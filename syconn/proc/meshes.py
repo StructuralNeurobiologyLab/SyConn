@@ -51,7 +51,7 @@ try:
 except ImportError:
     from .in_bounding_box import in_bounding_box
     log_proc.error('ImportError. Could not import `in_boundinb_box` from '
-                   '`syconn/proc.in_bounding_boxC.py`. Fallback to numba jit.')
+                   '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',

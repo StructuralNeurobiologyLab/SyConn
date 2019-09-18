@@ -260,6 +260,8 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
+                if len(self.ctv.valid_d) == 0:
+                    return 0
                 return 2000
             return 20000
 
@@ -561,13 +563,18 @@ class MultiViewData(Data):
                                nb_cpus=nb_cpus, ignore_missing=True,
                                force_reload=False)
         self.gt_dir = working_dir + "/ssv_%s/" % gt_type
+        splitting_dc_path = self.gt_dir + "%s_splitting.pkl" % gt_type
+        label_dc_path = self.gt_dir + "%s_labels.pkl" % gt_type
         if label_dict is None:
-            self.label_dict = load_pkl2obj(self.gt_dir +
-                                           "%s_labels.pkl" % gt_type)
-        if not os.path.isfile(self.gt_dir + "%s_splitting.pkl" % gt_type):
-            if train_fraction is None:  # TODO: replace by sklearn splitting which handles inra-class split-ratios
-                train_fraction = 0.85
-
+            self.label_dict = load_pkl2obj(label_dc_path)
+        if not os.path.isfile(splitting_dc_path) or train_fraction is \
+                not None:
+            if train_fraction is None:
+                msg = f'Did not find splitting dictionary at {splitting_dc_path} ' \
+                      f'and train data fraction was not defined.'
+                log_cnn.error(msg)
+                raise ValueError(msg)
+            # TODO: Use  stratified splitting for per-class balanced splitting
             ssv_ids = np.array(list(self.label_dict.keys()), dtype=np.uint)
             ssv_labels = np.array(list(self.label_dict.values()), dtype=np.uint)
             avail_classes, c_count = np.unique(ssv_labels, return_counts=True)
@@ -579,21 +586,24 @@ class MultiViewData(Data):
                     curr_c_ssvs = ssv_ids[ssv_labels == c][:1]
                     ssv_ids = np.concatenate([ssv_ids, curr_c_ssvs])
                     ssv_labels = np.concatenate([ssv_labels, [c]])
-            if int(train_fraction) * len(ssv_ids) < n_classes:
-                train_fraction = 1. - float(n_classes + 1) / len(ssv_ids)
-                print("Train data fraction was set to {} due to splitting restrictions "
-                      "(at least one sample per class in validation set).".format(train_fraction))
-            train_ids, valid_ids = train_test_split(ssv_ids, shuffle=True, random_state=random_seed, stratify=ssv_labels,
-                                                    train_size=train_fraction)
-            self.splitting_dict = {"train": train_ids, "valid": valid_ids,
-                                   "test": []}
-            print('Validation set: {}\t{}'.format(self.splitting_dict['valid'],
-                                              [self.label_dict[ix] for ix in self.splitting_dict['valid']]))
+            if train_fraction == 1:
+                self.splitting_dict = {"train": ssv_ids, "valid": [],
+                                       "test": []}
+            else:
+                if int(train_fraction) * len(ssv_ids) < n_classes:
+                    train_fraction = 1. - float(n_classes + 1) / len(ssv_ids)
+                    print("Train data fraction was set to {} due to splitting restrictions "
+                          "(at least one sample per class in validation set).".format(train_fraction))
+                train_ids, valid_ids = train_test_split(ssv_ids, shuffle=True, random_state=random_seed, stratify=ssv_labels,
+                                                        train_size=train_fraction)
+                self.splitting_dict = {"train": train_ids, "valid": valid_ids,
+                                       "test": []}
+                print('Validation set: {}\t{}'.format(self.splitting_dict['valid'],
+                                                  [self.label_dict[ix] for ix in self.splitting_dict['valid']]))
         else:
             if train_fraction is not None:
                 raise ValueError('Value fraction can only be set if splitting dict is not available.')
-            self.splitting_dict = load_pkl2obj(self.gt_dir +
-                                               "%s_splitting.pkl" % gt_type)
+            self.splitting_dict = load_pkl2obj(splitting_dc_path)
 
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
         if not load_data:
@@ -702,7 +712,7 @@ class CelltypeViews(MultiViewData):
     def __init__(self, inp_node, out_node, raw_only=False, nb_views=20, nb_views_renderinglocations=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1, n_classes=4,
                  class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1, ctgt_key="ctgt",
-                 train_fraction=0.95, random_seed=0, view_key=None):
+                 train_fraction=None, random_seed=0, view_key=None):
         """
         USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
 
@@ -733,7 +743,7 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.cache_size = 3000 * 2  # random permutations/subset in selected SSV views,
+        self.cache_size = 4000 * 2  # random permutations/subset in selected SSV views,
         # RandomFlip augmentation etc.
         self.max_nb_cache_uses = self.cache_size
         self.current_cache_uses = 0
@@ -825,23 +835,25 @@ class CelltypeViews(MultiViewData):
                 sso.nb_cpus = self.nb_cpus
                 ssos.append(sso)
             self.view_cache[source] = [sso.load_views(view_key=self.view_key) for sso in ssos]
-            self.syn_sign_cache[source] = np.array([syn_sign_ratio_celltype(sso) for sso in ssos])
+            # pre- and postsynapse type ratios
+            self.syn_sign_cache[source] = np.array(
+                [[syn_sign_ratio_celltype(sso), syn_sign_ratio_celltype(sso, comp_types=[0, ])]
+                 for sso in ssos])
             for ii in range(len(self.view_cache[source])):
                 views = self.view_cache[source][ii]
                 views = naive_view_normalization_new(views)
                 views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
                 self.view_cache[source][ii] = views
             self.label_cache[source] = l
-            # TODO: behaviour is highly dependent on sklearn version!
             # draw big cache batch from current SSOs from which training batches are drawn
             self.current_cache_uses = 0
             self.sample_weights[source] = compute_class_weight('balanced',
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
-        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
+        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=True)
         d, l, syn_signs = transform_celltype_data_views_alternative(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
-            self.syn_sign_cache[source], batch_size, self.nb_views)
+            [self.syn_sign_cache[source][ix] for ix in ixs], batch_size, self.nb_views)
         if self.reduce_context > 0:
             d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
                 self.reduce_context:-self.reduce_context]
@@ -919,7 +931,6 @@ class CelltypeViews(MultiViewData):
                 self.view_cache[source][ii] = views
             self.label_cache[source] = l
             print(f'Cache support: {np.unique(l, return_counts=True)}')
-            # TODO: behaviour is highly dependent on sklearn version!
             # draw big cache batch from current SSOs from which training batches are drawn
             self.current_cache_uses = 0
             self.sample_weights[source] = compute_class_weight('balanced',
@@ -986,7 +997,6 @@ class CelltypeViews(MultiViewData):
                 ssos.append(sso)
             self.view_cache[source] = [sso.load_views(view_key=self.view_key) for sso in ssos]
             self.label_cache[source] = l
-            # TODO: behaviour is dependent on sklearn version!
             self.sample_weights[source] = compute_class_weight('balanced',
                                                                np.unique(l), l)
             self.current_cache_uses = 0
@@ -1049,7 +1059,8 @@ class GliaViews(Data):
         super(GliaViews, self).__init__()
 
     def getbatch(self, batch_size, source='train'):
-        # TODO: keep in mind that super().get_batch does not shuffle for validation data -> btach_size for validation should be sufficiently big
+        # TODO: keep in mind that super().get_batch does not shuffle validation data ->
+        #  batch_size for validation should be sufficiently big
         # if source == 'valid':
         #     nb = len(self.valid_l)
         #     ixs = np.arange(nb)
@@ -1125,7 +1136,7 @@ def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
 def transform_celltype_data_views_alternative(sso_views, labels, syn_signs, batch_size, nb_views):
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
     new_labels = np.zeros((batch_size, 1), dtype=np.int16)
-    new_synsigns = np.zeros((batch_size, 1), dtype=np.int16)
+    new_synsigns = np.zeros((batch_size, 2), dtype=np.float32)
     cnt = 0
     # sample_fac_sv = np.max([int(nb_views / 10), 1]) # draw more SV if #views is high
     for ii, views in enumerate(sso_views):
@@ -1134,7 +1145,7 @@ def transform_celltype_data_views_alternative(sso_views, labels, syn_signs, batc
         if curr_nb_samples == 0:
             continue
         view_sampling = np.random.choice(np.arange(views.shape[1]),
-                                         curr_nb_samples*nb_views, replace=False)
+                                         curr_nb_samples*nb_views, replace=True)
         orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
                                                                                  nb_views, 128, 256)).swapaxes(1, 0)
         new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]
@@ -1383,7 +1394,8 @@ class TripletData_SSV(Data):
                         if len(existing_views) == nb_per_weight or\
                                 len(self.sso_ids[self.sso_weights == i]) == 0:
                             break
-                        print("Couldn't retrieve enough samples for batch, chance of sampling SSVs multiple times.")
+                        print("Couldn't retrieve enough samples for batch, "
+                              "chance of sampling SSVs multiple times.")
                     ssos += existing_views
                 # get random view pair of each ssos for small distance sample
                 out_d = np.zeros((len(ssos), 4, 2, 1024//self.downsample, 1024//self.downsample), dtype=np.float32)
@@ -1462,7 +1474,8 @@ class TripletData_SSV_nviews(Data):
         while True:
             try:
                 self._reseed()
-                # the number of views (one for reference and one set for similar N-view set, i.e. different views from the same ssv
+                # the number of views (one for reference and one set for similar N-view set, i.e.
+                # different views from the same ssv
                 nb_per_weight = batch_size // 6
                 assert nb_per_weight * 6 == batch_size, "Batch size must be multiple of 6"
                 chosen_ixs = []

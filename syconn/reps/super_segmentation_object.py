@@ -3094,7 +3094,7 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-    def certainty_celltype(self) -> float:
+    def certainty_celltype(self, proba_key: Optional[str] = None) -> float:
         """
         Certainty estimate of the celltype prediction:
             1. If `is_logit` is True, Generate pseudo-probabilities from the
@@ -3109,7 +3109,9 @@ class SuperSegmentationObject(object):
         Returns:
             Certainty measure based on the entropy of the cell type logits.
         """
-        logits = self.lookup_in_attribute_dict('celltype_cnn_e3_probas')
+        if proba_key is None:
+            proba_key = 'celltype_cnn_e3_probas'
+        logits = self.lookup_in_attribute_dict(proba_key)
         return certainty_estimate(logits, is_logit=True)
 
     def majority_vote(self, prop_key, max_dist):

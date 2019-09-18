@@ -26,7 +26,7 @@ from . import log_proc
 
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
-                      fscore_beta=1, target_names=None):
+                      fscore_beta=1, target_names=None, add_text=''):
     header = "-------------------------------\n\t\t%s\n" % prefix
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
@@ -55,8 +55,10 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
     log_proc.info(header)
     plot_pr(all_prec, all_rec, r=[0.6, 1.01], legend_labels=target_names)
     if model_dir is not None:
+        os.makedirs(model_dir, exist_ok=True)
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
         text_file.write(header)
+        text_file.write(add_text)
         text_file.close()
         prec, rec, fs, supp = precision_recall_fscore_support(labels, np.argmax(proba, axis=1))
         np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])

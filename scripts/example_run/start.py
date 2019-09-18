@@ -66,7 +66,7 @@ if __name__ == '__main__':
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
-    # keep imports here to guarantee correct usage of pyopengl platform if batch processing
+    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
     from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
     from syconn.handler.prediction import parse_movement_area_from_zip
@@ -110,6 +110,7 @@ if __name__ == '__main__':
     bd = bb[1] - bb[0]
 
     # INITIALIZE DATA
+    # TODO: switch to streaming confs instead of h5 files
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
@@ -153,7 +154,13 @@ if __name__ == '__main__':
 
     # # START SyConn
     # log.info('Step 0/8 - Predicting sub-cellular structures')
+    # TODO: launch all inferences in parallel
     # exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    #  TODO: might require also require adaptions in init_cell_subcell_sds
+    # exec_dense_prediction.predict_cellorganelles()
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    # exec_dense_prediction.predict_synapsetype()
     # time_stamps.append(time.time())
     # step_idents.append('Dense predictions')
 

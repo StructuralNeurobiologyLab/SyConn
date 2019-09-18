@@ -60,7 +60,7 @@ if __name__ == "__main__":
     #     ssv = new_ssd.get_super_segmentation_object(ssv_id)
     #     ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
     #     # # previous run for "normal" bootstrap N-view predictions
-    #     ssv._render_rawviews(4, verbose=True, force_recompute=True)  # TODO: Make sure that copied files are always the same if `force_recompute` is set to False!
+    #     ssv._render_rawviews(4, verbose=True, force_recompute=True)
     #     # # Large FoV bootstrapping
     #     # # downsample vertices and get ~3 locations per comp_window
     #     verts = ssv.mesh[1].reshape(-1, 3)
@@ -82,7 +82,8 @@ if __name__ == "__main__":
     # write_obj2pkl(path=new_ssd.path + "/{}_splitting.pkl".format(gt_version),
     #               objects=split_dc)
 
-    # test prediction, copy trained models, see paths to 'models' folder defined in global_params.config
+    # --------------------------------------------------------------------------
+    # TEST PREDICTIONS OF TRAIN AND VALIDATION DATA
     from syconn.handler.prediction import get_celltype_model_large_e3, \
         get_tripletnet_model_large_e3, get_celltype_model_e3
     from syconn.proc.stats import cluster_summary, projection_tSNE, model_performance
@@ -90,14 +91,12 @@ if __name__ == "__main__":
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
     import tqdm
     split_dc = load_pkl2obj(path=new_ssd.path + "/{}_splitting.pkl".format(gt_version))
-    for m_name in ['celltype_GTv4_nclasscorrected_CV1_sgd_bs20_nbviews20',
-                   'celltype_GTv4_nclasscorrected_CV2_adabound_bs40_nbviews20_biggercache',
-                   'celltype_GTv4_nclasscorrected_CV2_sgd_bs20_nbviews20',
-                   'celltype_GTv4_nclasscorrected_CV2_adabound_bs20_nbviews20',
-                   'celltype_GTv4_nclasscorrected_CV2_adabound_bs40_nbviews20',
-                   'celltype_GTv4_nclasscorrected_CV2_sgd_bs40_nbviews20_biggercache']:
+    for m_name in ['celltype_GTv4_syntype_CV1_adabound_bs40_nbviews20',
+                    'celltype_GTv4_syntype_CV2_adabound_bs40_nbviews20',
+                   'celltype_GTv4_syntype_CV1_sgd_bs40_nbviews20',
+                   'celltype_GTv4_syntype_CV2_sgd_bs40_nbviews20']:
         m_path = '/wholebrain/u/pschuber/e3_training/' + m_name
-        m = InferenceModel(m_path)
+        m = InferenceModel(m_path, bs=80)
 
         pred_key_appendix1 = "test_pred_v1_large"
         pred_key_appendix2 = m_name
@@ -112,9 +111,8 @@ if __name__ == "__main__":
         # TODO: change back to predict validation set, currently evaluates on training set for
         #  sanity checks, for 'celltype_GTv4' models CV1 <=> CV2 swapped, due to wrong keyword
         #  argument during DataClass init. in the trainer script.
-        ssv_ids = split_dc['valid'] if 'CV2' in m_name else split_dc['train']
         pbar = tqdm.tqdm(total=len(ssv_ids))
-
+        # predict all SSVs
         for ssv_id in ssv_ids:
             ssv = ssd.get_super_segmentation_object(ssv_id)
             ssv.nb_cpus = 20
@@ -122,57 +120,70 @@ if __name__ == "__main__":
             # ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix1,
             #                          model_tnet=m_tnet)
             ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2, largeFoV=False,
-                                     view_props={"overwrite": False, 'use_syntype': False,
-                                                 'nb_views': 10})
+                                     view_props={"overwrite": True, 'use_syntype': True,
+                                                 'nb_views': 20})
             pbar.update()
         pbar.close()
-        # analysis
+
+    # --------------------------------------------------------------------------
+    # analysis of VALIDATION set
+    for m_name in ['celltype_GTv4_syntype_{}_adabound_bs40_nbviews20',
+                   'celltype_GTv4_syntype_{}_sgd_bs40_nbviews20']:
+        # CV1: valid dataset: split_dc['valid'], CV2: valid_dataset: split_dc['train']
+        # Perform train data set eval as counter check
         gt_l = []
+        certainty = []
         pred_l = []
         pred_proba = []
         pred_l_large = []
         pred_proba_large = []
         latent_morph_d = []
         latent_morph_l = []
-        for ssv_id in ssv_ids:
-            ssv = ssd.get_super_segmentation_object(ssv_id)
-            ssv.load_attr_dict()
-            gt_l.append(ssv.attr_dict["cellttype_gt"])
+        for cv in ['CV1', 'CV2']:
+            ssv_ids = split_dc['train'] if cv == 'CV2' else split_dc['valid']
+            pred_key_appendix2 = m_name.format(cv)
+            print('Loading {}-data of model {}'.format(cv, pred_key_appendix2))
+            for ssv_id in ssv_ids:
+                ssv = ssd.get_super_segmentation_object(ssv_id)
+                ssv.load_attr_dict()
+                gt_l.append(ssv.attr_dict["cellttype_gt"])
 
-            # small FoV
-            pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
-            preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
-            preds_small = np.argmax(preds_small, axis=1)
-            major_dec = np.zeros(10)
-            for ii in range(len(major_dec)):
-                major_dec[ii] = np.sum(preds_small == ii)
-            major_dec /= np.sum(major_dec)
-            pred_proba.append(major_dec)
+                # small FoV
+                pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
+                preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
+                preds_small = np.argmax(preds_small, axis=1)
+                major_dec = np.zeros(10)
+                for ii in range(len(major_dec)):
+                    major_dec[ii] = np.sum(preds_small == ii)
+                major_dec /= np.sum(major_dec)
+                pred_proba.append(major_dec)
+                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
+                # # large FoV
+                # pred_l_large.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix1])
+                # probas_large = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix1)]
+                # preds_large = np.argmax(probas_large, axis=1)
+                # major_dec = np.zeros(10)
+                # for ii in range(len(major_dec)):
+                #     major_dec[ii] = np.sum(preds_large == ii)
+                # major_dec /= np.sum(major_dec)
+                # pred_proba_large.append(major_dec)
 
-            # # large FoV
-            # pred_l_large.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix1])
-            # probas_large = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix1)]
-            # preds_large = np.argmax(probas_large, axis=1)
-            # major_dec = np.zeros(10)
-            # for ii in range(len(major_dec)):
-            #     major_dec[ii] = np.sum(preds_large == ii)
-            # major_dec /= np.sum(major_dec)
-            # pred_proba_large.append(major_dec)
+                # # morphology embedding
+                # latent_morph_d.append(ssv.attr_dict["latent_morph_ct" + pred_key_appendix2])
+                # latent_morph_l.append(len(latent_morph_d[-1]) * [gt_l[-1]])
 
-            # # morphology embedding
-            # latent_morph_d.append(ssv.attr_dict["latent_morph_ct" + pred_key_appendix2])
-            # latent_morph_l.append(len(latent_morph_d[-1]) * [gt_l[-1]])
-
+        # # WRITE OUT COMBINED RESULTS
         # train_d = np.concatenate(latent_morph_d)
         # train_l = np.concatenate(latent_morph_l)
         # pred_proba_large = np.array(pred_proba_large)
         pred_proba = np.array(pred_proba)
+        certainty = np.array(certainty)
         gt_l = np.array(gt_l)
         int2str_label = {v: k for k, v in str2int_label.items()}
-        dest_p = f"/wholebrain/scratch/pschuber/celltype_comparison/{m_name}/"
+        dest_p = f"/wholebrain/scratch/pschuber/celltype_comparison_syntype/{m_name}_valid/"
         os.makedirs(dest_p, exist_ok=True)
         target_names = [int2str_label[kk] for kk in range(8)]
-        #
+
         # # large
         # classes, c_cnts = np.unique(np.argmax(pred_proba_large, axis=1), return_counts=True)
         # log_main.info('Successful prediction [large FoV] with the following cell type class '
@@ -184,6 +195,103 @@ if __name__ == "__main__":
         classes, c_cnts = np.unique(pred_l, return_counts=True)
         log_main.info('Successful prediction [standard] with the following cell type class '
                       'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
+        perc_50 = np.percentile(certainty, 50)
+        model_performance(pred_proba[certainty > perc_50], gt_l[certainty > perc_50],
+                          dest_p + '/upperhalf/', n_labels=8, target_names=target_names,
+                          add_text=f'Percentile-50: {perc_50}')
+        model_performance(pred_proba[certainty <= perc_50], gt_l[certainty <= perc_50],
+                          dest_p + '/lowerhalf/', n_labels=8, target_names=target_names,
+                          add_text=f'Percentile-50: {perc_50}')
+        model_performance(pred_proba, gt_l, dest_p, n_labels=8,
+                          target_names=target_names)
+
+        # # tSNE
+        # tsne_kwargs = {"n_components": 3, "random_state": 1, "perplexity": 30,
+        #                "n_iter": 500}
+        # projection_tSNE(train_d, train_l, dest_path=dest_p + 'tsne.png', target_names=target_names, do_3d=True,
+        #                 **tsne_kwargs)
+        # # cluster_summary(train_d, train_l, train_d, train_l, prefix=gt_version,
+        # #                 fold=dest_p + 'tsne.png')
+
+    # --------------------------------------------------------------------------
+    # analysis of TRAINING set
+    for m_name in ['celltype_GTv4_syntype_{}_adabound_bs40_nbviews20',
+                   'celltype_GTv4_syntype_{}_sgd_bs40_nbviews20']:
+        # CV1: valid dataset: split_dc['valid'], CV2: valid_dataset: split_dc['train']
+        # Perform train data set eval as counter check
+        gt_l = []
+        certainty = []
+        pred_l = []
+        pred_proba = []
+        pred_l_large = []
+        pred_proba_large = []
+        latent_morph_d = []
+        latent_morph_l = []
+        for cv in ['CV1', 'CV2']:
+            # this uses the training SSVs for evaluation
+            ssv_ids = split_dc['valid'] if cv == 'CV2' else split_dc['train']
+            pred_key_appendix2 = m_name.format(cv)
+            print('Loading {}-data of model {}'.format(cv, pred_key_appendix2))
+            for ssv_id in ssv_ids:
+                ssv = ssd.get_super_segmentation_object(ssv_id)
+                ssv.load_attr_dict()
+                gt_l.append(ssv.attr_dict["cellttype_gt"])
+
+                # small FoV
+                pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
+                preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
+                preds_small = np.argmax(preds_small, axis=1)
+                major_dec = np.zeros(10)
+                for ii in range(len(major_dec)):
+                    major_dec[ii] = np.sum(preds_small == ii)
+                major_dec /= np.sum(major_dec)
+                pred_proba.append(major_dec)
+                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
+
+                # # large FoV
+                # pred_l_large.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix1])
+                # probas_large = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix1)]
+                # preds_large = np.argmax(probas_large, axis=1)
+                # major_dec = np.zeros(10)
+                # for ii in range(len(major_dec)):
+                #     major_dec[ii] = np.sum(preds_large == ii)
+                # major_dec /= np.sum(major_dec)
+                # pred_proba_large.append(major_dec)
+
+                # # morphology embedding
+                # latent_morph_d.append(ssv.attr_dict["latent_morph_ct" + pred_key_appendix2])
+                # latent_morph_l.append(len(latent_morph_d[-1]) * [gt_l[-1]])
+
+        # # WRITE OUT COMBINED RESULTS
+        # train_d = np.concatenate(latent_morph_d)
+        # train_l = np.concatenate(latent_morph_l)
+        # pred_proba_large = np.array(pred_proba_large)
+        pred_proba = np.array(pred_proba)
+        certainty = np.array(certainty)
+        gt_l = np.array(gt_l)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        dest_p = f"/wholebrain/scratch/pschuber/celltype_comparison_syntype/{m_name}_train/"
+        os.makedirs(dest_p, exist_ok=True)
+        target_names = [int2str_label[kk] for kk in range(8)]
+
+        # # large
+        # classes, c_cnts = np.unique(np.argmax(pred_proba_large, axis=1), return_counts=True)
+        # log_main.info('Successful prediction [large FoV] with the following cell type class '
+        #               'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
+        # model_performance(pred_proba_large, gt_l, dest_p n_labels=9,
+        #                   target_names=target_names, prefix="large_")
+
+        # standard
+        classes, c_cnts = np.unique(pred_l, return_counts=True)
+        log_main.info('Successful prediction [standard] with the following cell type class '
+                      'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
+        perc_50 = np.percentile(certainty, 50)
+        model_performance(pred_proba[certainty > perc_50], gt_l[certainty > perc_50],
+                          dest_p + '/upperhalf/', n_labels=8, target_names=target_names,
+                          add_text=f'Percentile-50: {perc_50}')
+        model_performance(pred_proba[certainty <= perc_50], gt_l[certainty <= perc_50],
+                          dest_p + '/lowerhalf/', n_labels=8, target_names=target_names,
+                          add_text=f'Percentile-50: {perc_50}')
         model_performance(pred_proba, gt_l, dest_p, n_labels=8,
                           target_names=target_names)
 

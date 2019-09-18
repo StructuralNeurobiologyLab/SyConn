@@ -297,7 +297,7 @@ def start_multithread_imap(func, params, debug=False, verbose=False,
 def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
                            nb_cpus=None):
     """
-    # TODO: broken for n_cpus > 1: `TypeError: can't pickle _thread.RLock objects`
+
     Parameters
     ----------
     func_name : str
@@ -320,10 +320,11 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         nb_cpus = 1
 
     nb_cpus = min(nb_cpus, len(params), cpu_count())
-    if nb_cpus > 1:
-        log_mp.warning('`start_multiprocess_imap` is broken for n_cpus > 1:'
-                       ' `TypeError: cant pickle _thread.RLock objects`')
-        nb_cpus = 1
+    # # might work again
+    # if nb_cpus > 1:
+    #     log_mp.warning('`start_multiprocess_obj` is broken for n_cpus > 1:'
+    #                    ' `TypeError: cant pickle _thread.RLock objects`')
+    #     nb_cpus = 1
     if verbose:
         log_mp.debug("Computing %d parameters with %d cpus." %
                      (len(params), nb_cpus))

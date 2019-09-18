@@ -1325,4 +1325,5 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     # maximum entropy at equal probabilities: -sum(1/N*ln(1/N) = ln(N)
     entr_max = np.log(len(proba))
     entr_norm = entropy(proba) / entr_max
+    # convert to certainty estimate
     return 1 - entr_norm

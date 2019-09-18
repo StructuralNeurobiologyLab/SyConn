@@ -18,7 +18,8 @@ import os
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.models.simple import StackedConv2ScalarWithLatentAdd, Conv3DLayer, StackedConv2Scalar
+from elektronn3.models.simple import Conv3DLayer, StackedConv2Scalar, \
+    StackedConv2ScalarWithLatentAdd
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.metrics import channel_metric
@@ -27,7 +28,8 @@ import adabound
 
 
 def get_model():
-    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=8, n_scalar=1)
+    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=8, n_scalar=2,
+                                            dropout_rate=0.1)
     # model = StackedConv2Scalar(in_channels=4, n_classes=8)
     return model
 
@@ -36,7 +38,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('-n', '--exp-name',
-                        default="celltype_GTv4_syntype_CV1_sgd_bs40_nbviews20",
+                        default="celltype_GTv4_syntype_ALLTRAIN_adabound_bs100_"
+                                "nbviews20_dr10_longRUN_2ratios",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=5000000,
@@ -47,13 +50,21 @@ if __name__ == "__main__":
         help='Path to pretrained model state dict or a compiled and saved '
              'ScriptModule from which to resume training.'
     )
+    parser.add_argument(
+        '-j', '--jit', metavar='MODE', default='onsave',
+        choices=['disabled', 'train', 'onsave'],
+        help="""Options:
+    "disabled": Completely disable JIT tracing;
+    "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
+    "train": Use traced model for training and serialize it on disk"""
+    )
     args = parser.parse_args()
     if not args.disable_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
     else:
         device = torch.device('cpu')
-
     print('Running on device: {}'.format(device))
+
     # Don't move this stuff, it needs to be run this early to work
     import elektronn3
     elektronn3.select_mpl_backend('agg')
@@ -67,10 +78,16 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3_training/')
 
     max_steps = args.max_steps
-    lr = 0.008
+    lr = 0.003
     lr_stepsize = 500
     lr_dec = 0.997
-    batch_size = 40
+    batch_size = 50
+    n_classes = 8
+    data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': 1.0,
+                        'nb_views_renderinglocations': 4, #'view_key': "4_large_fov",
+                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4",
+                        'random_seed': 0, "binary_views": False,
+                        "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
     model = get_model()
     if torch.cuda.device_count() > 1:
@@ -79,12 +96,21 @@ if __name__ == "__main__":
         # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
         model = nn.DataParallel(model)
     model.to(device)
-    n_classes = 8
-    data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': None,
-                        'nb_views_renderinglocations': 4, #'view_key': "4_large_fov",
-                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4",
-                        'random_seed': 0, "binary_views": False,
-                        "n_classes": n_classes, 'class_weights': [1] * n_classes}
+
+    example_input = (torch.randn(1, 4, data_init_kwargs['nb_views'], 128, 256).to(device),
+                     torch.randn(1, 2).to(device))
+    enable_save_trace = False if args.jit == 'disabled' else True
+    if args.jit == 'onsave':
+        # Make sure that tracing works
+        tracedmodel = torch.jit.trace(model, example_input)
+    elif args.jit == 'train':
+        if getattr(model, 'checkpointing', False):
+            raise NotImplementedError(
+                'Traced models with checkpointing currently don\'t '
+                'work, so either run with --disable-trace or disable '
+                'checkpointing.')
+        tracedmodel = torch.jit.trace(model, example_input)
+        model = tracedmodel
 
     if args.resume is not None:  # Load pretrained network
         print('Resuming model from {}.'.format(os.path.expanduser(args.resume)))
@@ -102,14 +128,14 @@ if __name__ == "__main__":
     valid_dataset = CelltypeViewsE3(
         train=False, transform=transform, use_syntype_scal=use_syntype_scal, **data_init_kwargs)
 
-    # Set up optimization
-    optimizer = optim.SGD(
-        model.parameters(),
-        weight_decay=0.5e-4,
-        lr=lr,
-        # amsgrad=True
-    )
-    # optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
+    # # Set up optimization
+    # optimizer = optim.SGD(
+    #     model.parameters(),
+    #     weight_decay=0.5e-4,
+    #     lr=lr,
+    #     # amsgrad=True
+    # )
+    optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have
