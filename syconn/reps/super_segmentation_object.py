@@ -3097,20 +3097,17 @@ class SuperSegmentationObject(object):
     def certainty_celltype(self) -> float:
         """
         Certainty estimate of the celltype prediction:
-            1. Generate pseudo-probabilities from the predicted logits
-               ('celltype_cnn_e3_probas' inside :py:attr:`~attr_dict`) using
-               softmax.
-            2. Sum the evidence per class and rescale.
-            3. Compare the sorted evidence to the ideal outcome
-               (one-hot vector) via logloss.
-            4. Scale the logloss with the worst outcome (equal probabilities)
-               and subtract it from 1.
+            1. If `is_logit` is True, Generate pseudo-probabilities from the
+               input using softmax.
+            2. Sum the evidence per class and (re-)normalize.
+            3. Compute the entropy, scale it with the maximum entropy (equal
+               probabilities) and subtract it from 1.
 
         Notes:
-            Experimental!
+            See :func:`~syconn.handler.prediction.certainty_estimate`
 
         Returns:
-            Certainty measure based on the logloss of the celltype logits.
+            Certainty measure based on the entropy of the cell type logits.
         """
         logits = self.lookup_in_attribute_dict('celltype_cnn_e3_probas')
         return certainty_estimate(logits, is_logit=True)

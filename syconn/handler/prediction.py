@@ -1299,9 +1299,10 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     Estimates the certainty of (independent) predictions of the same sample:
         1. If `is_logit` is True, Generate pseudo-probabilities from the
            input using softmax.
-        2. Sum the evidence per class and rescale.
+        2. Sum the evidence per class and (re-)normalize.
         3. Compute the entropy, scale it with the maximum entropy (equal
            probabilities) and subtract it from 1.
+
     Args:
         inp: 2D array of prediction results (N: number of samples,
             C: Number of classes)
