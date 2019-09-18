@@ -22,12 +22,30 @@ from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews, st
 from syconn.mp.mp_utils import start_multiprocess_imap
 import re
 from multiprocessing import cpu_count
-import os
+import os, glob
 # from scipy.misc import imsave
 from imageio import imwrite
 from sklearn.model_selection import train_test_split
 import glob
 global initial_run
+
+def get_all_fname(data_path):
+    fnames = []
+    cell_combinations = set()
+    os.chdir(data_path)
+
+    for file in glob.glob("*.k.zip"):
+        # filter out duplicate merged_cells
+        cell_ids = re.findall(r"(\d+)", data_path + file)[1:]
+        if tuple(cell_ids) in cell_combinations or tuple(cell_ids[::-1]) in cell_combinations:
+            continue
+        cell_combinations.add(tuple(cell_ids))
+
+        fnames.append(file)
+
+    print("data dir: {}".format(data_path))
+    print("files in total: {}".format(len(fnames)))
+    return fnames
 
 
 def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=2,
@@ -419,12 +437,15 @@ if __name__ == "__main__":
         dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
         # dest_gt_dir = "/home/kloping/wholebrain/scratch/yliu/false_merger/{}".format(ws[0])  # local test: output directory
         os.makedirs(dest_gt_dir, exist_ok=True)
-
+        # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+        # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        initial_run = False
         n_views = 3
-        label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger"
+        label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger/generated_cells"
         # label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
-        file_names = ["/syn169316_cells17456256_17435397.k.zip"]
-                      # "/syn669316_cells31272448_26034194.k.zip"]
+        # file_names = ["/syn169316_cells17456256_17435397.k.zip"]
+        #               # "/syn669316_cells31272448_26034194.k.zip"]  # Test
+        file_names = get_all_fname(label_file_folder)
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
         GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, ws=ws, comp_window=comp_window)
 
