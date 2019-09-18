@@ -109,12 +109,12 @@ if __name__ == "__main__":
         syn_obj = sd_synssv.get_segmentation_object(syn_id)
         syn_obj.load_attr_dict()
         c1, c2 = syn_obj.attr_dict['neuron_partners']
-        cell_combinations.add((c1, c2))
 
         # check if the combination [c1, c2] already exist:
         for comb in cell_combinations:
             if c1 in comb and c2 in comb:
                 continue
+        cell_combinations.add((c1, c2))
 
         cell_obj1, cell_obj2 = ssd.get_super_segmentation_object([c1, c2])
         merged_cell = merge_superseg_objects(cell_obj1, cell_obj2)
@@ -171,9 +171,7 @@ if __name__ == "__main__":
         # TODO: export2kzip should run through
 
         count += 1
-        if count == sampled_ids // 10:
-            count = 0
-            progress += 1
-            print("{}/{} cells generated".format(progress * 10, len(sampled_ids)))
+        if count % 50 == 0:
+            print("{}/{} cells generated".format(count, len(sampled_ids)))
 
 
