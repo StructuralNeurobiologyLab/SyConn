@@ -136,8 +136,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     # node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
     # node_labels = np.array([int(n.data['merger_gt']) for n in skel_nodes], dtype=np.int)
     node_labels = np.array([int(n.data['merger_gt'][0]) for n in skel_nodes], dtype=np.int)
-    node_coords = node_coords[(node_labels != -1)]
-    node_labels = node_labels[(node_labels != -1)]
+    node_coords = node_coords[(node_labels != 0)]
+    node_labels = node_labels[(node_labels != 0)]
 
     # create KD tree from skeleton node coordinates
     tree = KDTree(node_coords)
