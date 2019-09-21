@@ -109,68 +109,68 @@ if __name__ == '__main__':
     bd = bb[1] - bb[0]
 
     # INITIALIZE DATA
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
+#    kd = knossosdataset.KnossosDataset()
+#    kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
+#
+#    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
+#    kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d, fast_downsampling=True, as_raw=False)
+#
+#    kd_mi = knossosdataset.KnossosDataset()
+#    kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
+#
+#    kd_vc = knossosdataset.KnossosDataset()
+#    kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+#
+#    kd_sj = knossosdataset.KnossosDataset()
+#    kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+#
+#    kd_sym = knossosdataset.KnossosDataset()
+#    kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
+#
+#    kd_asym = knossosdataset.KnossosDataset()
+#    kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
+#    time_stamps.append(time.time())
+#    step_idents.append('Preparation')
+#
+#    log.info('Finished example cube initialization (shape: {}). Starting SyConn pipeline.'.format(bd))
+#    log.info('Example data will be processed in "{}".'.format(example_wd))
+#
+#    # START SyConn
+#    log.info('Step 0/8 - Predicting sub-cellular structures')
+#    exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+#    time_stamps.append(time.time())
+#    step_idents.append('Dense predictions')
+#
+#    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
+#    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc)
+#    exec_init.run_create_rag()
+#
+#    time_stamps.append(time.time())
+#    step_idents.append('SD generation')
+#
+#    if global_params.config.prior_glia_removal:
+#        log.info('Step 1.5/8 - Glia separation')
+#        exec_multiview.run_glia_rendering()
+#        exec_multiview.run_glia_prediction(e3=True)
+#        exec_multiview.run_glia_splitting()
+#        time_stamps.append(time.time())
+#        step_idents.append('Glia separation')
+#
+#    log.info('Step 2/8 - Creating SuperSegmentationDataset')
+#    exec_multiview.run_create_neuron_ssd()
+#    time_stamps.append(time.time())
+#    step_idents.append('SSD generation')
+#
+#    # TODO: launch steps 3 and 4 in parallel
+#    log.info('Step 3/8 - Neuron rendering')
+#    exec_multiview.run_neuron_rendering()
+#    time_stamps.append(time.time())
+#    step_idents.append('Neuron rendering')
 
-    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-    kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d, fast_downsampling=True, as_raw=False)
-
-    kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
-
-    kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
-
-    kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
-
-    kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
-
-    kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale, experiment_name, offset=offset, boundary=bd, fast_downsampling=True, data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
-    time_stamps.append(time.time())
-    step_idents.append('Preparation')
-
-    log.info('Finished example cube initialization (shape: {}). Starting SyConn pipeline.'.format(bd))
-    log.info('Example data will be processed in "{}".'.format(example_wd))
-
-    # START SyConn
-    log.info('Step 0/8 - Predicting sub-cellular structures')
-    exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
-    time_stamps.append(time.time())
-    step_idents.append('Dense predictions')
-
-    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc)
-    exec_init.run_create_rag()
-
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
-
-    if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
-        exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction(e3=True)
-        exec_multiview.run_glia_splitting()
-        time_stamps.append(time.time())
-        step_idents.append('Glia separation')
-
-    log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd()
-    time_stamps.append(time.time())
-    step_idents.append('SSD generation')
-
-    # TODO: launch steps 3 and 4 in parallel
-    log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering()
-    time_stamps.append(time.time())
-    step_idents.append('Neuron rendering')
-
-    log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    time_stamps.append(time.time())
-    step_idents.append('Synapse detection')
+    # log.info('Step 4/8 - Synapse detection')
+    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    # time_stamps.append(time.time())
+    # step_idents.append('Synapse detection')
     #
     # log.info('Step 5/8 - Axon prediction')
     # exec_multiview.run_semsegaxoness_prediction()
