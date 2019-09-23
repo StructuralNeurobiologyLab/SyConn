@@ -2,30 +2,36 @@ import numpy as np
 import timeit
 from scipy.spatial import cKDTree
 import tqdm
+from tqdm import trange
+import os
 from typing import Union, Tuple, List, Optional, Dict, Generator, Any
 
 from syconn import global_params
 from syconn.reps.super_segmentation import *
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.meshes import merge_meshes
-from syconn.handler.basics import write_obj2pkl, load_pkl2obj
+from syconn.handler.basics import data2kzip, write_obj2pkl, load_pkl2obj
 
 # Parameters
 
 ### Path to load dataset
 # global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
 # cs_version = 'agg_0'
+
 global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
 cs_version = 0
 # global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/'  # local test
 
-### Path to store output kzip files
-# dest_folder = os.path.expanduser("~") + "/merged_cells_kzip_v6/"
-dest_folder = os.path.expanduser("~") + "/merged_cells_kzip_v10_v4b_base_20180214_full_agglo_cbsplit/"
+# Path to store output kzip files
+folder_name = "/merged_cells_kzip_"
+data_folder = global_params.wd.split('/')[-2]
+suffix_list = data_folder.split('_')[1:]
+version = suffix_list[0]
+suffix_str = '_'.join(suffix_list) + '/'
+dest_folder = os.path.expanduser("~") + folder_name + suffix_str
 
-### Path to pickle file which stores the dictionary: cell_ids2cs_ids
-# path_pkl_file = os.getcwd() + '/cell_ids2cs_ids_v6.pkl'
-path_pkl_file = os.getcwd() + '/cell_ids2cs_ids_v10.pkl'
+# Path to pickle file which stores the dictionary: cell_ids2cs_ids
+path_pkl_file = os.getcwd() + '/cell_ids2cs_ids_' + version + '.pkl'
 
 # number of cs_ids to retrieve from the dataset
 # if None, retrieve all cs_ids
@@ -36,7 +42,7 @@ create_new_cs_ids = False
 if num_cs_id == None:
     num_generated_cells = 50
 else:
-    # if num_cs_id is not None, then generate all the cells in the cell_ids list
+    # if num_cs_id is not None, then use all the cell_ids to for merger combination
     num_generated_cells = None
 
 
@@ -125,6 +131,7 @@ def create_lookup_table(num_cs_id):
             #     cs_id2cell_ids[cs_id] = {(c1, c2)}
     toc = timeit.default_timer()
     print("Time elapsed: {}".format(toc - tic))
+    print("Dictionary: cell_ids2cs_ids stored in {}".format(path_pkl_file))
     return cell_id2cs_ids, cell_ids
 
 
@@ -151,13 +158,13 @@ if __name__ == "__main__":
             write_obj2pkl(path_pkl_file, cell_id2cs_ids)
 
     assert len(cell_id2cs_ids) == len(cell_ids), "inconsistent length"
-    print("total number of cells: {}".format(len(cell_ids)))
+    print("Total number of cells: {}".format(len(cell_ids)))
 
     print("Generating merged cells")
     count = 0
     cell_ids = cell_ids[:num_generated_cells]
-    for i in tqdm.tqdm(range(len(cell_ids) - 1)):
-        for j in range(i+1, len(cell_ids)):
+    for i in trange(len(cell_ids) - 1, desc='first cell'):
+        for j in trange(i+1, len(cell_ids), desc='second cell'):
             c1, c2 = cell_ids[i], cell_ids[j]
             assert c1 != c2, "same cells cannot be merged."
 
