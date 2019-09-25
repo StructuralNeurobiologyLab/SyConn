@@ -59,6 +59,14 @@ if __name__ == "__main__":
                     help='Specify how many times each datapoint be used before corresponding h5 file is released')
     parser.add_argument('-r', '--resume', metavar='PATH',help='Path to pretrained model state dict or a compiled and saved '
                                                                 'ScriptModule from which to resume training.')
+    parser.add_argument(
+        '-j', '--jit', metavar='MODE', default='onsave',
+        choices=['disabled', 'train', 'onsave'],
+        help="""Options:
+    "disabled": Completely disable JIT tracing;
+    "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
+    "train": Use traced model for training and serialize it on disk"""
+    )
     args = parser.parse_args()
     if not args.disable_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
@@ -83,6 +91,21 @@ if __name__ == "__main__":
     batch_size = 4
 
     model = get_model()
+
+    example_input = torch.randn(1, 4, 128, 256)
+
+    enable_save_trace = False if args.jit == 'disabled' else True
+    if args.jit == 'onsave':
+        # Make sure that tracing works
+        tracedmodel = torch.jit.trace(model, example_input.to(device))
+    elif args.jit == 'train':
+        if getattr(model, 'checkpointing', False):
+            raise NotImplementedError(
+                'Traced models with checkpointing currently don\'t '
+                'work, so either run with --disable-trace or disable '
+                'checkpointing.')
+        tracedmodel = torch.jit.trace(model, example_input.to(device))
+        model = tracedmodel
 
     optimizer_state_dict = None
     lr_sched_state_dict = None
