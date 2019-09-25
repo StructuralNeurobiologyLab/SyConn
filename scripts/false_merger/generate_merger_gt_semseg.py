@@ -136,8 +136,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     # node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
     # node_labels = np.array([int(n.data['merger_gt']) for n in skel_nodes], dtype=np.int)
     node_labels = np.array([int(n.data['merger_gt'][0]) for n in skel_nodes], dtype=np.int)
-    node_coords = node_coords[(node_labels != 0)]
-    node_labels = node_labels[(node_labels != 0)]
+    node_coords = node_coords[(node_labels != -1)]
+    node_labels = node_labels[(node_labels != -1)]
 
     # create KD tree from skeleton node coordinates
     tree = KDTree(node_coords)
@@ -152,8 +152,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
         if gt_type == 'spgt':  # RBG-A value
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
         elif gt_type == 'merger_gt':
-                     # ignore (green)     , true-merger(grey) , false-merger(red)
-            colors = [[0.5, 0.5, 0.5, 0.4], [0.5, 0.5, 0.5, 0.4], [0.96, 0.14, 0.347, 1]]
+                     # true-merger(grey) , false-merger(red),   background
+            colors = [[0.5, 0.5, 0.5, 0.4], [0.96, 0.14, 0.347, 1], [0.9, 0.9, 0.9, 1]]
         else:# dendrite, axon, soma, bouton, terminal, background
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
                       [0.05, 0.6, 0.6, 1], [0.6, 0.05, 0.05, 1], [0.9, 0.9, 0.9, 1]]
@@ -293,7 +293,7 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     print("Writing h5 files.")
     os.makedirs(dest_dir, exist_ok=True)
     # chunk output data
-    for ii in range(5):
+    for ii in range(50):
         save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}_{}.h5".format(ii, h5_suffix),
                      ["raw"])
         save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}_{}.h5".format(ii, h5_suffix),
