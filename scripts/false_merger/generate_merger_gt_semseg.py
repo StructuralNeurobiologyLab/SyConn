@@ -58,7 +58,7 @@ def get_all_fname(data_path):
     # count = 0
     for file in glob.glob("*.k.zip"):
         # filter out duplicate merged_cells
-        cell_ids = re.findall(r"(\d+)", data_path + file)[1:]
+        cell_ids = re.findall(r"(\d+)", data_path + file)[-2:]
         if tuple(cell_ids) in cell_combinations or tuple(cell_ids[::-1]) in cell_combinations:
             continue
         cell_combinations.add(tuple(cell_ids))
@@ -96,15 +96,14 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
         raw, label and index views
     """
     assert gt_type in ["merger_gt"], "Currently only merger GT is supported"
-    n_labels = 3
+    n_labels = 2
     palette = generate_palette(n_labels)
 
     # @debug
     # sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     # sso_id1 = int(re.findall(r"(\d+)", kzip_path)[1])
     # sso_id2 = int(re.findall(r"(\d+)", kzip_path)[2])
-    merged_sso_id = re.findall(r"(\d+)", kzip_path)[1:]
-
+    merged_sso_id = re.findall(r"(\d+)", kzip_path)[-2:]
     sso = init_sso_from_kzip(kzip_path, sso_id=1)
 
     # if initial_run:  # use default SSD version
@@ -135,7 +134,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
     # node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
     # node_labels = np.array([int(n.data['merger_gt']) for n in skel_nodes], dtype=np.int)
-    node_labels = np.array([int(n.data['merger_gt'][0]) for n in skel_nodes], dtype=np.int)
+    node_labels = np.array([int(float(n.data['merger_gt'])) for n in skel_nodes], dtype=np.int)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
 
@@ -229,7 +228,7 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     #           "generation,".format(len(kzip_paths)))
 
     if dest_dir is None:
-        dest_dir = os.path.expanduser("~/{}_semseg/".format(gt_type))
+        dest_dir = os.path.expanduser("~/{}_semseg_v10_2/".format(gt_type))
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
     dest_p_cache = "{}/cache_{}votes/".format(dest_dir, n_voting)
@@ -251,7 +250,7 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     print("Writing views.")
     for ii in range(len(kzip_paths)):
         # sso_id = int(re.findall(r"/(\d+).", kzip_paths[ii])[0])
-        sso_id = re.findall(r"(\d+)", kzip_paths[ii])[1:]
+        sso_id = re.findall(r"(\d+)", kzip_paths[ii])[-2:]
         
         # dest_p = "{}/{}/".format(dest_p_cache, sso_id)
         dest_p = "{}/{}/".format(dest_p_cache, '_'.join(sso_id))
@@ -409,7 +408,7 @@ def gt_generation_helper(args):
                                                                out_path=dest_dir) # out_path set, colored meshes will be written out
 
     # sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
-    sso_id = re.findall(r"(\d+)", kzip_path)[1:]
+    sso_id = re.findall(r"(\d+)", kzip_path)[-2:]
     dest_p = "{}/{}/".format(dest_dir, '_'.join(sso_id))
     if not os.path.isdir(dest_p):
         os.makedirs(dest_p)
@@ -462,13 +461,15 @@ if __name__ == "__main__":
         # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         initial_run = False
         n_views = 3
-        label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger/generated_cells"
+        label_file_folder = "/wholebrain/u/yliu/merged_cells_kzip_v10_v4b_base_20180214_full_agglo_cbsplit/"
+        # label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger/generated_cells"
         # label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
-        # file_names = ["/syn78739_cells33286658_30666759.k.zip",
+        # file_names = ["/merged396_cells14491101_30109744.k.zip"]
         #               "/syn669316_cells31272448_26034194.k.zip",
         #               "syn373853_cells8636931_3062786.k.zip"]  # Test
         all_file_names = get_all_fname(label_file_folder)
         file_names = check_kzip_completeness(label_file_folder, all_file_names)
+        # file_names = file_names[:50]
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
         GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, ws=ws, comp_window=comp_window)
 
