@@ -210,6 +210,23 @@ celltype:
     comp_window: 40960
     nb_views_model: 4
 
+merger:
+  # `k=0` will not map predictions to unpredicted vertices -> faster
+  # `k` is the parameter used in `semseg2mesh`
+  view_properties_merger:
+    verbose: False
+    ws: [256, 128]
+    nb_views: 3
+    comp_window: 30720  # in NM
+    semseg_key: 'merger_gt'
+    k: 0
+  # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
+  # and 6 (unpredicted), use labels of the k-nearest vertices
+  map_properties_merger:
+    k: 50
+    ds_vertices: 1
+#    ignore_labels: [5, 6]
+
 # --------- MORPHOLOGY EMBEDDING
 tcmn:
   ndim_embedding: 10
