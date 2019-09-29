@@ -146,7 +146,8 @@ def _collect_properties_from_ssv_partners_thread(args):
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
         # TODO: think about refactoring or combining both axoness predictions
-        curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
+        curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness',
+                                          **global_params.config['spines']['semseg2coords_spines'])
 
         cache_dc['partner_axoness'] = np.array(curr_ax)
         cache_dc['synssv_ids'] = np.array(ssv_synids)

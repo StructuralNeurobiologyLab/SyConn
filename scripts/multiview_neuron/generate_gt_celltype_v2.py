@@ -91,10 +91,10 @@ if __name__ == "__main__":
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
     import tqdm
     split_dc = load_pkl2obj(path=new_ssd.path + "/{}_splitting.pkl".format(gt_version))
-    for m_name in ['celltype_GTv4_syntype_CV1_adabound_bs40_nbviews20',
-                    'celltype_GTv4_syntype_CV2_adabound_bs40_nbviews20',
-                   'celltype_GTv4_syntype_CV1_sgd_bs40_nbviews20',
-                   'celltype_GTv4_syntype_CV2_sgd_bs40_nbviews20']:
+    for m_name in ['celltype_GTv4_syntype_CV1_sgd_bs100_nbviews20_dr10_longRUN_2ratios',
+                    'celltype_GTv4_syntype_CV2_sgd_bs100_nbviews20_dr10_longRUN_2ratios',
+                   'celltype_GTv4_syntype_CV2_adabound_bs100_nbviews20_dr10_longRUN_2ratios',
+                   'celltype_GTv4_syntype_CV1_adabound_bs100_nbviews20_dr10_longRUN_2ratios']:
         m_path = '/wholebrain/u/pschuber/e3_training/' + m_name
         m = InferenceModel(m_path, bs=80)
 
@@ -127,8 +127,8 @@ if __name__ == "__main__":
 
     # --------------------------------------------------------------------------
     # analysis of VALIDATION set
-    for m_name in ['celltype_GTv4_syntype_{}_adabound_bs40_nbviews20',
-                   'celltype_GTv4_syntype_{}_sgd_bs40_nbviews20']:
+    for m_name in ['celltype_GTv4_syntype_{}_sgd_bs100_nbviews20_dr10_longRUN_2ratios',
+                   'celltype_GTv4_syntype_{}_adabound_bs100_nbviews20_dr10_longRUN_2ratios']:
         # CV1: valid dataset: split_dc['valid'], CV2: valid_dataset: split_dc['train']
         # Perform train data set eval as counter check
         gt_l = []

@@ -424,6 +424,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
             new_start = sl.start - n_iters if sl.start >= 0 + n_iters else sl.start
             new_end = sl.stop + n_iters
             new_obj_slices.append(slice(new_start, new_end, None))
+        new_obj_slices = tuple(new_obj_slices)
         sub_vol = overlay[new_obj_slices]
         binary_mask = (sub_vol == ix).astype(np.int)
         if verbose:

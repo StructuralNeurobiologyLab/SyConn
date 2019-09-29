@@ -140,7 +140,9 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     inp_d = sso_views_to_modelinput(sso, nb_views)
     inp_d = naive_view_normalization_new(inp_d)
     if global_params.config.syntype_available and use_syntype:
-        synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
+        synsign_ratio = np.array([[syn_sign_ratio_celltype(sso, comp_types=[1, ]),
+                                  syn_sign_ratio_celltype(sso, comp_types=[0, ])]]
+                                 * len(inp_d))
         res = model.predict_proba((inp_d, synsign_ratio))
     else:
         res = model.predict_proba(inp_d)
@@ -2055,7 +2057,9 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
     inp_d = naive_view_normalization_new(inp_d)
     if use_syntype:
-        synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
+        synsign_ratio = np.array([[syn_sign_ratio_celltype(sso, comp_types=[1, ]),
+                                  syn_sign_ratio_celltype(sso, comp_types=[0, ])]]
+                                 * len(inp_d))
         res = model.predict_proba((inp_d, synsign_ratio), bs=40)
     else:
         res = model.predict_proba(inp_d, bs=40)
@@ -2322,10 +2326,10 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
         ssv: The cell reconstruction.
         weighted: Compute synapse-area weighted ratio.
         recompute: Ignore existing value.
-        comp_types: All synapses that are formed on any of the
-        functional compartment types given in `comp_types` on the cell
-        reconstruction are used for computing the ratio (0: dendrite,
-        1: axon, 2: soma). Default: [1, ].
+        comp_types: All synapses that are formed between any of the
+            functional compartment types given in `comp_types` on the cell
+            reconstruction are used for computing the ratio (0: dendrite,
+            1: axon, 2: soma). Default: [1, ].
 
     Returns:
         (Area-weighted) ratio of symmetric synapses or -1 if no synapses.

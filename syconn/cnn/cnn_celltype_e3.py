@@ -14,12 +14,13 @@ from syconn import global_params
 from syconn.cnn.TrainData import CelltypeViewsE3
 import argparse
 import _pickle
+import zipfile
 import os
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.models.simple import Conv3DLayer, StackedConv2Scalar, \
-    StackedConv2ScalarWithLatentAdd
+from elektronn3.models.simple import Conv3DLayer, StackedConv2Scalar#, \
+    #StackedConv2ScalarWithLatentAdd
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.metrics import channel_metric
@@ -27,9 +28,48 @@ from elektronn3.training import metrics
 import adabound
 
 
+class StackedConv2ScalarWithLatentAdd(nn.Module):
+    def __init__(self, in_channels, n_classes, dropout_rate=0.08, act='relu',
+                 n_scalar=1):
+        super().__init__()
+        if act == 'relu':
+            act = nn.ReLU()
+        elif act == 'leaky_relu':
+            act = nn.LeakyReLU()
+        self.seq = nn.Sequential(
+            Conv3DLayer(in_channels, 13, (1, 5, 5), pooling=(1, 2, 2),
+                        dropout_rate=dropout_rate, act=act),
+            Conv3DLayer(13, 19, (1, 5, 5), pooling=(1, 2, 2),
+                        dropout_rate=dropout_rate, act=act),
+            Conv3DLayer(19, 25, (1, 4, 4), pooling=(1, 2, 2),
+                        dropout_rate=dropout_rate, act=act),
+            Conv3DLayer(25, 25, (1, 4, 4), pooling=(1, 2, 2),
+                        dropout_rate=dropout_rate, act=act),
+            Conv3DLayer(25, 30, (1, 2, 2), pooling=(1, 2, 2),
+                        dropout_rate=dropout_rate, act=act),
+            Conv3DLayer(30, 30, (1, 1, 1), pooling=(1, 2, 2),
+                        dropout_rate=dropout_rate, act=act),
+            Conv3DLayer(30, 31, (1, 1, 1), pooling=(1, 1, 1),
+                        dropout_rate=dropout_rate, act=act),
+        )  # given: torch.Size([1, 4, 20, 128, 256]), returns torch.Size([1, 31, 20, 1, 3])
+        self.fc = nn.Sequential(
+            nn.Linear(1860 + n_scalar, 50),
+            act,
+            nn.Linear(50, 30),
+            act,
+            nn.Linear(30, n_classes),
+        )
+
+    def forward(self, x, scal):
+        x = self.seq(x)
+        x = x.view(x.size()[0], -1)  # AdaptiveAvgPool1d requires input of shape B C D
+        x = torch.cat((x, scal), 1)
+        x = self.fc(x)  # remove auxiliary axis -> B C with C = n_classes
+        return x
+
+
 def get_model():
-    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=8, n_scalar=2,
-                                            dropout_rate=0.1)
+    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=8, n_scalar=2)
     # model = StackedConv2Scalar(in_channels=4, n_classes=8)
     return model
 
@@ -38,8 +78,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('-n', '--exp-name',
-                        default="celltype_GTv4_syntype_ALLTRAIN_adabound_bs100_"
-                                "nbviews20_dr10_longRUN_2ratios",
+                        default="celltype_GTv4_syntype_CV2_adam_"
+                                "nbviews20_longRUN_2ratios_ORIG_bs40",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=5000000,
@@ -78,14 +118,14 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3_training/')
 
     max_steps = args.max_steps
-    lr = 0.003
+    lr = 1e-3
     lr_stepsize = 500
-    lr_dec = 0.997
-    batch_size = 50
+    lr_dec = 0.98
+    batch_size = 40
     n_classes = 8
-    data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': 1.0,
+    data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': None,
                         'nb_views_renderinglocations': 4, #'view_key': "4_large_fov",
-                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4",
+                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4_cv2",
                         'random_seed': 0, "binary_views": False,
                         "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
@@ -113,12 +153,32 @@ if __name__ == "__main__":
         model = tracedmodel
 
     if args.resume is not None:  # Load pretrained network
-        print('Resuming model from {}.'.format(os.path.expanduser(args.resume)))
-        try:  # Assume it's a state_dict for the model
-            model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
-        except _pickle.UnpicklingError as exc:
-            # Assume it's a complete saved ScriptModule
-            model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
+        pretrained = os.path.expanduser(args.resume)
+        _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+        if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+            print(_warning_str)
+            model = torch.jit.load(pretrained, map_location=device)
+        else:  # Either state dict or pickled model
+            state = torch.load(pretrained)
+            if isinstance(state, dict):
+                try:
+                    model.load_state_dict(state['model_state_dict'])
+                except RuntimeError:
+                    print('Converting state dict (probably stored as DataParallel.')
+                    for k in list(state.keys()):
+                        state['module' + k] = state[k]
+                        del state[k]
+                optimizer_state_dict = state.get('optimizer_state_dict')
+                lr_sched_state_dict = state.get('lr_sched_state_dict')
+                if optimizer_state_dict is None:
+                    print('optimizer_state_dict not found.')
+                if lr_sched_state_dict is None:
+                    print('lr_sched_state_dict not found.')
+            elif isinstance(state, nn.Module):
+                print(_warning_str)
+                model = state
+            else:
+                raise ValueError(f'Can\'t load {pretrained}.')
 
     # Specify data set
     use_syntype_scal = True
@@ -129,13 +189,13 @@ if __name__ == "__main__":
         train=False, transform=transform, use_syntype_scal=use_syntype_scal, **data_init_kwargs)
 
     # # Set up optimization
-    # optimizer = optim.SGD(
-    #     model.parameters(),
-    #     weight_decay=0.5e-4,
-    #     lr=lr,
-    #     # amsgrad=True
-    # )
-    optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
+    optimizer = optim.Adam(
+        model.parameters(),
+        weight_decay=0.5e-4,
+        lr=lr,
+        amsgrad=True
+    )
+    # optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have
