@@ -2138,6 +2138,11 @@ class SuperSegmentationObject(object):
                                  [0.8, 0.8, 0.1, 1], [0.9, 0.9, 0.9, 1],
                                  [0.1, 0.1, 0.9, 1]])
                 cols = (cols * 255).astype(np.uint8)
+            elif 'merger_gt' in semseg_key:
+                # cell body, false merger, unpredicted, background
+                cols = np.array([[0.5, 0.5, 0.5, 0.4], [0.96, 0.14, 0.347, 1],
+                                 [0.0, 0.5, 0.0, 0.4], [0.9, 0.9, 0.9, 0.4]])
+                cols = (cols * 255).astype(np.uint8)
             else:
                 raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))
