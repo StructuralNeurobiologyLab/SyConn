@@ -23,7 +23,7 @@ cs_version = 0
 # global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/'  # local test
 
 # Path to store output kzip files
-folder_name = "/merged_cells_kzip_"
+folder_name = "/TEST_kzip_"
 data_folder = global_params.wd.split('/')[-2]
 suffix_list = data_folder.split('_')[1:]
 pkl_version = suffix_list[0]
@@ -40,7 +40,7 @@ create_new_cs_ids = False
 
 # number of generated cells
 if num_cs_id == None:
-    num_generated_cells = 500
+    num_generated_cells = 4
 else:
     # if num_cs_id is not None, then use all the cell_pairs for the merger combination
     num_generated_cells = None
@@ -217,6 +217,11 @@ if __name__ == "__main__":
         fname = dest_folder + f'/merged{count}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
         target_fnames = []
         tmp_dest_p = []
+
+        tmp_dest_p.append('{}_{}.pkl'.format(fname, 'skeleton'))
+        target_fnames.append('{}.pkl'.format('skeleton'))
+        write_obj2pkl(tmp_dest_p[-1], merged_cell.skeleton)
+
         tmp_dest_p.append('{}_{}.pkl'.format(fname, 'meta'))
         target_fnames.append('{}.pkl'.format('meta'))
         write_obj2pkl(tmp_dest_p[-1], {'version_dict': merged_cell.version_dict,
