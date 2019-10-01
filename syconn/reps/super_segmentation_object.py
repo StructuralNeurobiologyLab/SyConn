@@ -2445,7 +2445,7 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = (),
+    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton', ),
                     rag: Optional[nx.Graph] = None,
                     sv_color: Optional[np.ndarray] = None,
                     synssv_instead_sj: bool = False):
@@ -2497,6 +2497,8 @@ class SuperSegmentationObject(object):
             if attr not in allowed_attributes:
                 raise ValueError('Invalid attribute specified. Currently suppor'
                                  'ted attributes for export: {}'.format(allowed_attributes))
+            if attr == 'skeleton' and self.skeleton is None:
+                self.load_skeleton()
             tmp_dest_p.append('{}_{}.pkl'.format(dest_path, attr))
             target_fnames.append('{}.pkl'.format(attr))
             sso_attr = getattr(self, attr)
@@ -2516,6 +2518,8 @@ class SuperSegmentationObject(object):
         self.meshes2kzip(dest_path=dest_path, sv_color=sv_color,
                          synssv_instead_sj=synssv_instead_sj)
         self.mergelist2kzip(dest_path=dest_path)
+        if 'skeleton' in attr_keys:
+            self.save_skeleton_to_kzip(dest_path=dest_path)
 
     def write_svmeshes2kzip(self, dest_path=None):
         if dest_path is None:

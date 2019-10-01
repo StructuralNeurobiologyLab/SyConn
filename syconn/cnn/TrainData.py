@@ -712,7 +712,7 @@ class CelltypeViews(MultiViewData):
     def __init__(self, inp_node, out_node, raw_only=False, nb_views=20, nb_views_renderinglocations=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1, n_classes=4,
                  class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1, ctgt_key="ctgt",
-                 train_fraction=None, random_seed=0, view_key=None):
+                 train_fraction=None, random_seed=0, view_key=None, splitting_dict=None):
         """
         USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
 
@@ -760,7 +760,19 @@ class CelltypeViews(MultiViewData):
         print("Initializing CelltypeViews:", self.__dict__)  # TODO: add gt paths to config
         super().__init__(global_params.config.working_dir, ctgt_key, train_fraction=train_fraction,
                          naive_norm=False, load_data=load_data, random_seed=random_seed)
-        ssv_splits = self.splitting_dict
+        if splitting_dict is None:
+            ssv_splits = self.splitting_dict
+        else:
+            prev_splits = [(k, np.unique(v, return_counts=False)) for
+                           k, v in self.splitting_dict.items()]
+            now_splits = [(k, np.unique(v, return_counts=False)) for
+                          k, v in splitting_dict.items()]
+            log_cnn.critical('Splitting dict was passed explicitely. Overwriting '
+                             'default splitting of super-class. Support '
+                             f'previous: {prev_splits}'
+                             f'Support now: {now_splits}.')
+            ssv_splits = splitting_dict
+            self.splitting_dict = splitting_dict
         self.train_d = np.array(ssv_splits["train"])
         self.valid_d = np.array(ssv_splits["valid"])
         self.test_d = np.array(ssv_splits["test"])
@@ -771,11 +783,11 @@ class CelltypeViews(MultiViewData):
         self.train_d = self.train_d[:, None]
         self.valid_d = self.valid_d[:, None]
         self.test_d = self.test_d[:, None]
+        super(MultiViewData, self).__init__()
         for k, v in self.splitting_dict.items():
             classes, c_cnts = np.unique([self.label_dict[ix] for ix in
                                          self.splitting_dict[k]], return_counts=True)
             print(f"{k} [labels, counts]: {classes}, {c_cnts}")
-        super(MultiViewData, self).__init__()
 
     def getbatch_alternative(self, batch_size, source='train'):
         """

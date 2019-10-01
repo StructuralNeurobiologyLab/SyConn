@@ -48,6 +48,8 @@ setup(
     packages=find_packages(exclude=['scripts']),
     python_requires='>=3.6, <4',
     setup_requires=setup_requires,
+    package_data={'syconn': ['handler/config.yml']},
+    include_package_data=True,
     tests_require=['pytest', 'pytest-cov', 'pytest-xdist'],
     ext_modules=cython_out,
     entry_points={
