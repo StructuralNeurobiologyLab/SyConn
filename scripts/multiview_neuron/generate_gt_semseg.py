@@ -11,10 +11,8 @@ from sklearn.neighbors import KDTree
 from syconn.proc.meshes import MeshObject, write_mesh2kzip
 from syconn.handler.multiviews import generate_rendering_locs
 from syconn.proc.graphs import bfs_smoothing
-from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
-    render_sso_coords_index_views
+from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views, load_rendering_func
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
-from syconn.reps.views import ViewContainer
 from syconn import global_params
 from syconn.handler.compression import save_to_h5py
 from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews, str2intconverter
@@ -22,7 +20,6 @@ from syconn.mp.mp_utils import start_multiprocess_imap
 import re
 from multiprocessing import cpu_count
 import os
-from scipy.misc import imsave
 from sklearn.model_selection import train_test_split
 import glob
 global initial_run
@@ -55,6 +52,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     Tuple[np.array]
         raw, label and index views
     """
+    _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     assert gt_type in ["axgt", "spgt"], "Currently only spine and axon GT is supported"
     n_labels = 5 if gt_type == "axgt" else 4
     palette = generate_palette(n_labels)

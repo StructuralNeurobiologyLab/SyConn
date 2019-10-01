@@ -51,13 +51,13 @@ try:
 except ImportError:
     from .in_bounding_box import in_bounding_box
     log_proc.error('ImportError. Could not import `in_boundinb_box` from '
-                   '`syconn/proc.in_bounding_boxC.py`. Fallback to numba jit.')
+                   '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
-           'mesh_area_calc', 'mesh2obj_file']
+           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices']
 
 
 class MeshObject(object):
@@ -651,12 +651,18 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     """
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
-    all_ind = np.zeros((0, ), dtype=np.uint)
-    all_vert = np.zeros((0, ))
-    for i in range(len(vert_lst)):
-        all_ind = np.concatenate([all_ind, ind_lst[i] +
-                                  len(all_vert)//nb_simplices])
-        all_vert = np.concatenate([all_vert, vert_lst[i]])
+    if len(vert_lst) == 0:
+        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
+    else:
+        all_vert = np.concatenate(vert_lst)
+    # store index and vertex offset of every partial mesh
+    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+        np.uint)
+    ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+    all_ind = np.concatenate(ind_lst)
+    for i in range(0, len(vert_lst)):
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        all_ind[start_ix:end_ix] += vert_offset[i]
     return all_ind, all_vert
 
 
@@ -681,7 +687,6 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     """
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
-
     if len(vert_lst) == 0:
         return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
     else:
@@ -707,7 +712,7 @@ def mesh_loader(so):
 
 
 def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
-                  cmap=None, alpha=1.0):
+                   cmap=None, alpha=1.0):
     """
     Merge meshes of SegmentationObjects.
 
@@ -728,10 +733,6 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     np.array, np.array [, np.array]
         indices, vertices (scaled) [,colors]
     """
-    all_ind = np.zeros((0, ), dtype=np.uint)
-    all_vert = np.zeros((0, ))
-    all_norm = np.zeros((0, ))
-    colors = np.zeros((0, ))
     if nb_cpus > 1:
         log_proc.debug('`merge_someshes` is not working with `n_cpus > 1`:'
                        ' `cant pickle _thread.RLock objects`')
@@ -740,16 +741,44 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
                                      show_progress=False)
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
-    for i in range(len(meshes)):
-        ind, vert, norm = meshes[i]
-        assert len(vert) == len(norm) or len(norm) == 0, "Length of normals " \
-                                                         "and vertices differ."
-        all_ind = np.concatenate([all_ind, ind + len(all_vert)//nb_simplices])
-        all_vert = np.concatenate([all_vert, vert])
-        all_norm = np.concatenate([all_norm, norm])
+
+    ind_lst = []
+    vert_lst = []
+    norm_lst = []
+    color_lst = []
+    for i, (ind, vert, norm) in enumerate(meshes):
+        ind_lst.append(ind)
+        vert_lst.append(vert)
+        norm_lst.append(norm)
         if color_vals is not None:
-            curr_color = np.array([color_vals[i]]*len(vert))
-            colors = np.concatenate([colors, curr_color])
+            color_lst.append(np.array([color_vals[i]]*len(vert)))
+
+    # merge results
+    if color_vals is not None:
+        colors = np.concatenate(color_lst)
+        del color_lst
+    if len(norm_lst) == 0:
+        all_norm = np.zeros((0,))
+    else:
+        all_norm = np.concatenate(norm_lst)
+        del norm_lst
+
+    if len(vert_lst) == 0:
+        all_vert = np.zeros((0,))
+    else:
+        all_vert = np.concatenate(vert_lst)
+    if len(ind_lst) == 0:
+        all_ind = np.zeros((0,), dtype=np.uint)
+    else:
+        all_ind = np.concatenate(ind_lst)
+        # store index and vertex offset of every partial mesh
+        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+            np.uint)
+        ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+        for i in range(0, len(vert_lst)):
+            start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+            all_ind[start_ix:end_ix] += vert_offset[i]
+
     assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
         "Length of combined normals and vertices differ."
     if color_vals is not None:
@@ -779,14 +808,15 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
     vertices = vertices.astype(np.float32)
     indices = indices.astype(np.int32)
     if not rgba_color.ndim == 2:
-        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
+        rgba_color = np.array(rgba_color, dtype=np.uint8).reshape((
+            -1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
-    if len(rgba_color) != len(vertices) and len(rgba_color) == 4:
+    if len(rgba_color) != len(vertices) and len(rgba_color) == 1 and rgba_color.shape[1] == 4:
         # TODO: create per tree color instead of per vertex color
-        rgba_color = np.array([rgba_color for i in range(len(vertices))],
+        rgba_color = np.array([rgba_color[0] for i in range(len(vertices))],
                               dtype=np.uint8)
     else:
         if not (len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4):

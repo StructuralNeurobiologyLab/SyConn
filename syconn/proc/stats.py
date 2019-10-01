@@ -26,7 +26,7 @@ from . import log_proc
 
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
-                      fscore_beta=1, target_names=None):
+                      fscore_beta=1, target_names=None, add_text=''):
     header = "-------------------------------\n\t\t%s\n" % prefix
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
@@ -48,15 +48,17 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
                   "\n%0.6f %0.6f %0.6f %0.6f %0.6f %d\n\n" \
                  % (fscore_beta, t_opt, f[np.argmax(f)], rec[np.argmax(f)],
                     prec[np.argmax(f)], roc_auc, len(proba))
-    header += classification_report(labels, np.argmax(proba, axis=1), digits=4,
-                                target_names=target_names)
+    header += classification_report(labels, np.argmax(proba, axis=1), labels=np.arange(len(target_names)),
+                                    digits=4, target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, np.argmax(proba, axis=1))
     header += "\n-------------------------------\n"
     log_proc.info(header)
     plot_pr(all_prec, all_rec, r=[0.6, 1.01], legend_labels=target_names)
     if model_dir is not None:
+        os.makedirs(model_dir, exist_ok=True)
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
         text_file.write(header)
+        text_file.write(add_text)
         text_file.close()
         prec, rec, fs, supp = precision_recall_fscore_support(labels, np.argmax(proba, axis=1))
         np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])

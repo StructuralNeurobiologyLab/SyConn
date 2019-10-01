@@ -18,6 +18,7 @@ import argparse
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
 
+
 if __name__ == '__main__':
     # ------------------------ PARSE ARGUMENTS ------------------------------------
     parser = argparse.ArgumentParser(description='SyConn example run')
@@ -41,10 +42,10 @@ if __name__ == '__main__':
 
     key_val_pairs_conf = [
         ('prior_glia_removal', prior_glia_removal),
-        ('pyopengl_platform', 'egl'),
-        ('batch_proc_system', None),
+        ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
+        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
-        ('ngpus_per_node', 1),
+        ('ngpus_per_node', 2),
         ('nnodes_total', 1),
     ]
 
@@ -54,6 +55,8 @@ if __name__ == '__main__':
     example_wd = os.path.expanduser(args.working_dir) + "/"
 
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
+    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
 
     # -------------------------- Start logging
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
@@ -76,7 +79,6 @@ if __name__ == '__main__':
         log.critical('Example run started. Working directory was overwritten and set'
                      ' to "{}".'.format(example_wd))
     global_params.wd = example_wd
-
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # keep imports here to guarantee correct usage of pyopengl platform if batch processing
@@ -96,6 +98,12 @@ if __name__ == '__main__':
     # --------------------------  copy models to working directory
     if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
         shutil.copytree(curr_dir + '/models', example_wd + '/models/')
+
+    if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
+        raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
+    if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
+            or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
+        raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
 
     os.makedirs(example_wd + '/glia/', exist_ok=True)
 
@@ -179,9 +187,15 @@ if __name__ == '__main__':
     ####################################################################################################################
 
     log.info('Step 0/8 - Predicting sub-cellular structures')
+    # TODO: launch all inferences in parallel
     exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
-    time_stamps.append(time.time())
-    step_idents.append('Dense predictions')
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    #  TODO: might require also require adaptions in init_cell_subcell_sds
+    # exec_dense_prediction.predict_cellorganelles()
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    # exec_dense_prediction.predict_synapsetype()
+    # time_stamps.append(time.time())
+    # step_idents.append('Dense predictions')
 
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc)

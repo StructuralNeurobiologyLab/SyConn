@@ -243,7 +243,7 @@ def save_to_h5py(data: Union[Dict[str, np.ndarray], List[np.ndarray]],
             recommended for sparse and ordered data.
     """
     if (not type(data) is dict) and hdf5_names is None:
-        raise TypeError("hdf5names has to be set, when data is a list")
+        raise TypeError("hdf5names has to be set when data is a list")
     if os.path.isfile(path) and overwrite:
         os.remove(path)
     f = h5py.File(path, "w")
@@ -256,8 +256,8 @@ def save_to_h5py(data: Union[Dict[str, np.ndarray], List[np.ndarray]],
     else:
         if len(hdf5_names) != len(data):
             f.close()
-            msg = "Not enough or too many hdf5-names ({}) given when during" \
-                  " h5-file load attempt!".format(hdf5_names)
+            msg = "Not enough or too many hdf5-names ({}) given during" \
+                  " h5-file save attempt!".format(hdf5_names)
             log_handler.error(msg)
             raise ValueError(msg)
         for nb_data in range(len(data)):

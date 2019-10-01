@@ -947,7 +947,7 @@ class SegmentationObject(object):
         elif self.type == "syn":
             color = (150, 50, 200, 255)
         elif self.type == "syn_ssv":
-            color = (150, 50, 200, 255)
+            color = (240, 50, 50, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -1146,8 +1146,9 @@ class SegmentationObject(object):
             attr_key: Attribute key to look for.
 
         Returns:
-            Value of `attr_key` in :py:attr:`~attr_dict`. If key does not exist
-            locally, tries to load from :py:attr:`~attr_dict_path`.
+            Value of `attr_key` in :py:attr:`~attr_dict` or None if it does not
+            exist. If key does not exist in :py:attr:`~attr_dict`, tries to
+            load from :py:attr:`~attr_dict_path`.
         """
         if len(self.attr_dict) == 0:
             self.load_attr_dict()

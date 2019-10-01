@@ -29,16 +29,15 @@ from .. import global_params
 from .mp_utils import start_multiprocess_imap
 from . import log_mp
 
-BATCH_PROC_SYSTEM = global_params.config['batch_proc_system']
-
 
 def batchjob_enabled():
-    if BATCH_PROC_SYSTEM is None:
+    batch_proc_system = global_params.config['batch_proc_system']
+    if batch_proc_system is None or batch_proc_system == 'None':
         return False
     try:
-        if BATCH_PROC_SYSTEM == 'QSUB':
+        if batch_proc_system == 'QSUB':
             cmd_check = 'qstat'
-        elif BATCH_PROC_SYSTEM == 'SLURM':
+        elif batch_proc_system == 'SLURM':
             cmd_check = 'squeue'
         else:
             raise NotImplementedError
@@ -47,7 +46,7 @@ def batchjob_enabled():
                                   stdout=devnull, stderr=devnull)
     except subprocess.CalledProcessError as e:
         print("BatchJobSystem '{}' specified but failed with error '{}' not found,"
-              " switching to single node multiprocessing.".format(BATCH_PROC_SYSTEM, e))
+              " switching to single node multiprocessing.".format(batch_proc_system, e))
         return False
     return True
 
@@ -197,7 +196,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
                                 np.random.randint(0, len(letters), 10 if
-                                BATCH_PROC_SYSTEM == 'QSUB' else 8)])
+                                global_params.config['batch_proc_system'] == 'QSUB' else 8)])
             log_batchjob.info("Random job_name created: %s" % job_name)
     else:
         log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
@@ -230,7 +229,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
 
-    if BATCH_PROC_SYSTEM == 'SLURM':
+    if global_params.config['batch_proc_system'] == 'SLURM':
         if '-V ' in additional_flags:
             log_batchjob.warning(
                 '"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
@@ -282,7 +281,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                     pkl.dump(param, f)
 
         os.chmod(this_sh_path, 0o744)
-        if BATCH_PROC_SYSTEM == 'QSUB':
+        if global_params.config['batch_proc_system'] == 'QSUB':
             if pe is not None:
                 sge_queue_option = "-pe %s %d" % (pe, n_cores)
             elif queue is not None:
@@ -293,7 +292,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 sge_queue_option, job_log_path, job_err_path, job_name,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
-        elif BATCH_PROC_SYSTEM == 'SLURM':
+        elif global_params.config['batch_proc_system'] == 'SLURM':
             if n_cores > 1:
                 additional_flags += " -n%d" % n_cores
             cmd_exec = "sbatch {0} --output={1} --error={2}" \
@@ -347,7 +346,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
               ' Please check your submitted code.'
         log_batchjob.error(msg)
-        raise Exception(msg)
+        raise RuntimeError(msg)
     if len(out_files) < len(params):
         log_batchjob.error("%d jobs appear to have failed." % (len(params) - len(out_files)))
         checklist = np.zeros(len(params), dtype=np.bool)
@@ -637,9 +636,9 @@ def number_of_running_processes(job_name):
         number of running jobs
 
     """
-    if BATCH_PROC_SYSTEM == 'QSUB':
+    if global_params.config['batch_proc_system'] == 'QSUB':
         cmd_stat = "qstat -u %s" % username
-    elif BATCH_PROC_SYSTEM == 'SLURM':
+    elif global_params.config['batch_proc_system'] == 'SLURM':
         cmd_stat = "squeue -u %s" % username
     else:
         raise NotImplementedError
@@ -647,7 +646,8 @@ def number_of_running_processes(job_name):
                                stdout=subprocess.PIPE)
     nb_lines = 0
     for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-        if job_name[:10 if BATCH_PROC_SYSTEM == 'QSUB' else 8] in line:
+        if job_name[:10 if global_params.config['batch_proc_system'] == 'QSUB'
+        else 8] in line:
             nb_lines += 1
     return nb_lines
 
@@ -665,9 +665,9 @@ def delete_jobs_by_name(job_name):
     -------
 
     """
-    if BATCH_PROC_SYSTEM == 'QSUB':
+    if global_params.config['batch_proc_system'] == 'QSUB':
         cmd_stat = "qstat -u %s" % username
-    elif BATCH_PROC_SYSTEM == 'SLURM':
+    elif global_params.config['batch_proc_system'] == 'SLURM':
         cmd_stat = "squeue -u %s" % username
     else:
         raise NotImplementedError
@@ -679,7 +679,7 @@ def delete_jobs_by_name(job_name):
         if job_name[:10] in curr_line:
             job_ids.append(re.findall(r"[\d]+", curr_line)[0])
 
-    if BATCH_PROC_SYSTEM == 'QSUB':
+    if global_params.config['batch_proc_system'] == 'QSUB':
         cmd_del = "qdel "
         for job_id in job_ids:
             cmd_del += job_id + ", "
@@ -687,7 +687,7 @@ def delete_jobs_by_name(job_name):
 
         subprocess.Popen(command, shell=True,
                          stdout=subprocess.PIPE)
-    elif BATCH_PROC_SYSTEM == 'SLURM':
+    elif global_params.config['batch_proc_system'] == 'SLURM':
         cmd_del = "scancel -n {}".format(job_name)
         subprocess.Popen(cmd_del, shell=True,
                          stdout=subprocess.PIPE)

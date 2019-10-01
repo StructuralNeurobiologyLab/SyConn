@@ -317,12 +317,12 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    if not 'example' in global_params.config.working_dir:
-        n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-    else:
-        n_cores = global_params.config['ncores_per_node']
+    # if not 'example' in global_params.config.working_dir:
+    n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
+    # else:
+    #     n_cores = global_params.config['ncores_per_node']
     path_to_out = qu.QSUB_script(multi_params, "predict_axoness_semseg", log=log,
-                                 n_max_co_processes=global_params.config['nnodes_total'],
+                                 n_max_co_processes=global_params.config.ngpu_total,
                                  suffix="", additional_flags="--gres=gpu:1",
                                  n_cores=n_cores,
                                  remove_jobfolder=False)
@@ -457,7 +457,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
             n_parallel_jobs = global_params.config['ncores_per_node']
             qu.QSUB_script(multi_params, "render_views", suffix='_small',
                            n_max_co_processes=n_parallel_jobs, log=log,
-                           additional_flags="--gres=gpu:2",
+                           additional_flags="--gres=gpu:2", disable_batchjob=True,
                            n_cores=n_cores, remove_jobfolder=True)
         # run on whole cluster
         else:
