@@ -79,6 +79,7 @@ finished the following analysis steps for an example cube of shape \[2180 2180 1
 ## Example scripts and API usage
 An introduction on how to use the example scripts can be found [here](examples.md) and API code examples [here](api.md).
 
+
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
 
@@ -107,6 +108,7 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 
 <img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=800">
 
+## Full run  %%maybe remove Analysis steps
 
 ## Analysis steps
 After initialization of the SDs (cell and sub-cellular structures, step 1 in the example run) and the SSD

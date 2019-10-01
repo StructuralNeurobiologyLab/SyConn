@@ -63,6 +63,9 @@ if __name__ == '__main__':
                           key_value_pairs=key_val_pairs_conf,
                           force_overwrite=True)
 
+    print("\n\n\n Config file was generated \n\n\n")
+    sys.exit()
+
     # _____________________________ BASIC PARAMETERS  ___________________________________
 
     # ----------------------------- ADDITIONAL CHECKS --------------------------------------
