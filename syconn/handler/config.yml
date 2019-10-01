@@ -220,12 +220,12 @@ merger:
     comp_window: 30720  # in NM
     semseg_key: 'merger_gt'
     k: 0
-  # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
-  # and 6 (unpredicted), use labels of the k-nearest vertices
+  # mapping of vertex labels to skeleton nodes; ignore labels 2 (background), 3 (unpredicted)
+  # use labels of the k-nearest vertices
   map_properties_merger:
-    k: 50
+    k: 20
     ds_vertices: 1
-#    ignore_labels: [5, 6]
+    ignore_labels: [2, 3]
 
 # --------- MORPHOLOGY EMBEDDING
 tcmn:
