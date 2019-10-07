@@ -218,7 +218,7 @@ merger:
     ws: [256, 128]
     nb_views: 3
     comp_window: 30720  # in NM
-    semseg_key: 'merger_gt'
+    semseg_key: 'merger_pred'
     k: 0
   # mapping of vertex labels to skeleton nodes; ignore labels 2 (background), 3 (unpredicted)
   # use labels of the k-nearest vertices
