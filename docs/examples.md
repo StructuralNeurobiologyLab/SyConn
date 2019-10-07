@@ -38,3 +38,23 @@ The following two images show an example of the original data (content of `(\d+)
 ```
 python SyConn/examples/semseg_axon.py --kzip=~/2_example.k.zip
 ```
+
+## Semantic segmentation of cell mergers
+The prediction script to determine the merge location of two cells.
+* Input: kzip file of cell reconstruction
+* output: mesh and skeleton kzip of prediction
+
+* python scrpit: `SyConn/examples/semseg_false_merger.py`
+* requires model in working directory
+
+```
+python SyConn/examples/semseg_false_merger.py --kzip=<path to kzip folder>
+```
+
+#### Arguments
+- `--kzip`: path to the folder which contains kzip files of cell reconstructions. Each kzip file must contain the following content: `sv.ply`, `mi.ply`, `sj.ply`, `vc.ply`, `meta.pkl`, `skeleton.pkl`, `annotation.xml`. Incomplete kzip files will not be filtered out during prediction.
+
+- `--modelpath`: path to the trained model. E.g. `~/e3training/merger_FCN_v10_2/`
+
+- `--dest_path`: path in where the output kzip file should be stored. 
+
