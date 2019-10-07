@@ -641,7 +641,6 @@ class SuperSegmentationObject(object):
                              ''.format(data_type))
 
     #                                                                 PROPERTIES
-    @property
     def celltype(self, key: Optional[str] = None) -> int:
         """
         Returns the cell type classification result. Default: CMN model, if
@@ -3071,12 +3070,14 @@ class SuperSegmentationObject(object):
         if not largeFoV:
             if view_props is None:
                 view_props = {}
-            return ssh.predict_sso_celltype(
-                self, model, pred_key_appendix=pred_key_appendix, **view_props)  # OLD
-        if view_props is None:
-            view_props = global_params.config['celltype']['view_properties_large']
-        ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
-                                    overwrite=False, **view_props)
+            # reuse small, local views via bootstrapping
+            ssh.predict_sso_celltype(
+                self, model, pred_key_appendix=pred_key_appendix, **view_props)
+        else:
+            if view_props is None:
+                view_props = global_params.config['celltype']['view_properties_large']
+            ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
+                                        overwrite=False, **view_props)
         if model_tnet is not None:
             view_props = dict(view_props)  # create copy
             if 'use_syntype' in view_props:
@@ -3098,7 +3099,8 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-    def certainty_celltype(self, proba_key: Optional[str] = None) -> float:
+    def certainty_celltype(self, proba_key: Optional[str] = None,
+                           da_equals_tan: bool = True) -> float:
         """
         Certainty estimate of the celltype prediction:
             1. If `is_logit` is True, Generate pseudo-probabilities from the
@@ -3116,7 +3118,17 @@ class SuperSegmentationObject(object):
         if proba_key is None:
             proba_key = 'celltype_cnn_e3_probas'
         logits = self.lookup_in_attribute_dict(proba_key)
-        return certainty_estimate(logits, is_logit=True)
+
+        # DA and TAN are type modulatory, if this is changes, also change `predict_sso_celltype`
+        clf = np.argmax(logits, axis=1)
+        if np.max(clf) > 7:
+            raise ValueError('Unknown cell type predicted.')
+        major_dec = np.zeros(7)
+        for ii in range(len(major_dec)):
+            major_dec[ii] = np.sum(clf == ii)
+        major_dec /= np.sum(major_dec)
+
+        return certainty_estimate(major_dec[None, ], is_logit=False)
 
     def majority_vote(self, prop_key, max_dist):
         """

@@ -21,6 +21,7 @@ from torch import nn
 from torch import optim
 from elektronn3.models.simple import Conv3DLayer, StackedConv2Scalar#, \
     #StackedConv2ScalarWithLatentAdd
+from syconn.handler.basics import load_pkl2obj
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.metrics import channel_metric
@@ -37,27 +38,27 @@ class StackedConv2ScalarWithLatentAdd(nn.Module):
         elif act == 'leaky_relu':
             act = nn.LeakyReLU()
         self.seq = nn.Sequential(
-            Conv3DLayer(in_channels, 13, (1, 5, 5), pooling=(1, 2, 2),
+            Conv3DLayer(in_channels, 20, (1, 5, 5), pooling=(1, 2, 2),
                         dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(13, 19, (1, 5, 5), pooling=(1, 2, 2),
+            Conv3DLayer(20, 30, (1, 5, 5), pooling=(1, 2, 2),
                         dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(19, 25, (1, 4, 4), pooling=(1, 2, 2),
+            Conv3DLayer(30, 40, (1, 4, 4), pooling=(1, 2, 2),
                         dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(25, 25, (1, 4, 4), pooling=(1, 2, 2),
+            Conv3DLayer(40, 50, (1, 4, 4), pooling=(1, 2, 2),
                         dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(25, 30, (1, 2, 2), pooling=(1, 2, 2),
+            Conv3DLayer(50, 60, (1, 2, 2), pooling=(1, 2, 2),
                         dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(30, 30, (1, 1, 1), pooling=(1, 2, 2),
+            Conv3DLayer(60, 70, (1, 1, 1), pooling=(1, 2, 2),
                         dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(30, 31, (1, 1, 1), pooling=(1, 1, 1),
+            Conv3DLayer(70, 70, (1, 1, 1), pooling=(1, 1, 1),
                         dropout_rate=dropout_rate, act=act),
         )  # given: torch.Size([1, 4, 20, 128, 256]), returns torch.Size([1, 31, 20, 1, 3])
         self.fc = nn.Sequential(
-            nn.Linear(1860 + n_scalar, 50),
+            nn.Linear(4200 + n_scalar, 100),
             act,
-            nn.Linear(50, 30),
+            nn.Linear(100, 50),
             act,
-            nn.Linear(30, n_classes),
+            nn.Linear(50, n_classes),
         )
 
     def forward(self, x, scal):
@@ -66,6 +67,44 @@ class StackedConv2ScalarWithLatentAdd(nn.Module):
         x = torch.cat((x, scal), 1)
         x = self.fc(x)  # remove auxiliary axis -> B C with C = n_classes
         return x
+# class StackedConv2ScalarWithLatentAdd(nn.Module):
+#     def __init__(self, in_channels, n_classes, dropout_rate=0.08, act='relu',
+#                  n_scalar=1):
+#         super().__init__()
+#         if act == 'relu':
+#             act = nn.ReLU()
+#         elif act == 'leaky_relu':
+#             act = nn.LeakyReLU()
+#         self.seq = nn.Sequential(
+#             Conv3DLayer(in_channels, 13, (1, 5, 5), pooling=(1, 2, 2),
+#                         dropout_rate=dropout_rate, act=act),
+#             Conv3DLayer(13, 19, (1, 5, 5), pooling=(1, 2, 2),
+#                         dropout_rate=dropout_rate, act=act),
+#             Conv3DLayer(19, 25, (1, 4, 4), pooling=(1, 2, 2),
+#                         dropout_rate=dropout_rate, act=act),
+#             Conv3DLayer(25, 25, (1, 4, 4), pooling=(1, 2, 2),
+#                         dropout_rate=dropout_rate, act=act),
+#             Conv3DLayer(25, 30, (1, 2, 2), pooling=(1, 2, 2),
+#                         dropout_rate=dropout_rate, act=act),
+#             Conv3DLayer(30, 30, (1, 1, 1), pooling=(1, 2, 2),
+#                         dropout_rate=dropout_rate, act=act),
+#             Conv3DLayer(30, 31, (1, 1, 1), pooling=(1, 1, 1),
+#                         dropout_rate=dropout_rate, act=act),
+#         )  # given: torch.Size([1, 4, 20, 128, 256]), returns torch.Size([1, 31, 20, 1, 3])
+#         self.fc = nn.Sequential(
+#             nn.Linear(1860 + n_scalar, 50),
+#             act,
+#             nn.Linear(50, 30),
+#             act,
+#             nn.Linear(30, n_classes),
+#         )
+#
+#     def forward(self, x, scal):
+#         x = self.seq(x)
+#         x = x.view(x.size()[0], -1)  # AdaptiveAvgPool1d requires input of shape B C D
+#         x = torch.cat((x, scal), 1)
+#         x = self.fc(x)  # remove auxiliary axis -> B C with C = n_classes
+#         return x
 
 
 def get_model():
@@ -75,14 +114,20 @@ def get_model():
 
 
 if __name__ == "__main__":
+    lr = 1e-3
+    lr_stepsize = 500
+    lr_dec = 0.985
+    batch_size = 40
+    n_classes = 8
+    cv_val = 0
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('-n', '--exp-name',
-                        default="celltype_GTv4_syntype_CV2_adam_"
-                                "nbviews20_longRUN_2ratios_ORIG_bs40",
+                        default=f"celltype_GTv4_syntype_CV{cv_val}_adam_"
+                                f"nbviews20_longRUN_2ratios_BIG_bs40_10fold_eval0",
                         help='Manually set experiment name')
     parser.add_argument(
-        '-m', '--max-steps', type=int, default=5000000,
+        '-m', '--max-steps', type=int, default=200e3,
         help='Maximum number of training steps to perform.'
     )
     parser.add_argument(
@@ -115,18 +160,15 @@ if __name__ == "__main__":
     torch.manual_seed(0)
 
     # USER PATHS
-    save_root = os.path.expanduser('~/e3_training/')
-
+    save_root = os.path.expanduser('~/e3_training_10fold_eval/')
+    split_dc_path = f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4/ctgt_v4_splitting_cv' \
+                    f'{cv_val}_10fold.pkl'
+    split_dc = load_pkl2obj(split_dc_path)
     max_steps = args.max_steps
-    lr = 1e-3
-    lr_stepsize = 500
-    lr_dec = 0.98
-    batch_size = 40
-    n_classes = 8
     data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': None,
                         'nb_views_renderinglocations': 4, #'view_key': "4_large_fov",
-                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4_cv2",
-                        'random_seed': 0, "binary_views": False,
+                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4",
+                        'random_seed': 0, "binary_views": False, 'splitting_dict': split_dc,
                         "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
     model = get_model()

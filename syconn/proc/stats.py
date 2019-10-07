@@ -31,23 +31,6 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
     all_prec, all_rec = [], []
-    for i in range(n_labels):
-        curr_labels = np.array(labels, dtype=np.int)
-        curr_labels[labels != i] = 0
-        curr_labels[labels == i] = 1
-        prec, rec, t = precision_recall_curve(curr_labels, np.array(proba)[:, i])
-        all_prec.append(prec)
-        all_rec.append(rec)
-        f = fscore(rec, prec, beta=fscore_beta)
-        t_opt = t[np.argmax(f)]
-        try:
-            roc_auc = roc_auc_score(np.array(curr_labels), np.array(proba[:, i]))
-        except ValueError:  # Only one class present in y_true. ROC AUC score is not defined in that case
-            roc_auc = 0
-        header += "\nthresh, f%d-score, recall, precision, roc-auc, supp " \
-                  "\n%0.6f %0.6f %0.6f %0.6f %0.6f %d\n\n" \
-                 % (fscore_beta, t_opt, f[np.argmax(f)], rec[np.argmax(f)],
-                    prec[np.argmax(f)], roc_auc, len(proba))
     header += classification_report(labels, np.argmax(proba, axis=1), labels=np.arange(len(target_names)),
                                     digits=4, target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, np.argmax(proba, axis=1))

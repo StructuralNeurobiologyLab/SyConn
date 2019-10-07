@@ -1138,6 +1138,14 @@ def int2str_label_converter(label, gt_type):
         else:
             return "N/A"
     elif gt_type == 'ctgt_v2':
+        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            print('Unknown label "{}"'.format(label))
+            return "N/A"
+    elif gt_type == 'ctgt_v2_old':
         l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
         l_dc_inv["?"] = 8
         l_dc = {v: k for k, v in l_dc_inv.items()}
@@ -1148,7 +1156,6 @@ def int2str_label_converter(label, gt_type):
             return l_dc[label]
         except KeyError:
             print('Unknown label "{}"'.format(label))
-            return "N/A"
     else:
         raise ValueError("Given ground truth type is not valid.")
 

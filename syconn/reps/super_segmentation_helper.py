@@ -111,12 +111,15 @@ def nodes_in_pathlength(anno, max_path_len):
 
 def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
                          model: 'Module', nb_views: int = 20, use_syntype=True,
-                         overwrite: bool = False, pred_key_appendix=""):
+                         overwrite: bool = False, pred_key_appendix="",
+                         da_equals_tan=True):
     """
     Celltype prediction based on local views and synapse type ratio feature.
     Uses on file system cached views (also used for axon and spine prediction).
     See `celltype_of_sso_nocache` for 'on-the-fly' prediction, which renders
     views from scratch given their window size etc.
+    :func:`~sso_views_to_modelinput` is used to create the random view subsets.
+    The final prediction is the majority class of all subset predictions.
 
     Parameters
     ----------
@@ -146,9 +149,25 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
         res = model.predict_proba((inp_d, synsign_ratio))
     else:
         res = model.predict_proba(inp_d)
+
+    # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`
+    if da_equals_tan:
+        # accumulate evidence for DA and TAN
+        res[:, 1] += res[:, 6]
+        # remove TAN in proba array
+        res = np.delete(res, [6], axis=1)
+        # INT is now at index 6 -> label 6 is INT
+
     clf = np.argmax(res, axis=1)
-    ls, cnts = np.unique(clf, return_counts=True)
-    pred = ls[np.argmax(cnts)]
+    if np.max(clf) > 7:
+        raise ValueError('Unknown cell type predicted.')
+    major_dec = np.zeros(7)
+    for ii in range(len(major_dec)):
+        major_dec[ii] = np.sum(clf == ii)
+    major_dec /= np.sum(major_dec)
+    pred = np.argmax(major_dec)
+    sso.attr_dict[pred_key] = pred
+    sso.attr_dict[f"{pred_key}_probas"] = res
     sso.save_attributes([pred_key], [pred])
     sso.save_attributes([f"{pred_key}_probas"], [res])
 

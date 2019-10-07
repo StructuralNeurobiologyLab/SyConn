@@ -196,12 +196,10 @@ def int2str_converter(label: int, gt_type: str):
         else:
             return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
     elif gt_type == 'ctgt_v2':
-        l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
-        l_dc_inv["?"] = 8
+        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`,
+        # `predict_celltype_sso
+        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
         l_dc = {v: k for k, v in l_dc_inv.items()}
-        # Do not distinguish between FS and INT/?
-        l_dc[8] = "INT"
-        l_dc[6] = "INT"
         try:
             return l_dc[label]
         except KeyError:
