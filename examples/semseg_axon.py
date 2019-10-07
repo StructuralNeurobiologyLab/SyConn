@@ -73,5 +73,6 @@ if __name__ == '__main__':
         sso.skeleton['nodes'], view_props['semseg_key'],
         **global_params.config['compartments']['map_properties_semsegax'])
     sso.skeleton[view_props['semseg_key']] = node_preds
+
     sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_axon,
                               additional_keys=view_props['semseg_key'])

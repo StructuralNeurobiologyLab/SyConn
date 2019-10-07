@@ -38,7 +38,8 @@ try:
     from .block_processing_C import process_block_nonzero, extract_cs_syntype
 except ImportError as e:
     extract_cs_syntype = None
-    log_extraction.warning('Could not import cython version of `block_processing`.')
+    log_extraction.warning('Could not import cython version of `block_processing`. {}'.format(
+        str(e)))
     from .block_processing import process_block_nonzero
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from .. import global_params
