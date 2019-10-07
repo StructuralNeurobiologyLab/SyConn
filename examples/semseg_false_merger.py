@@ -2,12 +2,15 @@ from syconn.reps.super_segmentation import *
 from syconn.reps.super_segmentation_helper import semseg_of_sso_nocache
 from syconn.proc.ssd_assembly import init_sso_from_kzip
 from syconn.handler.prediction import get_semseg_axon_model
+import numpy as np
 import os, glob, re
 import argparse
 import random
 import zipfile
 import tqdm
 import timeit
+import networkx as nx
+from scipy.spatial import cKDTree
 
 def check_kzip_completeness(data_path: str, fnames: list):
     """
@@ -67,6 +70,12 @@ if __name__ == '__main__':
     file_names = get_all_fname(os.path.abspath(os.path.expanduser(args.kzip)))
     # file_names = get_all_fname(os.path.expanduser(args.kzip))
     file_names = check_kzip_completeness(os.path.expanduser(args.kzip), file_names)
+
+    # =====================================
+    # TEST file
+    # =====================================
+    file_names = ['/merged60_cells789872_8671124.k.zip']
+
     print("{} kzip files detected in: {}".format(len(file_names), args.kzip))
 
     # set working directory to obtain models
@@ -89,7 +98,7 @@ if __name__ == '__main__':
     view_props = global_params.config['merger']['view_properties_merger']
     view_props["verbose"] = True
 
-    dest_predicted_merger = os.path.expanduser("~") + '/predicted_merger/'
+    dest_predicted_merger = os.path.expanduser("~") + '/predicted_merger_test/'
     if not os.path.isdir(dest_predicted_merger):
         os.makedirs(dest_predicted_merger)
 
@@ -108,22 +117,92 @@ if __name__ == '__main__':
         node_preds = sso.semseg_for_coords(
             sso.skeleton['nodes'], view_props['semseg_key'],
             **global_params.config['merger']['map_properties_merger'])
-
         sso.skeleton[view_props['semseg_key']] = node_preds
 
         # TODO: define some criterion: size, confidence
-        merger_coord_list = list()
+        merger_idx2coord = dict()
+        all_skeleton_nodes = sso.skeleton['nodes'] * sso.scaling
         for i in range(len(node_preds)):
             if node_preds[i] == 1:
-                coord = sso.skeleton['nodes'][i] * sso.scaling
-                merger_coord_list.append(coord)
-        # randomly pick one coord to represent merger_location
-        if len(merger_coord_list) > 0:
-            merger_location = random.choice(merger_coord_list)
+                merger_idx2coord[i] = sso.skeleton['nodes'][i] * sso.scaling
+        # Plan 1: randomly pick one coord to represent merger_location
+        # if len(merger_idx2coord) > 0:
+        #     merger_location = random.choice(merger_coord_list)
 
+        # TODO: implement the binary closing to close the gap
+        # TODO: but also tweak the k_neighbor in config.yml to get best result
+
+        # create a graph of the whole skeleton
+        skeleton_graph = sso.weighted_graph([view_props['semseg_key']])
+        assert len(skeleton_graph.nodes()) == len(sso.skeleton['nodes'])
+        # keep only the merger nodes in the graph
+        for node in list(skeleton_graph.nodes()):
+            if node_preds[node] == 0:
+                skeleton_graph.remove_node(node)
+        assert len(skeleton_graph.nodes()) == len(merger_idx2coord)
+        # determine how many mergers are detected by calculating how many connected_components exist
+        cc_list = sorted(nx.connected_components(skeleton_graph), key=len, reverse=True)
+        # determine which two pairs of connected_components belongs to the same merger:
+        cc_pairs = list()
+        node_kdtree = cKDTree(all_skeleton_nodes)
+        for i in range(len(cc_list) - 1):
+            cc = cc_list[i]
+            if len(cc) < 3:
+                # discard the connected_component which contains less than 3 nodes
+                for node_id in cc:
+                    node_preds[node_id] = 0
+                continue
+            # get the middle element of cc
+            mid = sorted(list(cc))[len(cc) // 2]
+            ixs = sorted(node_kdtree.query_ball_point(merger_idx2coord[mid], r=1.5e3))
+            for j in range(i+1, len(cc_list)):
+                cc2 = cc_list[j]
+                if cc2 != cc:
+                    if len(set(ixs).intersection(cc2)) > 2:
+                        cc_pairs.append((cc, cc2))
+        # refresh the node prediction after the filtering out the isolated labeled_nodes
+        sso.skeleton[view_props['semseg_key']] = node_preds
         skeleton_fname = "skeleton_" + "_".join(cell_ids) + ".k.zip"
         sso.save_skeleton_to_kzip(dest_path=dest_predicted_merger + skeleton_fname,
                                   additional_keys=view_props['semseg_key'])
+
+        # ================================
+        # Information for confidence
+        # ================================
+        num_merger_nodes = len(merger_idx2coord)
+        # if num_merger_nodes
+
+        labeled_views = sso.load_views(view_props['semseg_key'])
+        unique, counts = np.unique(labeled_views, return_counts=True)
+        dict_label2count = dict(zip(unique, counts))
+
+        # get the coordinates of all vertices
+        vertices_flat = sso.mesh[1]
+        vertices = vertices_flat.reshape((-1, 3))
+        # get the label of all vertices
+        ld = sso.label_dict('vertex')
+        labeled_vertices = ld[view_props['semseg_key']]
+        assert len(vertices) == len(labeled_vertices)
+
+        vertices_kdtree = cKDTree(vertices)
+        confidence_list = list()
+        for merger in cc_pairs:
+            mid_node1 = sorted(list(merger[0]))[len(merger[0]) // 2]
+            mid_node2 = sorted(list(merger[1]))[len(merger[1]) // 2]
+            central_merger_location = (merger_idx2coord[mid_node1] + merger_idx2coord[mid_node2]) / 2
+            vert_ixs = vertices_kdtree.query_ball_point(central_merger_location, r=1.5e3)
+            unique, counts = np.unique(labeled_vertices[vert_ixs], return_counts=True)
+            dict_label2count = dict(zip(unique, counts))
+            confidence = dict_label2count[1] / (dict_label2count[0] + dict_label2count[1])
+            confidence_list.append(confidence)
+
+        import pdb
+        pdb.set_trace()
+
+        # ================================
+        # Information for confidence
+        # ================================
+
 
     toc = timeit.default_timer()
     print("Time elapsed: {}".format(toc - tic))
