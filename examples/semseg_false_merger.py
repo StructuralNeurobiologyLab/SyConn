@@ -6,7 +6,7 @@ import numpy as np
 import os, glob, re
 import argparse
 import random
-import zipfile
+import zipfile, yaml
 import tqdm
 import timeit
 import networkx as nx
@@ -101,6 +101,7 @@ if __name__ == '__main__':
     dest_predicted_merger = os.path.expanduser("~") + '/predicted_merger_test/'
     if not os.path.isdir(dest_predicted_merger):
         os.makedirs(dest_predicted_merger)
+    report = dict()
 
     tic = timeit.default_timer()
     for fname in tqdm.tqdm(file_names):
@@ -109,10 +110,10 @@ if __name__ == '__main__':
         sso = init_sso_from_kzip(cell_kzip_fn, sso_id=1)
         # get cell ids
         cell_ids = re.findall(r"(\d+)", fname)[-2:]
-        output_fname = "mesh_" + "_".join(cell_ids) + ".k.zip"
+        mesh_fname = "mesh_" + "_".join(cell_ids) + ".k.zip"
 
         # run prediction and store result in new kzip
-        semseg_of_sso_nocache(sso, dest_path=dest_predicted_merger + output_fname, model=m,
+        semseg_of_sso_nocache(sso, dest_path=dest_predicted_merger + mesh_fname, model=m,
                               **view_props)
         node_preds = sso.semseg_for_coords(
             sso.skeleton['nodes'], view_props['semseg_key'],
@@ -145,7 +146,7 @@ if __name__ == '__main__':
         # determine which two pairs of connected_components belongs to the same merger:
         cc_pairs = list()
         node_kdtree = cKDTree(all_skeleton_nodes)
-        for i in range(len(cc_list) - 1):
+        for i in range(len(cc_list)):
             cc = cc_list[i]
             if len(cc) < 3:
                 # discard the connected_component which contains less than 3 nodes
@@ -166,9 +167,18 @@ if __name__ == '__main__':
         sso.save_skeleton_to_kzip(dest_path=dest_predicted_merger + skeleton_fname,
                                   additional_keys=view_props['semseg_key'])
 
+        # Combine mesh and skeleton kzip into on kzip file
+        z_mesh = zipfile.ZipFile(dest_predicted_merger + mesh_fname, 'a')
+        z_skeleton = zipfile.ZipFile(dest_predicted_merger + skeleton_fname, 'r')
+        [z_mesh.writestr(t[0], t[1].read()) for t in ((n, z_skeleton.open(n)) for n in z_skeleton.namelist())]
+        z_mesh.close()
+        # delete the skeleton kzip
+        os.remove(dest_predicted_merger + skeleton_fname)
+
         # ================================
         # Information for confidence
         # ================================
+        # TODO: modify this block to be a function
         num_merger_nodes = len(merger_idx2coord)
         # if num_merger_nodes
 
@@ -186,6 +196,7 @@ if __name__ == '__main__':
 
         vertices_kdtree = cKDTree(vertices)
         confidence_list = list()
+        merger_location_list = list()
         for merger in cc_pairs:
             mid_node1 = sorted(list(merger[0]))[len(merger[0]) // 2]
             mid_node2 = sorted(list(merger[1]))[len(merger[1]) // 2]
@@ -195,14 +206,18 @@ if __name__ == '__main__':
             dict_label2count = dict(zip(unique, counts))
             confidence = dict_label2count[1] / (dict_label2count[0] + dict_label2count[1])
             confidence_list.append(confidence)
-
-        import pdb
-        pdb.set_trace()
+            merger_location_list.append(central_merger_location)
 
         # ================================
         # Information for confidence
         # ================================
+        report["_".join(cell_ids)] = (merger_location_list, confidence_list)
 
+        import pdb
+        pdb.set_trace()
 
     toc = timeit.default_timer()
     print("Time elapsed: {}".format(toc - tic))
+    with open('merger_pred_report.yml', 'w') as outfile:
+        yaml.dump(report, outfile, default_flow_style=False)
+        print("Result stored in merger_pred_report.yml")
