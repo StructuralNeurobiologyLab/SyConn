@@ -105,6 +105,7 @@ if __name__ == '__main__':
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
+    # TODO: get from h5 file
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
@@ -192,7 +193,8 @@ if __name__ == '__main__':
     step_idents.append('Neuron rendering')
 
     log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    exec_syns.run_syn_generation(chunk_size=chunk_size,
+                                 n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 

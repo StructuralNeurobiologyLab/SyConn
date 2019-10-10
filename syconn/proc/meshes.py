@@ -733,10 +733,11 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     np.array, np.array [, np.array]
         indices, vertices (scaled) [,colors]
     """
-    if nb_cpus > 1:
-        log_proc.debug('`merge_someshes` is not working with `n_cpus > 1`:'
-                       ' `cant pickle _thread.RLock objects`')
-        nb_cpus = 1
+    # TODO: check if this works reliably now
+    # if nb_cpus > 1:
+    #     log_proc.debug('`merge_someshes` is not working with `n_cpus > 1`:'
+    #                    ' `cant pickle _thread.RLock objects`')
+    #     nb_cpus = 1
     meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
                                      show_progress=False)
     if color_vals is not None and cmap is not None:

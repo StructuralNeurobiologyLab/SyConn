@@ -307,6 +307,7 @@ class SuperSegmentationObject(object):
         return hash((self.id, self.type, frozenset(self.sv_ids)))
 
     def __eq__(self, other):
+        # TODO: add additional criteria
         if not isinstance(other, self.__class__):
             return False
         return self.id == other.id and self.type == other.type and \
@@ -782,7 +783,7 @@ class SuperSegmentationObject(object):
             True if the mesh exists.
         """
         mesh_dc = MeshStorage(self.mesh_dc_path,
-                              disable_locking=not self.enable_locking)
+                              disable_locking=True)
         return obj_type in mesh_dc
 
     @property

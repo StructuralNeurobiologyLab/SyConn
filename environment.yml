@@ -66,6 +66,8 @@ dependencies:
   - pip:
     - zmesh
     - plyfile
+    # For importing the latest cell type model. TODO: transition to .pts models
+    - adabound
 
     # For running a tensorboard server (optional):
     # (Installing these via pip because currently conda packages are broken)

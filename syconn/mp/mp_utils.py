@@ -320,7 +320,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         nb_cpus = 1
 
     nb_cpus = min(nb_cpus, len(params), cpu_count())
-    # # might work again
+    # TODO: check if this works reliably now
     # if nb_cpus > 1:
     #     log_mp.warning('`start_multiprocess_obj` is broken for n_cpus > 1:'
     #                    ' `TypeError: cant pickle _thread.RLock objects`')

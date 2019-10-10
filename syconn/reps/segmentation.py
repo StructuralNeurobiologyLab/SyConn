@@ -184,12 +184,6 @@ class SegmentationObject(object):
     def __reduce__(self):
         """
         Support pickling of class instances.
-        TODO: calling methods/attributes via `start_multiprocess_obj` is still erroneous:
-         `TypeError: can't pickle _thread.RLock objects`
-
-        Returns
-        -------
-
         """
         return self.__class__, (self._id, self._type, self._version, self._working_dir,
                                 self._rep_coord, self._size, self._scaling, False,

@@ -206,7 +206,7 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        if not self.svs_from_ssv.has_key(ssv_id):
+        if ssv_id not in self.svs_from_ssv:
             r = self.session.get(self.server + '/svs_of_ssv/{0}'.format(ssv_id))
             self.svs_from_ssv[ssv_id] = json.loads(r.content)
         return self.svs_from_ssv[ssv_id]
@@ -222,7 +222,7 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        if not self.ssv_from_sv_cache.has_key(sv_id):
+        if sv_id not in self.ssv_from_sv_cache:
             start = time.time()
             r = self.session.get(self.server + '/ssv_of_sv/{0}'.format(sv_id))
             self.ssv_from_sv_cache[sv_id] = json.loads(r.content)
@@ -815,13 +815,11 @@ class main_class(QtGui.QDialog):
         self.exploration_mode_callback_check()
 
     def show_button_neurite_clicked(self):
-
         try:
              ssvs = [x.strip() for x in self.direct_ssv_id_input.text.split(',')]
              ssvs = map(int, ssvs)
         except:
-             pass
-
+            ssvs = []
         for ssv in ssvs:
             self.ssv_to_knossos(ssv)
             self.ssv_skel_to_knossos_tree(ssv)
