@@ -185,13 +185,14 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
         l0 = cd_dict['ssv_partner_0'][cd_dict['neuron_partner_ct_0'] == ct]
         l1 = cd_dict['ssv_partner_1'][cd_dict['neuron_partner_ct_1'] == ct]
         curr_ct_ssvs = np.unique(np.concatenate([l0, l1]))
+        # destroy sorting of `np.unique`
         np.random.shuffle(curr_ct_ssvs)
         curr_ct_ssvs = curr_ct_ssvs.tolist()
         ssvs_flattened += curr_ct_ssvs
         boarders.append(len(curr_ct_ssvs))
     boarders = np.cumsum(boarders)
     assert boarders[-1] == len(wiring)
-    # sum per-cell-pair synaptic connections multiplied by synaptic sign (-1 or 1)
+    # sum per cell-pair synaptic connections multiplied by synaptic sign (-1 or 1)
     cumul_syn_dc = defaultdict(list)
     # synapse size: in um2, mesh area of the overlap between cs and sj divided by 2
     for ii, syn_size in enumerate(cd_dict['syn_size']):

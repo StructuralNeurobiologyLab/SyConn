@@ -94,7 +94,9 @@ if __name__ == "__main__":
     da_equals_tan = True
     # --------------------------------------------------------------------------
     # analysis of VALIDATION set
-    for m_name in ['celltype_GTv4_syntype_CV0_adam_nbviews20_longRUN_2ratios_BIG_bs40_ALLTRAIN']:
+    for m_name in ['celltype_GTv4_syntype_CV{}_adam_nbviews20_longRUN_2ratios_BIG_bs40_10fold_eval0',
+                   'celltype_GTv4_syntype_CV{}_adam_nbviews20_longRUN_2ratios_BIG_bs40_10fold_eval1',
+                   'celltype_GTv4_syntype_CV{}_adam_nbviews20_longRUN_2ratios_BIG_bs40_10fold_eval2']:
         # CV1: valid dataset: split_dc['valid'], CV2: valid_dataset: split_dc['train']
         # Perform train data set eval as counter check
         gt_l = []
@@ -115,7 +117,7 @@ if __name__ == "__main__":
             loaded_ssv_ids.extend(ssv_ids)
             pred_key_appendix2 = m_name.format(str(cv))
             print('Loading cv-{}-data of model {}'.format(cv, pred_key_appendix2))
-            m_path = '/wholebrain/u/pschuber/e3_training/' + pred_key_appendix2
+            m_path = '/wholebrain/u/pschuber/e3_training_10fold_eval/' + pred_key_appendix2
             m = InferenceModel(m_path, bs=80)
             for ssv_id in ssv_ids:
                 ssv = new_ssd.get_super_segmentation_object(ssv_id)
@@ -126,31 +128,28 @@ if __name__ == "__main__":
                 #                          model_tnet=m_tnet)
                 ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2,
                                          largeFoV=False,
-                                         view_props={"overwrite": True, 'use_syntype': True,
-                                                     'nb_views': 20})
+                                         view_props={"overwrite": False, 'use_syntype': True,
+                                                     'nb_views': 20, 'da_equals_tan': da_equals_tan})
                 ssv.load_attr_dict()
-                gt_l.append(ssv.attr_dict["cellttype_gt"])
+                curr_l = ssv.attr_dict["cellttype_gt"]
+                if da_equals_tan:
+                    # adapt GT labels
+                    if curr_l == 6: curr_l = 1  # TAN and DA are the same now
+                    if curr_l == 7: curr_l = 6  # INT now has label 6
+                gt_l.append(curr_l)
 
                 # small FoV
                 pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
                 preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
+                major_dec = np.zeros(preds_small.shape[1])
                 preds_small = np.argmax(preds_small, axis=1)
-                major_dec = np.zeros(8)
                 # For printing with all classes (in case da_equals_tan is True)
-                major_dec_local = np.zeros(8)
                 for ii in range(len(major_dec)):
                     major_dec[ii] = np.sum(preds_small == ii)
-                    major_dec_local[ii] = np.sum(preds_small == ii)
-                if da_equals_tan:
-                    # accumulate evidence for DA and TAN
-                    major_dec[1] += major_dec[6]
-                    # remove TAN in proba array
-                    major_dec = np.delete(major_dec, [6], axis=0)
                 major_dec /= np.sum(major_dec)
-                major_dec_local /= np.sum(major_dec_local)
                 pred_proba.append(major_dec)
                 if pred_l[-1] != gt_l[-1]:
-                    print(f'{pred_l[-1]}\t{gt_l[-1]}\t{ssv.id}\t{major_dec_local}')
+                    print(f'{pred_l[-1]}\t{gt_l[-1]}\t{ssv.id}\t{major_dec}')
                 certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
                 # pbar.update(1)
                 # # large FoV
@@ -184,9 +183,6 @@ if __name__ == "__main__":
 
         # SET TAN AND DA TO THE SAME CLASS
         if da_equals_tan:
-            # adapt GT labels
-            gt_l[gt_l == 6] = 1  # TAN and DA are the same now
-            gt_l[gt_l == 7] = 6  # INT now has label 6
             target_names[1] = 'Modulatory'
             target_names.remove('TAN')
 
@@ -196,7 +192,6 @@ if __name__ == "__main__":
         #               'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
         # model_performance(pred_proba_large, gt_l, dest_p n_labels=9,
         #                   target_names=target_names, prefix="large_")
-
         # standard
         classes, c_cnts = np.unique(pred_l, return_counts=True)
         log_main.info('Successful prediction [standard] with the following cell type class '

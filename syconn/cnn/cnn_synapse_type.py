@@ -19,7 +19,7 @@ from torch import optim
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='syntype_unet_sameConv_BN_fancydice_gt4_bs4_inmem_noctgt',
+                    default='syntype_unet_sameConv_BN_fancydice_gtv2_bs4',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=500,
@@ -118,13 +118,20 @@ data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsety
 gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v4/'
 fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
 gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
-# fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-# random_ixs = np.arange(len(fnames_files))
-# np.random.seed(0)
-# np.random.shuffle(fnames_files)
-# fnames_files = np.array(fnames_files)[random_ixs].tolist()
-# fnames += fnames_files[:900]
-
+# do not use DA and TAN as GT samples
+fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if (f.endswith('.h5') and '1_cube' not
+                                                            in f and '6_cube' not in f and
+                                                            '0_cube' not in f)])
+fnames_files_stn = sorted([gt_dir + f for f in os.listdir(gt_dir) if (f.endswith('.h5') and '0_cube'
+                           in f)])
+# draw additional synapses at other cell types at random up to 900 samples in total
+random_ixs = np.arange(len(fnames_files) - len(fnames_files_stn))
+np.random.seed(0)
+np.random.shuffle(fnames_files)
+fnames_files = np.array(fnames_files)[random_ixs].tolist()
+fnames += fnames_files[:len(random_ixs)] + fnames_files_stn
+print(f'{len(fnames_files_stn)} STN, {len(random_ixs)} additonial CT and'
+      f' {len(fnames)} dense cube samples.')
 input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
 target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]
 valid_indices = [len(target_h5data) - 1]
@@ -149,10 +156,11 @@ common_transforms = [
     #transforms.Normalize(mean=dataset_mean, std=dataset_std),
 ]
 train_transform = transforms.Compose(common_transforms + [
-    transforms.RandomGrayAugment(channels=[0], prob=0.3),
-    transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.3),
+    transforms.RandomGrayAugment(channels=[0], prob=0.2),
+    transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.2),
     transforms.AdditiveGaussianNoise(sigma=0.05, channels=[0], prob=0.1),
     transforms.RandomBlurring({'probability': 0.1}),
+    transforms.RandomFlip(ndim_spatial=3),
     drop_func
 ])
 valid_transform = transforms.Compose(common_transforms + [])
@@ -206,11 +214,10 @@ preview_batch = get_preview_batch(
     preview_shape=(48, 144, 144),
 )
 
-optimizer = Padam(
+optimizer = torch.optim.Adam(
     model.parameters(),
     lr=2e-3,
     weight_decay=0.5e-4,
-    partial=1/4,
 )
 
 lr_stepsize = 200

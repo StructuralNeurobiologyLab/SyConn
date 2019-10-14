@@ -576,7 +576,9 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
 def run_create_neuron_ssd():
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
-    ``version=0`` at the currently active working directory.
+    ``version=0`` at the currently active working directory based on the RAG
+    at ``/glia/neuron_rag.bz2``. In case glia splitting is active, this will be
+    the RAG after glia removal, if it was disabled it is identical to ``pruned_rag.bz2``.
 
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and

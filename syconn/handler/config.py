@@ -180,7 +180,7 @@ class DynConfig(Config):
     def __getitem__(self, item: str) -> Any:
         """
         If `item` is not set in this config, the return value will be taken from
-         the default ``config.ini`` and ``configspec.ini``.
+         the default ``config.yml``.
 
         Args:
             item: Key of the requested value.
@@ -196,10 +196,11 @@ class DynConfig(Config):
     def __setitem__(self, key: str, value: Any) -> Any:
         """
         If `item` is not set in this config, the return value will be taken from
-         the default ``config.ini`` and ``configspec.ini``.
+         the default ``config.yml``.
 
         Args:
-            item: Key of the requested value.
+            key: Key of the item.
+            value: Value of the item.
 
         Returns:
             The value which corresponds to `item`.
@@ -246,7 +247,7 @@ class DynConfig(Config):
     @property
     def default_conf(self) -> Config:
         """
-        Load default ``config.ini`` if necessary.
+        Load default ``config.yml`` if necessary.
         """
         if self._default_conf is None:
             self._default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
@@ -370,8 +371,11 @@ class DynConfig(Config):
     @property
     def pruned_rag_path(self) -> str:
         """
+        See config parameter
+        ``global_params.config['glia']['min_cc_size_ssv']``.
+
         Returns:
-            Path to pruned RAG after glia separation.
+            Path to pruned RAG after size filtering.
         """
         self._check_actuality()
         return self.working_dir + '/pruned_rag.bz2'
@@ -521,7 +525,7 @@ class DynConfig(Config):
         procedure.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         return self.entries['skeleton']['allow_skel_gen']
 
@@ -533,7 +537,7 @@ class DynConfig(Config):
         matrix generation.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['dataset']['syntype_avail'] is None:
@@ -564,7 +568,7 @@ class DynConfig(Config):
         closer to the neuron surface.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['views']['use_new_renderings_locs'] is None:
@@ -580,7 +584,7 @@ class DynConfig(Config):
         If ``False`` meshes are computed sparsely, i.e. per object/supervoxel.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['meshes']['use_new_meshing'] is None:
@@ -603,10 +607,11 @@ class DynConfig(Config):
     def prior_glia_removal(self) -> bool:
         """
         If ``True`` glia separation procedure will be initiated to create a
-        pruned RAG (see :attr:`~syconn/handler.config.DynConfig.pruned_rag_path`).
+        glia-separated RAG (see ``glia/neuron_rag.bz2`` and
+        ``glia/glia_rag.bz2``).
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored in ``config.yml``.
         """
         return self.entries['glia']['prior_glia_removal']
 
@@ -618,7 +623,7 @@ class DynConfig(Config):
         in the same file.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored in ``config.yml``.
         """
         try:
             if self['paths']['use_new_subfold'] is not None:

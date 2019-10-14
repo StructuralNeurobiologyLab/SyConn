@@ -2521,6 +2521,20 @@ class SuperSegmentationObject(object):
         if 'skeleton' in attr_keys:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
+    def typedsyns2mesh(self, dest_path=None):
+        sym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
+                                       syn.lookup_in_attribute_dict("syn_sign") == -1])
+        asym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
+                                        syn.lookup_in_attribute_dict("syn_sign") == 1])
+        self._meshes['syn_asym'] = asym_syn_mesh
+        self._meshes['syn_sym'] = sym_syn_mesh
+        if dest_path is None:
+            return
+        write_mesh2kzip(dest_path, asym_syn_mesh[0], asym_syn_mesh[1],
+                        asym_syn_mesh[2], color=np.array((255, 25, 25, 255)), ply_fname='10.ply')
+        write_mesh2kzip(dest_path, sym_syn_mesh[0], sym_syn_mesh[1],
+                        sym_syn_mesh[2], color=np.array((50, 50, 255, 255)), ply_fname='11.ply')
+
     def write_svmeshes2kzip(self, dest_path=None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
@@ -3120,16 +3134,7 @@ class SuperSegmentationObject(object):
             proba_key = 'celltype_cnn_e3_probas'
         logits = self.lookup_in_attribute_dict(proba_key)
 
-        # DA and TAN are type modulatory, if this is changes, also change `predict_sso_celltype`
-        clf = np.argmax(logits, axis=1)
-        if np.max(clf) > 7:
-            raise ValueError('Unknown cell type predicted.')
-        major_dec = np.zeros(7)
-        for ii in range(len(major_dec)):
-            major_dec[ii] = np.sum(clf == ii)
-        major_dec /= np.sum(major_dec)
-
-        return certainty_estimate(major_dec[None, ], is_logit=False)
+        return certainty_estimate(logits, is_logit=True)
 
     def majority_vote(self, prop_key, max_dist):
         """

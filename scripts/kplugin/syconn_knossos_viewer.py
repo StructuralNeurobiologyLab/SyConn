@@ -737,6 +737,7 @@ class main_class(QtGui.QDialog):
     #        pass
             # disable selection polling timer
 
+
     def exploration_mode_callback_check(self):
         #if self.exploration_mode_chk_box.isChecked():
             #print('expl')
@@ -896,96 +897,31 @@ class main_class(QtGui.QDialog):
 
         KnossosModule.segmentation.set_render_only_selected_objs(True)
 
-        #print('self.ids_selected {0}'.format(self.ids_selected))
+        # create a 'fake' knossos tree for each obj mesh category;
+        # this is very hacky since it can generate nasty ID collisions.
+        mi_id = self.obj_id_offs + ssv_id + 1
+        sj_id = self.obj_id_offs + ssv_id + 2
+        vc_id = self.obj_id_offs + ssv_id + 3
+        neuron_id = self.obj_id_offs + ssv_id + 4
 
-        if len(self.ids_selected) < 10:
+        params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
+                  (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
+                  (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
+                  (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
+        start = time.time()
 
-            # create a 'fake' knossos tree for each obj mesh category;
-            # this is very hacky since it can generate nasty ID collisions.
-            mi_id = self.obj_id_offs + ssv_id + 1
-            sj_id = self.obj_id_offs + ssv_id + 2
-            vc_id = self.obj_id_offs + ssv_id + 3
-            neuron_id = self.obj_id_offs + ssv_id + 4
+        # add all meshes to download queue
+        for par in params:
+            mesh_loader_threaded(*par)
+        # wait for downloads
+        self.syconn_gate.wait_for_all_downloads()
+        print('Mesh download took {}'.format(time.time() - start))
 
-            params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
-                      (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
-                      (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
-                      (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
-            #print('starting downloads')
-            #time.sleep(1)
-            start = time.time()
-
-            # add all meshes to download queue
-            for par in params:
-                mesh_loader_threaded(*par)
-            #print('downloads started')
-            #time.sleep(1)
-            # wait for downloads
-            self.syconn_gate.wait_for_all_downloads()
-            print('Mesh download took {}'.format(time.time() - start))
-
-            start = time.time()
-            # add all to knossos
-            for par in params:
-                mesh_to_K(*par)
-            print('Mesh to K took {}'.format(time.time() - start))
-
-            # mi_start = time.time()
-            # mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
-            # print("Mi time:", time.time() - mi_start)
-            # mi_start = time.time()
-            # if len(mi_mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
-            #                                          mi_mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(mi_id,
-            #                                           QtGui.QColor(0, 0, 255, 255))
-            # print("Mi time (Knossos):", time.time() - mi_start)
-            #
-            # sj_start = time.time()
-            # sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
-            # print("SJ time:", time.time() - sj_start)
-            # sj_start = time.time()
-            # if len(sj_mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
-            #                                          sj_mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(sj_id,
-            #                                           QtGui.QColor(0, 0, 0, 255))
-            # print("SJ time (Knossos):", time.time() - sj_start)
-            #
-            # vc_start = time.time()
-            # vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
-            # print("VC time:", time.time() - vc_start)
-            # vc_start = time.time()
-            # if len(vc_mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
-            #                                          vc_mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(vc_id,
-            #                                           QtGui.QColor(0, 255, 0, 255))
-            # print("VC time (Knossos):", time.time() - vc_start)
-            #
-            # sv_start = time.time()
-            # k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-            # mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            # print("SV time:", time.time() - sv_start)
-            # sv_start = time.time()
-            # if len(mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
-            #                                          mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(neuron_id,
-            #                                           QtGui.QColor(255, 0, 0, 128))
-            # print("SV time (Knossos):", time.time() - sv_start)
-        else:
-            mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
-                                                 mesh[0],
-                                                 [], 4, False)
-
-        #print("Total time:", time.time() - start_tot)
+        start = time.time()
+        # add all to knossos
+        for par in params:
+            mesh_to_K(*par)
+        print('Mesh to K took {}'.format(time.time() - start))
         return
 
     def ssv_skel_to_knossos_tree(self, ssv_id, signal_block=True):

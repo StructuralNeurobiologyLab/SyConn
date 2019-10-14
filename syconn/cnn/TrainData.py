@@ -1867,10 +1867,10 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     # set bouton predictions to axon label
     syn_axs[syn_axs == 3] = 1
     syn_axs[syn_axs == 4] = 1
-    # dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, GPe=5, INT=8)
+    # dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
     # asymmetric STN, HVC, LMAN synapses
     if mask_celltypes:
-        m_exc = (syn_cts == 0) | (syn_cts == 3) | (syn_cts == 3)
+        m_exc = (syn_cts == 0) | (syn_cts == 3) | (syn_cts == 4)
     else:
         # use alle cells
         m_exc = np.ones_like(syn_cts, dtype=np.bool)
@@ -1884,7 +1884,7 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
 
     # symmetric MSN, INT, TAN, FS synapses
     if mask_celltypes:
-        m_inh = (syn_cts == 2) | (syn_cts == 6) | (syn_cts == 7) | (syn_cts == 8)
+        m_inh = (syn_cts == 2) | (syn_cts == 5) | (syn_cts == 6)
     else:
         # this time set it to zero - all celltypes were already taken into account above
         m_inh = np.zeros_like(syn_cts, dtype=np.bool)
