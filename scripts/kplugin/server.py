@@ -344,8 +344,8 @@ class SyConnBackend(object):
                                "{}.".format(obj_type, ssv_id))
             except KeyError:
                 pass
-        # if not existent, create mesh
-        _ = ssv.load_mesh(obj_type)
+        # # Now assumes all object meshes do already exist
+        # _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
