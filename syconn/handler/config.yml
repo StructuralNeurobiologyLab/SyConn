@@ -215,17 +215,20 @@ merger:
   # `k` is the parameter used in `semseg2mesh`
   view_properties_merger:
     verbose: False
-    ws: [256, 128]
-    nb_views: 3
-    comp_window: 30720  # in NM
+    nb_views: 5
+    # ws: [256, 128]
+    # comp_window: 15360  # 10240 * 1.5 in NM
+    ws: [512, 128]
+    comp_window: 30720
     semseg_key: 'merger_pred'
     k: 0
   # mapping of vertex labels to skeleton nodes; ignore labels 2 (background), 3 (unpredicted)
   # use labels of the k-nearest vertices
   map_properties_merger:
-    k: 20
+    k: 100
     ds_vertices: 1
     ignore_labels: [2, 3]
+    use_ratio: True
 
 # --------- MORPHOLOGY EMBEDDING
 tcmn:
