@@ -3,7 +3,7 @@ import timeit
 from scipy.spatial import cKDTree
 import tqdm
 from tqdm import trange
-import os
+import os, yaml
 from typing import Union, Tuple, List, Optional, Dict, Generator, Any
 
 from syconn import global_params
@@ -23,12 +23,13 @@ cs_version = 0
 # global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/'  # local test
 
 # Path to store output kzip files
-folder_name = "/TEST_kzip_"
+folder_name = "/merger_CSfilter_kzip_"
 data_folder = global_params.wd.split('/')[-2]
 suffix_list = data_folder.split('_')[1:]
 pkl_version = suffix_list[0]
 suffix_str = '_'.join(suffix_list) + '/'
 dest_folder = os.path.expanduser("~") + folder_name + suffix_str
+dest_folder = '/wholebrain/scratch/yliu/false_merger_generation/' + folder_name + 'v10'
 
 # Path to pickle file which stores the dictionary: cell_pair2cs_ids
 path_pkl_file = os.getcwd() + '/cell_pairs2cs_ids_' + pkl_version + '.pkl'
@@ -40,10 +41,15 @@ create_new_cs_ids = False
 
 # number of generated cells
 if num_cs_id == None:
-    num_generated_cells = 4
+    num_generated_cells = 2000
 else:
     # if num_cs_id is not None, then use all the cell_pairs for the merger combination
     num_generated_cells = None
+
+# radius for kd-tree
+true_merger_radius = 2e3
+no_merger_radius = 30e3
+
 
 
 # helper function for testing
@@ -169,7 +175,8 @@ if __name__ == "__main__":
     print("in which {} pairs have more than one cs.".format(count))
 
     print("Generating merged cells")
-    count = 0
+    count = 1
+    # cell_pairs = cell_pairs[501:501+num_generated_cells]
     cell_pairs = cell_pairs[:num_generated_cells]
     for i in trange(len(cell_pairs), desc='cell_pairs'):
         cell_pair = cell_pairs[i]
@@ -187,24 +194,28 @@ if __name__ == "__main__":
         # Find all common contact-sites of two cells
         common_cs = cell_pair2cs_ids[cell_pair]
         assert len(common_cs) > 0, "Empty value in cell_pair2cs_ids"
-        cs_coord_list = []
+        cs_coord_list = list()
         for cs_id in common_cs:
             cs_obj = contact_sites.get_segmentation_object(cs_id)
-            # TODO: determine if the contact is big enough
-            # cs.size, cs.mesh_area --> threshhold 0.1
-            cs_coord = cs_obj.rep_coord * merged_cell.scaling
-            cs_coord_list.append(cs_coord)
+            # determine if the contact is big enough
+            # if cs_obj.mesh_area >= 0.05:
+            if cs_obj.mesh_area >= 0.1:
+                cs_coord = cs_obj.rep_coord * merged_cell.scaling
+                cs_coord_list.append(cs_coord)
+        if len(cs_coord_list) == 0:
+            continue
 
-        # find medium cube around artificial merger and set it to 0 (true merger)
+        # find medium cube around artificial merger and set it to 0 (no-merger/cell_body)
         kdtree = cKDTree(merged_cell_nodes)
         # find all skeleton nodes which are close to all contact-sites
         for cs_coord in cs_coord_list:
-            ixs = kdtree.query_ball_point(cs_coord, r=30e3)
+            ixs = kdtree.query_ball_point(cs_coord, r=no_merger_radius)
             node_labels[ixs] = int(0)
 
-        # find small cube around artificial merger and set it to 1 (false merger)
+        # find small cube around artificial merger and set it to 1 (true merger)
         for cs_coord in cs_coord_list:
-            ixs = kdtree.query_ball_point(cs_coord, r=1.5e3)
+            # ixs = kdtree.query_ball_point(cs_coord, r=1.5e3)
+            ixs = kdtree.query_ball_point(cs_coord, r=true_merger_radius)
             node_labels[ixs] = int(1)
 
         # write out annotated skeletons to ['merger_gt']
