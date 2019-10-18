@@ -12,6 +12,7 @@ import timeit
 import networkx as nx
 from scipy.spatial import cKDTree
 
+
 def check_kzip_completeness(data_path: str, fnames: list):
     """
     Check the completeness of the kzip file, each kzip file must contain:
@@ -28,6 +29,7 @@ def check_kzip_completeness(data_path: str, fnames: list):
             filtered_fnames.append(file_name)
 
     return filtered_fnames
+
 
 def get_all_fname(data_path):
     """
@@ -49,6 +51,56 @@ def get_all_fname(data_path):
         # count += 1
     return fnames
 
+
+def get_confidence(sso, cc_pairs) -> (list, list):
+    """
+    For each merger location
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+        Either get from SuperSegmentationDataset or get from init_sso_from_kzip()
+    cc_pairs: list
+        A list containing two sets of skeleton nodes belonging to one merger.
+        'cc' stands for 'connected_component'
+    :return:
+
+    Returns
+    -------
+    """
+    # labeled_views = sso.load_views(view_props['semseg_key'])
+    # unique, counts = np.unique(labeled_views, return_counts=True)
+    # dict_label2count = dict(zip(unique, counts))
+
+    # get the coordinates of all vertices
+    vertices_flat = sso.mesh[1]
+    vertices = vertices_flat.reshape((-1, 3))
+    # get the label of all vertices
+    ld = sso.label_dict('vertex')
+    labeled_vertices = ld[view_props['semseg_key']]
+    assert len(vertices) == len(labeled_vertices)
+
+    vertices_kdtree = cKDTree(vertices)
+    confidence_list = list()
+    merger_location_list = list()
+    for merger in cc_pairs:
+        mid_node1 = sorted(list(merger[0]))[len(merger[0]) // 2]
+        mid_node2 = sorted(list(merger[1]))[len(merger[1]) // 2]
+        central_merger_location = (merger_idx2coord[mid_node1] + merger_idx2coord[mid_node2]) / 2
+        vert_ixs = vertices_kdtree.query_ball_point(central_merger_location, r=1.5e3)
+        unique, counts = np.unique(labeled_vertices[vert_ixs], return_counts=True)
+        dict_label2count = dict(zip(unique, counts))
+        try:
+            _ = dict_label2count[1]
+            _ = dict_label2count[0]
+        except:
+            return merger_location_list, "error in getting confidence"
+        confidence = dict_label2count[1] / (dict_label2count[0] + dict_label2count[1])
+        confidence_list.append(confidence)
+        merger_location_list.append(list(central_merger_location))
+
+    return merger_location_list, confidence_list
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
     # parser.add_argument('--working_dir', type=str,
@@ -61,21 +113,22 @@ if __name__ == '__main__':
     parser.add_argument('--modelpath', type=str,
                         default=os.path.expanduser("~/e3training/merger_FCN_v10_2/"),
                         help='path to the model.pt file of the trained model.')
+    parser.add_argument('--dest_path', type=str,
+                        default=os.path.expanduser("~/predicted_merger_TEST_BC/"),
+                        help='path in where the output kzip file should be stored.')
     args = parser.parse_args()
 
-    # path to working directory of example cube - required to load pretrained models
-    # path_to_workingdir = os.path.expanduser(args.working_dir)
-
     # path to cell reconstruction k.zip
-    file_names = get_all_fname(os.path.abspath(os.path.expanduser(args.kzip)))
-    # file_names = get_all_fname(os.path.expanduser(args.kzip))
+    file_names = get_all_fname(os.path.expanduser(args.kzip))
     file_names = check_kzip_completeness(os.path.expanduser(args.kzip), file_names)
 
-    # =====================================
-    # TEST file
-    # =====================================
+    # # TEST file
     file_names = ['/merged60_cells789872_8671124.k.zip']
-
+    # hard to detect merger:
+    # file_names = ['/merged49_cells117696_23408910.k.zip', '/merged95_cells12626016_12986527.k.zip',
+    #               '/merged29_cells14432502_15006702.k.zip', '/merged38_cells17356261_26788561.k.zip']
+    # file_names = ['/merged76_cells9799549_10889214.k.zip']
+    # file_names = file_names[:20]
     print("{} kzip files detected in: {}".format(len(file_names), args.kzip))
 
     # set working directory to obtain models
@@ -96,21 +149,30 @@ if __name__ == '__main__':
 
     # get model for false-merger detection
     view_props = global_params.config['merger']['view_properties_merger']
+    map_props = global_params.config['merger']['map_properties_merger']
     view_props["verbose"] = True
-
-    dest_predicted_merger = os.path.expanduser("~") + '/predicted_merger_test/'
+    # ======= TEST ==========
+    # view_props["comp_window"] = 10240 * 3
+    # view_props["nb_views"] = 3
+    # map_props["use_ratio"] = False
+    # =======================
+    print("comp_window: {}".format(view_props["comp_window"]))
+    # dest_predicted_merger = os.path.expanduser("~") + '/predicted_merger_test/'
+    dest_predicted_merger = args.dest_path
     if not os.path.isdir(dest_predicted_merger):
         os.makedirs(dest_predicted_merger)
     report = dict()
 
+    count = 0
     tic = timeit.default_timer()
     for fname in tqdm.tqdm(file_names):
+        count += 1
         # load SSO instance from k.zip file
         cell_kzip_fn = os.path.abspath(os.path.expanduser(args.kzip)) + fname
         sso = init_sso_from_kzip(cell_kzip_fn, sso_id=1)
         # get cell ids
         cell_ids = re.findall(r"(\d+)", fname)[-2:]
-        mesh_fname = "mesh_" + "_".join(cell_ids) + ".k.zip"
+        mesh_fname = "mesh" + str(count) + "_" + "_".join(cell_ids) + ".k.zip"
 
         # run prediction and store result in new kzip
         semseg_of_sso_nocache(sso, dest_path=dest_predicted_merger + mesh_fname, model=m,
@@ -120,18 +182,11 @@ if __name__ == '__main__':
             **global_params.config['merger']['map_properties_merger'])
         sso.skeleton[view_props['semseg_key']] = node_preds
 
-        # TODO: define some criterion: size, confidence
         merger_idx2coord = dict()
         all_skeleton_nodes = sso.skeleton['nodes'] * sso.scaling
         for i in range(len(node_preds)):
             if node_preds[i] == 1:
                 merger_idx2coord[i] = sso.skeleton['nodes'][i] * sso.scaling
-        # Plan 1: randomly pick one coord to represent merger_location
-        # if len(merger_idx2coord) > 0:
-        #     merger_location = random.choice(merger_coord_list)
-
-        # TODO: implement the binary closing to close the gap
-        # TODO: but also tweak the k_neighbor in config.yml to get best result
 
         # create a graph of the whole skeleton
         skeleton_graph = sso.weighted_graph([view_props['semseg_key']])
@@ -142,6 +197,7 @@ if __name__ == '__main__':
                 skeleton_graph.remove_node(node)
         assert len(skeleton_graph.nodes()) == len(merger_idx2coord)
         # determine how many mergers are detected by calculating how many connected_components exist
+        # TODO: this logic of cc_pair should be changed when dealing with "real-false-merger-data", there you won't need to find pairs
         cc_list = sorted(nx.connected_components(skeleton_graph), key=len, reverse=True)
         # determine which two pairs of connected_components belongs to the same merger:
         cc_pairs = list()
@@ -161,6 +217,7 @@ if __name__ == '__main__':
                 if cc2 != cc:
                     if len(set(ixs).intersection(cc2)) > 2:
                         cc_pairs.append((cc, cc2))
+
         # refresh the node prediction after the filtering out the isolated labeled_nodes
         sso.skeleton[view_props['semseg_key']] = node_preds
         skeleton_fname = "skeleton_" + "_".join(cell_ids) + ".k.zip"
@@ -175,49 +232,13 @@ if __name__ == '__main__':
         # delete the skeleton kzip
         os.remove(dest_predicted_merger + skeleton_fname)
 
-        # ================================
-        # Information for confidence
-        # ================================
-        # TODO: modify this block to be a function
-        num_merger_nodes = len(merger_idx2coord)
-        # if num_merger_nodes
-
-        labeled_views = sso.load_views(view_props['semseg_key'])
-        unique, counts = np.unique(labeled_views, return_counts=True)
-        dict_label2count = dict(zip(unique, counts))
-
-        # get the coordinates of all vertices
-        vertices_flat = sso.mesh[1]
-        vertices = vertices_flat.reshape((-1, 3))
-        # get the label of all vertices
-        ld = sso.label_dict('vertex')
-        labeled_vertices = ld[view_props['semseg_key']]
-        assert len(vertices) == len(labeled_vertices)
-
-        vertices_kdtree = cKDTree(vertices)
-        confidence_list = list()
-        merger_location_list = list()
-        for merger in cc_pairs:
-            mid_node1 = sorted(list(merger[0]))[len(merger[0]) // 2]
-            mid_node2 = sorted(list(merger[1]))[len(merger[1]) // 2]
-            central_merger_location = (merger_idx2coord[mid_node1] + merger_idx2coord[mid_node2]) / 2
-            vert_ixs = vertices_kdtree.query_ball_point(central_merger_location, r=1.5e3)
-            unique, counts = np.unique(labeled_vertices[vert_ixs], return_counts=True)
-            dict_label2count = dict(zip(unique, counts))
-            confidence = dict_label2count[1] / (dict_label2count[0] + dict_label2count[1])
-            confidence_list.append(confidence)
-            merger_location_list.append(central_merger_location)
-
-        # ================================
-        # Information for confidence
-        # ================================
-        report["_".join(cell_ids)] = (merger_location_list, confidence_list)
-
-        import pdb
-        pdb.set_trace()
+        # get confidence of the prediction for each merger location
+        merger_location_list, confidence_list = get_confidence(sso, cc_pairs)
+        report[str(count) + "_" + "_".join(cell_ids)] = [str(merger_location_list), str(confidence_list)]
 
     toc = timeit.default_timer()
     print("Time elapsed: {}".format(toc - tic))
-    with open('merger_pred_report.yml', 'w') as outfile:
+
+    with open(os.path.expanduser('~') + r'/merger_pred_report100_ratio.yml', 'w') as outfile:
         yaml.dump(report, outfile, default_flow_style=False)
         print("Result stored in merger_pred_report.yml")
