@@ -29,7 +29,7 @@ from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
-    knossos_ml_from_svixs, subfold_from_ix_SSO
+    knossos_ml_from_svixs, subfold_from_ix_SSO, label_vertices_ratio_k_neighbors
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify, data2kzip
 from ..handler.prediction import certainty_estimate
@@ -2152,7 +2152,7 @@ class SuperSegmentationObject(object):
 
     def semseg_for_coords(self, coords: np.ndarray, semseg_key: str, k: int = 5,
                           ds_vertices: int = 20,
-                          ignore_labels: Optional[Iterable[int]] = None):
+                          ignore_labels: Optional[Iterable[int]] = None, use_ratio=False):
         """
         Get the semantic segmentation with key `semseg_key` from the `k` nearest
         vertices at every coordinate in `coords`.
@@ -2191,9 +2191,16 @@ class SuperSegmentationObject(object):
             vertex_labels = vertex_labels[vertex_labels != ign_l]
         if len(vertex_labels) != len(vertices):
             raise ValueError('Size of vertices and their labels does not match!')
-        maj_vote = colorcode_vertices(coords, vertices, vertex_labels, k=k,
+
+        if use_ratio:
+            ratios = label_vertices_ratio_k_neighbors(coords, vertices, vertex_labels, k=k,
+                                                      return_color=False, nb_cpus=self.nb_cpus,
+                                                      num_classes=2, threshold=0.3)
+            return ratios
+        else:
+            maj_vote = colorcode_vertices(coords, vertices, vertex_labels, k=k,
                                       return_color=False, nb_cpus=self.nb_cpus)
-        return maj_vote
+            return maj_vote
 
     def get_spine_compartments(self, semseg_key: str = 'spiness', k: int = 1,
                                min_spine_cc_size: Optional[int] = None,
