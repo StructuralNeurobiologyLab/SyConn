@@ -318,6 +318,88 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     return vert_col
 
 
+def label_vertices_ratio_k_neighbors(vertices, rep_coords, rep_values, colors=None,
+                       nb_cpus=-1, k=1, return_color=True, num_classes=2, threshold=0.5):
+    """
+    Calculate the ratio of each labeled vertices in the k-nearest-neighbor.
+
+    Assigns all vertices the kNN majority label from rep_coords/rep_values and
+    if return_color is True assigns those a color. Helper function to colorcode
+    a set of coordinates (vertices) by known labels (rep_coords, rep_values).
+
+    Parameters
+    ----------
+    vertices : np.array
+        [N, 3], coordinates of all the vertices
+    rep_coords : np.array
+        [M ,3]
+    rep_values : np.array
+        [M, 1] int values to be color coded for each vertex; used as indices
+        for colors
+    colors : list
+        color for each rep_value
+    nb_cpus : int
+    k : int
+        Number of nearest neighbors (average prediction)
+    return_color : bool
+        If false it returns the majority vote for each index
+    num_classes: int
+        Number of class that should be predicted.
+    threshold: float
+        If the ration of label 1 is above threshold, then assign the vertice to label 1,
+        else, assign it to label 0
+
+    Returns
+    -------
+    np. array [N, 4]
+        rgba values for every vertex from 0 to 255
+    """
+    if colors is None:
+        colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                           [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+    else:
+        if np.max(colors) <= 1.0:
+            colors = np.array(colors) * 255
+        colors = np.array(colors, dtype=np.uint)
+        if len(colors) < np.max(rep_values) + 1:
+            msg = 'Length of colors has to be equal to "np.max(rep_values)+1"' \
+                  '. Note that currently only consecutive labels are supported.'
+            log_reps.error(msg)
+            raise ValueError(msg)
+
+    hull_tree = spatial.cKDTree(rep_coords)
+    if k > len(rep_coords):
+        k = rep_coords
+    dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
+    hull_rep = np.zeros((len(vertices)), dtype=np.int)
+
+    for i in range(len(ixs)):
+        curr_reps = np.array(rep_values)[ixs[i]]
+        if np.isscalar(curr_reps):
+            curr_reps = np.array([curr_reps])
+
+        unique, counts = np.unique(curr_reps, return_counts=True)
+        dict_label2count = dict(zip(unique, counts))
+        if len(dict_label2count) == num_classes:
+            merger_label_ratio = dict_label2count[1] / (dict_label2count[0] + dict_label2count[1])
+            if merger_label_ratio > threshold:
+                hull_rep[i] = 1
+            else:
+                hull_rep[i] = 0
+        else:
+            assert len(dict_label2count) == 1
+            hull_rep[i] = [*dict_label2count][0]
+
+        ### ######
+        # curr_maj = Counter(curr_reps).most_common(1)[0][0]
+        ### ######
+        # hull_rep[i] = curr_maj
+    if not return_color:
+        return hull_rep
+
+    vert_col = colors[hull_rep]
+    return vert_col
+
 def assign_rep_values(target_coords, rep_coords, rep_values,
                       nb_cpus=-1, return_ixs=False):
     """
