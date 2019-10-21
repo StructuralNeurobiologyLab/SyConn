@@ -677,3 +677,36 @@ def nxGraph2kzip(g, coords, kzip_path):
     skel.add_annotation(anno)
     skel.to_kzip(kzip_path)
     pbar.close()
+
+
+def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
+    """
+    Writes the SV graph stored in `ssv.edgelist_path` to a kzip file.
+    The representative coordinate of a SV is used as the corresponding node
+    location.
+
+    Args:
+        ssv: Cell reconstruction object.
+        kzip_path: Path to the output kzip file.
+    """
+    sv_graph = nx.read_edgelist(ssv.edgelist_path, nodetype=int)
+    coords = {ix: ssv.get_seg_obj('sv', ix).rep_coord for ix in sv_graph.nodes}
+    import tqdm
+    skel = Skeleton()
+    anno = SkeletonAnnotation()
+    anno.scaling = ssv.scaling
+    node_mapping = {}
+    pbar = tqdm.tqdm(total=len(coords) + len(sv_graph.edges()))
+    for v in sv_graph.nodes:
+        c = coords[v]
+        n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
+        n.setComment(f'{v}')
+        node_mapping[v] = n
+        anno.addNode(n)
+        pbar.update(1)
+    for e in sv_graph.edges():
+        anno.addEdge(node_mapping[e[0]], node_mapping[e[1]])
+        pbar.update(1)
+    skel.add_annotation(anno)
+    skel.to_kzip(kzip_path)
+    pbar.close()
