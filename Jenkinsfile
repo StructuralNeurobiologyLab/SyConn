@@ -28,7 +28,7 @@ pipeline {
     stage('test') {
       steps {
           sh '''
-            /wholebrain/scratch/CI/atulconda3/bin/conda init bash
+            source /wholebrain/scratch/CI/atulconda1/etc/profile.d/conda.sh
             conda activate qazz
             python -m pytest --junit-xml=pytest_unit.xml
             '''
