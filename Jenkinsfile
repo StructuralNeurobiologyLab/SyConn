@@ -18,7 +18,7 @@ pipeline {
             sh """#!/bin/bash
                 /wholebrain/scratch/CI/atulconda1/bin/python -c 'print("hello")'
                 /wholebrain/scratch/CI/atulconda1/bin/pip install -r docs/requirements.txt
-                /wholebrain/scratch/CI/atulconda1/bin/pip install -e .
+                /wholebrain/scratch/CI/atulconda1/bin/pip install --no-deps -v -e .
                 source /wholebrain/scratch/CI/atulconda1/etc/profile.d/conda.sh
                 conda activate qazz
 
@@ -37,7 +37,7 @@ pipeline {
   }
   post {
     always {
-        sh 'conda remove --yes -n qazz --all'
+        sh 'conda remove --yes -n ppp --all'
     }
     failure {
         echo "Error while removing conda environment."
