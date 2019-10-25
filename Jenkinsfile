@@ -1,14 +1,14 @@
 pipeline {
   agent any
   environment {
-      PATH="/wholebrain/scratch/CI/atulconda1/bin:$PATH"
+      PATH="/wholebrain/u/atultm/anaconda3/bin:$PATH"
     }
   stages {
     stage("build") {
       steps {
             sh """
                 echo $USER
-                ls /wholebrain/scratch/CI/atulconda1/bin/python
+                ls /wholebrain/u/atultm/anaconda3/bin/python
                 which conda
                 which sh
                 which pip
@@ -16,22 +16,22 @@ pipeline {
             sh 'printenv | sort'
 
             sh """#!/bin/bash
-                /wholebrain/scratch/CI/atulconda1/bin/python -c 'print("hello")'
-                /wholebrain/scratch/CI/atulconda1/bin/pip install -r docs/requirements.txt
-                /wholebrain/scratch/CI/atulconda1/bin/pip install -e .
-                source /wholebrain/scratch/CI/atulconda1/etc/profile.d/conda.sh
-                conda activate qazz
+                /wholebrain/u/atultm/anaconda3/bin/python -c 'print("hello")'
+                /wholebrain/u/atultm/anaconda3/bin/pip install -r docs/requirements.txt
+                /wholebrain/u/atultm/anaconda3/bin/pip install -e .
+                source /wholebrain/u/atultm/anaconda3/etc/profile.d/conda.sh
+                conda activate qaz
 
             """
       }
     }
     stage('test') {
       steps {
-          sh '''
-            source /wholebrain/scratch/CI/atulconda1/etc/profile.d/conda.sh
-            conda activate qazz
+          sh """#!/bin/bash
+            source /wholebrain/u/atultm/anaconda3/etc/profile.d/conda.sh
+            conda activate qaz
             python -m pytest --junit-xml=pytest_unit.xml
-            '''
+            """
       }
     }
   }
