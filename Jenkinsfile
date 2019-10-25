@@ -37,7 +37,7 @@ pipeline {
   }
   post {
     always {
-        sh 'conda remove --yes -n pysyintegration --all'
+        sh 'conda remove --yes -n qazz --all'
     }
     failure {
         echo "Error while removing conda environment."
