@@ -41,8 +41,8 @@ def check_kzip_completeness(data_path: str, fnames: list):
         kzip_path = data_path + '/' + file_name
         zip = zipfile.ZipFile(kzip_path)
         files = zip.namelist()
-
-        if zip is not None and set(files) == {'meta.pkl', 'annotation.xml', 'sj.ply', 'vc.ply', 'mi.ply', 'sv.ply'}:
+        if zip is not None and set(files) == {'meta.pkl', 'annotation.xml', 'sj.ply', 'vc.ply',
+                                              'mi.ply', 'sv.ply', 'skeleton.pkl'}:
             filtered_fnames.append(file_name)
 
     return filtered_fnames
@@ -199,7 +199,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
 
 
 def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
-                  n_voting=0, ws=(256, 128), comp_window=8e3, h5_suffix=""):
+                  n_voting=0, ws=(256, 128), comp_window=8e3, h5_suffix="", h5_idx=0, h5_split_size=20):
     """
     Generates a .npy GT file from all kzip paths.
 
@@ -227,8 +227,11 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     #     print("Ignoring missing IDs. Using {} k.zip files for GT "
     #           "generation,".format(len(kzip_paths)))
 
+    # =====================================
+
     if dest_dir is None:
-        dest_dir = os.path.expanduser("~/{}_semseg_v10_2/".format(gt_type))
+        # dest_dir = os.path.expanduser("~/{}_semseg_v10_2/".format(gt_type))
+        dest_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_v10_5views_200_6000/'
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
     dest_p_cache = "{}/cache_{}votes/".format(dest_dir, n_voting)
@@ -237,6 +240,7 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     params = [(p, ssd_version, gt_type, n_voting, nb_views, ws, comp_window, dest_p_cache) for p in kzip_paths]
     if not os.path.isdir(dest_p_cache):
         os.makedirs(dest_p_cache)
+
     start_multiprocess_imap(gt_generation_helper, params, nb_cpus=cpu_count(),
                             debug=False)
 
@@ -247,6 +251,10 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     all_raw_views = []
     all_label_views = []
     # all_index_views = []  # Removed index views
+
+    # ======================================
+
+
     print("Writing views.")
     for ii in range(len(kzip_paths)):
         # sso_id = int(re.findall(r"/(\d+).", kzip_paths[ii])[0])
@@ -292,7 +300,11 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     print("Writing h5 files.")
     os.makedirs(dest_dir, exist_ok=True)
     # chunk output data
-    for ii in range(50):
+    count = 0
+    for ii in range(h5_idx, h5_idx+h5_split_size):
+    # for ii in range(50, 100):
+    # for ii in range(100, 150):
+    # for ii in range(150, 200):
         save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}_{}.h5".format(ii, h5_suffix),
                      ["raw"])
         save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}_{}.h5".format(ii, h5_suffix),
@@ -303,100 +315,8 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
                      ["label"])
         save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}_{}.h5".format(ii, h5_suffix),
                      ["label"])
-    # save_to_h5py([label_test], dest_dir + "/label_test.h5",
-    # ["label"])  # Removed index views
-
-def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
-                  n_voting=40, ws=(256, 128), comp_window=8e3, h5_suffix=""):
-    """
-    Generates a .npy GT file from all kzip paths.
-
-    Parameters
-    ----------
-    kzip_paths : List[str]
-    gt_type : str
-    n_voting : int
-        Number of collected nodes during BFS for majority vote (label smoothing)
-    Returns
-    -------
-
-    """
-    sso_ids = [int(re.findall(r"/(\d+).", kzip_path)[0]) for kzip_path in kzip_paths]
-    ssd = SuperSegmentationDataset()
-    if not np.all([ssv.lookup_in_attribute_dict("size") is not None for ssv in
-                   ssd.get_super_segmentation_object(sso_ids)]):
-        print("Not all SSV IDs are part of " \
-            "the current SSD. IDs: {}".format([sso_id for sso_id in sso_ids if sso_id not in
-                                               ssd.ssv_ids]))
-        kzip_paths = np.array(kzip_paths)[np.array([ssv.lookup_in_attribute_dict("size") is not None for ssv in
-                   ssd.get_super_segmentation_object(sso_ids)])]
-        print("Ignoring missing IDs. Using {} k.zip files for GT "
-              "generation,".format(len(kzip_paths)))
-    if dest_dir is None:
-        dest_dir = os.path.expanduser("~/{}_semseg/".format(gt_type))
-    if not os.path.isdir(dest_dir):
-        os.makedirs(dest_dir)
-    dest_p_cache = "{}/cache_{}votes/".format(dest_dir, n_voting)
-    params = [(p, ssd_version, gt_type, n_voting, nb_views, ws, comp_window, dest_p_cache) for p in kzip_paths]
-    if not os.path.isdir(dest_p_cache):
-        os.makedirs(dest_p_cache)
-    start_multiprocess_imap(gt_generation_helper, params, nb_cpus=cpu_count(),
-                            debug=False)
-    # TODO: in case GT is too big to hold all views in memory
-    # if gt_type == 'axgt':
-    #     return
-    # Create Dataset splits for training, validation and test
-    all_raw_views = []
-    all_label_views = []
-    # all_index_views = []  # Removed index views
-    print("Writing views.")
-    for ii in range(len(kzip_paths)):
-        sso_id = int(re.findall(r"/(\d+).", kzip_paths[ii])[0])
-        dest_p = "{}/{}/".format(dest_p_cache, sso_id)
-        raw_v = np.load(dest_p + "raw.npy")
-        label_v = np.load(dest_p + "label.npy")
-        # index_v = np.load(dest_p + "index.npy")  # Removed index views
-        all_raw_views.append(raw_v)
-        all_label_views.append(label_v)
-        # all_index_views.append(index_v)  # Removed index views
-    all_raw_views = np.concatenate(all_raw_views)
-    all_label_views = np.concatenate(all_label_views)
-    # all_index_views = np.concatenate(all_index_views)  # Removed index views
-    print("{} view locations collected. Shuffling views.".format(len(all_label_views)))
-    np.random.seed(0)
-    ixs = np.arange(len(all_raw_views))
-    np.random.shuffle(ixs)
-    all_raw_views = all_raw_views[ixs]
-    all_label_views = all_label_views[ixs]
-    # all_index_views = all_index_views[ixs]  # Removed index views
-    print("Swapping axes.")
-    all_raw_views = all_raw_views.swapaxes(2, 1)
-    all_label_views = all_label_views.swapaxes(2, 1)
-    # all_index_views = all_index_views.swapaxes(2, 1)  # Removed index views
-    print("Reshaping arrays.")
-    all_raw_views = all_raw_views.reshape((-1, 4, ws[1], ws[0]))
-    all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
-    # # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
-    # # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
-    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views,
-                                                                      all_label_views, train_size=0.9,
-                                                                      shuffle=False)
-    # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
-    print("Writing h5 files.")
-    os.makedirs(dest_dir, exist_ok=True)
-    # chunk output data
-    for ii in range(5):
-        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}_{}.h5".format(ii, h5_suffix),
-                     ["raw"])
-        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}_{}.h5".format(ii, h5_suffix),
-                     ["raw"])
-        # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
-        # ["raw"])  # Removed index views
-        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}_{}.h5".format(ii, h5_suffix),
-                     ["label"])
-        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}_{}.h5".format(ii, h5_suffix),
-                     ["label"])
-        print("dest_dir_{}: {}".format(ii, dest_dir))
+        count += 1
+    print("Wrote index {}~{} h5 files".format(h5_idx, h5_idx+count))
     # save_to_h5py([label_test], dest_dir + "/label_test.h5",
     # ["label"])  # Removed index views
 
@@ -448,30 +368,48 @@ def gt_generation_helper(args):
 
 if __name__ == "__main__":
 
-    #############################
-    # Unit test
-    ############################
     if 1:
-        comp_window = 10240 * 3
-        ws = (256, 128)
+        # comp_window = 10240 * 1.5
+        # ws = (256, 128)
+        comp_window = 20480
+        ws = (512, 256)
         dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
         # dest_gt_dir = "/home/kloping/wholebrain/scratch/yliu/false_merger/{}".format(ws[0])  # local test: output directory
         os.makedirs(dest_gt_dir, exist_ok=True)
         # global_params.wd = "/wholebrain/scratch/areaxfs3/"
         # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         initial_run = False
-        n_views = 3
-        label_file_folder = "/wholebrain/u/yliu/merged_cells_kzip_v10_v4b_base_20180214_full_agglo_cbsplit/"
-        # label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger/generated_cells"
+        # n_views = 3
+        n_views = 5
+        label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_CSfilter_kzip_v10/"
         # label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
-        # file_names = ["/merged396_cells14491101_30109744.k.zip"]
+        # file_names = ["/merged438_cells252804_1149416.k.zip"]
         #               "/syn669316_cells31272448_26034194.k.zip",
         #               "syn373853_cells8636931_3062786.k.zip"]  # Test
+
         all_file_names = get_all_fname(label_file_folder)
         file_names = check_kzip_completeness(label_file_folder, all_file_names)
-        # file_names = file_names[:50]
-        file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
-        GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, ws=ws, comp_window=comp_window)
+
+        start_index = 0
+        split_size = 50
+        h5_idx = 0
+        h5_split_size = 20
+        while start_index < len(file_names):
+            # file_names = file_names[:200]
+            # file_names = file_names[200:400]
+            # file_names = file_names[400:600]
+            # file_names = file_names[600:]
+            current_file_names = file_names[start_index : start_index + split_size]
+            no_merger_in_files = '/syn0_cells1463796_1463796.k.zip' in current_file_names
+            print("Is no_merger in files? {}".format(no_merger_in_files))
+            print("File_names from: {} ~ {}".format(start_index, start_index+split_size))
+            print("Output h5 files: {} ~ {}".format(h5_idx, h5_idx+h5_split_size))
+            file_paths = [label_file_folder + "/" + fname for fname in current_file_names][::-1]
+            GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views,
+                                    ws=ws, comp_window=comp_window,
+                                    h5_idx=h5_idx, h5_split_size=h5_split_size, n_voting=0)
+            h5_idx += h5_split_size
+            start_index += split_size
 
     # spiness
     if 0:
