@@ -41,7 +41,7 @@ create_new_cs_ids = False
 
 # number of generated cells
 if num_cs_id == None:
-    num_generated_cells = 2000
+    num_generated_cells = 10000
 else:
     # if num_cs_id is not None, then use all the cell_pairs for the merger combination
     num_generated_cells = None
@@ -49,7 +49,6 @@ else:
 # radius for kd-tree
 true_merger_radius = 2e3
 no_merger_radius = 30e3
-
 
 
 # helper function for testing
