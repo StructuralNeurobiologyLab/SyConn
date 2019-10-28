@@ -9,7 +9,8 @@
 import argparse
 import os
 import _pickle
-
+import zipfile
+import re
 import torch
 from torch import nn
 from torch import optim
@@ -19,10 +20,10 @@ from torch import optim
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='syntype_unet_sameConv_noBN_fancydice_gt2_noctgt_bs4_inmem',
+                    default='syntype_unet_sameConv_BN_fancydice_gtv2_bs4_bal_RES',
                     help='Manually set experiment name')
 parser.add_argument(
-    '-s', '--epoch-size', type=int, default=200,
+    '-s', '--epoch-size', type=int, default=500,
     help='How many training samples to process between '
          'validation/preview/extended-stat calculation phases.'
 )
@@ -87,7 +88,7 @@ model = UNet(
     start_filts=28,
     planar_blocks=(0,),
     activation='relu',
-    batch_norm=False,
+    batch_norm=True,
     # conv_mode='valid',
     #up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
     adaptive=False  # Experimental. Disable if results look weird.
@@ -109,50 +110,67 @@ elif args.jit == 'train':
     tracedmodel = torch.jit.trace(model, example_input.to(device))
     model = tracedmodel
 
-
 # USER PATHS
 save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
-data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
+data_root = os.path.expanduser(
+    '/wholebrain/songbird/j0126/GT/synapsetype_gt/')
 
-gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v2/'
+gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v4/'
 fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-# gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
-# fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-# random_ixs = np.arange(len(fnames_files))
-# np.random.seed(0)
-# np.random.shuffle(fnames_files)
-# fnames_files = np.array(fnames_files)[random_ixs].tolist()
-# fnames += fnames_files[:900]
 
 input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
 target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]
-valid_indices = [3]
+valid_indices = [len(target_h5data) - 1]
 
 # Class weights for imbalanced dataset, the last one is used as ignore label
 class_weights = torch.tensor([0.33, 0.33, 0.33, 0]).to(device)
+# class_weights = torch.tensor([1, 2, 2, 0]).to(device)
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
 
 if args.resume is not None:  # Load pretrained network
-    try:  # Assume it's a state_dict for the model
-        model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
-    except _pickle.UnpicklingError as exc:
-        # Assume it's a complete saved ScriptModule
-        model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
+    pretrained = os.path.expanduser(args.resume)
+    _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+    if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+        print(_warning_str)
+        model = torch.jit.load(pretrained, map_location=device)
+    else:  # Either state dict or pickled model
+        state = torch.load(pretrained)
+        if isinstance(state, dict):
+            try:
+                model.load_state_dict(state['model_state_dict'])
+            except RuntimeError:
+                print('Converting state dict (probably stored as DataParallel.')
+                for k in list(state.keys()):
+                    state['module' + k] = state[k]
+                    del state[k]
+            optimizer_state_dict = state.get('optimizer_state_dict')
+            lr_sched_state_dict = state.get('lr_sched_state_dict')
+            if optimizer_state_dict is None:
+                print('optimizer_state_dict not found.')
+            if lr_sched_state_dict is None:
+                print('lr_sched_state_dict not found.')
+        elif isinstance(state, nn.Module):
+            print(_warning_str)
+            model = state
+        else:
+            raise ValueError(f'Can\'t load {pretrained}.')
 
+drop_func = transforms.DropIfTooMuchBG(bg_id=3, threshold=0.9)
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
     transforms.SqueezeTarget(dim=0),  # Workaround for neuro_data_cdhw
     #transforms.Normalize(mean=dataset_mean, std=dataset_std),
-    transforms.DropIfTooMuchBG(bg_id=3, threshold=0.9)
 ]
 train_transform = transforms.Compose(common_transforms + [
-    transforms.RandomGrayAugment(channels=[0], prob=0.3),
-    transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.3),
+    transforms.RandomGrayAugment(channels=[0], prob=0.2),
+    transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.2),
     transforms.AdditiveGaussianNoise(sigma=0.05, channels=[0], prob=0.1),
-    transforms.RandomBlurring({'probability': 0.1})
+    transforms.RandomBlurring({'probability': 0.1}),
+    transforms.RandomFlip(ndim_spatial=3),
+    drop_func
 ])
 valid_transform = transforms.Compose(common_transforms + [])
 
@@ -162,8 +180,9 @@ common_data_kwargs = {  # Common options for training and valid sets.
     'aniso_factor': aniso_factor,
     'patch_shape': (48, 144, 144),
     'num_classes': 4,
-    # 'offset': (20, 46, 46),
 }
+
+cube_prios = [1] * (len(input_h5data) - len(valid_indices))
 
 type_args = list(range(len(input_h5data)))
 train_dataset = PatchCreator(
@@ -171,12 +190,13 @@ train_dataset = PatchCreator(
     target_h5data=[target_h5data[i] for i in type_args if i not in valid_indices],
     train=True,
     epoch_size=args.epoch_size,
+    cube_prios=cube_prios,
     warp_prob=0.2,
     in_memory=True,
     warp_kwargs={
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
-        'warp_amount': 0.05,
+        'warp_amount': 0.2,
     },
     transform=train_transform,
     **common_data_kwargs
@@ -199,11 +219,10 @@ preview_batch = get_preview_batch(
     preview_shape=(48, 144, 144),
 )
 
-optimizer = Padam(
+optimizer = torch.optim.Adam(
     model.parameters(),
     lr=2e-3,
     weight_decay=0.5e-4,
-    partial=1/4,
 )
 
 lr_stepsize = 200
@@ -215,8 +234,7 @@ schedulers = {'lr': lr_sched}
 valid_metrics = {
 }
 
-criterion = DiceLossFancy(apply_softmax=True, weights=class_weights,
-                          ignore_index=3)
+criterion = DiceLoss(apply_softmax=True)
 
 # Create trainer
 trainer = Trainer(
@@ -253,7 +271,6 @@ Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
 
 # Start training
 trainer.run(max_steps=max_steps, max_runtime=max_runtime)
-
 
 # How to re-calculate mean, std and class_weights for other datasets:
 #  dataset_mean = utils.calculate_means(train_dataset.inputs)
