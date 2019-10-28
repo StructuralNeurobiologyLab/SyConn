@@ -18,6 +18,9 @@ import re
 import json
 sys.dont_write_bytecode = True
 import time
+from multiprocessing.pool import ThreadPool
+from Queue import Queue
+from threading import Thread
 import numpy as np
 try:
     try:
@@ -42,6 +45,11 @@ class SyConnGateInteraction(object):
         self.svs_from_ssv = dict()
         self.synthresh = synthresh
         self.axodend_only = axodend_only
+
+        self.get_download_queue = Queue()
+        self.init_get_download_queue_worker()
+        self.get_download_done = Queue()
+        self.get_download_results_store = dict()
 
     def get_ssv_mesh(self, ssv_id):
         """
@@ -90,6 +98,61 @@ class SyConnGateInteraction(object):
             skel[k] = np.array(skel[k], dtype=np.float32)
         return skel if len(skel) > 0 else None
 
+    def init_get_download_queue_worker(self):
+        """
+        Initialize mesh queue daemon workers.
+
+        :return:
+        """
+        for i in range(20):
+            worker = Thread(target=self.get_download_queue_worker)
+            worker.setDaemon(True)
+            worker.start()
+
+        return
+
+    def wait_for_all_downloads(self):
+        while not self.get_download_done.empty():
+            time.sleep(0.05)
+
+    def get_download_queue_worker(self):
+        while True:
+            # this is blocking and therefore fine
+            get_request = self.get_download_queue.get()
+            r = self.session.get(self.server + get_request)
+            self.get_download_results_store[get_request] = r
+            self.get_download_queue.task_done() # not sure whether this is needed
+            _ = self.get_download_done.get() # signal download done by removal
+
+        return
+
+    def add_ssv_obj_mesh_to_down_queue(self, ssv_id, obj_type):
+        # if this queue is empty, all downloads will be done,
+        # a poor man's sync mechanism
+        for i in range(3):
+            self.get_download_done.put('working')
+
+        self.get_download_queue.put('/ssv_obj_ind/{0}/{1}'.format(ssv_id, obj_type))
+        self.get_download_queue.put('/ssv_obj_vert/{0}/{1}'.format(ssv_id, obj_type))
+        self.get_download_queue.put('/ssv_obj_norm/{0}/{1}'.format(ssv_id, obj_type))
+
+    def get_ssv_obj_mesh_from_results_store(self, ssv_id, obj_type):
+        ind_hash = '/ssv_obj_ind/{0}/{1}'.format(ssv_id, obj_type)
+        vert_hash = '/ssv_obj_vert/{0}/{1}'.format(ssv_id, obj_type)
+        norm_hash = '/ssv_obj_norm/{0}/{1}'.format(ssv_id, obj_type)
+
+        #start = time.time()
+        ind = lz4stringtoarr(self.get_download_results_store[ind_hash].content, dtype=np.uint32)
+        vert = lz4stringtoarr(self.get_download_results_store[vert_hash].content, dtype=np.float32)
+        norm = lz4stringtoarr(self.get_download_results_store[norm_hash].content, dtype=np.float32)
+        #print('lz4 decompress took {}'.format(time.time()-start))
+        # clean up - could also be extended into some more permanent results cache
+        self.get_download_results_store.pop(ind_hash, None)
+        self.get_download_results_store.pop(vert_hash, None)
+        self.get_download_results_store.pop(norm_hash, None)
+
+        return ind, vert, -norm  # invert normals
+
     def get_ssv_obj_mesh(self, ssv_id, obj_type):
         """
         Returns a mesh for a given ssv_id and a specified obj_type.
@@ -103,6 +166,14 @@ class SyConnGateInteraction(object):
         -------
 
         """
+        #thread_pool = ThreadPool(processes=3)
+
+        #result = thread_pool.map(self.get_mesh_fragment,
+        #                         [(sv_id, frag_key) for frag_key in
+        #                          fragment_keys])
+
+        #thread_pool.close()
+        #thread_pool.join()
         r1 = self.session.get(self.server + '/ssv_obj_ind/{0}/{1}'.format(ssv_id,
                                                                           obj_type))
         r2 = self.session.get(self.server + '/ssv_obj_vert/{0}/{1}'.format(ssv_id,
@@ -135,7 +206,7 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        if not self.svs_from_ssv.has_key(ssv_id):
+        if ssv_id not in self.svs_from_ssv:
             r = self.session.get(self.server + '/svs_of_ssv/{0}'.format(ssv_id))
             self.svs_from_ssv[ssv_id] = json.loads(r.content)
         return self.svs_from_ssv[ssv_id]
@@ -151,9 +222,11 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        if not self.ssv_from_sv_cache.has_key(sv_id):
+        if sv_id not in self.ssv_from_sv_cache:
+            start = time.time()
             r = self.session.get(self.server + '/ssv_of_sv/{0}'.format(sv_id))
             self.ssv_from_sv_cache[sv_id] = json.loads(r.content)
+            print('Get ssv of sv {} without cache took {}'.format(sv_id, time.time() - start))
         return self.ssv_from_sv_cache[sv_id]
 
     def get_celltype_of_ssv(self, ssv_id):
@@ -262,7 +335,7 @@ class InputDialog(QtGui.QDialog):
         self.ip = QtGui.QLabel()
         self.ip.setText("host")
         layout.addWidget(self.ip)
-        self.text_ip = QtGui.QLineEdit("0.0.0.0")
+        self.text_ip = QtGui.QLineEdit("localhost")
         layout.addWidget(self.text_ip)
         mainLayout.addLayout(layout)
 
@@ -337,13 +410,22 @@ class main_class(QtGui.QDialog):
             try:
                 self.init_syconn()
                 self.build_gui()
-                self.timer = QtCore.QTimer()
-                self.timer.timeout.connect(self.exploration_mode_callback_check)
-                self.timer.start(1000)
+                #self.timer = QtCore.QTimer()
+                #self.timer.timeout.connect(self.exploration_mode_callback_check)
+                #self.timer.start(1000)
+
+                #self.timer2 = QtCore.QTimer()
+                #self.timer2.timeout.connect(self.release_gil_hack)
+                #self.timer2.start(50)
+
                 break
             except requests.exceptions.ConnectionError as e:
                 print("Failed to establish connection to SyConn Server.", str(e))
                 pass
+
+    def release_gil_hack(self):
+        time.sleep(0.01)
+        return
 
     def init_syconn(self):
         # move to config file
@@ -501,6 +583,7 @@ class main_class(QtGui.QDialog):
         self.setLayout(layout)
 
         self.show_button_neurite = QtGui.QPushButton('Show neurite')
+        self.show_button_selected_neurite = QtGui.QPushButton('Add selected neurite(s)')
         self.show_button_synapse = QtGui.QPushButton('Show synapse')
         self.clear_knossos_view_button = QtGui.QPushButton('Clear view')
 
@@ -569,8 +652,8 @@ class main_class(QtGui.QDialog):
         self.send_button_response_label = QtGui.QLabel()
         self.send_button_response_label.setText(None)
 
-        self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
-        self.exploration_mode_chk_box.setChecked(True)
+        #self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
+        #self.exploration_mode_chk_box.setChecked(True)
         #self.ssv_selection_model =
         # QtGui.QItemSelectionModel(self.ssv_select_model)
 
@@ -594,7 +677,7 @@ class main_class(QtGui.QDialog):
         layout.addWidget(self.show_button_neurite, 3, 0, 1, 1)
         layout.addWidget(self.show_button_synapse, 3, 1, 1, 1)
         layout.addWidget(self.clear_knossos_view_button, 4, 0, 1, 1)
-        layout.addWidget(self.exploration_mode_chk_box, 5, 0, 1, 2)
+        layout.addWidget(self.show_button_selected_neurite, 5, 0, 1, 1)
         layout.addWidget(self.celltype_field, 1, 2, 1, 2)
 
         layout.addWidget(self.synapse_field1, 2, 2, 1, 1)
@@ -608,10 +691,11 @@ class main_class(QtGui.QDialog):
         #self.selectionModel.selectionChanged.connect(self.on_ssv_selector_changed)
 
         self.show_button_neurite.clicked.connect(self.show_button_neurite_clicked)
+        self.show_button_selected_neurite.clicked.connect(self.show_button_selected_neurite_clicked)
         self.show_button_synapse.clicked.connect(self.show_button_synapse_clicked)
         self.clear_knossos_view_button.clicked.connect(self.clear_knossos_view_button_clicked)
         self.send_synapsetype_label_button.clicked.connect(self.send_synapsetype_label_button_clicked)
-        self.exploration_mode_chk_box.stateChanged.connect(self.exploration_mode_changed)
+        #self.exploration_mode_chk_box.stateChanged.connect(self.exploration_mode_changed)
 
         # self.setGeometry(300, 300, 450, 300)
         self.setWindowTitle('SyConn Viewer v2')
@@ -645,91 +729,103 @@ class main_class(QtGui.QDialog):
         #self.gui_auto_agglo_line_edit = QtGui.QLineEdit()
         #self.gui_auto_agglo_line_edit.setText('0')
 
-    def exploration_mode_changed(self):
-        if self.exploration_mode_chk_box.isChecked():
-            pass
+    #def exploration_mode_changed(self):
+    #    if self.exploration_mode_chk_box.isChecked():
+    #        pass
             # enable selection polling timer
-        else:
-            pass
+    #    else:
+    #        pass
             # disable selection polling timer
 
+
     def exploration_mode_callback_check(self):
-        if self.exploration_mode_chk_box.isChecked():
+        #if self.exploration_mode_chk_box.isChecked():
+            #print('expl')
+        sel_seg_objs = KnossosModule.segmentation.selected_objects()
+        if len(sel_seg_objs) == 0:
+            return
+        sel_sv_ids = []
+        for sel_seg_obj in sel_seg_objs:
+            sel_sv_ids.append(KnossosModule.segmentation.subobject_ids_of_object(sel_seg_obj)[0])
 
-            sel_seg_objs = KnossosModule.segmentation.selected_objects()
-            sel_sv_ids = []
-            for sel_seg_obj in sel_seg_objs:
-                sel_sv_ids.append(KnossosModule.segmentation.subobject_ids_of_object(sel_seg_obj)[0])
 
-            # get selected ssv ids
-            ssv_ids_selected = [self.syconn_gate.get_ssv_of_sv(sv_id)['ssv'] for sv_id in sel_sv_ids]
+        trees = KnossosModule.skeleton.trees()
+        ids_in_k = set([tree.tree_id() for tree in trees if
+                        tree.tree_id() < self.obj_id_offs])
+        # get selected ssv ids
+        ssv_ids_selected = [self.syconn_gate.get_ssv_of_sv(sv_id)['ssv'] for sv_id in sel_sv_ids] #if not sv_id in ids_in_k
 
-            # id_changer returns -1 for a supervoxel that is unconnected, add support for single svs
-            ssv_ids_selected = [ssv_id for ssv_id in ssv_ids_selected if ssv_id != -1]
 
-            #print('ssv_ids_selected {0}'.format(ssv_ids_selected))
 
-            trees = KnossosModule.skeleton.trees()
-            ids_in_k = set([tree.tree_id() for tree in trees if
-                            tree.tree_id() < self.obj_id_offs])
+        # id_changer returns -1 for a supervoxel that is unconnected, add support for single svs
+        ssv_ids_selected = [ssv_id for ssv_id in ssv_ids_selected if ssv_id != -1]
 
-            #print('self.obj_tree_ids {0}'.format(self.obj_tree_ids))
-            #print('ids_in_k 1 {0}'.format(ids_in_k))
+        #print('ssv_ids_selected {0}'.format(ssv_ids_selected))
 
-            #print('ids_in_k 2 {0}'.format(ids_in_k))
 
-            # compare with the selected segmentation objects
-            ids_selected = set(ssv_ids_selected)
 
-            # add missing ones to knossos, delete if not needed anymore
-            ids_to_add = ids_selected - ids_in_k
-            ids_to_del = ids_in_k - ids_selected
+        #print('self.obj_tree_ids {0}'.format(self.obj_tree_ids))
+        #print('ids_in_k 1 {0}'.format(ids_in_k))
 
-            # remove segmentation objects that are not needed anymore
-            all_objects = KnossosModule.segmentation.objects()
+        #print('ids_in_k 2 {0}'.format(ids_in_k))
 
-            objs_to_del = set(all_objects) - set(ids_selected)
+        # compare with the selected segmentation objects
+        ids_selected = set(ssv_ids_selected)
 
-            [KnossosModule.segmentation.remove_object(obj) for obj in objs_to_del]
+        # add missing ones to knossos, delete if not needed anymore
+        ids_to_add = ids_selected - ids_in_k
+        ids_to_del = ids_in_k - ids_selected
 
-            #print('ids to del {0} ids to add {1}'.format(ids_to_del, ids_to_add))
+        # remove segmentation objects that are not needed anymore
+        all_objects = KnossosModule.segmentation.objects()
 
-            #print('ids_selected {0}'.format(ids_selected))
-            self.ids_selected = ids_selected
+        objs_to_del = set(all_objects) - set(ids_selected)
 
-            [self.remove_ssv_from_knossos(ssv_id) for ssv_id in ids_to_del]
-            [self.ssv_to_knossos(ssv_id) for ssv_id in ids_to_add]
-            [self.ssv_skel_to_knossos_tree(ssv_id) for ssv_id in ids_to_add]
-            [self.update_celltype(ssv_id) for ssv_id in ids_to_add]
+        [KnossosModule.segmentation.remove_object(obj) for obj in objs_to_del]
 
-            if len(ids_in_k) != 1 or len(ids_to_del) > 0:
-                [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in
-                 self.obj_tree_ids]
-                self.obj_tree_ids = set()
+        #print('ids to del {0} ids to add {1}'.format(ids_to_del, ids_to_add))
+
+        #print('ids_selected {0}'.format(ids_selected))
+        self.ids_selected = ids_selected
+
+        [self.remove_ssv_from_knossos(ssv_id) for ssv_id in ids_to_del]
+        [self.ssv_to_knossos(ssv_id) for ssv_id in ids_to_add]
+        [self.ssv_skel_to_knossos_tree(ssv_id) for ssv_id in ids_to_add]
+        [self.update_celltype(ssv_id) for ssv_id in ids_to_add]
+
+        #if len(ids_in_k) != 1 or len(ids_to_del) > 0:
+        #    [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in
+        #     self.obj_tree_ids]
+        #    self.obj_tree_ids = set()
 
         return
 
     def remove_ssv_from_knossos(self, ssv_id):
+        return
         KnossosModule.skeleton.delete_tree(ssv_id)
         # check whether there are object meshes that need to be deleted as well
         trees = KnossosModule.skeleton.trees()
         obj_mesh_ids = set([tree.tree_id() for tree in trees if
                         tree.tree_id() > self.obj_id_offs])
-        for i in range(1, 5):
+        for i in range(1, 4):
             obj_id_to_test = ssv_id + self.obj_id_offs + i
             if obj_id_to_test in obj_mesh_ids:
                 KnossosModule.skeleton.delete_tree(obj_id_to_test)
 
+    def show_button_selected_neurite_clicked(self):
+        self.exploration_mode_callback_check()
+
     def show_button_neurite_clicked(self):
         try:
-            self.ssv_selected1 = int(self.direct_ssv_id_input.text)
+             ssvs = [x.strip() for x in self.direct_ssv_id_input.text.split(',')]
+             ssvs = map(int, ssvs)
         except:
-            pass
-
-        if self.ssv_selected1:
-            self.ssv_to_knossos(self.ssv_selected1)
-            self.ssv_skel_to_knossos_tree(self.ssv_selected1)
-            self.update_celltype(self.ssv_selected1)
+            ssvs = []
+        for ssv in ssvs:
+            self.ssv_to_knossos(ssv)
+            self.ssv_skel_to_knossos_tree(ssv)
+            self.update_celltype(ssv)
+            self.ssv_selected1 = ssv
         return
 
     def show_button_synapse_clicked(self):
@@ -776,11 +872,13 @@ class main_class(QtGui.QDialog):
         self.celltype_field.setText("CellType: {} ({})".format(ct, certainty))
 
     def ssv_to_knossos(self, ssv_id):
-        start = time.time()
+        start_tot = time.time()
         #self.clear_knossos_view_button_clicked()
 
         # to mergelist
+        start = time.time()
         sv_ids = self.syconn_gate.get_svs_of_ssv(ssv_id)['svs']
+        print('Get svs of ssv took {}'.format(time.time()-start))
         sv_ids = map(int, sv_ids)
 
         KnossosModule.segmentation.create_object(ssv_id, sv_ids[0], (1,1,1))
@@ -799,85 +897,39 @@ class main_class(QtGui.QDialog):
 
         KnossosModule.segmentation.set_render_only_selected_objs(True)
 
-        #print('self.ids_selected {0}'.format(self.ids_selected))
+        # create a 'fake' knossos tree for each obj mesh category;
+        # this is very hacky since it can generate nasty ID collisions.
+        mi_id = self.obj_id_offs + ssv_id + 1
+        sym_id = self.obj_id_offs + ssv_id + 2
+        asym_id = self.obj_id_offs + ssv_id + 3
+        vc_id = self.obj_id_offs + ssv_id + 4
+        neuron_id = self.obj_id_offs + ssv_id + 5
 
-        if len(self.ids_selected) < 10:
+        params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
+                  (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
+                  (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
+                  # (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
+                  (self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
+                  (self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
+        start = time.time()
 
-            # create a 'fake' knossos tree for each obj mesh category;
-            # this is very hacky since it can generate nasty ID collisions.
-            mi_id = self.obj_id_offs + ssv_id + 1
-            sj_id = self.obj_id_offs + ssv_id + 2
-            vc_id = self.obj_id_offs + ssv_id + 3
-            neuron_id = self.obj_id_offs + ssv_id + 4
+        # add all meshes to download queue
+        for par in params:
+            mesh_loader_threaded(*par)
+        # wait for downloads
+        self.syconn_gate.wait_for_all_downloads()
+        print('Mesh download took {}'.format(time.time() - start))
 
-            params = [(self, ssv_id, neuron_id, 'sv', (255, 0, 0, 128)),
-                      (self, ssv_id, mi_id, 'mi', (0, 0, 255, 255)),
-                      (self, ssv_id, vc_id, 'vc', (0, 255, 0, 255)),
-                      (self, ssv_id, sj_id, 'sj', (0, 0, 0, 255))]
-
-            for par in params:
-                mesh_loader(*par)
-
-            # mi_start = time.time()
-            # mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
-            # print("Mi time:", time.time() - mi_start)
-            # mi_start = time.time()
-            # if len(mi_mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
-            #                                          mi_mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(mi_id,
-            #                                           QtGui.QColor(0, 0, 255, 255))
-            # print("Mi time (Knossos):", time.time() - mi_start)
-            #
-            # sj_start = time.time()
-            # sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
-            # print("SJ time:", time.time() - sj_start)
-            # sj_start = time.time()
-            # if len(sj_mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
-            #                                          sj_mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(sj_id,
-            #                                           QtGui.QColor(0, 0, 0, 255))
-            # print("SJ time (Knossos):", time.time() - sj_start)
-            #
-            # vc_start = time.time()
-            # vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
-            # print("VC time:", time.time() - vc_start)
-            # vc_start = time.time()
-            # if len(vc_mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
-            #                                          vc_mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(vc_id,
-            #                                           QtGui.QColor(0, 255, 0, 255))
-            # print("VC time (Knossos):", time.time() - vc_start)
-            #
-            # sv_start = time.time()
-            # k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-            # mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            # print("SV time:", time.time() - sv_start)
-            # sv_start = time.time()
-            # if len(mesh[0]) > 0:
-            #     KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
-            #                                          mesh[0],
-            #                                          [], 4, False)
-            #     KnossosModule.skeleton.set_tree_color(neuron_id,
-            #                                           QtGui.QColor(255, 0, 0, 128))
-            # print("SV time (Knossos):", time.time() - sv_start)
-        else:
-            mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
-                                                 mesh[0],
-                                                 [], 4, False)
-
-        print("Total time:", time.time() - start)
+        start = time.time()
+        # add all to knossos
+        for par in params:
+            mesh_to_K(*par)
+        print('Mesh to K took {}'.format(time.time() - start))
         return
 
     def ssv_skel_to_knossos_tree(self, ssv_id, signal_block=True):
         # disable knossos signal emission first - O(n^2) otherwise
+        start = time.time()
         if signal_block:
             signalsBlocked = KnossosModule.knossos_global_skeletonizer.blockSignals(
                 True)
@@ -885,6 +937,7 @@ class main_class(QtGui.QDialog):
         if k_tree is None:
             k_tree = KnossosModule.skeleton.add_tree(ssv_id)
         skel = self.syconn_gate.get_ssv_skel(ssv_id)
+        #skel = None
         if skel is None:
             print("Loaded skeleton is None.")
             return
@@ -914,6 +967,7 @@ class main_class(QtGui.QDialog):
             KnossosModule.knossos_global_skeletonizer.blockSignals(
                 signalsBlocked)
             KnossosModule.knossos_global_skeletonizer.resetData()
+        print('Skel down and to K took {}'.format(time.time()-start))
         return
 
 
@@ -930,6 +984,20 @@ def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
                                               QtGui.QColor(*color))
     print("Loading {}-mesh time (pure KNOSSOS): {:.2f} s".format(
         obj_type, time.time() - start))
+
+
+def mesh_loader_threaded(gate_obj, ssv_id, tree_id, obj_type, color):
+    gate_obj.syconn_gate.add_ssv_obj_mesh_to_down_queue(ssv_id, obj_type)
+
+
+def mesh_to_K(gate_obj, ssv_id, tree_id, obj_type, color):
+    mesh = gate_obj.syconn_gate.get_ssv_obj_mesh_from_results_store(ssv_id, obj_type)
+    if len(mesh[0]) > 0:
+        KnossosModule.skeleton.add_tree_mesh(tree_id, mesh[1], mesh[2],
+                                             mesh[0],
+                                             [], 4, False)
+        KnossosModule.skeleton.set_tree_color(tree_id,
+                                              QtGui.QColor(*color))
 
 
 def lz4stringtoarr(string, dtype=np.float32, shape=None):
@@ -1010,6 +1078,14 @@ def int2str_label_converter(label, gt_type):
         else:
             return "N/A"
     elif gt_type == 'ctgt_v2':
+        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            print('Unknown label "{}"'.format(label))
+            return "N/A"
+    elif gt_type == 'ctgt_v2_old':
         l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
         l_dc_inv["?"] = 8
         l_dc = {v: k for k, v in l_dc_inv.items()}
@@ -1020,7 +1096,6 @@ def int2str_label_converter(label, gt_type):
             return l_dc[label]
         except KeyError:
             print('Unknown label "{}"'.format(label))
-            return "N/A"
     else:
         raise ValueError("Given ground truth type is not valid.")
 

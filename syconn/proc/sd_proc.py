@@ -1005,7 +1005,7 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
                              n_iterations])
 
     # Running workers
-    if qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         sm.start_multiprocess(_binary_filling_cs_thread,
                               multi_params, nb_cpus=nb_cpus)
 

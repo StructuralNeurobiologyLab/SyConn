@@ -24,8 +24,13 @@ plyfile
 pytest
 pytest-runner
 pytest-cov
+<<<<<<< HEAD
+=======
+pytest-xdist
+>>>>>>> d7b8a8b9652050cca79384c362fc1099bced807c
 prompt-toolkit
 vtki
 dill
+pyyaml
 git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 

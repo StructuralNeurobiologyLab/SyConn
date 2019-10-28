@@ -138,8 +138,8 @@ class SuperSegmentationDataset(object):
         self._config = config
 
         if working_dir is None:
-            if global_params.wd is not None or version == 'tmp':
-                self._working_dir = global_params.wd
+            if version == 'tmp' or global_params.config.working_dir is not None:
+                self._working_dir = global_params.config.working_dir
             else:
                 msg = "No working directory (wd) given. It has to be" \
                       " specified either in global_params, via kwarg " \
@@ -459,7 +459,8 @@ class SuperSegmentationDataset(object):
     def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]],
                                       new_mapping: bool = False,
                                       caching: Optional[bool] = None,
-                                      create: bool = False):
+                                      create: bool = False)\
+            -> Union[SuperSegmentationObject, List[SuperSegmentationObject]]:
         """
         Factory method for
         :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`s.
@@ -480,7 +481,8 @@ class SuperSegmentationDataset(object):
             * Set the default value of `caching` to False, PS 20Feb2019
 
         Returns:
-
+            SuperSegmentationObject(s) corresponding to the given `obj_id`
+            (int or Iterable[int]).
         """
         if caching is None:
             caching = self.sso_caching
@@ -499,7 +501,8 @@ class SuperSegmentationDataset(object):
                                               mesh_caching=caching,
                                               view_caching=caching,
                                               enable_locking_so=False,
-                                              enable_locking=self.sso_locking)
+                                              enable_locking=self.sso_locking,
+                                              config=self.config)
             else:
                 sso = SuperSegmentationObject(obj_id,
                                               self.version,
@@ -513,7 +516,8 @@ class SuperSegmentationDataset(object):
                                               mesh_caching=caching,
                                               view_caching=caching,
                                               enable_locking_so=False,
-                                              enable_locking=self.sso_locking)
+                                              enable_locking=self.sso_locking,
+                                              config=self.config)
             sso._dataset = self
         else:
             sso = []

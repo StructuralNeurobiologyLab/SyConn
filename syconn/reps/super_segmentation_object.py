@@ -37,7 +37,7 @@ from ..backend.storage import CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
     compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
-from ..proc.rendering import render_sampled_sso, multi_view_sso, \
+from ..proc.rendering import render_sampled_sso, load_rendering_func, \
     render_sso_coords, render_sso_coords_index_views
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -307,6 +307,7 @@ class SuperSegmentationObject(object):
         return hash((self.id, self.type, frozenset(self.sv_ids)))
 
     def __eq__(self, other):
+        # TODO: add additional criteria
         if not isinstance(other, self.__class__):
             return False
         return self.id == other.id and self.type == other.type and \
@@ -559,7 +560,10 @@ class SuperSegmentationObject(object):
     #                                                                     MESHES
     def load_mesh(self, mesh_type) -> Optional[MeshType]:
         """
-        Load mesh of a specific type, e.g. 'mi', 'sv', etc.
+        Load mesh of a specific type, e.g. 'mi', 'sv' (cell supervoxel), 'sj' (connected
+        components of the original synaptic junction predictions), 'syn_ssv' (overlap of
+        'sj' with cell contact sites), 'syn_ssv_sym' and 'syn_ssv_asym' (only if syn-type
+        predictions are available).
 
         Args:
             mesh_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject` used for
@@ -568,7 +572,9 @@ class SuperSegmentationObject(object):
         Returns:
             Three flat arrays: indices, vertices, normals
         """
-        if not mesh_type in self._meshes:
+        if mesh_type in ('syn_ssv_sym', 'syn_ssv_asym'):
+            self.typedsyns2mesh()
+        if mesh_type not in self._meshes:
             return None
         if self._meshes[mesh_type] is None:
             if not self.mesh_caching:
@@ -641,21 +647,20 @@ class SuperSegmentationObject(object):
                              ''.format(data_type))
 
     #                                                                 PROPERTIES
+    def celltype(self, key: Optional[str] = None) -> int:
+        """
+        Returns the cell type classification result. Default: CMN model, if
+        `key` is specified returns the corresponding value loaded
+        by :func:`~lookup_in_attribute_dict`.
+        Args:
+            key: Key where classification result is stored.
 
-    @property
-    def cell_type(self):
-        log_reps.warning('DEPRECATED USE OF `cell_type` attribute in SSV'
-                         ' {}'.format(self.id))
-        if self.cell_type_ratios is not None:
-            return np.argmax(self.cell_type_ratios)
-        else:
-            return None
-
-    @property
-    def cell_type_ratios(self):
-        log_reps.warning('DEPRECATED USE OF `cell_type_ratios` attribute in SSV'
-                         ' {}'.format(self.id))
-        return self.lookup_in_attribute_dict("cell_type_ratios")
+        Returns:
+            Cell type classification.
+        """
+        if key is None:
+            key = 'celltype_cnn_e3'
+        return self.lookup_in_attribute_dict(key)
 
     def weighted_graph(self, add_node_attr: Iterable[str] = ()) -> nx.Graph:
         """
@@ -783,7 +788,7 @@ class SuperSegmentationObject(object):
             True if the mesh exists.
         """
         mesh_dc = MeshStorage(self.mesh_dc_path,
-                              disable_locking=not self.enable_locking)
+                              disable_locking=True)
         return obj_type in mesh_dc
 
     @property
@@ -932,7 +937,7 @@ class SuperSegmentationObject(object):
         return SegmentationObject(obj_id=obj_id, obj_type=obj_type,
                                   version=self.version_dict[obj_type],
                                   working_dir=self.working_dir, create=False,
-                                  scaling=self.scaling,
+                                  scaling=self.scaling, config=self.config,
                                   enable_locking=self.enable_locking_so)
 
     def get_seg_dataset(self, obj_type: str) -> SegmentationDataset:
@@ -1447,8 +1452,8 @@ class SuperSegmentationObject(object):
             weighted: Compute synapse-area weighted ratio.
             recompute: Ignore existing value.
             comp_types: All synapses that are formed on any of the
-                functional compartment types given in `comp_types` on the cell
-                reconstruction are used for computing the ratio (0: dendrite,
+                functional compartment types given in `comp_types` are used
+                for computing the ratio (0: dendrite,
                 1: axon, 2: soma). Default: [1, ].
             comp_types_partner: Compartment type of the partner cell. Default:
                 [0, ].
@@ -1478,10 +1483,11 @@ class SuperSegmentationObject(object):
                 continue
             if ax[other_cell_ix] not in comp_types_partner:
                 continue
-            if ax[other_cell_ix] != 1:
-                continue
             syn_signs.append(syn.attr_dict["syn_sign"])
             syn_sizes.append(syn.mesh_area / 2)
+        log_reps.debug(f'Used {len(syn_signs)} with a total size of '
+                       f'{np.sum(syn_sizes)} um^2 between {comp_types} '
+                       f'(this cell) and {comp_types_partner} (other cells).')
         if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
             return -1
         syn_signs = np.array(syn_signs)
@@ -2431,7 +2437,7 @@ class SuperSegmentationObject(object):
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        for ot in ["sj", "vc", "mi", "sv"]:  # determins rendering order in KNOSSOS
+        for ot in ["sj", "vc", "mi", "sv"]:  # determines rendering order in KNOSSOS
             if ot == "sj" and synssv_instead_sj:
                 ot = 'syn_ssv'
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
@@ -2456,7 +2462,7 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = (),
+    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton', ),
                     rag: Optional[nx.Graph] = None,
                     sv_color: Optional[np.ndarray] = None,
                     synssv_instead_sj: bool = False):
@@ -2508,6 +2514,8 @@ class SuperSegmentationObject(object):
             if attr not in allowed_attributes:
                 raise ValueError('Invalid attribute specified. Currently suppor'
                                  'ted attributes for export: {}'.format(allowed_attributes))
+            if attr == 'skeleton' and self.skeleton is None:
+                self.load_skeleton()
             tmp_dest_p.append('{}_{}.pkl'.format(dest_path, attr))
             target_fnames.append('{}.pkl'.format(attr))
             sso_attr = getattr(self, attr)
@@ -2527,6 +2535,48 @@ class SuperSegmentationObject(object):
         self.meshes2kzip(dest_path=dest_path, sv_color=sv_color,
                          synssv_instead_sj=synssv_instead_sj)
         self.mergelist2kzip(dest_path=dest_path)
+        if 'skeleton' in attr_keys:
+            self.save_skeleton_to_kzip(dest_path=dest_path)
+
+    def typedsyns2mesh(self, dest_path: Optional[str] = None,
+                       rewrite: bool = False):
+        """
+        Generates typed meshes of 'syn_ssv' and stores it at
+        :py:attr:`~mesh_dc_path` (keys: ``'syn_ssv_sym'`` and ``'syn_ssv_asym'``)
+        and writes it to `dest_path` (if given).
+        Accessed with the respective keys via :py:attr:`~load_mesh`.
+
+        Args:
+            dest_path:
+            rewrite:
+
+        Returns:
+            None
+        """
+        if not rewrite and self.mesh_exists('syn_ssv_sym') and self.mesh_exists('syn_ssv_asym') \
+                and not self.version == "tmp":
+            return
+        sym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
+                                       syn.lookup_in_attribute_dict("syn_sign") == -1])
+        asym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
+                                        syn.lookup_in_attribute_dict("syn_sign") == 1])
+        sym_syn_mesh = list(sym_syn_mesh)
+        asym_syn_mesh = list(asym_syn_mesh)
+        if not self.version == "tmp":
+            mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
+                                  disable_locking=not self.enable_locking)
+            mesh_dc['syn_ssv_sym'] = sym_syn_mesh
+            mesh_dc['syn_ssv_asym'] = asym_syn_mesh
+            mesh_dc.push()
+        self._meshes['syn_ssv_sym'] = sym_syn_mesh
+        self._meshes['syn_ssv_asym'] = asym_syn_mesh
+        if dest_path is None:
+            return
+        # TODO: add appropriate ply fname and/or comment
+        write_mesh2kzip(dest_path, asym_syn_mesh[0], asym_syn_mesh[1],
+                        asym_syn_mesh[2], color=np.array((240, 50, 50, 255)), ply_fname='10.ply')
+        write_mesh2kzip(dest_path, sym_syn_mesh[0], sym_syn_mesh[1],
+                        sym_syn_mesh[2], color=np.array((50, 50, 240, 255)), ply_fname='11.ply')
 
     def write_svmeshes2kzip(self, dest_path=None):
         if dest_path is None:
@@ -2576,19 +2626,22 @@ class SuperSegmentationObject(object):
             Color for each possible prediction value (range(np.max(preds))
         k : int
             Number of nearest neighbors (average prediction)
+
         Returns
         -------
         None or [np.array, np.array, np.array]
         """
-        if not ply_fname.endswith(".ply"):
+        if ply_fname is not None and not ply_fname.endswith(".ply"):
             ply_fname += ".ply"
+        if dest_path is not None and ply_fname is None:
+            msg = "Specify 'ply_fanme' in order to save colored " \
+                  "mesh to k.zip."
+            log_reps.error(msg)
+            raise ValueError(msg)
         mesh = self.mesh
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
-        if dest_path is None or ply_fname is None:
-            if not dest_path is None and ply_fname is None:
-                log_reps.warning("Specify 'ply_fanme' in order to save colored"
-                                 " mesh to k.zip.")
+        if dest_path is None:
             return mesh[0], mesh[1], col
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], col,
@@ -2631,8 +2684,8 @@ class SuperSegmentationObject(object):
         coords = sm.start_multiprocess_obj("rep_coord", params,
                                            nb_cpus=self.nb_cpus)
         coords = np.array(coords)
-        params = [[sv, {"thresh": thresh, "pred_key_appendix":
-            pred_key_appendix}] for sv in self.svs]
+        params = [[sv, {"thresh": thresh, "pred_key_appendix": pred_key_appendix}]
+                  for sv in self.svs]
         glia_preds = sm.start_multiprocess_obj("glia_pred", params,
                                                nb_cpus=self.nb_cpus)
         glia_preds = np.array(glia_preds)
@@ -3055,10 +3108,11 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             largeFoV=True):
+                             largeFoV=False):
         """
-        Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
-        and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
+        Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
+        ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
+        cell morphology embedding via `model_tnet` (stored as ``latent_morph_ct``).
 
         Parameters
         ----------
@@ -3068,23 +3122,31 @@ class SuperSegmentationObject(object):
         view_props : Optional[dict]
             Dictionary which contains view properties. If None, default defined in
             `global_params.py` will be used.
+        largeFoV : bool
 
         """
         if not largeFoV:
             if view_props is None:
                 view_props = {}
-            return ssh.predict_sso_celltype(self, model, **view_props)  # OLD
-        if view_props is None:
-            view_props = global_params.config['celltype']['view_properties_large']
-        ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
-                                    overwrite=False, **view_props)
+            # reuse small, local views via bootstrapping
+            ssh.predict_sso_celltype(
+                self, model, pred_key_appendix=pred_key_appendix, **view_props)
+        else:
+            if view_props is None:
+                view_props = global_params.config['celltype']['view_properties_large']
+            ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
+                                        overwrite=False, **view_props)
         if model_tnet is not None:
+            view_props = dict(view_props)  # create copy
+            if 'use_syntype' in view_props:
+                del view_props['use_syntype']
             ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
                                               overwrite=True, **view_props)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
-        from scipy.misc import imsave
+        multi_view_sso = load_rendering_func('multi_view_sso')
+        from scipy.misc import imsave  # TODO: use new imageio package
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
                       "vc": (0, 1, 0, 1), "sj": (1, 0, 0, 1)}
@@ -3095,25 +3157,26 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-    def certainty_celltype(self) -> float:
+    def certainty_celltype(self, proba_key: Optional[str] = None,
+                           da_equals_tan: bool = True) -> float:
         """
         Certainty estimate of the celltype prediction:
-            1. Generate pseudo-probabilities from the predicted logits
-               ('celltype_cnn_e3_probas' inside :py:attr:`~attr_dict`) using
-               softmax.
-            2. Sum the evidence per class and rescale.
-            3. Compare the sorted evidence to the ideal outcome
-               (one-hot vector) via logloss.
-            4. Scale the logloss with the worst outcome (equal probabilities)
-               and subtract it from 1.
+            1. If `is_logit` is True, Generate pseudo-probabilities from the
+               input using softmax.
+            2. Sum the evidence per class and (re-)normalize.
+            3. Compute the entropy, scale it with the maximum entropy (equal
+               probabilities) and subtract it from 1.
 
         Notes:
-            Experimental!
+            See :func:`~syconn.handler.prediction.certainty_estimate`
 
         Returns:
-            Certainty measure based on the logloss of the celltype logits.
+            Certainty measure based on the entropy of the cell type logits.
         """
-        logits = self.lookup_in_attribute_dict('celltype_cnn_e3_probas')
+        if proba_key is None:
+            proba_key = 'celltype_cnn_e3_probas'
+        logits = self.lookup_in_attribute_dict(proba_key)
+
         return certainty_estimate(logits, is_logit=True)
 
     def majority_vote(self, prop_key, max_dist):

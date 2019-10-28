@@ -156,7 +156,9 @@ class SyConnBackend(object):
         self.logger.info('Initializing SyConn backend')
 
         self.ssd = ss.SuperSegmentationDataset(syconn_path,
-                                               sso_locking=False)
+                                               # deal with concurrency issues
+                                               sso_locking=False,
+                                               sso_caching=True)
 
         self.logger.info('SuperSegmentation dataset initialized.')
 
@@ -186,9 +188,6 @@ class SyConnBackend(object):
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
-                # TODO: examine the existing normals more closely -> find_meshes seems to create
-                #  different normals than K (face orientation is correct though)
-                # 'normals': mesh[2] if len(mesh) == 2 else []}
                 'normals': []}
         dtime = time.time() - start
         self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
@@ -275,8 +274,7 @@ class SyConnBackend(object):
         :param ssv_id: int
         :return: dict
         """
-        # TODO: examine the existing normals more closely -> find_meshes seems to create
-        #  different normals than K (face orientation is correct though)
+        # not needed for K
         return b""
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
@@ -346,8 +344,8 @@ class SyConnBackend(object):
                                "{}.".format(obj_type, ssv_id))
             except KeyError:
                 pass
-        # if not existent, create mesh
-        _ = ssv.load_mesh(obj_type)
+        # # Now assumes all object meshes do already exist
+        # _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'

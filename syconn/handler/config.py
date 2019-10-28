@@ -63,7 +63,7 @@ class Config(object):
         Returns:
             Path to config file (``config.yml``).
         """
-        return self.working_dir + "/config.yml"
+        return self._working_dir + "/config.yml"
 
     @property
     def config_exists(self):
@@ -170,13 +170,17 @@ class DynConfig(Config):
                                " ".format(self['log_level']) +
                                colored("'{}'".format(self.working_dir), 'red'))
             if self.initialized is False:
-                self.log_main.warning(f'Initialized config at {self.path_config} '
-                                      f'without initial file.')
+                from syconn import handler
+                default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+                self.log_main.warning(f'Initialized working directory without '
+                                      f'existing config file at'
+                                      f' {self.path_config}. Using default '
+                                      f'parameters as defined in {default_conf_p}.')
 
     def __getitem__(self, item: str) -> Any:
         """
         If `item` is not set in this config, the return value will be taken from
-         the default ``config.ini`` and ``configspec.ini``.
+         the default ``config.yml``.
 
         Args:
             item: Key of the requested value.
@@ -189,6 +193,27 @@ class DynConfig(Config):
         except (KeyError, ValueError, AttributeError):
             return self.default_conf.entries[item]
 
+    def __setitem__(self, key: str, value: Any) -> Any:
+        """
+        If `item` is not set in this config, the return value will be taken from
+         the default ``config.yml``.
+
+        Args:
+            key: Key of the item.
+            value: Value of the item.
+
+        Returns:
+            The value which corresponds to `item`.
+        """
+        self.log_main.warning('Modifying DynConfig items via `__setitem__` '
+                              'is currently experimental. To change config '
+                              'parameters please make changes in the '
+                              'corresponding config.yml entries.')
+        try:
+            self.entries[key] = value
+        except (KeyError, ValueError, AttributeError):
+            self.default_conf.entries[key] = value
+
     def _check_actuality(self):
         """
         Checks os.environ and global_params and triggers an update if the therein
@@ -196,32 +221,33 @@ class DynConfig(Config):
         """
         # first check if working directory was set in environ,
         # else check if it was changed in memory.
+        new_wd = None
         if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
             len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
             if super().working_dir != os.environ['syconn_wd']:
-                super().__init__(os.environ['syconn_wd'])
-                self.log_main.info("Initialized stdout logging (level: {}). "
-                                   "Current working directory:"
-                                   " ".format(self['log_level']) +
-                                   colored("'{}'".format(self.working_dir), 'red'))
-                if self.initialized is False:
-                    self.log_main.warning(f'Initialized config at {self.path_config} '
-                                          f'without initial file.')
+                new_wd = os.environ['syconn_wd']
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
                 (global_params.wd != "None") and (super().working_dir != global_params.wd):
-            super().__init__(global_params.wd)
-            self.log_main.info("Initialized stdout logging (level: {}). "
-                               "Current working directory:"
-                               " ".format(self['log_level']) +
-                               colored("'{}'".format(self.working_dir), 'red'))
-            if self.initialized is False:
-                self.log_main.warning(f'Initialized config at {self.path_config} '
-                                      f'without initial file.')
+            new_wd = global_params.wd
+        if new_wd is None:
+            return
+        super().__init__(new_wd)
+        self.log_main.info("Initialized stdout logging (level: {}). "
+                           "Current working directory:"
+                           " ".format(self['log_level']) +
+                           colored("'{}'".format(new_wd), 'red'))
+        if self.initialized is False:
+            from syconn import handler
+            default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+            self.log_main.warning(f'Initialized working directory without '
+                                  f'existing config file at'
+                                  f' {self.path_config}. Using default '
+                                  f'parameters as defined in {default_conf_p}.')
 
     @property
     def default_conf(self) -> Config:
         """
-        Load default ``config.ini`` if necessary.
+        Load default ``config.yml`` if necessary.
         """
         if self._default_conf is None:
             self._default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
@@ -345,8 +371,11 @@ class DynConfig(Config):
     @property
     def pruned_rag_path(self) -> str:
         """
+        See config parameter
+        ``global_params.config['glia']['min_cc_size_ssv']``.
+
         Returns:
-            Path to pruned RAG after glia separation.
+            Path to pruned RAG after size filtering.
         """
         self._check_actuality()
         return self.working_dir + '/pruned_rag.bz2'
@@ -469,7 +498,7 @@ class DynConfig(Config):
             Path to model trained on identifying synapse types (symmetric
             vs. asymmetric) within 3D EM raw data.
         """
-        return self.model_dir + '/syntype/model_best.pt'
+        return self.model_dir + '/syntype/model.pts'
 
     @property
     def mpath_syn_rfc(self) -> str:
@@ -496,7 +525,7 @@ class DynConfig(Config):
         procedure.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         return self.entries['skeleton']['allow_skel_gen']
 
@@ -508,7 +537,7 @@ class DynConfig(Config):
         matrix generation.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['dataset']['syntype_avail'] is None:
@@ -539,7 +568,7 @@ class DynConfig(Config):
         closer to the neuron surface.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['views']['use_new_renderings_locs'] is None:
@@ -555,7 +584,7 @@ class DynConfig(Config):
         If ``False`` meshes are computed sparsely, i.e. per object/supervoxel.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['meshes']['use_new_meshing'] is None:
@@ -578,10 +607,11 @@ class DynConfig(Config):
     def prior_glia_removal(self) -> bool:
         """
         If ``True`` glia separation procedure will be initiated to create a
-        pruned RAG (see :attr:`~syconn/handler.config.DynConfig.pruned_rag_path`).
+        glia-separated RAG (see ``glia/neuron_rag.bz2`` and
+        ``glia/glia_rag.bz2``).
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored in ``config.yml``.
         """
         return self.entries['glia']['prior_glia_removal']
 
@@ -593,7 +623,7 @@ class DynConfig(Config):
         in the same file.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored in ``config.yml``.
         """
         try:
             if self['paths']['use_new_subfold'] is not None:

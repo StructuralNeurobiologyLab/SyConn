@@ -353,7 +353,11 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
               background_only=True, mop_kwargs=None, verbose=False):
     """
     Generic function for binary morphological image operations with multi-label
-     content.
+    content.
+
+    Currently supported operations:
+        * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
+          ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
     Parameters
     ----------
@@ -388,24 +392,25 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     return overlay
 
 
-def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
-                           verbose=False, mop_kwargs=None):
+def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
+                           mop_kwargs=None):
     """
     Generic function for binary morphological image operations with multi-label content
-    using 'find_objects' from scipy.ndimage to reduce processed volume.
+    using 'find_objects' from scipy.ndimage to reduce the processed volume and
+    to apply the operation per object, which enables to process multi-label
+    data.
+    Currently supported operations:
+        * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
+          ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
-    Parameters
-    ----------
-    mop_func : func
-        e.g. binary_dilation, binary_erosion etc
-    overlay
-    n_iters
-    background_only
-    verbose
-    mop_kwargs
+    Args:
+        mop_func:
+        overlay:
+        n_iters:
+        verbose:
+        mop_kwargs:
 
-    Returns
-    -------
+    Returns:
 
     """
     if mop_kwargs is None:
@@ -418,27 +423,37 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
     for ix in unique_ixs:
         if verbose:
             pbar.update(1)
-        obj_slice = objslices[ix-1]
-        new_obj_slices = []
-        for sl in obj_slice:
-            new_start = sl.start - n_iters if sl.start >= 0 + n_iters else sl.start
-            new_end = sl.stop + n_iters
-            new_obj_slices.append(slice(new_start, new_end, None))
-        sub_vol = overlay[new_obj_slices]
+        obj_slice = objslices[int(ix-1)]
+        sub_vol = overlay[obj_slice]
+        # pad with zeros to prevent boundary artifacts in the original data array
+        if "closing" in mop_func.__name__:
+            sub_vol = np.pad(sub_vol, n_iters)
         binary_mask = (sub_vol == ix).astype(np.int)
         if verbose:
             nb_occ = np.sum(binary_mask)
-        res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
-        if verbose:
-            if np.sum(binary_mask) == 0 and nb_occ != 0:
-                log_proc.debug("Object with ID={} and size={} is not present after"
-                               " erosion with N={}.".format(ix, nb_occ, n_iters))
+        if "fill_holes" in mop_func.__name__:
+            res = mop_func(binary_mask, **mop_kwargs)
+        else:
+            res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
+        # remove overlap
+        if "closing" in mop_func.__name__:
+            res = res[n_iters:-n_iters, n_iters:-n_iters,
+                      n_iters:-n_iters]
+            binary_mask = binary_mask[n_iters:-n_iters, n_iters:-n_iters,
+                                      n_iters:-n_iters]
+            sub_vol = sub_vol[n_iters:-n_iters, n_iters:-n_iters,
+                              n_iters:-n_iters]
         # only dilate/erode background/the objects itself
         if "erosion" in mop_func.__name__:
-            overlay[new_obj_slices][binary_mask == 1] = res[binary_mask == 1] * ix
-        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__):
+            if verbose:
+                if np.sum(binary_mask) == 0 and nb_occ != 0:
+                    log_proc.debug("Object with ID={} and size={} is not present after"
+                                   " erosion with N={}.".format(ix, nb_occ, n_iters))
+            overlay[obj_slice][binary_mask == 1] = res[binary_mask == 1] * ix
+        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__) or\
+            ("fill_holes" in mop_func.__name__):
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
-            overlay[new_obj_slices][proc_mask] = res[proc_mask] * ix
+            overlay[obj_slice][proc_mask] = res[proc_mask] * ix
         else:
             msg = "Only erosion or dilation allowed. Attempted to use morphological " \
                   "operation '{}'.".format(mop_func.__name__)
@@ -449,54 +464,47 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
     return overlay
 
 
-def _multi_dilation_findobjects(overlay, n_dilations, background_only,
-                                verbose=False):
+def multi_dilation_backgroundonly(overlay, n_dilations, mop_kwargs=None):
     """
-    Wrapper function for dilation
+    Same as :func:`~multi_dilation`, but processes each object in `overlay` independently.
+    In addition, changes only apply to the background (0). E.g. objects will not
+    dilate into other objects.
 
-    Parameters
-    ----------
-    overlay
-    n_dilations
-    background_only
-    verbose
+    Args:
+        overlay: 3D volume of type uint.
+        n_dilations: Number of dilations.
+        mop_kwargs: Additional keyword arguments passed to `mop_func`.
 
-    Returns
-    -------
-
+    Returns:
+        Dilated overlay.
     """
-    return _multi_mop_findobjects(ndimage.binary_dilation, overlay, n_dilations,
-                                  background_only, verbose)
+    return multi_mop_backgroundonly(ndimage.binary_dilation, overlay,
+                                    n_dilations, mop_kwargs=mop_kwargs)
 
 
-def multi_dilation_backgroundonly(overlay, n_dilations):
+def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
     """
-    Same as 'multi_dilation' but only dilates regions into global background
+    Same as :func:`~multi_mop`, but processes each object in `overlay` independently.
+    In addition, changes only apply to the background (0). E.g. objects will not
+    dilate into other objects. The original regions/segmentation is only
+    affected in case of erosion.
 
-    Parameters
-    ----------
-    overlay
-    n_dilations
+    Notes:
+        * For ``binary_closing`` it is advised to pass ``structure=np.ones((2, 2, 2))``
+          in order to fill gaps at the array boundaries. See https://docs.scip
+          y.org/doc/scipy-0.14.0/reference/generated/scipy.ndimage.morphology
+          .binary_closing.html for an example.
 
-    Returns
-    -------
+    Args:
+        mop_func: One of ``binary_closing``, ``binary_dilation``,
+            ``binary_erosion``, ``binary_fill_holes``
+            (see ``scipy.ndimage``).
+        overlay: 3D volume of type uint.
+        iterations: Number of iterations.
+        mop_kwargs: Additional keyword arguments passed to `mop_func`.
 
+    Returns:
+        Volume processed by the given morphological operation.
     """
-    return multi_mop_backgroundonly(ndimage.binary_dilation, overlay, n_dilations)
-
-
-def multi_mop_backgroundonly(mop_func, overlay, n_dilations):
-    """
-    Same as 'multi_mop' but only dilates regions into global background
-
-    Parameters
-    ----------
-    mop_func
-    overlay
-    n_dilations
-
-    Returns
-    -------
-
-    """
-    return _multi_mop_findobjects(mop_func, overlay, n_dilations, background_only=True)
+    return _multi_mop_findobjects(mop_func, overlay, iterations,
+                                  mop_kwargs=mop_kwargs)

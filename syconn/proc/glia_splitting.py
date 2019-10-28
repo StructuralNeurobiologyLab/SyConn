@@ -49,29 +49,15 @@ def collect_glia_sv():
     # get single SV glia probas which were not included in the old RAG
     ids_in_rag = np.concatenate(list(cc_dict.values()))
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-    # get all SV glia probas (faster than single access)
-    multi_params = sds.so_dir_paths
-    # glia predictions only used for SSVs which only have single SV and were
-    # not contained in RAG
-    # TODO: add start_multiprocess on a different node
-    glia_preds_list = start_multiprocess(collect_gliaSV_helper_chunked, multi_params,
-                                         nb_cpus=global_params.config['ncores_per_node'],
-                                         debug=False)
-    glia_preds = {}
-    for dc in glia_preds_list:
-        glia_preds.update(dc)
-    log_proc.info("Collected SV glianess.")
+
     # get SSV glia splits
     chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'])
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
                                                  nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")
-    # add missing SV glianess and store whole dataset classification
+    # Missing SVs were sorted out by the size filter
+    # TODO: Decide of those should be added to the glia RAG or not
     missing_ids = np.setdiff1d(sds.ids, ids_in_rag)
-    # # Single SV SSVs are part of the RAG now
-    # single_sv_glia = np.array([ix for ix in missing_ids if glia_preds[ix] == 1],
-    #                           dtype=np.uint64)
-    # glia_svs = np.concatenate([single_sv_glia, glia_svs]).astype(np.uint64)
     np.save(global_params.config.working_dir + "/glia/glia_svs.npy", glia_svs)
     neuron_svs = np.array(list(set(sds.ids).difference(set(glia_svs).union(set(missing_ids)))),
                           dtype=np.uint64)
@@ -90,41 +76,13 @@ def collect_gliaSV_helper(cc_ixs):
         sso.load_attr_dict()
         ad = sso.attr_dict
         glia_svids += list(flatten_list(ad["glia_svs"]))
-    return np.array(glia_svids)
-
-
-def collect_gliaSV_helper_chunked(path):
-    """
-    Fast, chunked way to collect glia predictions.
-
-    Parameters
-    ----------
-    path : str
-
-    Returns
-    -------
-    dict
-    """
-    ad = AttributeDict(path + "attr_dict.pkl")
-    glia_preds = {}
-    for k, v in ad.items():
-        # see syconn.reps.segmentation_helper.glia_pred_so
-        glia_pred = 0
-        preds = np.array(v["glia_probas"][:, 1] > glia_thresh, dtype=np.int)
-        pred = np.mean(v["glia_probas"][:, 1]) > glia_thresh
-        if pred == 0:
-            glia_pred = 0
-        glia_votes = np.sum(preds)
-        if glia_votes > int(len(preds) * 0.7):
-            glia_pred = 1
-        glia_preds[k] = glia_pred
-    return glia_preds
+    return np.array(glia_svids, dtype=np.uint)
 
 
 def write_glia_rag(rag, min_ssv_size, suffix=""):
     """
     Stores glia and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx
-     edgelist and as knossos merge list.
+    edge list and as knossos merge list.
 
     Parameters
     ----------
