@@ -30,10 +30,10 @@ except ImportError:
 from elektronn3.training import metrics
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
+from elektronn3.models.unet_plusplus import NestedUNet
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from sys import getsizeof
-
 
 # ==========================
 # Configurable Parameters
@@ -55,11 +55,24 @@ batch_size = 6
 
 
 def get_model():
-    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    model = FCNs(base_net=vgg_model, n_class=3)
-    # model = UNet(in_channels=4, out_channels=6, n_blocks=5, start_filts=32,
-    #              merge_mode='concat', planar_blocks=(), #up_mode='resize',
-    #              activation='relu', batch_norm=True, dim=2,)
+    # ===================
+    # FCN
+    # ===================
+    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    # model = FCNs(base_net=vgg_model, n_class=3)
+
+    # ===================
+    # U-Net
+    # ===================
+    model = UNet(in_channels=4, out_channels=3, n_blocks=5, start_filts=32,
+                 merge_mode='concat', planar_blocks=(), #up_mode='resize',
+                 activation='relu', batch_norm=True, dim=2,)
+
+    # ===================
+    # U-Net++
+    # ===================
+    # model = NestedUNet(in_channels=4, out_channels=3, deepsupervision=False)
+    # model = NestedUNet(in_channels=4, out_channels=3, deepsupervision=True)
     return model
 
 
@@ -105,7 +118,6 @@ if __name__ == "__main__":
     model.to(device)
 
     example_input = torch.randn(1, 4, 128, 256)
-
     enable_save_trace = False if args.jit == 'disabled' else True
     if args.jit == 'onsave':
         # Make sure that tracing works
@@ -182,6 +194,7 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
+    # global_params.config['compartments']['gt_path_axonseg'] = '/wholebrain/u/yliu/merger_gt_semseg'
 
     # num_workers must be <=1 for MultiviewDataCached class
     train_dataset = MultiviewDataCached(base_dir=dataset_dir + '',
@@ -199,13 +212,13 @@ if __name__ == "__main__":
     criterion = DiceLoss().to(device)
 
     valid_metrics = {
-    # 'val_accuracy': metrics.bin_accuracy,
-    'val_precision': metrics.bin_precision,
-    'val_recall': metrics.bin_recall,
-    # 'val_DSC': metrics.bin_dice_coefficient,
-    'val_IoU': metrics.bin_iou,
-    # 'val_AP': metrics.bin_average_precision,  # expensive
-    # 'val_AUROC': metrics.bin_auroc,  # expensive
+        # 'val_accuracy': metrics.bin_accuracy,
+        'val_precision': metrics.bin_precision,
+        'val_recall': metrics.bin_recall,
+        # 'val_DSC': metrics.bin_dice_coefficient,
+        'val_IoU': metrics.bin_iou,
+        # 'val_AP': metrics.bin_average_precision,  # expensive
+        # 'val_AUROC': metrics.bin_auroc,  # expensive
     }
 
     # Create and run trainer
