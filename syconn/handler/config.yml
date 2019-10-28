@@ -219,7 +219,7 @@ merger:
     # ws: [256, 128]
     # comp_window: 15360  # 10240 * 1.5 in NM
     ws: [512, 256]
-    comp_window: 20480   
+    comp_window: 20480
     semseg_key: 'merger_pred'
     k: 0
   # mapping of vertex labels to skeleton nodes; ignore labels 2 (background), 3 (unpredicted)
