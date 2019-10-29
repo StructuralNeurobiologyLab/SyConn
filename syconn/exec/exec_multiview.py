@@ -588,7 +588,24 @@ def run_create_neuron_ssd():
                              overwrite=False)
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+
     # e.g. if rag was not created by glia splitting procedure this filtering is required
+    if not global_params.config.prior_glia_removal:
+        sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+
+        sv_size_dict = {}
+        bbs = sd.load_cached_data('bounding_box') * sd.scaling
+        for ii in range(len(sd.ids)):
+            sv_size_dict[sd.ids[ii]] = bbs[ii]
+        ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
+        log.debug("Finished preparation of SSV size dictionary based "
+                  "on bounding box diagional of corresponding SVs.")
+        before_cnt = len(rag_g.nodes())
+        for ix in list(rag_g.nodes()):
+            if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
+                rag_g.remove_node(ix)
+        log.debug("Removed %d neuron CCs because of size." %
+                  (before_cnt - len(rag_g.nodes())))
 
     ccs = nx.connected_components(rag_g)
     cc_dict = {}
@@ -609,20 +626,6 @@ def run_create_neuron_ssd():
     # also executes 'ssd.save_dataset_shallow()'
     ssd.save_dataset_deep(n_max_co_processes=global_params.config.ncore_total)
 
-    exec_skeleton.run_skeleton_generation()
-
-    log.info('Finished SSD initialization. Starting cellular '
-             'organelle mapping.')
-
-    # map cellular organelles to SSVs
-    # TODO: sort by SSV size (descending)
-    ssd_proc.aggregate_segmentation_object_mappings(
-        ssd, global_params.config['existing_cell_organelles'])
-    ssd_proc.apply_mapping_decisions(
-        ssd, global_params.config['existing_cell_organelles'])
-    log.info('Finished mapping of cellular organelles to SSVs. '
-             'Writing individual SSV graphs.')
-
     # Write SSV RAGs
     pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5)
     for ssv in ssd.ssvs:
@@ -639,6 +642,20 @@ def run_create_neuron_ssd():
         pbar.update(1)
     pbar.close()
     log.info('Finished saving individual SSV RAGs.')
+
+    exec_skeleton.run_skeleton_generation()
+
+    log.info('Finished SSD initialization. Starting cellular '
+             'organelle mapping.')
+
+    # map cellular organelles to SSVs
+    # TODO: sort by SSV size (descending)
+    ssd_proc.aggregate_segmentation_object_mappings(
+        ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.apply_mapping_decisions(
+        ssd, global_params.config['existing_cell_organelles'])
+    log.info('Finished mapping of cellular organelles to SSVs. '
+             'Writing individual SSV graphs.')
 
 
 def run_glia_prediction(e3: bool = False):

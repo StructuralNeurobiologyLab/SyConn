@@ -151,7 +151,7 @@ class SuperSegmentationObject(object):
             cell and cell organelle shapes. Stored at :py:attr:`~view_path` and accessed via the
             :class:`~syconn.backend.storage.CompressedStorage` interface.
         version_dict: A dictionary which contains the versions of other dataset types which share
-            the same working directory. Defaults to the `Versions` entry in the `config.ini` file.
+            the same working directory. Defaults to the `Versions` entry in the `config.yml` file.
     """
     def __init__(self, ssv_id: int, version: Optional[str] = None,
                  version_dict: Optional[Dict[str, str]] = None,
@@ -170,7 +170,8 @@ class SuperSegmentationObject(object):
             version: Version string identifier. if 'tmp' is used, no data will
                 be saved to disk.
             version_dict: Dictionary which contains the versions of other dataset types which share
-                the same working directory. Defaults to the `Versions` entry in the `config.ini`file.
+                the same working directory. Defaults to the `versions` entry in the
+                `config.yml`file.
             working_dir (): Path to the working directory.
             create: If True, the folder to its storage location :py:attr:`~ssv_dir` will be created.
             sv_ids: List of agglomerated supervoxels which define the neuron reconstruction.
@@ -377,7 +378,7 @@ class SuperSegmentationObject(object):
     @property
     def scaling(self) -> np.ndarray:
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.ini`
+        Voxel size in nanometers (XYZ). Default is taken from the `config.yml`
         file and accessible via :py:attr:`~config`.
         """
         return self._scaling
@@ -1546,7 +1547,7 @@ class SuperSegmentationObject(object):
         :class:`~syconn.reps.segmentation.SegmentationObject` in question is
         assigned to this :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
         if they share the highest overlap. For more details see ``SyConn/docs/object_mapping.md``.
-        Default parameters for the mapping will be taken from the `config.ini` file.
+        Default parameters for the mapping will be taken from the `config.yml` file.
 
         Args:
             obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`

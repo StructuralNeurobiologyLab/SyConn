@@ -688,11 +688,12 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
 def dense_predictor(args):
     """
+    Volumes are transformed by XYZ <-> ZYX before they are passed to the
+    model.
 
     Parameters
     ----------
-    args : Tuple
-        (
+    args : Tuple(
         chunk_ids: list
             list of chunks in chunk dataset
         kd_p : str
@@ -704,14 +705,9 @@ def dense_predictor(args):
         offset : 
         chunk_size:
         )
-
-    Returns
-    -------
-
     """
     # TODO: remove chunk necessity
     # TODO: clean up (e.g. redundant chunk sizes, ...)
-    # TODO: do not use xyz2zxy but just invert order..
     #
     chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles,\
     tile_shape, chunk_size, n_channel, target_channels, target_kd_path_list, \
@@ -736,7 +732,6 @@ def dense_predictor(args):
 
     # init Predictor
     from elektronn3.inference import Predictor
-    # TODO: be consistent with the axis order: either ZYX or ZXY
     out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
     out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
     predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],

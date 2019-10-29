@@ -122,7 +122,7 @@ class DynConfig(Config):
         * Adapt all ``global_params.config.`` usages accordingly.
         * Do not replace any property call for now (e.g. `~allow_mesh_gen_cells`)
           because they convey default parameters for old datasets in case they
-          are not present in the default ``config.ini``.
+          are not present in the default ``config.yml``.
 
     Examples:
         To initialize a working directory at the beginning of your script, run::
@@ -552,7 +552,7 @@ class DynConfig(Config):
         Use views with large field of view for cell type prediction.
 
         Returns:
-            Value stored at the config.ini file.
+            Value stored at the config.yml file.
         """
         try:
             if self.entries['views']['use_large_fov_views_ct'] is None:
