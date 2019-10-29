@@ -29,7 +29,7 @@ pipeline {
       steps {
           sh """#!/bin/bash
             source /wholebrain/scratch/CI/atulconda1/etc/profile.d/conda.sh
-            conda activate /wholebrain/scratch/CI/atulconda1/envs/qazz
+            conda activate qazz
             python -m pytest --junit-xml=pytest_unit.xml
             """
       }
