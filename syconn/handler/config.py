@@ -485,7 +485,7 @@ class DynConfig(Config):
             Path to model trained on identifying myelinated cell parts
             within 3D EM raw data.
         """
-        return self.model_dir + '/myelin/model.pts'
+        return self.model_dir + '/myelin/model.pt'
 
     @property
     def mpath_syntype(self) -> str:

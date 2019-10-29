@@ -20,7 +20,7 @@ from syconn.handler.config import generate_default_conf, initialize_logging
 
 
 if __name__ == '__main__':
-    # ------------------------ PARSE ARGUMENTS ------------------------------------
+    # ------------------------ COMMAND LINE ARGUMENTS ------------------------------------
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
@@ -29,7 +29,12 @@ if __name__ == '__main__':
                              'or "2" (1100, 1100, 600).')
     args = parser.parse_args()
     example_cube_id = args.example_cube
-    # __________________________ PARSE ARGUMENTS ___________________________________
+
+    if args.working_dir == "":  # define a default working directory
+        args.working_dir = "/wholebrain/scratch/mariakaw/example_cube{}/".format(example_cube_id)
+    example_wd = os.path.expanduser(args.working_dir) + "/"
+
+    # __________________________ COMMAND LINE ARGUMENTS ___________________________________
 
     # -------------------------- BASIC PARAMETERS  -----------------------------------
 
@@ -40,6 +45,15 @@ if __name__ == '__main__':
     n_folders_fs_sc = 1000
     experiment_name = 'j0126_example'
 
+    # -------------------------- Get the current directory
+
+    curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
+    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+
+    # -------------------------- Start logging
+    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
+
+    # -------------------------- Create config file
     key_val_pairs_conf = [
         ('prior_glia_removal', prior_glia_removal),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
@@ -49,26 +63,9 @@ if __name__ == '__main__':
         ('nnodes_total', 1),
     ]
 
-    # -------------------------- Setup working directory
-    if args.working_dir == "":
-        args.working_dir = "/wholebrain/scratch/mariakaw/example_cube{}/".format(example_cube_id)
-    example_wd = os.path.expanduser(args.working_dir) + "/"
-
-    curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
-    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
-
-    # -------------------------- Start logging
-    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
-
-    # -------------------------- Create config file
     generate_default_conf(example_wd, scale,
                           key_value_pairs=key_val_pairs_conf,
                           force_overwrite=True)
-
-    print("\n\n\n Config file was generated \n\n\n")
-    sys.exit()
-
     # _____________________________ BASIC PARAMETERS  ___________________________________
 
     # ----------------------------- ADDITIONAL CHECKS --------------------------------------
@@ -95,12 +92,10 @@ if __name__ == '__main__':
     time_stamps = [time.time()]
     step_idents = ['t-0']
 
-    # --------------------------  copy models to working directory
+    # --------------------------  copy models to the working directory
     if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
         shutil.copytree(curr_dir + '/models', example_wd + '/models/')
 
-    if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
-        raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
@@ -129,14 +124,9 @@ if __name__ == '__main__':
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
     # -------------------------- read info about the cube of interest
-    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
 
-    if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
-        raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
-
-    bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
-    bd = bb[1] - bb[0]
+    bd = [400, 400, 600]
 
     # ________________________________  PREPARE TOY DATA  ___________________________________
 
@@ -186,6 +176,7 @@ if __name__ == '__main__':
     ##########  ----------------------------------  START SyConn -------------------------------------------  ##########
     ####################################################################################################################
 
+    log.info('Step 0/8 - Predicting sub-cellular structures')
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
     exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
