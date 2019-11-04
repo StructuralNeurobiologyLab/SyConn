@@ -9,7 +9,8 @@
 import argparse
 import os
 import _pickle
-
+import zipfile
+import re
 import torch
 from torch import nn
 from torch import optim
@@ -19,7 +20,7 @@ from torch import optim
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='syntype_unet_sameConv_BN_fancydice_gtv2_bs4',
+                    default='syntype_unet_sameConv_BN_fancydice_gtv2_bs4_bal_RES',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=500,
@@ -109,45 +110,70 @@ elif args.jit == 'train':
     tracedmodel = torch.jit.trace(model, example_input.to(device))
     model = tracedmodel
 
-
 # USER PATHS
 save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
-data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
+# data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
+data_root = os.path.expanduser(
+    '/wholebrain/songbird/j0126/GT/synapsetype_gt/')
 
 gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v4/'
 fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
-# do not use DA and TAN as GT samples
-fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if (f.endswith('.h5') and '1_cube' not
-                                                            in f and '6_cube' not in f and
-                                                            '0_cube' not in f)])
+
+# Get synapse GT based on cell type connectivity
+gt_dir = data_root + '/synssv_reconnects_nosomamerger_v2/'
+fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
+fnames_files = np.array(fnames_files)
+fnames_files_ls = np.array([int(re.findall('(\d)_', fname)[0]) for fname in fnames_files])
+# do not use STN, DA and TAN as GT samples
+fnames_files = np.concatenate([fnames_files[fnames_files_ls == cl][:110] for cl in [2, 3, 4, 5,
+                                                                                    7]]).tolist()
+# Add all STN samples
 fnames_files_stn = sorted([gt_dir + f for f in os.listdir(gt_dir) if (f.endswith('.h5') and '0_cube'
                            in f)])
-# draw additional synapses at other cell types at random up to 900 samples in total
-random_ixs = np.arange(len(fnames_files) - len(fnames_files_stn))
-np.random.seed(0)
-np.random.shuffle(fnames_files)
-fnames_files = np.array(fnames_files)[random_ixs].tolist()
-fnames += fnames_files[:len(random_ixs)] + fnames_files_stn
-print(f'{len(fnames_files_stn)} STN, {len(random_ixs)} additonial CT and'
+
+print(f'{len(fnames_files_stn)} STN, {len(fnames_files)} additional CT and'
       f' {len(fnames)} dense cube samples.')
+fnames += fnames_files + fnames_files_stn
+
 input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
 target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]
 valid_indices = [len(target_h5data) - 1]
 
 # Class weights for imbalanced dataset, the last one is used as ignore label
 class_weights = torch.tensor([0.33, 0.33, 0.33, 0]).to(device)
+# class_weights = torch.tensor([1, 2, 2, 0]).to(device)
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
 
 if args.resume is not None:  # Load pretrained network
-    try:  # Assume it's a state_dict for the model
-        model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
-    except _pickle.UnpicklingError as exc:
-        # Assume it's a complete saved ScriptModule
-        model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
+    pretrained = os.path.expanduser(args.resume)
+    _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+    if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+        print(_warning_str)
+        model = torch.jit.load(pretrained, map_location=device)
+    else:  # Either state dict or pickled model
+        state = torch.load(pretrained)
+        if isinstance(state, dict):
+            try:
+                model.load_state_dict(state['model_state_dict'])
+            except RuntimeError:
+                print('Converting state dict (probably stored as DataParallel.')
+                for k in list(state.keys()):
+                    state['module' + k] = state[k]
+                    del state[k]
+            optimizer_state_dict = state.get('optimizer_state_dict')
+            lr_sched_state_dict = state.get('lr_sched_state_dict')
+            if optimizer_state_dict is None:
+                print('optimizer_state_dict not found.')
+            if lr_sched_state_dict is None:
+                print('lr_sched_state_dict not found.')
+        elif isinstance(state, nn.Module):
+            print(_warning_str)
+            model = state
+        else:
+            raise ValueError(f'Can\'t load {pretrained}.')
 
 drop_func = transforms.DropIfTooMuchBG(bg_id=3, threshold=0.9)
 # Transformations to be applied to samples before feeding them to the network
@@ -241,7 +267,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batchsize=4,
-    num_workers=8,
+    num_workers=2,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,

@@ -50,7 +50,7 @@ if __name__ == '__main__':
         os.makedirs(data_dir, exist_ok=True)
         bb = parse_movement_area_from_zip(kzip_p)
         raw = kd.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
-        seg = kd.from_overlaycubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
+        seg = kd.from_overlaycubes_to_matrix(size=bb[1] - bb[0], offset=bb[0], mag=1)
         seg_mi = kd_mi.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
         seg_vc = kd_vc.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
         seg_sj = kd_sj.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)

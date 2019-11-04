@@ -875,7 +875,7 @@ def map_myelin2coords(coords: np.ndarray,
     n_cube_vx = np.prod(cube_edge_avg)
     for ix, c in enumerate(coords):
         offset, size = c // mag - cube_edge_avg // 2, cube_edge_avg
-        myelin_proba = kd.from_raw_cubes_to_matrix(size, offset, mag=mag)
+        myelin_proba = kd.load_raw(size=size*mag, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
         myelin_preds[ix] = myelin_ratio > thresh_majority
     return myelin_preds

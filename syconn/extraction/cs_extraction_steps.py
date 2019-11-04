@@ -281,9 +281,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         stencil_offset = (cs_filtersize - 1) // 2
 
-        data = kd.from_overlaycubes_to_matrix(
-            size + 2 * stencil_offset, offset - stencil_offset,
-            datatype=np.uint64).astype(np.uint32)
+        data = kd.load_seg(size=size + 2 * stencil_offset,
+                           offset=offset - stencil_offset,
+                           mag=1, datatype=np.uint64).astype(np.uint32).swapaxes(0, 2)
         cum_dt_data += time.time() - start
         start = time.time()
         # contacts has size as given with `size`, because it performs valid conv.
@@ -297,15 +297,15 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
-        syn_d = (kd_syn.from_overlaycubes_to_matrix(
-            size, offset, datatype=np.uint64) > 0).astype(np.uint8)
+        syn_d = (kd_syn.load_seg(size=size, offset=offset, mag=1,
+                                 datatype=np.uint64) > 0).astype(np.uint8).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         # TODO: add thresholds to global_params
         if global_params.config.syntype_available:
-            sym_d = (kd_syntype_sym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
-                np.uint8)
-            asym_d = (kd_syntype_asym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
-                np.uint8)
+            sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                     >= 123).astype(np.uint8)
+            asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                      >= 123).astype(np.uint8)
         else:
             sym_d = np.zeros_like(syn_d)
             asym_d = np.zeros_like(syn_d)
@@ -821,7 +821,8 @@ def _contact_site_detection_thread(args):
     overlap = np.array([6, 6, 3], dtype=np.int)
     offset = np.array(chunk.coordinates - overlap)
     size = 2 * overlap + np.array(chunk.size)
-    data = kd.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64).astype(np.uint32)
+    data = kd.load_seg(size=size, offset=offset, mag=1,
+                       datatype=np.uint64).astype(np.uint32).swapaxes(0, 2)
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
     compression.save_to_h5py([contacts],

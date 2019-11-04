@@ -80,9 +80,9 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
             raise ValueError("Offset for raw cubes has to have length 3.")
         else:
             raw_data_offset = np.array(raw_data_offset)
-        raw = kd.from_raw_cubes_to_matrix(size // mag + 2 * raw_data_offset,
-                                          offset // mag - raw_data_offset, nb_threads=2,
-                                          mag=mag, show_progress=False)
+        raw = kd.load_raw(size=(size // mag + 2 * raw_data_offset) * mag,
+                          offset=(offset // mag - raw_data_offset) * mag,
+                          nb_threads=2, mag=mag).swapaxes(0, 2)
         raw_data.append(raw[None, ])
         label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
                                        verbose=False, show_progress=False)
@@ -747,14 +747,15 @@ def dense_predictor(args):
                         dtype=np.int)
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
-        raw = kd.from_raw_cubes_to_matrix(size, coords, mag=mag)
+        raw = kd.load_raw(size=size*mag, offset=coords*mag, mag=mag)
         # start = time.time()
-        pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor)
+        pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
+                                      is_zyx=True, return_zyx=True)
         # dt = time.time() - start
         # print(f'Finished prediction after {dt}s, thats'
         #       f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s')
-        # slice out the original input volume along XYZ, i.e. the last three axes
-        pred = pred[..., ol[0]:-ol[0], ol[1]:-ol[1], ol[2]:-ol[2]]
+        # slice out the original input volume along ZYX, i.e. the last three axes
+        pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
         # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
@@ -775,17 +776,15 @@ def dense_predictor(args):
                     # no thresholding and only one label in the target KnossosDataset
                     # -> store probability map.
                     data = pred[label]
-            target_kd_dict[path].from_matrix_to_cubes(
-                ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
-                fast_downsampling=True,
-                overwrite=True, upsample=False,
-                nb_threads=global_params.config['ncores_per_node']//global_params.config['ngpus_per_node'],
-                as_raw=True, datatype=np.uint8)
+            target_kd_dict[path].save_raw(
+                offset=ch.coordinates*mag, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
+                fast_resampling=True, upsample=False)
         # dt = time.time() - start
         # print(f'Finished writing data after {dt}s.')
 
 
-def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarray:
+def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False,
+                           return_zyx=False) -> np.ndarray:
     """
 
     Args:
@@ -796,12 +795,14 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarra
         The inference result in CXYZ as uint8 between 0..255.
     """
     # transform raw data
-    raw = xyz2zyx(raw)
+    if not is_zyx:
+        raw = xyz2zyx(raw)
     # predict: pred of the form (N, C, [D,], H, W)
     pred = predictor.predict(raw[None, None])
     pred = np.array(pred[0]) * 255  # remove N-axis
     pred = pred.astype(np.uint8)
-    pred = zyx2xyz(pred)
+    if not return_zyx:
+        pred = zyx2xyz(pred)
     return pred
 
 

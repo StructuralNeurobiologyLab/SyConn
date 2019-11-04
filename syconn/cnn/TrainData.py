@@ -96,7 +96,8 @@ if elektronn3_avail:
         def __getitem__(self, index):
             # index = index - self.num_samples_in_already_read_files
             index = np.random.randint(0, len(self.index_array), 1)[0]
-            if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
+            if self.current_count > int(0.1*len(self.index_array)) and self.thread_launched == \
+                    False : #adjust 0.5
                 print("Launching parallel thread.")
                 start = time.time()
                 self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
@@ -139,7 +140,7 @@ if elektronn3_avail:
             print(f"read h5 file {self.fnames_inp[file_pointer]} contains {self.secondary.shape[0]} samples") #, {self.secondary_t.shape[0]} labels")
 
         def __len__(self):
-            return 2000 if self.train else 200
+            return 10000 if self.train else 1000
 
         def close_files(self):
             self.file_inp.close()
