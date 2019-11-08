@@ -2,16 +2,9 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 
-import pytest
 from syconn.reps.rep_helper import find_object_properties
-import os
-import logging
 import numpy as np
 
-
-# test_dir = os.path.dirname(os.path.realpath(__file__))
-# logging.basicConfig(filename=test_dir + '/test_config.log',
-#                     level=logging.DEBUG, filemode='w')
 
 def test_find_objects_properties():
     sample_array=np.array([
@@ -20,7 +13,7 @@ def test_find_objects_properties():
             [[5, 2],
              [2, 1]]],np.uint)
     func_output=find_object_properties(sample_array)
-    element, count=np.unique(sample_array,return_counts=True)
+    element, count = np.unique(sample_array, return_counts=True)
     for i in range(len(element)):
         if(element[i] != 0 and func_output[2][element[i]] != count[i]):
             assert True, "Count of the voxels not working." \
@@ -49,7 +42,7 @@ def test_find_objects_properties():
             min_bound[qq] = np.minimum(min_bound[qq],index)
             max_bound[qq] = np.maximum(max_bound[qq],index)
     for i in element:
-        if i != 0 :
+        if i != 0:
             if not np.array_equal(func_output[1][i][0], min_bound[i]):
                 if not np.array_equal(func_output[1][i][1], (max_bound[i] + [1, 1, 1])):
                     assert True, "Bounding box directory mismatch." \
@@ -58,5 +51,4 @@ def test_find_objects_properties():
 
 
 if __name__ == '__main__':
-    #raise()
     test_find_objects_properties()
