@@ -265,7 +265,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
     tot_sym_cnt = {}
-    tot_asym_cnt = {}
+
     cum_dt_data = 0
     cum_dt_proc = 0
     cum_dt_proc2 = 0
