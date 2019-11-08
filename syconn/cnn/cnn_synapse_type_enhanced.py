@@ -6,21 +6,24 @@
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Martin Drawitsch, Philipp Schubert
 
+import zipfile
 import argparse
 import os
 import _pickle
-
+from sklearn.model_selection import StratifiedKFold
+import re
 import torch
 from torch import nn
 from torch import optim
 
 
 class HybridDiceLoss(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, downscale_fact=1):
         super().__init__()
         self.dice_syntype = DiceLossFancy(
             apply_softmax=True, weights=torch.tensor([0.33, 0.33, 0.33, 0]).to(device),
             ignore_index=3)
+        self.downscale_fact = downscale_fact
         weights = torch.tensor([1.] * 10 + [0., ]).to(device) / 10.
         # self.dice_celltype = DiceLossFancy(
         #     apply_softmax=True, weights=weights, ignore_index=10)
@@ -29,7 +32,7 @@ class HybridDiceLoss(torch.nn.Module):
         self.mse = torch.nn.MSELoss(reduction='mean')
         self.counter = 0  # half time after 5000 steps: 0.000138629
 
-    def forward(self, output, target, downscale_fact=1):
+    def forward(self, output, target):
         """
 
         Args:
@@ -47,7 +50,7 @@ class HybridDiceLoss(torch.nn.Module):
         vec_field_d = output[:, :3]
         vec_field_t = target[:, :3]
         # scale target vectors
-        loss_vec = self.mse(vec_field_d, vec_field_t.to(torch.float32) * downscale_fact)
+        loss_vec = self.mse(vec_field_d, vec_field_t.to(torch.float32) * self.downscale_fact)
         syntype_d = output[:, 3:7]
         syntype_l = target[:, 3]
         loss_syntype = self.dice_syntype(syntype_d, syntype_l)
@@ -74,7 +77,7 @@ class HybridDiceLoss(torch.nn.Module):
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='syntype_unet_sameConv_noBN_fancydice_gtALL_enhanced_bs4_noct_adam',
+                    default='syntype_unet_sameConv_BN_fancydice_gtv2_enhanced_bs4_noct_adam_RES',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=500,
@@ -129,7 +132,7 @@ model = UNet(
     start_filts=28,
     planar_blocks=(0,),
     activation='relu',
-    batch_norm=False,
+    batch_norm=True,
     adaptive=False  # Experimental. Disable if results look weird.
 ).to(device)
 
@@ -152,29 +155,68 @@ elif args.jit == 'train':
 # USER PATHS
 save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
-data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
+data_root = os.path.expanduser('/wholebrain/songbird/j0126/GT/synapsetype_gt/')
 
-gt_dir = data_root + '/synssv_reconnects_nosomamerger_enhanced_ALL/'
+gt_dir = data_root + '/synssv_reconnects_nosomamerger_enhanced_v2/'
 fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-random_ixs = np.arange(len(fnames_files))
-np.random.seed(0)
-np.random.shuffle(fnames_files)
-fnames_files = np.array(fnames_files)[random_ixs].tolist()
-fnames = fnames_files[:850]
+fnames_files = np.array(fnames_files)
+fnames_files_ls = np.array([int(re.findall('(\d)_', fname)[0]) for fname in fnames_files])
+# do not use STN, DA and TAN as GT samples
+fnames_files = np.concatenate([fnames_files[fnames_files_ls == cl][:110] for cl in [2, 3, 4, 5, 7]])
+# Add all STN samples
+fnames_files_stn = sorted([gt_dir + f for f in os.listdir(gt_dir) if (f.endswith('.h5') and '0_cube'
+                           in f)])
 
-input_h5data = [(f, 'raw') for f in fnames + fnames[-20:]]
-target_h5data = [(f, 'label') for f in fnames + fnames[-20:]]
-valid_indices = np.arange(len(target_h5data) - 20, len(target_h5data))
+# draw additional synapses at other cell types at random up to 900 samples in total
+fnames_files = fnames_files.tolist()
+print(f'{len(fnames_files_stn)} STN, {len(fnames_files)} additional CT.')
+fnames = fnames_files + fnames_files_stn
+
+input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
+target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]
+valid_indices = [len(target_h5data) - 1]
+# gt_dir = data_root + '/synssv_reconnects_nosomamerger_enhanced_ALL/'
+# fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
+# random_ixs = np.arange(len(fnames_files))
+# np.random.seed(0)
+# np.random.shuffle(fnames_files)
+# fnames_files = np.array(fnames_files)[random_ixs].tolist()
+# fnames = fnames_files[:850]
+#
+# input_h5data = [(f, 'raw') for f in fnames + fnames[-20:]]
+# target_h5data = [(f, 'label') for f in fnames + fnames[-20:]]
+# valid_indices = np.arange(len(target_h5data) - 20, len(target_h5data))
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
 
 if args.resume is not None:  # Load pretrained network
-    try:  # Assume it's a state_dict for the model
-        model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
-    except _pickle.UnpicklingError as exc:
-        # Assume it's a complete saved ScriptModule
-        model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
+    pretrained = os.path.expanduser(args.resume)
+    _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+    if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+        print(_warning_str)
+        model = torch.jit.load(pretrained, map_location=device)
+    else:  # Either state dict or pickled model
+        state = torch.load(pretrained)
+        if isinstance(state, dict):
+            try:
+                model.load_state_dict(state['model_state_dict'])
+            except RuntimeError:
+                print('Converting state dict (probably stored as DataParallel.')
+                for k in list(state.keys()):
+                    state['module' + k] = state[k]
+                    del state[k]
+            optimizer_state_dict = state.get('optimizer_state_dict')
+            lr_sched_state_dict = state.get('lr_sched_state_dict')
+            if optimizer_state_dict is None:
+                print('optimizer_state_dict not found.')
+            if lr_sched_state_dict is None:
+                print('lr_sched_state_dict not found.')
+        elif isinstance(state, nn.Module):
+            print(_warning_str)
+            model = state
+        else:
+            raise ValueError(f'Can\'t load {pretrained}.')
 
 drop_func = transforms.DropIfTooMuchBG(bg_id=3, threshold=0.9)
 # Transformations to be applied to samples before feeding them to the network
@@ -259,7 +301,7 @@ schedulers = {'lr': lr_sched}
 valid_metrics = {
 }
 
-criterion = HybridDiceLoss()
+criterion = HybridDiceLoss(downscale_fact=0.1)
 
 # Create trainer
 trainer = Trainer(
@@ -270,7 +312,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batchsize=4,
-    num_workers=8,
+    num_workers=2,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,

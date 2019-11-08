@@ -465,12 +465,12 @@ def _map_subcell_extract_props_thread(args):
     for ch_id in chunks:
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
-        cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
+        cell_d = kd_cell.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         tmp_subcell_meshes = [defaultdict(list) for _ in kd_subcells]
         subcell_d = []
         for kd_sc, i in zip(kd_subcells, range(len(kd_subcells))):
-            subc_d = kd_sc.from_overlaycubes_to_matrix(size, offset)
+            subc_d = kd_sc.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
             if global_params.config.use_new_meshing:
                 start = time.time()
                 tmp_subcell_meshes[i] = find_meshes(subc_d, offset)

@@ -119,7 +119,7 @@ class SuperSegmentationDataset(object):
             sv_mapping: Dictionary mapping sueprvoxel IDs (key) to the super-supervoxel ID it
                 belongs to.
             scaling: Array defining the voxel size in XYZ. Default is taken from the
-                `config.ini` file.
+                `config.yml` file.
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`.
             sso_caching: WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
                 `get_super_segmentation_object`
@@ -226,7 +226,7 @@ class SuperSegmentationDataset(object):
     @property
     def scaling(self) -> np.ndarray:
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.ini`
+        Voxel size in nanometers (XYZ). Default is taken from the `config.yml`
         file and accessible via :py:attr:`~config`.
         """
         return self._scaling
@@ -1213,7 +1213,7 @@ def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
     """
     Creates a new SSD specified with `new_version` and a copy of the given SSVs.
     Usually used for generating distinct GT SSDs. Based on the common
-    super-supervoxel dataset (as specified in the `config.ini` file, default:
+    super-supervoxel dataset (as specified in the `config.yml` file, default:
      ``version=ssv_0``).
 
     Args:

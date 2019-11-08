@@ -43,7 +43,7 @@ def collect_glia_sv():
     """
     Collect glia super voxels (as returned by glia splitting) from all 'sv'
     SegmentationObjects contained in 'sv' SegmentationDataset (always uses
-    default version as defined in config.ini).
+    default version as defined in config.yml).
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag.pkl")
     # get single SV glia probas which were not included in the old RAG

@@ -255,14 +255,14 @@ def _gauss_threshold_connected_components_thread(args):
             for kd_key in prob_kd_path_dict.keys():
                 kd = kd_factory(prob_kd_path_dict[kd_key])
                 if load_from_kd_overlaycubes:  # enable possibility to load from overlay cubes as well
-                    data_k = kd.from_overlaycubes_to_matrix(size, box_offset)
+                    data_k = kd.load_seg(size=size, offset=box_offset, mag=1).swapaxes(0, 2)
                     if transf_func_kd_overlay is not None:
                         bin_data_dict[kd_key] = transf_func_kd_overlay(data_k)
                     else:
                         bin_data_dict[kd_key] = data_k
                 else:  # load raw
-                    bin_data_dict[kd_key] = kd.from_raw_cubes_to_matrix(size,
-                                                                        box_offset)
+                    bin_data_dict[kd_key] = kd.load_raw(size=size, offset=box_offset,
+                                                        mag=1).swapaxes(0, 2)
 
         else:
             if not fast_load:
@@ -304,7 +304,8 @@ def _gauss_threshold_connected_components_thread(args):
             elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:
                 kd_bar = knossosdataset.KnossosDataset()
                 kd_bar.initialize_from_knossos_path(membrane_kd_path)
-                membrane_data = kd_bar.from_raw_cubes_to_matrix(size, box_offset)
+                membrane_data = kd_bar.load_raw(size=size, offset=box_offset,
+                                                mag=1).swapaxes(0, 2)
                 tmp_data[membrane_data > 255*.4] = 0
 
             if thresholds[nb_hdf5_name] != 0:
@@ -865,12 +866,11 @@ def _extract_voxels_thread(args):
                 kd = kd_factory(overlaydataset_path)
 
                 try:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates)
+                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                    mag=1).swapaxes(0, 2)
                 except:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates,
-                                                                       datatype=np.uint32)
+                    this_segmentation = kd.load_seg(size=chunk.size,  offset=chunk.coordinates,
+                                                    datatype=np.uint32, mag=1).swapaxes(0, 2)
 
             uniqueID_coords_dict = defaultdict(list)  # {sv_id: [(x0,y0,z0),(x1,y1,z1),...]}
 
@@ -1153,12 +1153,11 @@ def _extract_voxels_combined_thread_NEW(args):
         for i_chunk, chunk in enumerate(chunks):
                 kd = kd_factory(overlaydataset_path)
                 try:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates)
+                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                    mag=1).swapaxes(0, 2)
                 except:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates,
-                                                                       datatype=np.uint32)
+                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                    datatype=np.uint32, mag=1).swapaxes(0, 2)
                 # returns 3 dicts: rep coord, bounding box, size
                 segobj_res = find_object_properties(this_segmentation)
                 rep_coords = segobj_res[0]
@@ -1217,12 +1216,11 @@ def _extract_voxels_combined_thread_OLD(args):
                 kd = kd_factory(overlaydataset_path)
 
                 try:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates)
+                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                    mag=1).swapaxes(0, 2)
                 except:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates,
-                                                                       datatype=np.uint32)
+                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                    datatype=np.uint32, mag=1).swapaxes(0, 2)
 
             uniqueID_coords_dict = defaultdict(list)  # {sv_id: [(x0,y0,z0),(x1,y1,z1),...]}
 

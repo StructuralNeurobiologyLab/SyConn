@@ -268,9 +268,9 @@ class VoxelStorageDyn(CompressedStorage):
             for bb in bbs:  # iterate over all bounding boxes
                 size = bb[1] - bb[0]
                 off = bb[0]
-                curr_mask = self.voxeldata.from_overlaycubes_to_matrix(
-                    size, off, show_progress=False, verbose=False) == item
-                res.append(curr_mask)
+                curr_mask = self.voxeldata.load_seg(
+                    size=size, offset=off, mag=1) == item
+                res.append(curr_mask.swapaxes(0, 2))
             return res, bbs[:, 0]  # N, 3 --> all offset
         else:
             return super().__getitem__(item)

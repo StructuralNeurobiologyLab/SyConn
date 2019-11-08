@@ -70,7 +70,7 @@ if __name__ == "__main__":
         model = nn.DataParallel(model)
     model.to(device)
     n_classes = 3
-    data_init_kwargs = {"channels_to_load": (0, 1, 2, 3), "nb_views": 2,}
+    data_init_kwargs = {"channels_to_load": (0, 1, 2, 3), "nb_views": 2, }
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     train_dataset = AxonsViewsE3(train=True, transform=transform, **data_init_kwargs)

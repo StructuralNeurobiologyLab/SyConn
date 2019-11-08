@@ -65,7 +65,7 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     ``"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)``.
     See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` for details of
     the conversion process from the initial probability map to the SV segmentation. Default:
-    thresholding and connected components, thresholds are set via the `config.ini` file, check
+    thresholding and connected components, thresholds are set via the `config.yml` file, check
     ``syconn.global_params.config['cell_objects']["probathresholds"]`` of an initialized
     :calss:`~syconn.handler.config.DynConfig` object.
 

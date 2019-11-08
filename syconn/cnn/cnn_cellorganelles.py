@@ -13,13 +13,13 @@ import _pickle
 import torch
 from torch import nn
 from torch import optim
-
+import zipfile
 # TODO: Make torch and numpy RNG seed configurable
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='cellorganelle_unet_sameConv_noBN_run2',
+                    default='cellorganelle_unet_sameConv_BN_inmem_RESUMED',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=200,
@@ -83,11 +83,11 @@ torch.backends.cudnn.benchmark = True  # Improves overall performance in *most* 
 model = UNet(
     in_channels=1,
     out_channels=4,
-    n_blocks=4,
+    n_blocks=5,
     start_filts=28,
-    planar_blocks=(0,),
+    planar_blocks=(0, 3),
     activation='relu',
-    batch_norm=False,
+    batch_norm=True,
     # conv_mode='valid',
     #up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
     adaptive=True  # Experimental. Disable if results look weird.
@@ -109,7 +109,6 @@ elif args.jit == 'train':
     tracedmodel = torch.jit.trace(model, example_input.to(device))
     model = tracedmodel
 
-
 # USER PATHS
 save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
@@ -122,28 +121,50 @@ input_h5data = [(f, 'raw') for f in fnames[:1] + fnames]
 target_h5data = [(f, 'label') for f in fnames_l[:1] + fnames_l]
 valid_indices = [0]
 
-class_weights = torch.tensor([0.25, 0.25, 0.25, 0.25]).to(device)
+class_weights = torch.tensor([1, 1, 1, 1], dtype=torch.float32).to(device)
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
 
 if args.resume is not None:  # Load pretrained network
-    try:  # Assume it's a state_dict for the model
-        model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
-    except _pickle.UnpicklingError as exc:
-        # Assume it's a complete saved ScriptModule
-        model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
+    pretrained = os.path.expanduser(args.resume)
+    _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+    if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+        print(_warning_str)
+        model = torch.jit.load(pretrained, map_location=device)
+    else:  # Either state dict or pickled model
+        state = torch.load(pretrained)
+        if isinstance(state, dict):
+            try:
+                model.load_state_dict(state['model_state_dict'])
+            except RuntimeError:
+                print('Converting state dict (probably stored as DataParallel.')
+                for k in list(state.keys()):
+                    state['module' + k] = state[k]
+                    del state[k]
+            optimizer_state_dict = state.get('optimizer_state_dict')
+            lr_sched_state_dict = state.get('lr_sched_state_dict')
+            if optimizer_state_dict is None:
+                print('optimizer_state_dict not found.')
+            if lr_sched_state_dict is None:
+                print('lr_sched_state_dict not found.')
+        elif isinstance(state, nn.Module):
+            print(_warning_str)
+            model = state
+        else:
+            raise ValueError(f'Can\'t load {pretrained}.')
 
 # Transformations to be applied to samples before feeding them to the network
 common_transforms = [
     transforms.SqueezeTarget(dim=0),  # Workaround for neuro_data_cdhw
     #transforms.Normalize(mean=dataset_mean, std=dataset_std),
-    transforms.DropIfTooMuchBG(bg_id=3, threshold=0.9)
+    transforms.DropIfTooMuchBG(bg_id=0, threshold=0.9),
 ]
 train_transform = transforms.Compose(common_transforms + [
-    transforms.RandomGrayAugment(channels=[0], prob=0.3),
-    transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.3),
-    transforms.AdditiveGaussianNoise(sigma=0.05, channels=[0], prob=0.1),
+    transforms.RandomGrayAugment(channels=[0], prob=0.1),
+    transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.1),
+    transforms.AdditiveGaussianNoise(sigma=0.05, channels=[0], prob=0.05),
+    transforms.RandomFlip(ndim_spatial=3),
     transforms.RandomBlurring({'probability': 0.1})
 ])
 valid_transform = transforms.Compose(common_transforms + [])
@@ -159,6 +180,7 @@ common_data_kwargs = {  # Common options for training and valid sets.
 
 type_args = list(range(len(input_h5data)))
 train_dataset = PatchCreator(
+    in_memory=True,
     input_h5data=[input_h5data[i] for i in type_args if i not in valid_indices],
     target_h5data=[target_h5data[i] for i in type_args if i not in valid_indices],
     train=True,
@@ -173,6 +195,7 @@ train_dataset = PatchCreator(
     **common_data_kwargs
 )
 valid_dataset = None if not valid_indices else PatchCreator(
+    in_memory=True,
     input_h5data=[input_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
     target_h5data=[target_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
     train=False,
@@ -189,11 +212,10 @@ preview_batch = get_preview_batch(
     preview_shape=(48, 144, 144),
 )
 
-optimizer = Padam(
+optimizer = torch.optim.Adam(
     model.parameters(),
     lr=2e-3,
     weight_decay=0.5e-4,
-    partial=1/4,
 )
 
 lr_stepsize = 200
@@ -216,7 +238,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batchsize=1,
-    num_workers=1,
+    num_workers=4,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,

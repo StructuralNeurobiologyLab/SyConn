@@ -900,14 +900,17 @@ class main_class(QtGui.QDialog):
         # create a 'fake' knossos tree for each obj mesh category;
         # this is very hacky since it can generate nasty ID collisions.
         mi_id = self.obj_id_offs + ssv_id + 1
-        sj_id = self.obj_id_offs + ssv_id + 2
-        vc_id = self.obj_id_offs + ssv_id + 3
-        neuron_id = self.obj_id_offs + ssv_id + 4
+        sym_id = self.obj_id_offs + ssv_id + 2
+        asym_id = self.obj_id_offs + ssv_id + 3
+        vc_id = self.obj_id_offs + ssv_id + 4
+        neuron_id = self.obj_id_offs + ssv_id + 5
 
         params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
                   (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
                   (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
-                  (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
+                  # (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
+                  (self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
+                  (self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
         start = time.time()
 
         # add all meshes to download queue
@@ -967,6 +970,7 @@ class main_class(QtGui.QDialog):
         print('Skel down and to K took {}'.format(time.time()-start))
         return
 
+
 def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
     start = time.time()
     mesh = gate_obj.syconn_gate.get_ssv_obj_mesh(ssv_id, obj_type)
@@ -981,8 +985,10 @@ def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
     print("Loading {}-mesh time (pure KNOSSOS): {:.2f} s".format(
         obj_type, time.time() - start))
 
+
 def mesh_loader_threaded(gate_obj, ssv_id, tree_id, obj_type, color):
     gate_obj.syconn_gate.add_ssv_obj_mesh_to_down_queue(ssv_id, obj_type)
+
 
 def mesh_to_K(gate_obj, ssv_id, tree_id, obj_type, color):
     mesh = gate_obj.syconn_gate.get_ssv_obj_mesh_from_results_store(ssv_id, obj_type)

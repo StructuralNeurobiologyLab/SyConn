@@ -46,7 +46,7 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
         num_neighbours = np.array([len(sublist) for sublist in contact_ids])
         if np.sum(num_neighbours>0) >= 1:
             break
-    contact_coords_a = coords_a[num_neighbours>0]
+    contact_coords_a = coords_a[num_neighbours > 0]
     contact_ids_b = set([id for sublist in contact_ids for id in sublist])
     contact_coords_b = coords_b[list(contact_ids_b)]
     if contact_coords_a.ndim == 1:

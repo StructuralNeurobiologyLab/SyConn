@@ -151,7 +151,7 @@ class SuperSegmentationObject(object):
             cell and cell organelle shapes. Stored at :py:attr:`~view_path` and accessed via the
             :class:`~syconn.backend.storage.CompressedStorage` interface.
         version_dict: A dictionary which contains the versions of other dataset types which share
-            the same working directory. Defaults to the `Versions` entry in the `config.ini` file.
+            the same working directory. Defaults to the `Versions` entry in the `config.yml` file.
     """
     def __init__(self, ssv_id: int, version: Optional[str] = None,
                  version_dict: Optional[Dict[str, str]] = None,
@@ -170,7 +170,8 @@ class SuperSegmentationObject(object):
             version: Version string identifier. if 'tmp' is used, no data will
                 be saved to disk.
             version_dict: Dictionary which contains the versions of other dataset types which share
-                the same working directory. Defaults to the `Versions` entry in the `config.ini`file.
+                the same working directory. Defaults to the `versions` entry in the
+                `config.yml`file.
             working_dir (): Path to the working directory.
             create: If True, the folder to its storage location :py:attr:`~ssv_dir` will be created.
             sv_ids: List of agglomerated supervoxels which define the neuron reconstruction.
@@ -377,7 +378,7 @@ class SuperSegmentationObject(object):
     @property
     def scaling(self) -> np.ndarray:
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.ini`
+        Voxel size in nanometers (XYZ). Default is taken from the `config.yml`
         file and accessible via :py:attr:`~config`.
         """
         return self._scaling
@@ -560,7 +561,10 @@ class SuperSegmentationObject(object):
     #                                                                     MESHES
     def load_mesh(self, mesh_type) -> Optional[MeshType]:
         """
-        Load mesh of a specific type, e.g. 'mi', 'sv', etc.
+        Load mesh of a specific type, e.g. 'mi', 'sv' (cell supervoxel), 'sj' (connected
+        components of the original synaptic junction predictions), 'syn_ssv' (overlap of
+        'sj' with cell contact sites), 'syn_ssv_sym' and 'syn_ssv_asym' (only if syn-type
+        predictions are available).
 
         Args:
             mesh_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject` used for
@@ -569,6 +573,8 @@ class SuperSegmentationObject(object):
         Returns:
             Three flat arrays: indices, vertices, normals
         """
+        if mesh_type in ('syn_ssv_sym', 'syn_ssv_asym'):
+            self.typedsyns2mesh()
         if mesh_type not in self._meshes:
             return None
         if self._meshes[mesh_type] is None:
@@ -1541,7 +1547,7 @@ class SuperSegmentationObject(object):
         :class:`~syconn.reps.segmentation.SegmentationObject` in question is
         assigned to this :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
         if they share the highest overlap. For more details see ``SyConn/docs/object_mapping.md``.
-        Default parameters for the mapping will be taken from the `config.ini` file.
+        Default parameters for the mapping will be taken from the `config.yml` file.
 
         Args:
             obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`
@@ -2521,19 +2527,45 @@ class SuperSegmentationObject(object):
         if 'skeleton' in attr_keys:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def typedsyns2mesh(self, dest_path=None):
+    def typedsyns2mesh(self, dest_path: Optional[str] = None,
+                       rewrite: bool = False):
+        """
+        Generates typed meshes of 'syn_ssv' and stores it at
+        :py:attr:`~mesh_dc_path` (keys: ``'syn_ssv_sym'`` and ``'syn_ssv_asym'``)
+        and writes it to `dest_path` (if given).
+        Accessed with the respective keys via :py:attr:`~load_mesh`.
+
+        Args:
+            dest_path:
+            rewrite:
+
+        Returns:
+            None
+        """
+        if not rewrite and self.mesh_exists('syn_ssv_sym') and self.mesh_exists('syn_ssv_asym') \
+                and not self.version == "tmp":
+            return
         sym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
                                        syn.lookup_in_attribute_dict("syn_sign") == -1])
         asym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
                                         syn.lookup_in_attribute_dict("syn_sign") == 1])
-        self._meshes['syn_asym'] = asym_syn_mesh
-        self._meshes['syn_sym'] = sym_syn_mesh
+        sym_syn_mesh = list(sym_syn_mesh)
+        asym_syn_mesh = list(asym_syn_mesh)
+        if not self.version == "tmp":
+            mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
+                                  disable_locking=not self.enable_locking)
+            mesh_dc['syn_ssv_sym'] = sym_syn_mesh
+            mesh_dc['syn_ssv_asym'] = asym_syn_mesh
+            mesh_dc.push()
+        self._meshes['syn_ssv_sym'] = sym_syn_mesh
+        self._meshes['syn_ssv_asym'] = asym_syn_mesh
         if dest_path is None:
             return
+        # TODO: add appropriate ply fname and/or comment
         write_mesh2kzip(dest_path, asym_syn_mesh[0], asym_syn_mesh[1],
-                        asym_syn_mesh[2], color=np.array((255, 25, 25, 255)), ply_fname='10.ply')
+                        asym_syn_mesh[2], color=np.array((240, 50, 50, 255)), ply_fname='10.ply')
         write_mesh2kzip(dest_path, sym_syn_mesh[0], sym_syn_mesh[1],
-                        sym_syn_mesh[2], color=np.array((50, 50, 255, 255)), ply_fname='11.ply')
+                        sym_syn_mesh[2], color=np.array((50, 50, 240, 255)), ply_fname='11.ply')
 
     def write_svmeshes2kzip(self, dest_path=None):
         if dest_path is None:

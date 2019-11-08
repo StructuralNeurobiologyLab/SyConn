@@ -478,6 +478,11 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
     # # Important assert. Please don't remove
     # assert nx.number_connected_components(new_nx_g) == 1,\
     #     'Additional connected components created after pruning!'
+
+    for e in new_nx_g.edges:
+        w = np.linalg.norm((new_nx_g.node[e[0]]['position'] -
+                            new_nx_g.node[e[1]]['position']) * scal)
+        new_nx_g[e[0]][e[1]]['weight'] = w
     new_nx_g = nx.minimum_spanning_tree(new_nx_g)
     if sso is not None:
         sso = from_netkx_to_sso(sso, new_nx_g)
@@ -870,7 +875,7 @@ def map_myelin2coords(coords: np.ndarray,
     n_cube_vx = np.prod(cube_edge_avg)
     for ix, c in enumerate(coords):
         offset, size = c // mag - cube_edge_avg // 2, cube_edge_avg
-        myelin_proba = kd.from_raw_cubes_to_matrix(size, offset, mag=mag)
+        myelin_proba = kd.load_raw(size=size*mag, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
         myelin_preds[ix] = myelin_ratio > thresh_majority
     return myelin_preds
@@ -1011,7 +1016,7 @@ def create_new_skeleton_sv_fast(args):
     return nodes, diameters, edges
 
 
-def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=5e3):
+def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=1.5e3):
     """
     Stitches the SV skeletons using the supervoxel graph ``sso.rag``.
 
@@ -1195,6 +1200,11 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True,
             skel_nx, dot_prod_thresh=dot_prod_thresh,
             max_dist_thresh=max_dist_thresh_iter2)
     start = time.time()
+    for e in skel_nx.edges:
+        w = np.linalg.norm((skel_nx.node[e[0]]['position'] -
+                            skel_nx.node[e[1]]['position']) *
+                           global_params.config['scaling'])
+        skel_nx[e[0]][e[1]]['weight'] = w
     skel_nx = nx.minimum_spanning_tree(skel_nx)
     log_reps.debug(f'mst took {time.time()-start:.0f} s')
     sso = from_netkx_to_sso(sso, skel_nx)

@@ -304,8 +304,10 @@ def map_synssv_objects_thread(args):
         # key has to be the same as the SegmentationDataset name to enable automatic mesh retrieval in syconn/gate/server.py
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
-        # cache syn_ssv mesh
+        # cache syn_ssv mesh and typed meshes if available
         ssv.load_mesh('syn_ssv')
+        if global_params.config.syntype_available:
+            ssv.typedsyns2mesh()
 
 
 def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):

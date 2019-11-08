@@ -66,7 +66,7 @@ class SegmentationObject(object):
                  n_folders_fs: int = None, enable_locking: bool = True,
                  skeleton_caching: bool = True):
         """
-        If `working_dir` is given and the directory contains a valid `config.ini`file,
+        If `working_dir` is given and the directory contains a valid `config.yml`file,
         all other optional kwargs will be defined by the :class:`~syconn.handler.config.DynConfig`
         object available in :attr:`~syconn.global_params.config`.
 
@@ -299,7 +299,7 @@ class SegmentationObject(object):
     @property
     def scaling(self):
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.ini` file and
+        Voxel size in nanometers (XYZ). Default is taken from the `config.yml` file and
         accessible via `self.config`.
         """
         if self._scaling is None:
