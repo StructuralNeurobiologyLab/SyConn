@@ -16,7 +16,7 @@ opencv-python
 numba
 m2r
 plyfile
-vtkInterface
+vtki
 openmesh
 git+https://github.com/knossos-project/knossos_utils.git
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git
