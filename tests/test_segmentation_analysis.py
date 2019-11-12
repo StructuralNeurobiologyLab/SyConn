@@ -3,6 +3,7 @@
 # All rights reserved
 
 from syconn.reps.rep_helper import find_object_properties
+from syconn.extraction.cs_extraction_steps import detect_cs
 import numpy as np
 
 
@@ -45,6 +46,8 @@ def test_find_object_properties():
             assert np.array_equal(np.array(func_output[1][i][1]), (max_bound[i] + np.ones((3,), dtype=np.uint64))), \
                 "Bounding box dictionary mismatch." \
                          " They should be same"
+    aa = detect_cs(np.ones((13,13,13)))
+    print(aa[0])
 
 if __name__ == '__main__':
     test_find_object_properties()
