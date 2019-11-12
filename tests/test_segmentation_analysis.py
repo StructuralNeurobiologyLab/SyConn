@@ -19,13 +19,15 @@ def test_find_objects_properties():
     element, count = np.unique(sample_array, return_counts=True)
     for i in range(len(element)):
         if element[i] != 0:
+            #testing count of voxel ids
             assert (func_output[2][element[i]] == count[i].astype(np.uint64)), "Count of the voxels not working" \
                                                                                " They should be same"
+            # testing unique voxel-id
             ll = func_output[0][element[i]]
             check = sample_array[ll[0], ll[1], ll[2]]
-            assert element[i].astype(np.uint64) == check.astype(np.uint64), "object voxel directory dosen't match" \
+            assert element[i].astype(np.uint64) == check.astype(np.uint64), "object voxel dictionary dosen't match" \
                              "They should be same"
-
+    # testing bounding box
     indices = sample_array.flatten()
     min_bound = np.full(((int(element[len(element)-1]) + 1), 3), len(indices), dtype=np.uint64)
     max_bound = np.full(((int(element[len(element)-1]) + 1), 3), 0, dtype=np.uint64)
@@ -38,10 +40,10 @@ def test_find_objects_properties():
     for i in element:
         if i != 0:
             assert (np.array_equal(np.array(func_output[1][i][0]), min_bound[i])), \
-                "Bounding box directory mismatch." \
+                "Bounding box dictionary mismatch." \
                 " They should be same"
             assert np.array_equal(np.array(func_output[1][i][1]), (max_bound[i] + np.ones((3,), dtype=np.uint64))), \
-                "Bounding box directory mismatch." \
+                "Bounding box dictionary mismatch." \
                          " They should be same"
 
 if __name__ == '__main__':
