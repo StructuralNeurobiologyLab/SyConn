@@ -11,7 +11,7 @@ def test_find_objects_properties():
             [[0, 1],
              [1, 1]],
             [[5, 2],
-             [2, 1]]], np.uint)
+             [2, 1]]], np.uint64)
     func_output = find_object_properties(sample_array)
     #func_output[0]=dictionary of id's of unique voxel id, voxel id as key
     #func_output[1]=dictionary of bounding box for voxel ids, voxel id as key
