@@ -46,8 +46,13 @@ def test_find_object_properties():
             assert np.array_equal(np.array(func_output[1][i][1]), (max_bound[i] + np.ones((3,), dtype=np.uint64))), \
                 "Bounding box dictionary mismatch." \
                          " They should be same"
+
+
+def test_detect_cs():
     aa = detect_cs(np.ones((13,13,13)))
-    print(aa[0])
+    print(type(aa))
+
 
 if __name__ == '__main__':
     test_find_object_properties()
+    test_detect_cs()
