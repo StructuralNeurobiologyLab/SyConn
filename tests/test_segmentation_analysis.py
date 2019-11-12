@@ -6,7 +6,7 @@ from syconn.reps.rep_helper import find_object_properties
 import numpy as np
 
 
-def test_find_objects_properties():
+def test_find_object_properties():
     sample_array = np.array([
             [[0, 1],
              [1, 1]],
@@ -47,4 +47,4 @@ def test_find_objects_properties():
                          " They should be same"
 
 if __name__ == '__main__':
-    test_find_objects_properties()
+    test_find_object_properties()
