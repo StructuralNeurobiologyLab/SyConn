@@ -9,10 +9,15 @@ import numpy as np
 
 def test_find_object_properties():
     sample_array = np.array([
-            [[0, 1],
-             [1, 1]],
-            [[5, 2],
-             [2, 1]]], np.uint64)
+            [[0, 1, 9],
+             [1, 1, 9],
+             [0, 1, 9]],
+            [[5, 2, 4],
+             [2, 1, 3],
+             [0, 1, 9]],
+            [[9, 1, 9],
+             [2, 3, 4],
+             [0, 3, 9]]], np.uint64)
     func_output = find_object_properties(sample_array)
     #func_output[0]=dictionary of id's of unique voxel id, voxel id as key
     #func_output[1]=dictionary of bounding box for voxel ids, voxel id as key
@@ -46,6 +51,12 @@ def test_find_object_properties():
             assert np.array_equal(np.array(func_output[1][i][1]), (max_bound[i] + np.ones((3,), dtype=np.uint64))), \
                 "Bounding box dictionary mismatch." \
                          " They should be same"
+    print(func_output)
+    print(min_bound)
+    print(max_bound)
+    print(element)
+    print(count)
+
 
 
 def test_detect_cs():
