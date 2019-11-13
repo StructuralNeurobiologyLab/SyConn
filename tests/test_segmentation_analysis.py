@@ -60,7 +60,7 @@ def test_find_object_properties():
 
 
 def test_detect_cs():
-    aa = detect_cs(np.ones((13,13,13)))
+    aa = detect_cs(np.ones((13, 13, 13)))
     print(type(aa))
 
 
