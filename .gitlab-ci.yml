@@ -1,6 +1,7 @@
 build:
   script:
     - conda env create -f environment.yml -n pysyintegration python
+    - conda init 
     - conda activate pysyintegration
     - pip install -r requirements.txt
 
