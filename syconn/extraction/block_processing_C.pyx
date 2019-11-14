@@ -9,7 +9,6 @@ from libcpp.unordered_map cimport unordered_map
 from libcpp.vector cimport vector
 import timeit
 
-
 ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
 ctypedef vector[int] int_vec
 ctypedef vector[int_vec] int_vec_vec
@@ -19,9 +18,9 @@ ctypedef fused n_type:
     uint32_t
 
 
-def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
+def kernel(n_type[:, :, :] chunk, n_type center_id):
 
-    cdef map[uint32_t, int] unique_ids
+    cdef map[uint64_t, int] unique_ids
 
     for i in range(chunk.shape[0]):
         for j in range(chunk.shape[1]):
@@ -32,7 +31,7 @@ def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
     cdef int theBiggest  = 0
     cdef uint64_t key = 0
 
-    cdef map[uint32_t,int].iterator it = unique_ids.begin()
+    cdef map[uint64_t,int].iterator it = unique_ids.begin()
     while it != unique_ids.end():
         if dereference(it).second > theBiggest:
             theBiggest =  dereference(it).second
@@ -50,7 +49,6 @@ def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
 
 def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
-
     cdef int stencil[3]
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
@@ -61,7 +59,7 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
     offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2] ### check what type do you need
     cdef int center_id
     cdef uint32_t[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2),
-                                           itemsize=sizeof(int), format='i')
+                                           itemsize=sizeof(uint32_t), format='i')
 
     for x in range(offset[0], arr.shape[0] - offset[0]):
         for y in range(offset[1], arr.shape[1] - offset[1]):
@@ -77,7 +75,6 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
 
 
 def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
-
     cdef int stencil[3]
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
@@ -101,6 +98,7 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
                 chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
                 out[x, y, z] =  kernel(chunk, center_id)
     return out
+
 
 def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
     uint8_t[:, :, :] asym_mask, uint8_t[:, :, :] sym_mask):

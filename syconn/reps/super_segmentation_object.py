@@ -3135,12 +3135,12 @@ class SuperSegmentationObject(object):
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
         multi_view_sso = load_rendering_func('multi_view_sso')
-        from scipy.misc import imsave  # TODO: use new imageio package
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
                       "vc": (0, 1, 0, 1), "sj": (1, 0, 0, 1)}
         views = multi_view_sso(self, colors, ws=ws, obj_to_render=obj_to_render)
         if dest_folder:
+            from scipy.misc import imsave  # TODO: use new imageio package
             for ii, v in enumerate(views):
                 imsave("%s/SSV_%d_%d.png" % (dest_folder, self.id, ii), v)
         else:
