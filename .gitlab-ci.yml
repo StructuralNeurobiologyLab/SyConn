@@ -27,4 +27,4 @@ unittests:
   tags:
     - default
   script:
-    - python -m pytest --junit-xml=pytest_unit.xml
+    - pytest
