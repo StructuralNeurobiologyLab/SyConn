@@ -2,7 +2,6 @@ init-scratch:
   only: 
     - master
   script:
-    - conda deactivate
     - conda env create -f environment.yml -n pysyintegration python
     - conda init bash
     - conda activate pysyintegration
