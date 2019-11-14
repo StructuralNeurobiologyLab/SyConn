@@ -427,7 +427,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         sub_vol = overlay[obj_slice]
         # pad with zeros to prevent boundary artifacts in the original data array
         if "closing" in mop_func.__name__:
-            sub_vol = np.pad(sub_vol, n_iters)
+            sub_vol = np.pad(sub_vol, n_iters, mode="constant")
         binary_mask = (sub_vol == ix).astype(np.int)
         if verbose:
             nb_occ = np.sum(binary_mask)
