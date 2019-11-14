@@ -1,5 +1,14 @@
-unittests:
-  tags:
-    - default
+build:
   script:
-    - pytest
+    - conda env create -f environment.yml --yes -n pysyintegration python
+    - conda activate pysyintegration
+    - pip install -r requirements.txt
+
+test-unit:
+  script:
+    - conda activate pysyintegration
+    - python -m pytest --junit-xml=pytest_unit.xml
+
+post:
+  script:
+    - conda remove --yes -n pysyintegration --all
