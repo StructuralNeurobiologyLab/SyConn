@@ -1,7 +1,7 @@
 stages:
   - test
   - build
-  - deploy
+  - cleanup
 
 test:
   stage: test
@@ -29,8 +29,8 @@ build:
   tags:
     - master
 
-post:
-  stage: build
+cleanup:
+  stage: cleanup
   script:
     - conda remove --yes -n pysyintegration --all
   only:
