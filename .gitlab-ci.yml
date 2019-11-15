@@ -1,14 +1,39 @@
-build:
+stages:
+  - test
+  - build
+  - deploy
+
+test:
+  stage: test
   script:
+    - pytest --ignore=tests/test_run.py
+  except:
+    - master
+
+test-full:
+  stage: test
+  script:
+    - pytest
+  only:
+    - master
+
+build:
+  stage: build
+  script:
+    - echo "Installing SyConn"
     - conda env create -f environment.yml --yes -n pysyintegration python
     - conda activate pysyintegration
     - pip install -r requirements.txt
-
-test-unit:
-  script:
-    - conda activate pysyintegration
-    - python -m pytest --junit-xml=pytest_unit.xml
+  only:
+    - master
+  tags:
+    - master
 
 post:
+  stage: build
   script:
     - conda remove --yes -n pysyintegration --all
+  only:
+    - master
+  tags:
+    - master

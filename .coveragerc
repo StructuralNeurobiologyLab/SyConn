@@ -1,5 +1,9 @@
 [run]
+include =
+    syconn/*
 omit =
     syconn/batchjob_scripts/QSUB_*
     syconn/batchjob_scripts/batch_*
+    knossos_utils/*
+    tests/*
     */__init__.py
