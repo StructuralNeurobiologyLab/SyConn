@@ -21,9 +21,9 @@ build:
   stage: build
   script:
     - echo "Installing SyConn"
-    - conda env create -f environment.yml --yes -n pysyintegration python
-    - conda activate pysyintegration
-    - pip install -r requirements.txt
+    - conda env create -f environment.yml -n pysyintegration python
+    # - conda activate pysyintegration
+    # - pip install -r requirements.txt
   only:
     - master
   tags:
