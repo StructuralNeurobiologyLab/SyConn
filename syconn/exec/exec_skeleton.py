@@ -115,15 +115,16 @@ def run_skeleton_axoness():
 
 
 
-def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None,
-                            map_myelin: Optional[bool] = None):
+def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, kd_path, path2savefolder):
     """
-    Generate the cell reconstruction skeletons.
+    Generate the cell reconstruction skeletons with the kimimaro tool. functions are in proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
 
     Args:
         max_n_jobs: Number of parallel jobs.
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
         :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
+        kd_path: path to knossos dataset
+        path2savefolder: path to output folder where files are saved
 
     """
     if max_n_jobs is None:
@@ -164,7 +165,8 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None,
                 path_dic[cell_id].append(f)
             else:
                 path_dic[cell_id].append(f)
-    write_obj2pkl("/wholebrain/scratch/arother/path_dict.pkl", path_dic)
+    pathdict_filepath = ("%40s/excube1_path_dict.pkl" % path2savefolder)
+    write_obj2pkl(pathdict_filepath, path_dic)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
@@ -175,8 +177,9 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None,
     multi_params = multi_params[ordering[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
 
-    # add ssd parameters
-    multi_params = [("/wholebrain/scratch/arother/path_dict.pkl", ssv_ids) for ssv_ids in multi_params]
+    # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
+    zipname = ("40s/excube1_kimimaro_skels" % path2savefolder)
+    multi_params = [(pathdict_filepath, ssv_ids, zipname) for ssv_ids in multi_params]
 
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(

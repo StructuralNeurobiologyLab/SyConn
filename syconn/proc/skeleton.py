@@ -20,13 +20,6 @@ if __name__ == '__main__':
         import pickle as pkl
 
     #code from https://pypi.org/project/kimimaro/
-    start = time.time()
-    global_params.wd = "/ssdscratch/pschuber/songbird/j0126/assembled_core_relabeled_base_merges_relabeled_to_v4b_base_20180214_full_agglo_cbsplit_with_reconnects_no_soma_merger/"
-
-
-    #sd_synssv = SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir)
-
-
     def kimimaro_skelgen(cube_size = np.array([200, 200, 200]), cube_offset=[1000, 1000, 1000]):
         ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
         kd = kd_factory(global_params.config.kd_seg_path)
@@ -99,9 +92,8 @@ if __name__ == '__main__':
 
         return skel
 
-    def kimimaro_skels_tokzip(skels, cell_id):
+    def kimimaro_skels_tokzip(skels, cell_id, zipname):
         #write to zip file
-        zipname = ('/wholebrain/scratch/arother/kimimaro_skels')
         if not os.path.exists(zipname):
             os.mkdir(zipname)
         for ii in skels:

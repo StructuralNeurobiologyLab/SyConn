@@ -17,13 +17,13 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-path2results_dc, cell_ids = args
+path2results_dc, cell_ids, zipname = args
 restuls_dc = load_pkl2obj(path2results_dc)
 full_skels = dict()
 
 for cell_id in cell_ids:
     combined_skel = kimimaro_mergeskels(path2results_dc[cell_id], cell_id)
-    kimimaro_skels_tokzip(combined_skel,cell_id)
+    kimimaro_skels_tokzip(combined_skel,cell_id, zipname)
     full_skels[cell_id] = combined_skel
 
 
