@@ -112,3 +112,77 @@ def run_skeleton_axoness():
     ft_context = [1000, 2000, 4000, 8000, 12000]
     sbc.generate_data(feature_contexts_nm=ft_context, nb_cpus=global_params.config['ncores_per_node'])
     sbc.classifier_production(ft_context, nb_cpus=global_params.config['ncores_per_node'])
+
+
+
+def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None,
+                            map_myelin: Optional[bool] = None):
+    """
+    Generate the cell reconstruction skeletons.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+        map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
+        :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
+
+    """
+    if max_n_jobs is None:
+        max_n_jobs = global_params.config.ncore_total * 2
+    log = initialize_logging('skeleton_generation',
+                             global_params.config.working_dir + '/logs/',
+                             overwrite=False)
+
+    from knossos_utils.chunky import ChunkDataset
+    from knossos_utils import knossosdataset
+    kd = knossosdataset.KnossosDataset()
+    kd.initialize_from_knossos_path(kd_path)
+
+    cube_size = np.array([512, 512, 256])
+    cd = ChunkDataset()
+    cd.initialize(kd, kd.boundary, cube_size, '/cd_tmp/',
+                  box_coords=[0, 0, 0], list_of_coords=[],
+                  fit_box_size=True)
+
+    multi_params = [(cube_size, chunk.offset) for chunk in cd.chunk_list]
+    out_dir = qu.QSUB_script(multi_params, "kimimaroskelgen", log=log,
+                   n_max_co_processes=global_params.config.ncore_total, remove_jobfolder=False)
+
+    import glob
+    try:
+        import cPickle as pkl
+    except ImportError:
+        import pickle as pkl
+    from syconn.handler.basics import load_pkl2obj, write_obj2pkl
+
+    fpaths = glob.glob(out_dir)
+    path_dic = dict()
+    for f in fpaths:
+        partial_skels = load_pkl2obj(f)
+        for cell_id in partial_skels:
+            if not cell_id in path_dic:
+                path_dic[cell_id] = []
+                path_dic[cell_id].append(f)
+            else:
+                path_dic[cell_id].append(f)
+    write_obj2pkl("/wholebrain/scratch/arother/path_dict.pkl", path_dic)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+
+    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
+    multi_params = ssd.ssv_ids
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
+    multi_params = chunkify(multi_params, max_n_jobs)
+
+    # add ssd parameters
+    multi_params = [("/wholebrain/scratch/arother/path_dict.pkl", ssv_ids) for ssv_ids in multi_params]
+
+    # create SSV skeletons, requires SV skeletons!
+    log.info('Starting skeleton generation of {} SSVs.'.format(
+        len(ssd.ssv_ids)))
+    qu.QSUB_script(multi_params, "kimimaromerge", log=log,
+                   n_max_co_processes=global_params.config.ncore_total,
+                   remove_jobfolder=False, n_cores=2)
+
+    log.info('Finished skeleton generation.')
