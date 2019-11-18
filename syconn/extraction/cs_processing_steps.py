@@ -398,7 +398,7 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread_old,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn",
+        _ = qu.QSUB_script(multi_params, "combine_and_split_syn_old",
                            resume_job=resume_job, remove_jobfolder=True,
                            n_max_co_processes=n_max_co_processes, log=log)
 

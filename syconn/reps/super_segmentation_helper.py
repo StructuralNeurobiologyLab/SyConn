@@ -619,7 +619,7 @@ def from_netkx_to_sso(sso, skel_nx):
     assert nx.number_connected_components(skel_nx) == 1
 
     # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_nx.edges()).reshape(-1)
+    temp_edges = np.array(list(skel_nx.edges())).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 
