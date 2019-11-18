@@ -134,16 +134,13 @@ class SegmentationObject(object):
                 log_reps.error(msg)
                 raise ValueError(msg)
         elif config is not None:
-            if working_dir[-1] == '/':
-                working_dir = working_dir[:-1]
-            if config.working_dir != working_dir:
+            if os.path.normpath(config.working_dir) != \
+                    os.path.normpath(working_dir):
                 raise ValueError('Inconsistent working directories in `config` and'
                                  '`working_dir` kwargs.')
             self._config = config
             self._working_dir = working_dir
         else:
-            if working_dir[-1] == '/':
-                working_dir = working_dir[:-1]
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
 
