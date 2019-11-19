@@ -115,7 +115,7 @@ def run_skeleton_axoness():
 
 
 
-def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, kd_path, path2savefolder):
+def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
 
@@ -124,7 +124,6 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, kd_path, path2savefol
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
         :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
         kd_path: path to knossos dataset
-        path2savefolder: path to output folder where files are saved
 
     """
     if max_n_jobs is None:
@@ -136,12 +135,12 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, kd_path, path2savefol
     from knossos_utils.chunky import ChunkDataset
     from knossos_utils import knossosdataset
     kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
+    kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
 
     cube_size = np.array([512, 512, 256])
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary, cube_size, '/cd_tmp/',
-                  box_coords=[0, 0, 0], list_of_coords=[],
+    cd.initialize(kd, kd.boundary, cube_size, '~/cd_tmp/',
+                  box_coords=[0, 0, 0],
                   fit_box_size=True)
 
     multi_params = [(cube_size, chunk.offset) for chunk in cd.chunk_list]
@@ -165,7 +164,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, kd_path, path2savefol
                 path_dic[cell_id].append(f)
             else:
                 path_dic[cell_id].append(f)
-    pathdict_filepath = ("%40s/excube1_path_dict.pkl" % path2savefolder)
+    pathdict_filepath = ("%s/excube1_path_dict.pkl" % global_params.config.working_dir)
     write_obj2pkl(pathdict_filepath, path_dic)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -178,7 +177,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, kd_path, path2savefol
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
-    zipname = ("40s/excube1_kimimaro_skels" % path2savefolder)
+    zipname = ("%s/excube1_kimimaro_skels/" % global_params.config.working_dir)
     multi_params = [(pathdict_filepath, ssv_ids, zipname) for ssv_ids in multi_params]
 
     # create SSV skeletons, requires SV skeletons!

@@ -1,0 +1,19 @@
+PyTorch version: 1.0.1.post2
+Is debug build: No
+CUDA used to build PyTorch: 9.0.176
+
+OS: CentOS Linux release 7.5.1804 (Core) 
+GCC version: (GCC) 6.4.0
+CMake version: version 2.8.12.2
+
+Python version: 3.6
+Is CUDA available: Yes
+CUDA runtime version: Could not collect
+GPU models and configuration: GPU 0: GeForce GTX 980 Ti
+Nvidia driver version: 390.87
+cuDNN version: Could not collect
+
+Versions of relevant libraries:
+[pip] Could not collect
+[conda] torch                     1.0.1.post2              pypi_0    pypi
+[conda] torchvision               0.2.1                    pypi_0    pypi

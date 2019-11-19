@@ -63,7 +63,7 @@ if __name__ == '__main__':
             for i,v in enumerate(cell.vertices):
                 c = cell.vertices[i]
                 #add cube_offset in physical coordinates
-                c = np.array([int(c[0]+cube_offset[0]*20), int(c[1]+cube_offset[1]*20), int(c[2]+cube_offset[2]*40)])
+                cell.vertices[i] = np.array([int(c[0]+cube_offset[0]*20), int(c[1]+cube_offset[1]*20), int(c[2]+cube_offset[2]*40)])
 
         return skels
 

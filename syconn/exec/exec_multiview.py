@@ -20,7 +20,7 @@ from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
-from syconn.reps.segmentation import SegmentationDataset
+
 from syconn.handler.prediction import get_glia_model
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc.rendering import render_sso_coords_multiprocessing
@@ -34,7 +34,7 @@ from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.exec import exec_skeleton
-
+from syconn.reps.segmentation import SegmentationDataset
 
 def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     """
