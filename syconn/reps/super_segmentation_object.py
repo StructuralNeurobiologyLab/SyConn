@@ -1055,7 +1055,6 @@ class SuperSegmentationObject(object):
                                       disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
                 mesh_dc.push()
-        # Changed vertex dtype to float32, as they actually should. PS, 22Oct2018
         return np.array(ind, dtype=np.int), np.array(vert, dtype=np.float32), \
                np.array(normals, dtype=np.float32)
 
@@ -2193,6 +2192,10 @@ class SuperSegmentationObject(object):
             vertex_labels = vertex_labels[vertex_labels != ign_l]
         if len(vertex_labels) != len(vertices):
             raise ValueError('Size of vertices and their labels does not match!')
+        if len(vertices) < k:
+            log_reps.warning(f'Number of vertices ({len(vertices)}) is less than the given '
+                             f'value of k ({k}). Setting k to lower value.')
+            k = len(vertices)
         maj_vote = colorcode_vertices(coords, vertices, vertex_labels, k=k,
                                       return_color=False, nb_cpus=self.nb_cpus)
         return maj_vote
@@ -3146,8 +3149,7 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-    def certainty_celltype(self, proba_key: Optional[str] = None,
-                           da_equals_tan: bool = True) -> float:
+    def certainty_celltype(self, proba_key: Optional[str] = None) -> float:
         """
         Certainty estimate of the celltype prediction:
             1. If `is_logit` is True, Generate pseudo-probabilities from the
@@ -3158,6 +3160,11 @@ class SuperSegmentationObject(object):
 
         Notes:
             See :func:`~syconn.handler.prediction.certainty_estimate`
+
+        Args:
+            proba_key: Key of classification results (one C-class probability
+                vector for every N-view sample). Must exist in
+                :py:attr:`~attr_dict`.
 
         Returns:
             Certainty measure based on the entropy of the cell type logits.

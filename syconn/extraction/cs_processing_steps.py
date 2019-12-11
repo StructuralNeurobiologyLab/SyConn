@@ -410,12 +410,12 @@ def _combine_and_split_syn_thread(args):
     rel_cs_to_cs_agg_ids_items = args[1]
     voxel_rel_paths = args[2]
     syn_version = args[3]
-    cs_version = args[4]
+    syn_ssv_version = args[4]
     scaling = args[5]
     cs_gap_nm = args[6]
 
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=cs_version)
+                                                  version=syn_ssv_version)
 
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
                                               version=syn_version)
@@ -574,12 +574,12 @@ def _combine_and_split_syn_thread_old(args):
     rel_cs_to_cs_agg_ids_items = args[1]
     voxel_rel_paths = args[2]
     syn_version = args[3]
-    cs_version = args[4]
+    syn_ssv_version = args[4]
     scaling = args[5]
     cs_gap_nm = args[6]
 
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=cs_version)
+                                                  version=syn_ssv_version)
 
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
                                               version=syn_version)
@@ -1230,8 +1230,16 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          nb_cpus=None, n_max_co_processes=None,
                          sym_label=1, asym_label=1):
     """TODO: will be refactored into single method when generating syn objects
+    # TODO: Investigate, prediction results of might be buggy
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
     syn_ssv object attribute dict.
+
+    Notes:
+        If the synapse type prediction was carried out via
+        :func:`~syconn.exec.exec_dense_prediction.predict_synapsetype` labels
+        are as follows:
+            * Label 1: asymmetric.
+            * Label 2: symmetric.
 
     Parameters
     ----------
@@ -1248,6 +1256,10 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
         Label of asymmetric class within `kd_asym_path`.
     """
     assert "syn_ssv" in sj_sd.version_dict
+    if (sym_label == asym_label) and (kd_asym_path == kd_sym_path):
+        raise ValueError('Both KnossosDatasets and labels for symmetric and '
+                         'asymmetric synapses are identical. Either one of '
+                         'those needs to be different.')
     paths = sj_sd.so_dir_paths
 
     # Partitioning the work
@@ -1304,7 +1316,7 @@ def _extract_synapse_type_thread(args):
             if trafo_dict is not None:
                 vxl -= trafo_dict[so_id]
                 vxl = vxl[:, [1, 0, 2]]
-            # TODO: remvoe try-except
+            # TODO: remove try-except
             if global_params.config.syntype_available:
                 try:
                     asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl) == asym_label)

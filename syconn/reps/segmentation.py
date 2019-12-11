@@ -1810,17 +1810,23 @@ class SegmentationDataset(object):
 
     def load_cached_data(self, prop_name) -> np.ndarray:
         """
-        Load cached array. The ordering of the returned array will correspond to :py:attr:`~ids`.
+        Load cached array. The ordering of the returned array will correspond
+        to :py:attr:`~ids`.
 
+        Todo:
+            * remove 's' appendix in file names.
 
         Args:
             prop_name: Identifier of the requested cache array.
 
         Returns:
-            Loaded numpy array of property `name`.
+            numpy array of property `prop_name`.
         """
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy")
+        else:
+            log_reps.warning(f'Requested data cache "{prop_name}" '
+                             f'did not exist.')
 
     def get_segmentationdataset(self, obj_type: str):
         """

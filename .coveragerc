@@ -6,4 +6,5 @@ omit =
     syconn/batchjob_scripts/batch_*
     knossos_utils/*
     tests/*
+    syconn/ui/*
     */__init__.py

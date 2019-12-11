@@ -19,6 +19,7 @@ test-full:
 
 build:
   stage: build
+  # TODO: use conda environment for test stage
   script:
     - echo "Installing SyConn"
     - conda env create -f environment.yml -n pysyintegration python
