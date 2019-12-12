@@ -1,11 +1,14 @@
 stages:
-  - test
   - build
+  - test
   - cleanup
 
 test:
   stage: test
   script:
+    - source ~/.bashrc
+    - conda activate pysyintegration
+    - pip install --upgrade -e .
     - pytest --ignore=tests/test_run.py
   except:
     - master
@@ -13,8 +16,12 @@ test:
 test-full:
   stage: test
   script:
+    - source ~/.bashrc
+    - conda activate pysyintegration_m
     - pytest
   only:
+    - master
+  tags:
     - master
 
 build:
@@ -22,9 +29,10 @@ build:
   # TODO: use conda environment for test stage
   script:
     - echo "Installing SyConn"
-    - conda env create -f environment.yml -n pysyintegration python
-    # - conda activate pysyintegration
-    # - pip install -r requirements.txt
+    - conda env create -f environment.yml -n pysyintegration_m python
+    - source ~/.bashrc
+    - conda activate pysyintegration_m
+    - pip install --no-deps -v .
   only:
     - master
   tags:
@@ -33,7 +41,8 @@ build:
 cleanup:
   stage: cleanup
   script:
-    - conda remove --yes -n pysyintegration --all
+    - conda remove --yes -n pysyintegration_m --all
+  when: always
   only:
     - master
   tags:

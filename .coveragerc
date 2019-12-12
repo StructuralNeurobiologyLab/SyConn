@@ -7,4 +7,5 @@ omit =
     knossos_utils/*
     tests/*
     syconn/ui/*
+    syconn/cnn/*
     */__init__.py
