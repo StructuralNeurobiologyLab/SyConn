@@ -1,6 +1,6 @@
 stages:
-  - test
   - build
+  - test
   - cleanup
 
 test:
@@ -16,6 +16,8 @@ test-full:
     - pytest
   only:
     - master
+  tags:
+    - master
 
 build:
   stage: build
@@ -23,8 +25,8 @@ build:
   script:
     - echo "Installing SyConn"
     - conda env create -f environment.yml -n pysyintegration python
-    # - conda activate pysyintegration
-    # - pip install -r requirements.txt
+    - source activate pysyintegration
+    - pip install --no-deps -v .
   only:
     - master
   tags:
