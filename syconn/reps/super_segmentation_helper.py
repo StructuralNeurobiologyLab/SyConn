@@ -619,7 +619,7 @@ def from_netkx_to_sso(sso, skel_nx):
     assert nx.number_connected_components(skel_nx) == 1
 
     # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_nx.edges()).reshape(-1)
+    temp_edges = np.array(list(skel_nx.edges())).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 
@@ -2210,6 +2210,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     -------
 
     """
+    # TODO: add new cell type labels
     sso.load_attr_dict()
     pred_key = "celltype_cnn_e3" + pred_key_appendix  # TODO: add appendix functionality also to `predict_celltype_sso`
     if not overwrite and pred_key in sso.attr_dict:
@@ -2257,9 +2258,9 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
-    for an alternative operating on file-system cachec views.
+    for an alternative which uses file-system cached views.
     By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph_ct`. Note that `latent_morph` is infered locally via `
+    and `latent_morph_ct`. Note that `latent_morph` is inferred locally via `
 
     Args:
         sso:
@@ -2283,16 +2284,17 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
-
-    # overwrite default rendering locations (used later on for the view generation)
-    sso._sample_locations = rendering_locs
     # this cache is only in-memory, and not file system cache
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
+        rendering_locs = generate_rendering_locs(verts,
+                                                 comp_window / 3)  # three views per comp window
+
+        # overwrite default rendering locations (used later on for the view generation)
+        sso._sample_locations = rendering_locs
         views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
     else:

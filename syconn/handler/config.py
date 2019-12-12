@@ -364,8 +364,8 @@ class DynConfig(Config):
         """
         self._check_actuality()
         p = self.entries['paths']['init_rag']
-        if len(p) == 0:
-            p = self.working_dir + "rag.bz2"
+        if p is None or len(p) == 0:
+            p = self.working_dir + "/rag.bz2"
         return p
 
     @property

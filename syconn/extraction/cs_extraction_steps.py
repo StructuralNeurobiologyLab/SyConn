@@ -35,7 +35,12 @@ from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.image import multi_mop_backgroundonly
 import multiprocessing
 try:
-    from .block_processing_C import process_block_nonzero, extract_cs_syntype
+    from .block_processing_C import process_block_nonzero as process_block_nonzero_C
+    from .block_processing_C import extract_cs_syntype
+
+    def process_block_nonzero(*args):
+        return np.asarray(process_block_nonzero_C(*args))
+
 except ImportError as e:
     extract_cs_syntype = None
     log_extraction.warning('Could not import cython version of `block_processing`. {}'.format(
@@ -830,7 +835,15 @@ def _contact_site_detection_thread(args):
                              ".h5", ["cs"])
 
 
-def detect_cs(arr):
+def detect_cs(arr: np.ndarray) -> np.ndarray:
+    """
+
+    Args:
+        arr: 3D segmentation array (only np.uint32!)
+
+    Returns:
+        3D contact site segmentation array (np.uint64).
+    """
     jac = np.zeros([3, 3, 3], dtype=np.int)
     jac[1, 1, 1] = -6
     jac[1, 1, 0] = 1
@@ -842,8 +855,8 @@ def detect_cs(arr):
     edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
     edges = edges.astype(np.uint32)
     arr = arr.astype(np.uint32)
-    cs_seg = process_block_nonzero(edges, arr, global_params.config['cell_objects'][
-        'cs_filtersize'])
+    cs_seg = process_block_nonzero(
+        edges, arr, global_params.config['cell_objects']['cs_filtersize'])
     return cs_seg
 
 

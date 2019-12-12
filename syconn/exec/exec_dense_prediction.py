@@ -55,7 +55,7 @@ def predict_synapsetype(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     ``global_params.config.working_dir + '/knossosdatasets/synapsetype/'``.
 
     Notes:
-        Label 1: asymmetric, label2: symmetric.
+        Label 1: asymmetric, label 2: symmetric.
 
     Args:
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum

@@ -13,25 +13,15 @@ import glob
 import shutil
 import sys
 import time
-import argparse
 
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
 
 
-if __name__ == '__main__':
-    # pare arguments
-    parser = argparse.ArgumentParser(description='SyConn example run')
-    parser.add_argument('--working_dir', type=str, default='',
-                        help='Working directory of SyConn')
-    parser.add_argument('--example_cube', type=str, default='1',
-                        help='Used toy data. Either "1" (400 x 400 x 600) '
-                             'or "2" (1100, 1100, 600).')
-    args = parser.parse_args()
-    example_cube_id = args.example_cube
-    if args.working_dir == "":  # by default use cube dependent working dir
-        args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
-    example_wd = os.path.expanduser(args.working_dir) + "/"
+def test_full_run():
+    example_cube_id = 1
+    working_dir = "~/SyConn/tests/example_cube{}/".format(example_cube_id)
+    example_wd = os.path.expanduser(working_dir) + "/"
 
     # set up basic parameter, log, working directory and config file
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
@@ -49,7 +39,7 @@ if __name__ == '__main__':
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
-    curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
+    curr_dir = os.path.expanduser('~/SyConn//')
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
     kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
 
@@ -187,7 +177,6 @@ if __name__ == '__main__':
     step_idents.append('SSD generation')
 
     # TODO: launch steps 3 and 4 in parallel
-    # TODO: use syn_ssv for rendering
     log.info('Step 3/8 - Neuron rendering')
     exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())
@@ -239,10 +228,4 @@ if __name__ == '__main__':
             i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
         time_summary_str += step_str
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconst'
-             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-                   '/../kplugin/server.py'
-    os.system('python {} --working_dir={} --port=10001'.format(
-        fname_server, example_wd))
+    shutil.rmtree(example_wd)
