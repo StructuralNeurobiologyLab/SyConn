@@ -25,7 +25,7 @@ dependencies:
   - matplotlib
   - tqdm
   - scipy
-  - networkx
+  - networkx <= 2.3  # AttributeError: module 'networkx' has no attribute 'connected_component_subgraphs'
   - m2r
   - lz4
   - flask
