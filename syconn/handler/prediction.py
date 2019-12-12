@@ -734,7 +734,7 @@ def dense_predictor(args):
     from elektronn3.inference import Predictor
     out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
     out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
-    predictor = Predictor(model_p, strict_shapes= True, tile_shape=tile_shape[::-1],
+    predictor = Predictor(model_p, tile_shape=tile_shape[::-1],
                           out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
                           apply_softmax=True)
     predictor.model.ae = False

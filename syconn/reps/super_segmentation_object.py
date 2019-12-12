@@ -1413,6 +1413,28 @@ class SuperSegmentationObject(object):
         if to_kzip:
             self.save_skeleton_to_kzip()
 
+    def save_skeleton_kimimaro(self, skel, to_kzip=False, to_object=True):
+        """
+                Saves skeleton to default locations as `.pkl` and optionally as `.k.zip`.
+                needs input what to save
+
+                Args:
+                    to_kzip: Stores skeleton as a KNOSSOS compatible xml inside a k.zip file.
+                    to_object: Stores skeleton as a dictionary in a pickle file.
+                """
+        if self.version == 'tmp':
+            log_reps.warning('"save_skeleton" called but this SSV '
+                             'has version "tmp", skeleton will'
+                             ' not be saved to disk.')
+            return
+
+        skel_path = self.ssv_dir + ("%s.pkl" % skel)
+        if to_object:
+            write_obj2pkl(skel_path, eval("self.%s" % skel))
+
+        if to_kzip:
+            self.save_skeleton_to_kzip()
+
     def load_skeleton(self) -> bool:
         """
         Loads skeleton and will compute it if it does not exist yet (requires
@@ -1431,6 +1453,23 @@ class SuperSegmentationObject(object):
                 self.calculate_skeleton()
                 return True
             return False
+
+    def load_skeleton_kimimaro(self, skel) :
+        """
+        Loads skeleton and needs inormation which one to load.
+
+        Returns:
+            True if successfully loaded/generated skeleton, else False.
+        """
+        skel_path = self.ssv_dir + ("%s.pkl" % skel)
+        if skel == "k_skeleton":
+            self.k_skeleton = load_pkl2obj(skel_path)
+        elif skel == "knx_skeleton":
+            self.knx_skeleton = load_pkl2obj(skel_path)
+        elif skel == "knx_skeleton_dict":
+            self.knx_skeleton_dict = load_pkl2obj(skel_path)
+        else:
+            print ("unknown skeleton")
 
     def syn_sign_ratio(self, weighted: bool = True,
                        recompute: bool = True,
@@ -3056,6 +3095,15 @@ class SuperSegmentationObject(object):
         self.enable_locking = locking_tmp
         return res
 
+    def cnn_axoness2skel_kimimaro(self, **kwargs):
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh.cnn_axoness2skel_kimimaro(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
+
     def average_node_axoness_views(self, **kwargs):
         """
         Apply a sliding window averaging along the axon predictions stored at the
@@ -3227,10 +3275,61 @@ class SuperSegmentationObject(object):
             The shortest path in nanometers for each start coordinate.
         """
         if axoness_key is None:
-            axoness_key = 'axoness_avg{}'.format(global_params.config['compartments'][
-                                            'dist_axoness_averaging'])
+            axoness_key = 'axoness_avg{}'.format(global_params.config['compartments']
+                                            ['dist_axoness_averaging'])
         nodes = self.skeleton['nodes']
         soma_ixs = np.nonzero(self.skeleton[axoness_key] == 2)[0]
+        if np.sum(soma_ixs) == 0:
+            return [np.inf] * len(coordinates)
+        graph = self.weighted_graph(add_node_attr=[axoness_key])
+        kdt = scipy.spatial.cKDTree(nodes)
+        dists, start_ixs = kdt.query(coordinates, n_jobs=self.nb_cpus)
+        log_reps.debug(f'Computing shortest paths to soma for {len(start_ixs)} '
+                       f'starting nodes.')
+        shortest_paths_of_interest = []
+        for ix in start_ixs:
+            shortest_paths = nx.single_source_dijkstra_path_length(graph, ix)
+            # get the shortest path to a soma
+            curr_path = np.min([shortest_paths[soma_ix] for soma_ix in soma_ixs])
+            shortest_paths_of_interest.append(curr_path)
+        return shortest_paths_of_interest
+
+    def shortestpath2soma_kimimaro(self, coordinates: np.ndarray,
+                          axoness_key: Optional[str] = None) -> List[float]:
+        """
+        Computes the shortest path to the soma along :py:attr:`~skeleton`.
+        Cell compartment predictions must exist in ``self.skeleton['axoness_avg10000']``,
+        see :func:`~syconn.exec.exec_multiview.run_semsegaxoness_mapping`.
+        Requires a populated :py:attr:`~skeleton`, e.g. via :func:`~load_skeleton`.
+
+        Args:
+            coordinates: Starting coordinates in voxel coordinates; shape of (N, 3).
+            axoness_key: Key to axon prediction stored in :py:attr:`~skeleton`.
+
+        Raises:
+            KeyError: If axon prediction does not exist.
+
+        Examples:
+            To get the shortest paths between all synapses and the soma use::
+
+                from syconn.reps.super_segmentation import *
+                from syconn import global_params
+
+                global_params.wd = '~/SyConn/example_cube1/'
+                ssd = SuperSegmentationDataset()
+                # get any cell reconstruction
+                ssv = ssd.get_super_segmentation_object(ssd.ssv_ids[0])
+                # get synapse coordinates in voxels.
+                syns = np.array([syn.rep_coord for syn in ssv.syn_ssv])
+                shortest_paths = ssv.shortestpath2soma(syns)
+
+        Returns:
+            The shortest path in nanometers for each start coordinate.
+        """
+        if axoness_key is None:
+            axoness_key = 'axoness_avg{}'.format(global_params.config['compartments']['dist_axoness_averaging'])
+        nodes = self.knx_skeleton_dict['nodes']
+        soma_ixs = np.nonzero(self.knx_skeleton_dictc[axoness_key] == 2)[0]
         if np.sum(soma_ixs) == 0:
             return [np.inf] * len(coordinates)
         graph = self.weighted_graph(add_node_attr=[axoness_key])

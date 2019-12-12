@@ -629,6 +629,8 @@ def run_create_neuron_ssd():
     # Write SSV RAGs
     pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5)
     for ssv in ssd.ssvs:
+        if ssv.id not in cc_dict:
+            continue
         # get all nodes in CC of this SSV
         if len(cc_dict[ssv.id]) > 1:  # CCs with 1 node do not exist in the global RAG
             n_list = nx.node_connected_component(rag_g, ssv.id)
