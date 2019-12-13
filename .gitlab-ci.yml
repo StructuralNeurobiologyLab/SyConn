@@ -12,7 +12,6 @@ test:
     - pytest --ignore=tests/test_run.py
   except:
     - master
-    - bettersetup
 
 test-full:
   stage: test
@@ -23,7 +22,6 @@ test-full:
     - pytest
   only:
     - master
-    - bettersetup
   tags:
     - master
 
@@ -36,7 +34,6 @@ build:
     - conda activate pysyintegration_m
   only:
     - master
-    - bettersetup
   tags:
     - master
 
@@ -47,6 +44,5 @@ cleanup:
   when: always
   only:
     - master
-    - bettersetup
   tags:
     - master
