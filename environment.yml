@@ -46,6 +46,9 @@ dependencies:
   - pyyaml
   - cython
   - colorlog
+  - plyfile
+  - zmesh
+  - tensorboard
 
   # From -c menpo
   - osmesa
@@ -63,17 +66,6 @@ dependencies:
 
   # Required dependencies that are not yet available via conda:
   - pip:
-    - zmesh
-    - plyfile
-    # For importing the latest cell type model. TODO: transition to .pts models
-    - adabound
-
-    # For running a tensorboard server (optional):
-    # (Installing these via pip because currently conda packages are broken)
-    # TODO: Move these up to conda once they work again
-    - tensorflow
-    - tensorboard
-
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils

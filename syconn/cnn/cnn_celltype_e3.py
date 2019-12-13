@@ -26,7 +26,6 @@ from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.metrics import channel_metric
 from elektronn3.training import metrics
-import adabound
 
 
 class StackedConv2ScalarWithLatentAdd(nn.Module):
@@ -237,7 +236,7 @@ if __name__ == "__main__":
         lr=lr,
         amsgrad=True
     )
-    # optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-3, final_lr=0.1)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have
