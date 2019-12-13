@@ -139,7 +139,8 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
 
     cube_size = np.array([512, 512, 256])
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary, cube_size, '~/cd_tmp/',
+    boundary = (kd.boundary/2).astype(int) #if later working on mag=2
+    cd.initialize(kd, boundary, cube_size, '~/cd_tmp/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True)
     multi_params = [(cube_size, offset) for offset in cd.coord_dict]
@@ -178,7 +179,6 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
         os.mkdir(zipname)
     multi_params = [(pathdict_filepath, ssv_id, zipname) for ssv_id in multi_params]
     # create SSV skeletons, requires SV skeletons!
-
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
     outfile2 = qu.QSUB_script(multi_params, "kimimaromerge", log=log,
@@ -225,7 +225,7 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
 
     #return ssv_id_list
 
-def map_axoness2kimimaro_skeleton(ssv_id_list, max_n_jobs: Optional[int] = None):
+def map_axoness2kimimaro_skeleton(max_n_jobs: Optional[int] = None):
     #code from exec_multiview rum_semsegaxoness_mapping
 
     if max_n_jobs is None:

@@ -13,8 +13,10 @@ import os as os
 import kimimaro
 import tqdm
 import time
-from syconn.handler.basics import load_pkl2obj, write_obj2pkl
+from syconn.handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 import networkx as nx
+from syconn import global_params
+
 
 try:
     import cPickle as pkl
@@ -25,7 +27,9 @@ except ImportError:
 def kimimaro_skelgen(cube_size, cube_offset):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
+
     seg = kd.from_overlaycubes_to_matrix(cube_size, cube_offset, mag=2)
+
     seg_cell = np.zeros_like(seg)
     for x in range(seg.shape[0]):
         for y in range(seg.shape[1]):
@@ -184,7 +188,9 @@ def kimimaro_skels_tokzip(cell_skel, cell_id, zipname):
     pbar = tqdm.tqdm(total=len(cv) + len(cell_skel.edges))
     for i,v in enumerate(cv):
         c = cv[i]
-        n = SkeletonNode().from_scratch(anno, int(c[0]/10)+5400, int(c[1]/10)+ 5900, int(c[2]/20)+3000)
+        #n = SkeletonNode().from_scratch(anno, int(c[0]/10)+5400, int(c[1]/10)+ 5900, int(c[2]/20)+3000)
+        #above only for example_cube with certain offset
+        n = SkeletonNode().from_scratch(anno, int(c[0] / 10), int(c[1] / 10), int(c[2] / 20) )
         node_mapping[i] = n
         anno.addNode(n)
         pbar.update(1)
