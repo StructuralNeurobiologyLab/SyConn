@@ -9,7 +9,7 @@ test:
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade -e .
-    - pytest --ignore=tests/test_run.py
+    - python -m pytest --ignore=tests/test_run.py
   except:
     - master
 
@@ -18,7 +18,7 @@ test-full:
   script:
     - source ~/.bashrc
     - conda activate pysyintegration_m
-    - pytest
+    - python -m pytest
   only:
     - master
   tags:
@@ -31,7 +31,7 @@ build:
     - conda env create -f environment.yml -n pysyintegration_m python
     - source ~/.bashrc
     - conda activate pysyintegration_m
-    - pip install --no-deps -v -e .
+    - pip install --upgrade --no-deps -v -e .
   only:
     - master
   tags:
