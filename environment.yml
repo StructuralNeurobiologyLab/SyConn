@@ -57,6 +57,7 @@ dependencies:
   - pytest
   - pytest-runner
   - pytest-cov
+  - pytest-forked
 
   # For docs (optional):
   - sphinx
