@@ -26,6 +26,7 @@ import networkx as nx
 import contextlib
 import tqdm
 import warnings
+from typing import List, Union
 from plyfile import PlyData
 from . import log_handler
 from .. import global_params
@@ -571,18 +572,19 @@ def convert_keys_byte2str(dc):
     return dc
 
 
-def chunkify(lst, n):
+def chunkify(lst: Union[list, np.ndarray], n: int) -> List[list]:
     """
-    Splits list into n sub-lists.
+    Splits list into ``np.min([n, len(lst)])`` sub-lists.
 
-    Parameters
-    ----------
-    lst : List
-    n : int
+    Args:
+        lst:
+        n:
+    Examples:
+        >>> chunkify(np.arange(10), 2)
+        >>> chunkify(np.arange(10), 100)
 
-    Returns
-    -------
-
+    Returns:
+        List of chunks. Length is ``np.min([n, len(lst)])``.
     """
     if len(lst) < n:
         n = len(lst)

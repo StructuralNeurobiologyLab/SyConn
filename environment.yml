@@ -19,7 +19,6 @@ dependencies:
   - freeglut
   - pyopengl
   - python-snappy
-  - m2r
   - ipython
   - h5py
   - matplotlib
@@ -55,7 +54,7 @@ dependencies:
   - pytest
   - pytest-runner
   - pytest-cov
-  - pytest-xdist
+  - pytest-forked
 
   # For docs (optional):
   - sphinx

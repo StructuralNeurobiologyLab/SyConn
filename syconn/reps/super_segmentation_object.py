@@ -2918,6 +2918,7 @@ class SuperSegmentationObject(object):
             majority attribute value is used.
         attr_keys : List[str]
             Attribute identifier
+
         Returns
         -------
         List
