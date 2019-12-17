@@ -685,7 +685,7 @@ def run_glia_prediction(e3: bool = False):
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     multi_params = chunkify(sd.so_dir_paths, global_params.config.ngpu_total * 2)
     # get model properties
-    if e3 == True:
+    if e3 is True:
         model_kwargs = 'get_glia_model_e3'
     else:
         m = get_glia_model()
