@@ -831,6 +831,17 @@ def _contact_site_detection_thread(args):
 
 
 def detect_cs(arr):
+    """
+
+    Args:
+        arr: Takes a 3-d array of cell_ids to be processed for cell detection.
+
+    Returns: 3-d array corresponding to edge locations. Element of array is a
+            64-bit cell id composite of two 32-bit ids corresponding to
+            center cell-id and maximum count cell_id in neighbourhood
+            of center cell_id
+
+    """
     jac = np.zeros([3, 3, 3], dtype=np.int)
     jac[1, 1, 1] = -6
     jac[1, 1, 0] = 1
