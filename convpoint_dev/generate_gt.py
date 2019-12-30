@@ -10,9 +10,12 @@ import os
 import glob
 import re
 import pickle as pkl
+from syconn.handler.multiviews import generate_rendering_locs
+from syconn.proc.graphs import create_graph_from_coords
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
 from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation_helper import create_sso_skeleton_fast
 from syconn import global_params
 from syconn.handler.multiviews import str2intconverter
 from syconn.mp.mp_utils import start_multiprocess_imap
@@ -97,9 +100,12 @@ def labels2mesh(args):
     # save labels in merged label array
     t_labels[0:len(vertex_labels)] = vertex_labels
 
-    # load skeleton
+    # load skeleton (There are different skeleton generation algorithms outcommented)
     sso.load_skeleton()
-    skel = sso.skeleton
+    skel = create_sso_skeleton_fast(sso)
+    # skel = sso.skeleton
+    # locs = generate_rendering_locs(vertices, 1000)
+    # skel_rend = create_graph_from_coords(locs, mst=True)
 
     # pack all results into single dict
     gt_dict = {'nodes': skel['nodes']*sso.scaling, 'edges': skel['edges'], 'vertices': t_vertices,
