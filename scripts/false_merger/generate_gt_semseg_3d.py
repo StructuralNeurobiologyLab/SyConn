@@ -64,6 +64,8 @@ def labels2mesh(args):
 
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([int(float(n.data['merger_gt'])) for n in a_nodes], dtype=np.int)
+    a_node_labels_all = np.copy(a_node_labels)
+
 
     # filter nodes where label = -1
     a_node_coords = a_node_coords[(a_node_labels != -1)]
@@ -90,7 +92,7 @@ def labels2mesh(args):
 
     # pack all results into single dict
     gt_dict = {'skel_nodes': skel['nodes']*sso.scaling, 'skel_edges': skel['edges'], 'mesh_verts': vertices,
-               'vert_labels': vertex_labels, 'node_labels': a_node_labels, 'skel2mesh': skel2mesh_dict}
+               'vert_labels': vertex_labels, 'node_labels': a_node_labels_all, 'skel2mesh': skel2mesh_dict}
 
     # save training info as pickle
     with open("{}/sso_{}_info.pkl".format(out_path, sso.id), 'wb') as f:
