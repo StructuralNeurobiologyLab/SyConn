@@ -12,13 +12,11 @@ import re
 import pickle as pkl
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
-from syconn.proc.meshes import write_mesh2kzip
-from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn import global_params
 from syconn.handler.multiviews import str2intconverter
 from syconn.mp.mp_utils import start_multiprocess_imap
 from multiprocessing import cpu_count
-from collections import defaultdict
 
 
 def labels2mesh(args):
@@ -34,10 +32,42 @@ def labels2mesh(args):
     # get sso
     sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version='semsegaxoness')
+    sso.load_attr_dict()
 
-    # load mesh
-    indices, vertices, normals = sso.mesh
-    vertices = vertices.reshape((-1, 3))
+    encoding = {0: 'dendrite', 1: 'axon', 2: 'soma', 3: 'bouton', 4: 'terminal', 5: 'mi', 6: 'vc', 7: 'sj'}
+
+    # load cell and cell organelles (order of meshes in array is important for later merging process)
+    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
+    label_map = [-1, 5, 6, 7]
+    vertices_l = 0
+    indices_l = 0
+
+    # find sizes
+    for mesh in meshes:
+        indices, vertices, normals = mesh
+        vertices = vertices.reshape((-1, 3))
+        indices = indices.reshape((-1, 3))
+        vertices_l += len(vertices)
+        indices_l += len(indices)
+
+    # prepare merged arrays
+    t_vertices = np.zeros((vertices_l, 3))
+    t_indices = np.zeros((indices_l, 3))
+    t_labels = np.zeros((vertices_l, 1))
+
+    # merge meshes
+    vertices_o = 0
+    indices_o = 0
+    for ix, mesh in enumerate(meshes):
+        indices, vertices, normals = mesh
+        vertices = vertices.reshape((-1, 3))
+        indices = indices.reshape((-1, 3))
+
+        t_vertices[vertices_o:vertices_o+len(vertices)] = vertices
+        t_labels[vertices_o:vertices_o+len(vertices)] = label_map[ix]
+        vertices_o += len(vertices)
+        t_indices[indices_o:indices_o+len(indices)] = indices
+        indices_o += len(indices)
 
     # load annotation object
     a_obj = load_skeleton(kzip_path)
@@ -59,38 +89,25 @@ def labels2mesh(args):
     tree = KDTree(a_node_coords)
 
     # transfer labels from skeleton to mesh
+    indices, vertices, normals = meshes[0]
+    vertices = vertices.reshape((-1, 3))
     dist, ind = tree.query(vertices, k=1)  # k-nearest neighbour
     vertex_labels = a_node_labels[ind]  # retrieving labels of vertices
+
+    # save labels in merged label array
+    t_labels[0:len(vertex_labels)] = vertex_labels
 
     # load skeleton
     sso.load_skeleton()
     skel = sso.skeleton
 
-    tree = KDTree(skel['nodes']*sso.scaling)
-    dist, ind = tree.query(vertices, k=1)
-
-    # create mapping array between skeleton nodes and mesh nodes
-    skel2mesh_dict = defaultdict(list)
-    for vertex_idx, skel_idx in enumerate(ind):
-        skel2mesh_dict[skel_idx[0]].append(vertex_idx)
-
     # pack all results into single dict
-    gt_dict = {'skel_nodes': skel['nodes']*sso.scaling, 'skel_edges': skel['edges'], 'mesh_verts': vertices,
-               'vert_labels': vertex_labels, 'skel2mesh': skel2mesh_dict}
+    gt_dict = {'nodes': skel['nodes']*sso.scaling, 'edges': skel['edges'], 'vertices': t_vertices,
+               'indices': t_indices, 'normals': np.array([]), 'labels': t_labels, 'encoding': encoding}
 
-    # save training info as pickle
-    with open("{}/sso_{}_info.pkl".format(out_path, sso.id), 'wb') as f:
+    # save gt as pickle
+    with open("{}/sso_{}.pkl".format(out_path, sso.id), 'wb') as f:
         pkl.dump(gt_dict, f)
-
-    if out_path is not None:
-        # dendrite, axon, soma, bouton, terminal, background
-        colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
-                  [0.05, 0.6, 0.6, 1], [0.6, 0.05, 0.05, 1], [0.9, 0.9, 0.9, 1]]
-        colors = (np.array(colors) * 255).astype(np.uint8)
-        color_array_mesh = colors[vertex_labels][:, 0]
-        write_mesh2kzip("{}/sso_{}_gtlabels.k.zip".format(out_path, sso.id),
-                        sso.mesh[0], sso.mesh[1], sso.mesh[2], color_array_mesh,
-                        ply_fname="gtlabels.ply")
 
 
 def gt_generation(kzip_paths, dest_dir=None):
@@ -100,11 +117,13 @@ def gt_generation(kzip_paths, dest_dir=None):
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
 
-    dest_p_results = "{}/gt_results/".format(dest_dir)
+    dest_p_results = "{}/gt_full/".format(dest_dir)
     if not os.path.isdir(dest_p_results):
         os.makedirs(dest_p_results)
 
     params = [(p, dest_p_results) for p in kzip_paths]
+
+    # labels2mesh(params[0])
 
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
