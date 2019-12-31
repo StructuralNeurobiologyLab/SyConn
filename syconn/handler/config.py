@@ -333,7 +333,7 @@ class DynConfig(Config):
         return path_dict
 
     @property
-    def kd_organelle_seg_paths(self)-> Dict[str, str]:
+    def kd_organelle_seg_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle segmentations.
 
@@ -646,6 +646,20 @@ class DynConfig(Config):
     def ngpu_total(self) -> int:
         return self['nnodes_total'] * self['ngpus_per_node']
 
+    @property
+    def asym_label(self) -> Optional[int]:
+        try:
+            return self.entries['cell_objects']['asym_label']
+        except KeyError:
+            return None
+
+    @property
+    def sym_label(self) -> Optional[int]:
+        try:
+            return self.entries['cell_objects']['sym_label']
+        except KeyError:
+            return None
+
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
@@ -787,6 +801,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
               # above will be assigned synaptic sign (-1, inhibitory) and <= will be
               # (1, excitatory)
               sym_thresh: 0.225
+              # labels are None by default
+              asym_label:
+              sym_label:
 
             meshes:
               allow_mesh_gen_cells:
@@ -963,10 +980,16 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     entries['glia']['prior_glia_removal'] = prior_glia_removal
     if key_value_pairs is not None:
         for k, v in key_value_pairs:
-            entries[k] = v
+            if k not in entries:
+                raise KeyError(f'Key in provided key-value {k}:{v} pair '
+                               f'does not exist in default config.')
+            if type(v) is dict:
+                entries[k].update(v)
+            else:
+                entries[k] = v
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
-        raise ValueError(f'Attempting to overwrite existing config file at '
+        raise ValueError(f'Overwrite attempt of existing config file at '
                          f'{default_conf.path_config}.')
     default_conf.write_config(working_dir)
 

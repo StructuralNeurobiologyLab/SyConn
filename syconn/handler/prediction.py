@@ -24,6 +24,7 @@ import tqdm
 from logging import Logger
 import shutil
 from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple
+from scipy.ndimage import zoom
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -588,13 +589,14 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     knossos dataset located at `kd_path`.
     Prediction results will be written to KnossosDatasets called `target_names`
     at `target_path`. If no threshold and only one channel per `target_names`
-    is given, the resulting KnossosDataset will contain a probability map.
-    Otherwise the classification results will be written (to the raw channel).
+    is given, the resulting KnossosDataset will contain a probability map in the
+    raw channel as uint8 (0..255).
+    Otherwise the classification results will be written to the overlay channel.
 
     Args:
-        kd_path: Path to knossos dataset .conf file.
-        target_path: Destination folder for target knossos datasets containing
-            the prediction.
+        kd_path: Path to KnossosDataset .conf file of the raw data.
+        target_path: Destination directory for the output KnossosDataset(s)
+            which contain the prediction(s).
         model_path: Path to elektronn3 model for predictions. Loaded via the
             :class:`~elektronn3.inference.inference.Predictor`.
         n_channel: Number of channels predicted by the model.
@@ -606,7 +608,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             Defaults to ``[[ix for ix in range(n_channel)]]``.
             Length must match with `target_names`.
         channel_thresholds: Thresholds for channels: If None and number of channels
-            for target kd is 1: probabilities are stored else: 0.5 as default
+            for target kd is 1: probabilities are stored. Else: 0.5 as default
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
         log: Logger.
         mag: Data magnification level.
@@ -676,7 +678,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
                     for ch_ids in multi_params]
-    log.info('Starting dense prediction of {} in {:d} chunk(s).'.format(
+    log.info('Started dense prediction of {} in {:d} chunk(s).'.format(
         ", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
         'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
@@ -704,6 +706,7 @@ def dense_predictor(args):
             path to model
         offset : 
         chunk_size:
+        ...
         )
     """
     # TODO: remove chunk necessity
@@ -743,29 +746,38 @@ def dense_predictor(args):
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
+
         size = np.array(np.array(ch.size) + 2 * np.array(ol),
                         dtype=np.int)
+
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
+        start = time.time()
         raw = kd.load_raw(size=size*mag, offset=coords*mag, mag=mag)
-        # start = time.time()
+        print(f'loading took {time.time()-start}. {raw.shape}')
+
+        start = time.time()
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
                                       is_zyx=True, return_zyx=True)
-        # dt = time.time() - start
-        # print(f'Finished prediction after {dt}s, thats'
-        #       f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s')
+
+        dt = time.time() - start
+        print(f'Finished prediction after {dt}s, That is'
+              f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s. {pred.shape}')
+
         # slice out the original input volume along ZYX, i.e. the last three axes
         pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
         # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
-            data = np.zeros_like(pred[0]).astype(np.uint8)
+            data = np.zeros_like(pred[0]).astype(np.uint64)
+            save_as_raw = not (len(ids) > 1)
             for label in ids:
                 t = channel_thresholds[label]
                 # if threshold is given or multiple target labels per dataset
-                # store classification restuls
-                if t is not None or len(ids) > 1:
+                # store classification results
+                # TODO: argmax might be more reasonable
+                if not save_as_raw:
                     if t is None:
                         t = 255 / 2
                     if t < 1.:
@@ -776,9 +788,16 @@ def dense_predictor(args):
                     # no thresholding and only one label in the target KnossosDataset
                     # -> store probability map.
                     data = pred[label]
-            target_kd_dict[path].save_raw(
-                offset=ch.coordinates*mag, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
-                fast_resampling=True, upsample=False)
+            if save_as_raw:
+                target_kd_dict[path].save_raw(
+                    offset=ch.coordinates*mag, data=data.astype(np.uint8),
+                    data_mag=mag, mags=[mag, mag*2, mag*4],
+                    fast_resampling=True, upsample=False)
+            else:
+                target_kd_dict[path].save_seg(
+                    offset=ch.coordinates * mag, data=data, data_mag=mag,
+                    mags=[mag, mag * 2, mag * 4],
+                    fast_resampling=True, upsample=False)
         # dt = time.time() - start
         # print(f'Finished writing data after {dt}s.')
 

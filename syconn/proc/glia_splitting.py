@@ -116,7 +116,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(g, sv_size_dict)
     log_proc.info("Finished preparation of SSV size dictionary based "
-                  "on bounding box diagional of corresponding SVs.")
+                  "on bounding box diagonal of corresponding SVs.")
 
     # add CCs with single neuron SV manually
     neuron_ids = list(neuron_g.nodes())

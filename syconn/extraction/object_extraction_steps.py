@@ -676,7 +676,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     merge_list_dict_path = cset.path_head_folder + "merge_list_dict.pkl"
 
     f = open(merge_list_dict_path, "wb")
-    pkl.dump(merge_list_dict, f)
+    pkl.dump(merge_list_dict, f, protocol=4)
     f.close()
     if n_chunk_jobs is None:
         n_chunk_jobs = global_params.config.ncore_total
@@ -819,7 +819,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
             for key, value in result[hdf5_name].items():
                 remap_dict[key].append(value)
         with open("%s/remapping_dict.pkl" % dataset_path, "wb") as f:
-            pkl.dump(remap_dict, f)
+            pkl.dump(remap_dict, f, protocol=4)
 
 
 def _extract_voxels_thread(args):

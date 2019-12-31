@@ -61,6 +61,7 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     Generate KnossosDatasets for given subcellular structure key (e.g. 'mi').
     The required initial data format is a chunkdataset located at
     ``"{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)``.
+    This folder will be removed after the KD has been generated successfully!
     Resulting KD will be stored at
     ``"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)``.
     See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` for details of
@@ -114,6 +115,8 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
                              debug=False, size=size, offset=offset,
                              load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
                              transf_func_kd_overlay=transf_func_kd_overlay[co], log=log, **kwargs)
+    shutil.rmtree(cd_dir, ignore_errors=True)
+
 
 
 def from_probabilities_to_kd(cset, filename, hdf5names,
@@ -208,8 +211,6 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
         is True.
     log : logging.logger
         # TODO: pass log to all methods called
-
-
     """
     if log is None:
         log = log_extraction

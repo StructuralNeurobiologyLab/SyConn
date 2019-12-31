@@ -7,10 +7,12 @@ from syconn import global_params
 from syconn.handler.prediction import predict_dense_to_kd
 
 
-def predict_myelin(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
+def predict_myelin(kd_raw_path: str = None,
+        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Generates a probability map for myelinated neuron voxels at
-    ``global_params.config.working_dir + '/knossosdatasets/myelin/'``.
+    ``global_params.config.working_dir + '/knossosdatasets/myelin/'`` stored
+    in the raw channel, i.e. as uint8 (0..255).
 
     Examples:
         The entire myelin prediction for a single cell reconstruction including a smoothing
@@ -38,11 +40,14 @@ def predict_myelin(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
                 additional_keys=['myelin', 'myelin_avg10000'])
 
     Args:
+        kd_raw_path: Path to the KnossosDataset of the raw data.
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
 
     """
-    predict_dense_to_kd(global_params.config.kd_seg_path,
+    if kd_raw_path is None:
+        kd_raw_path = global_params.config.kd_seg_path
+    predict_dense_to_kd(kd_raw_path,
                         global_params.config.working_dir + '/knossosdatasets/',
                         global_params.config.mpath_myelin, n_channel=2, mag=4,
                         target_channels=[(1, )], target_names=['myelin'],
@@ -52,7 +57,8 @@ def predict_myelin(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
 def predict_synapsetype(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Generates synapse type predictions at every dataset voxel stored in
-    ``global_params.config.working_dir + '/knossosdatasets/synapsetype/'``.
+    ``global_params.config.working_dir + '/knossosdatasets/syntype_v2/'`` as
+    overlay.
 
     Notes:
         Label 1: asymmetric, label 2: symmetric.
@@ -73,7 +79,8 @@ def predict_synapsetype(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
 def predict_cellorganelles(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Generates synapse type predictions at every dataset voxel stored in
-    ``global_params.config.working_dir + '/knossosdatasets/synapsetype/'``.
+    ``global_params.config.working_dir + '/knossosdatasets/synapsetype/'`` as
+    overlay.
 
     Notes:
         Labels:

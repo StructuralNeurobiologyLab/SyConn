@@ -143,8 +143,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         merge_prop_dicts([syn_props, curr_syn_props])
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
-    log.info('Finished contact site (#objects: {}) and synapse (#objects: {})'
-             ' extraction.'.format(len(cs_props[0]), len(syn_props[0])))
+    log.info('Finished extraction of contact sites (#objects: {}) and synapses'
+             ' (#objects: {}).'.format(len(cs_props[0]), len(syn_props[0])))
     if len(syn_props[0]) == 0:
         log.critical('WARNING: Did not find any synapses during extraction step.')
     # TODO: extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
@@ -158,26 +158,26 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     # TODO: size filter here or during write-out? TODO: use config parameter
     dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(cs_props, f)
+        pkl.dump(cs_props, f, protocol=4)
     del cs_props
     dict_paths.append(dict_p)
 
     dict_p = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(syn_props, f)
+        pkl.dump(syn_props, f, protocol=4)
     del syn_props
     dict_paths.append(dict_p)
 
     # convert counting dicts to store ratio of syn. type voxels
     dict_p = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(tot_sym_cnt, f)
+        pkl.dump(tot_sym_cnt, f, protocol=4)
     del tot_sym_cnt
     dict_paths.append(dict_p)
 
     dict_p = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(tot_asym_cnt, f)
+        pkl.dump(tot_asym_cnt, f, protocol=4)
     del tot_asym_cnt
     dict_paths.append(dict_p)
 
@@ -258,6 +258,13 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     chunks = args[0]
     knossos_path = args[1]
 
+    if global_params.config.syntype_available and \
+       (global_params.config.sym_label == global_params.config.asym_label) and \
+       (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
+        raise ValueError('Both KnossosDatasets and labels for symmetric and '
+                         'asymmetric synapses are identical. Either one '
+                         'must differ.')
+
     kd = kd_factory(knossos_path)
     # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
     #  see below.
@@ -296,8 +303,6 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         contacts = np.asarray(detect_cs(data))
         cum_dt_proc += time.time() - start
 
-        # store syn information as: synaptic voxel (1), symmetric type (2)
-        # and asymmetric type (3)
         start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
@@ -305,19 +310,37 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         syn_d = (kd_syn.load_seg(size=size, offset=offset, mag=1,
                                  datatype=np.uint64) > 0).astype(np.uint8).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
-        # TODO: add thresholds to global_params
         if global_params.config.syntype_available:
-            sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                     >= 123).astype(np.uint8)
-            asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                      >= 123).astype(np.uint8)
+            if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
+                # TODO: add thresholds to global_params
+                if global_params.config.sym_label is None:
+                    sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                             >= 123).astype(np.uint8)
+                else:
+                    sym_d = (kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                             == global_params.config.sym_label).astype(np.uint8)
+
+                if global_params.config.asym_label is None:
+                    asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                              >= 123).astype(np.uint8)
+                else:
+                    asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                              == global_params.config.asym_label).astype(np.uint8)
+            else:
+                assert global_params.config.asym_label is not None,\
+                    'Label of asymmetric synapses is not set.'
+                assert global_params.config.sym_label is not None,\
+                    'Label of symmetric synapses is not set.'
+                # load synapse type classification results stored in the same KD
+                sym_d = kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                # create copy
+                asym_d = np.array(sym_d == global_params.config.asym_label, dtype=np.uint8)
+                sym_d = np.array(sym_d == global_params.config.sym_label, dtype=np.uint8)
         else:
             sym_d = np.zeros_like(syn_d)
             asym_d = np.zeros_like(syn_d)
         cum_dt_data += time.time() - start
 
-        # TODO: refactor such that CS are not dilated / closed? This would require an independent
-        #  property analysis.
         # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
         start = time.time()
         # returns rep. coords, bounding box and size for every ID in contacts
@@ -336,7 +359,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             binary_mask = (sub_vol == ix).astype(np.int)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
-            # TODO: add to parameters
+            # TODO: add to parameters to config
             res = scipy.ndimage.binary_dilation(
                 res, iterations=2)
             # only update background or the objects itself

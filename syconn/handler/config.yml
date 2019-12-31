@@ -104,6 +104,9 @@ cell_objects:
   # above will be assigned synaptic sign (-1, inhibitory) and <= will be
   # (1, excitatory)
   sym_thresh: 0.225
+  # labels are None by default
+  asym_label:
+  sym_label:
 
 meshes:
   allow_mesh_gen_cells:

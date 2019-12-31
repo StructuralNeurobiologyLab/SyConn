@@ -258,7 +258,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     all_times = []
     step_names = []
 
-    # extracting mapping
+    # extract mapping
     start = time.time()
     multi_params = list(basics.chunkify_successive(
         chunk_list, np.max([len(chunk_list) // n_chunk_jobs, 1])))
@@ -307,19 +307,19 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
 
     sc_mesh_worker_dc = "{}/sc_mesh_worker_dict.pkl".format(global_params.config.temp_path)
     with open(sc_mesh_worker_dc, "wb") as f:
-        pkl.dump(subcell_mesh_workers, f)
+        pkl.dump(subcell_mesh_workers, f, protocol=4)
     del subcell_mesh_workers
 
     c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
     with open(c_mesh_worker_dc, "wb") as f:
-        pkl.dump(cell_mesh_workers, f)
+        pkl.dump(cell_mesh_workers, f, protocol=4)
     del cell_mesh_workers
 
     # convert mapping dicts to store ratio of number of overlapping voxels
     # TODO: size filter here or during write-out?
     prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
     with open(prop_dict_p, "wb") as f:
-        pkl.dump(tot_cp, f)
+        pkl.dump(tot_cp, f, protocol=4)
 
     # use dictionary for rep coord (just use any, they all share the same keys)
     for k in tot_cp[0]:
@@ -333,20 +333,20 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
         # subcell ID -> cell ID -> ratio
         mapping_dict_path = "{}/{}_mapping_dict.pkl".format(global_params.config.temp_path, k)
         with open(mapping_dict_path, "wb") as f:
-            pkl.dump(tot_scm[ii], f)
+            pkl.dump(tot_scm[ii], f, protocol=4)
 
         # cell ID -> subcell ID -> ratio
         tot_scm_inv = invert_mdc(tot_scm[ii])
         mapping_dict_path_inv = "{}_inv.pkl".format(mapping_dict_path[:-4])
         with open(mapping_dict_path_inv, "wb") as f:
-            pkl.dump(tot_scm_inv, f)
+            pkl.dump(tot_scm_inv, f, protocol=4)
         tot_scm[ii] = {}  # free space
         del tot_scm_inv
 
         prop_dict = tot_scp[ii]
         prop_dict_p = "{}/{}_prop_dict.pkl".format(global_params.config.temp_path, k)
         with open(prop_dict_p, "wb") as f:
-            pkl.dump(prop_dict, f)
+            pkl.dump(prop_dict, f, protocol=4)
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=k, version=0,
             n_folders_fs=n_folders_fs_sc)
@@ -517,7 +517,7 @@ def _map_subcell_extract_props_thread(args):
             p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
                                                  segtype, worker_nr)
             output_worker = open(p, 'wb')
-            pkl.dump(big_mesh_dict[segtype], output_worker)
+            pkl.dump(big_mesh_dict[segtype], output_worker, protocol=4)
             output_worker.close()
             dt_times_dc['mesh_io'] += time.time() - start
             ids_list.append(list(big_mesh_dict[segtype].keys()))

@@ -92,7 +92,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           max_n_jobs: Optional[int] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
-                          cube_of_interest_bb: Optional[np.ndarray] = None):
+                          cube_of_interest_bb: Optional[np.ndarray] = None,
+                          n_cores: int = 1):
     """
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
@@ -112,13 +113,17 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
             which is processed (minimum and maximum coordinates in mag1 voxels,
             XYZ).
+        n_cores: Cores used within :func:`~map_subcell_extract_props`.
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
         transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
     if chunk_size is None:
+        chunk_size_kdinit = [1024, 1024, 512]
         chunk_size = [512, 512, 512]
+    else:
+        chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
         # loading cached data or adapt number of jobs/cache size dynamically,
@@ -130,7 +135,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
              'type available: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
+
+    ps = [Process(target=kd_init, args=[co, chunk_size_kdinit, transf_func_kd_overlay,
                                         load_cellorganelles_from_kd_overlaycubes,
                                         cube_of_interest_bb, log])
           for co in global_params.config['existing_cell_organelles']]
@@ -139,6 +145,9 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         time.sleep(5)
     for p in ps:
         p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -147,7 +156,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
-        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log)
+        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log,
+        n_cores=n_cores)
     log.info('Finished extraction and mapping after {:.2f}s.'
              ''.format(time.time() - start))
 
@@ -161,6 +171,9 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         time.sleep(5)
     for p in ps:
         p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
     log.info('Finished SD caching after {:.2f}s.'
              ''.format(time.time() - start))
 

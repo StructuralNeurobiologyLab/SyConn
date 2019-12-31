@@ -304,7 +304,10 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
 
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
+    n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
+                       len(rel_synssv_to_syn_ids))
+    voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
+                               n_used_paths)
 
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -318,13 +321,11 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         os.makedirs(sd_syn_ssv.so_storage_path + p)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
-    # TODO: reduce number of used paths - e.g. by
-    #  `red_fact = max(n_folders_fs // 1000, 1)` `voxel_rel_paths[ii:ii + red_fact]` and
-    #  `n_used_paths =  np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths) // red_fact])`
-    n_used_paths = np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths)])
+
     rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
-    multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii:ii + 1],  # only get one element
-                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for ii in range(n_used_paths)]
+    multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
+                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for
+                    ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
@@ -348,8 +349,8 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
 
     All objects of the resulting 'syn_ssv' SegmentationDataset contain the
     following attributes:
-    ['syn_sign', 'syn_type_sym_ratio', 'sj_ids', 'cs_ids', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
-    'neuron_partners']
+    ['syn_sign', 'syn_type_sym_ratio', 'sj_ids', 'cs_ids', 'id_sj_ratio',
+    'id_cs_ratio', 'background_overlap_ratio', 'neuron_partners']
 
     Parameters
     ----------
@@ -373,7 +374,10 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
 
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
+    n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
+                       len(rel_synssv_to_syn_ids))
+    voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
+                               n_used_paths)
 
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -387,13 +391,11 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
         os.makedirs(sd_syn_ssv.so_storage_path + p)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
-    # TODO: reduce number of used paths - e.g. by
-    #  `red_fact = max(n_folders_fs // 1000, 1)` `voxel_rel_paths[ii:ii + red_fact]` and
-    #  `n_used_paths =  np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths) // red_fact])`
-    n_used_paths = np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths)])
+
     rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
-    multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii:ii + 1],  # only get one element
-                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for ii in range(n_used_paths)]
+    multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
+                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for
+                    ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread_old,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
@@ -1258,8 +1260,8 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
     assert "syn_ssv" in sj_sd.version_dict
     if (sym_label == asym_label) and (kd_asym_path == kd_sym_path):
         raise ValueError('Both KnossosDatasets and labels for symmetric and '
-                         'asymmetric synapses are identical. Either one of '
-                         'those needs to be different.')
+                         'asymmetric synapses are identical. Either one '
+                         'must differ.')
     paths = sj_sd.so_dir_paths
 
     # Partitioning the work
@@ -1982,7 +1984,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
     # (loop of skeleton node generation)
-    # make sure cache-arrays have ndim == 2, TODO: check when writing chached arrays
+    # make sure cache-arrays have ndim == 2, TODO: check when writing cached arrays
     m_sizes = np.multiply(m_sizes, m_syn_sign).squeeze()[:, None]  # N, 1
     m_axs = m_axs.squeeze()  # N, 2
     m_sp = m_sp.squeeze()  # N, 2
