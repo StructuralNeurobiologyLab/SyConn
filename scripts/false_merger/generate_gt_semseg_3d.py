@@ -58,14 +58,14 @@ def labels2mesh(args):
         a_obj = a_obj["skeleton"]
     a_nodes = list(a_obj.getNodes())
 
-    # extract node coordinates and labels
-    # a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
-    # a_node_labels = np.array([str2intconverter(n.getComment(), 'axgt') for n in a_nodes], dtype=np.int)
+    # Convert a_nodes to numpy array with shape (n_nodes, 3)
+    skel_nodes = [np.array(node.getCoordinate()) for node in a_nodes]
+    skel_nodes = np.array(skel_nodes)
 
+    # extract node coordinates and labels
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([int(float(n.data['merger_gt'])) for n in a_nodes], dtype=np.int)
     a_node_labels_all = np.copy(a_node_labels)
-
 
     # filter nodes where label = -1
     a_node_coords = a_node_coords[(a_node_labels != -1)]
@@ -82,7 +82,7 @@ def labels2mesh(args):
     # sso.load_skeleton()
     skel = sso.skeleton
 
-    tree = KDTree(skel['nodes']*sso.scaling)
+    tree = KDTree(skel_nodes*sso.scaling)
     dist, ind = tree.query(vertices, k=1)
 
     # create mapping array between skeleton nodes and mesh nodes
@@ -91,7 +91,7 @@ def labels2mesh(args):
         skel2mesh_dict[skel_idx[0]].append(vertex_idx)
 
     # pack all results into single dict
-    gt_dict = {'skel_nodes': skel['nodes']*sso.scaling, 'skel_edges': skel['edges'], 'mesh_verts': vertices,
+    gt_dict = {'skel_nodes': skel_nodes*sso.scaling, 'skel_edges': skel['edges'], 'mesh_verts': vertices,
                'vert_labels': vertex_labels, 'node_labels': a_node_labels_all, 'skel2mesh': skel2mesh_dict}
 
     # save training info as pickle
