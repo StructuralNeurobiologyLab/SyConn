@@ -29,7 +29,7 @@ build:
   stage: build
   # TODO: use conda environment for test stage
   script:
-    - conda env create -f environment.yml -n pysyintegration_m python
+    - conda env create -f environment.yml -n pysyintegration_m python --force
     - source ~/.bashrc
     - conda activate pysyintegration_m
   only:
