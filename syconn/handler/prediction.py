@@ -627,6 +627,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             coordinate in voxels in the respective magnification (see kwarg `mag`).
 
     """
+    # TODO: support pyk confs
     if log is None:
         log_name = 'dense_prediction'
         if target_names is not None:
@@ -668,7 +669,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(6)])
+                                          kd.experiment_name, [2**x for x in range(6)],)
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
     # init QSUB parameters

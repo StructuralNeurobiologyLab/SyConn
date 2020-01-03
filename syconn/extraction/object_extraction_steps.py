@@ -1261,30 +1261,33 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
                                as_raw=False, fast_downsampling=False, n_max_job=None,
                                unified_labels=False, orig_dtype=np.uint8, log=None):
     """
-    Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see knossos_utils.chunky for
-    details.
+    Batchjob version of :class:`knossos_utils.chunky.ChunkDataset.export_cset_to_kd`
+    method, see ``knossos_utils.chunky`` for details.
 
-    Parameters
-    ----------
-    cset :
-    kd :
-    name :
-    hdf5names :
-    n_cores :
-    offset :
-    size :
-    n_max_co_processes :
-    stride :
-    as_raw :
-    fast_downsampling :
-    overwrite :
-    unified_labels :
-    orig_dtype :
-    log:
-    n_max_job
+    Notes:
+        * KnossosDataset needs to be initialized beforehand (see
+          :func:`~KnossosDataset.initialize_without_conf`).
+        * Only works if data mag = 1.
 
-    Returns
-    -------
+    Args:
+        cset: Source ChunkDataset.
+        kd: Target KnossosDataset.
+        name:
+        hdf5names:
+        n_cores:
+        offset:
+        size:
+        n_max_co_processes:
+        stride:
+        overwrite:
+        as_raw:
+        fast_downsampling:
+        n_max_job:
+        unified_labels:
+        orig_dtype:
+        log:
+
+    Returns:
 
     """
     try:

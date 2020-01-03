@@ -106,7 +106,10 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
         shutil.rmtree(path)
     target_kd = knossosdataset.KnossosDataset()
     scale = np.array(global_params.config['scaling'], dtype=np.float32)
-    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
+    # TODO: make this a parameter
+    target_kd._cube_shape = (256, 256, 256)
+    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
+                                      create_pyk_conf=True)
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_from_knossos_path(path)
     from_probabilities_to_kd(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
@@ -116,7 +119,6 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
                              load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
                              transf_func_kd_overlay=transf_func_kd_overlay[co], log=log, **kwargs)
     shutil.rmtree(cd_dir, ignore_errors=True)
-
 
 
 def from_probabilities_to_kd(cset, filename, hdf5names,
