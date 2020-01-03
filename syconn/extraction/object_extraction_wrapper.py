@@ -118,7 +118,6 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     shutil.rmtree(cd_dir, ignore_errors=True)
 
 
-
 def from_probabilities_to_kd(cset, filename, hdf5names,
                           overlap="auto", sigmas=None, thresholds=None,
                           debug=False, swapdata=0, target_kd=None,

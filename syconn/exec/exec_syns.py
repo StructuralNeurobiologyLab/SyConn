@@ -72,7 +72,7 @@ def run_matrix_export():
     log.info('Connectivity matrix was exported to "{}".'.format(dest_folder))
 
 
-def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
+def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512),
                        n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
                        cube_of_interest_bb: Optional[np.ndarray] = None):

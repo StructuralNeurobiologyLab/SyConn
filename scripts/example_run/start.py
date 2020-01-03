@@ -60,12 +60,10 @@ if __name__ == '__main__':
     n_folders_fs_sc = 1000
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
-    if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
+    if not os.path.isdir(h5_dir):
         curr_dir = os.path.abspath(os.path.curdir) + '/'
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-        kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
-        if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
+        if not os.path.isdir(h5_dir):
             raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
@@ -168,9 +166,8 @@ if __name__ == '__main__':
     # TODO: launch all inferences in parallel
     exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
     # TODO: if performed, work-in paths of the resulting KDs to the config
-    #  TODO: might require also require adaptions in init_cell_subcell_sds
+    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
     exec_dense_prediction.predict_synapsetype()
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
@@ -245,8 +242,8 @@ if __name__ == '__main__':
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
         step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
-            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
+        step_str = "{:<10}{:<25}{:<20}{:<4s}\n".format(
+            f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_perc}%')
         time_summary_str += step_str
     log.info(time_summary_str)
     log.info('Setting up flask server for inspection. Annotated cell reconst'
@@ -256,3 +253,5 @@ if __name__ == '__main__':
                    '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10001'.format(
         fname_server, example_wd))
+
+
