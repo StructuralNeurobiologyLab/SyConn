@@ -302,8 +302,7 @@ def _gauss_threshold_connected_components_thread(args):
                                               offset[2]: membrane_data_shape[2]-offset[2]]
                 tmp_data[membrane_data > 255*.4] = 0
             elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:
-                kd_bar = knossosdataset.KnossosDataset()
-                kd_bar.initialize_from_knossos_path(membrane_kd_path)
+                kd_bar = kd_factory(membrane_kd_path)
                 membrane_data = kd_bar.load_raw(size=size, offset=box_offset,
                                                 mag=1).swapaxes(0, 2)
                 tmp_data[membrane_data > 255*.4] = 0

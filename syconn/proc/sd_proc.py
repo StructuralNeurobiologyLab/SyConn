@@ -1215,8 +1215,7 @@ def _export_sd_to_knossosdataset_thread(args):
 
     block_size = np.array([block_edge_length] * 3, dtype=np.int)
 
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
+    kd = basics.kd_factory(kd_path)
 
     sd = segmentation.SegmentationDataset(obj_type=obj_type,
                                           working_dir=working_dir,

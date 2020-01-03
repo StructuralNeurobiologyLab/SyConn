@@ -108,10 +108,10 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     scale = np.array(global_params.config['scaling'], dtype=np.float32)
     # TODO: make this a parameter
     target_kd._cube_shape = (256, 256, 256)
+    target_kd.scales = [scale, ]
     target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
-                                      create_pyk_conf=True)
-    target_kd = knossosdataset.KnossosDataset()
-    target_kd.initialize_from_knossos_path(path)
+                                      create_pyk_conf=True, create_knossos_conf=False)
+    target_kd = basics.kd_factory(path)
     from_probabilities_to_kd(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                              prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                              hdf5names=[co], n_max_co_processes=None, target_kd=target_kd,

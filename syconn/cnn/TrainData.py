@@ -12,7 +12,7 @@ import numpy as np
 from knossos_utils import KnossosDataset
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
-from syconn.handler.basics import load_pkl2obj, temp_seed
+from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
@@ -1733,8 +1733,7 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
                                               iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
-    kd = KnossosDataset()
-    kd.initialize_from_conf(global_params.config.kd_seg_path)
+    kd = kd_factory(global_params.config.kd_seg_path)
     raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
     if syntype_label is None:
         syn_sign = syn_ssv.lookup_in_attribute_dict('syn_sign')
@@ -1796,8 +1795,7 @@ def fetch_single_synssv_typseg_enhanced(
                                               iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
-    kd = KnossosDataset()
-    kd.initialize_from_conf(global_params.config.kd_seg_path)
+    kd = kd_factory(global_params.config.kd_seg_path)
     raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
 
     # get the SSV IDs ordering given the PCA vector (ID1 points towards ID2)

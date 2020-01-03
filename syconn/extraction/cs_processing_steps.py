@@ -1297,10 +1297,8 @@ def _extract_synapse_type_thread(args):
     else:
         trafo_dict = None
 
-    kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_knossos_path(kd_asym_path)
-    kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_knossos_path(kd_sym_path)
+    kd_asym = kd_factory(kd_asym_path)
+    kd_sym = kd_factory(kd_sym_path)
 
     seg_dataset = segmentation.SegmentationDataset("syn_ssv",
                                                    version=obj_version,

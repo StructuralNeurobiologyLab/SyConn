@@ -214,9 +214,15 @@ class VoxelStorageDyn(CompressedStorage):
     Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
     manipulation of the object's bounding box. In this case `voxeldata_path`
     has to be given or already be existent in loaded dictionary. Expects the
-    source path of a KnossoDataset (see knossos_utils), like
+    source path of a KnossoDataset (see knossos_utils), like:
+
         kd = KnossoDataset()
         kd.initialize_from_knossos_path(SOURCE_PATH)
+
+    or
+
+        kd = kd_factory(SOURCE_PATH)
+
     `__setitem__` requires the object ID as key and an 3 dimensional array with
      all bounding boxes defining the object (N, 2, 3). Those BBs are then used to
      query the object voxels. The bounding box is expected to be two 3D

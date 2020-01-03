@@ -824,7 +824,7 @@ def _export_ssv_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
@@ -1061,7 +1061,7 @@ def export_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
@@ -1088,10 +1088,8 @@ def convert_knossosdataset_thread(args):
     offsets = args[6]
     size = args[7]
 
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
+    ssv_kd = kd_factory(ssv_kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_id_changer()

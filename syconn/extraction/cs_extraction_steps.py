@@ -196,10 +196,11 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         # TODO: make this a parameter
         target_kd._cube_shape = (256, 256, 256)
         scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ], create_pyk_conf=True)
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
+                                          mags=[1, ], create_pyk_conf=True,
+                                          create_knossos_conf=False)
+        target_kd = kd_factory(path)
         export_cset_to_kd_batchjob(
             cset, target_kd, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
@@ -921,10 +922,10 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     # TODO: make this a parameter
     target_kd._cube_shape = (256, 256, 256)
     scale = np.array(global_params.config['scaling'])
+    target_kd.scales = [scale, ]
     target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
-                                      create_pyk_conf=True)
-    target_kd = knossosdataset.KnossosDataset()
-    target_kd.initialize_from_knossos_path(path)
+                                      create_pyk_conf=True, create_knossos_conf=False)
+    target_kd = kd_factory(path)
 
     # convert Chunkdataset to KD
     export_cset_to_kd_batchjob(

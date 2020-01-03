@@ -590,7 +590,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
         if remove_jobfolder:
             shutil.rmtree(job_folder, ignore_errors=True)
     else:
-        msg = 'Uncritical warnings/errors occurred during ' \
+        msg = 'Warnings/errors occurred during ' \
               '"{}".:\n{} See logs at {} for details.'.format(name, out_str,
                                                               job_folder)
         log_mp.warning(msg)
@@ -602,7 +602,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
 
 def fallback_exec(cmd_exec):
     """
-    Helper function to execute commands using subprocess.
+    Helper function to execute commands via ``subprocess.Popen``.
     """
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
