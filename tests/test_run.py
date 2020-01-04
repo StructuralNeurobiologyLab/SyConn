@@ -29,7 +29,7 @@ def test_full_run():
     scale = np.array([10, 10, 20])
     prior_glia_removal = True
     key_val_pairs_conf = [
-        ('prior_glia_removal', prior_glia_removal),
+        ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),

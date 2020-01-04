@@ -198,8 +198,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                                           mags=[1, ])
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
-        export_cset_to_kd_batchjob(
-            cset, target_kd, obj_type, [obj_type],
+        export_cset_to_kd_batchjob({obj_type: path},
+            cset, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
             orig_dtype=np.uint64, unified_labels=False,
             n_max_co_processes=n_max_co_processes, log=log)
@@ -922,8 +922,8 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     target_kd.initialize_from_knossos_path(path)
 
     # convert Chunkdataset to KD
-    export_cset_to_kd_batchjob(
-        cset, target_kd, '{}'.format(filename), [hdf5name],
+    export_cset_to_kd_batchjob({hdf5name: path},
+        cset, '{}'.format(filename), [hdf5name],
         offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
         orig_dtype=np.uint64, unified_labels=False,
         n_max_co_processes=n_max_co_processes)
