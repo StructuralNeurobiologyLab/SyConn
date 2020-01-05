@@ -140,8 +140,7 @@ def test_full_run():
     kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
                                    experiment_name, offset=offset, boundary=bd,
                                    fast_downsampling=True, data_path=h5_dir + 'asym.h5',
-                                   mags=[1, 2], hdf5_names=['asym'],
-                                   force_overwrite=True)
+                                   mags=[1, 2], hdf5_names=['asym'], force_overwrite=True)
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
