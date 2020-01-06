@@ -142,7 +142,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         raise Exception("Number of thresholds, sigmas and HDF5 names does not "
                         "match!")
     if n_chunk_jobs is None:
-        n_chunk_jobs = global_params.config.ncore_total
+        n_chunk_jobs = global_params.config.ncore_total * 4
 
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
@@ -195,7 +195,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "gauss_threshold_connected_components",
                                      n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes,
+                                     n_max_co_processes=n_chunk_jobs,
                                      use_dill=True, suffix=filename)
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
@@ -333,7 +333,7 @@ def _gauss_threshold_connected_components_thread(args):
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                        chunk_translator, debug, suffix="", n_max_co_processes=100,
-                       n_chunk_jobs=None):
+                       n_chunk_jobs=None, nb_cpus=1):
     """
     Makes labels unique across chunks
 
@@ -387,7 +387,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         path_to_out = qu.QSUB_script(multi_params_glob,
                                      "make_unique_labels", suffix=filename,
                                      n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True)
+                                     remove_jobfolder=True, n_cores=nb_cpus)
 
 
 def _make_unique_labels_thread(func_args):
@@ -644,12 +644,6 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
     for hdf5_name in hdf5names:
         this_stitch_list = stitch_list[hdf5_name]
         max_label = max_labels[hdf5_name]
-        max_label_sitch = np.max(this_stitch_list)
-        if max_label != max_label_sitch:
-            log_handler.warning(f'Inconsistent high-IDs found by max labels '
-                                f'step {max_label} and in stitch list '
-                                f'{max_label_sitch}. Using maximum of both.')
-        max_label = max(max_label_sitch, max_label)
         graph = nx.from_edgelist(this_stitch_list)
         cc = nx.connected_components(graph)
         merge_dict[hdf5_name] = {}
@@ -664,7 +658,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                      debug, suffix="", n_max_co_processes=100,
-                     n_chunk_jobs=None):
+                     n_chunk_jobs=None, nb_cpus=1):
     """
     Applies merge list to all chunks
 
@@ -699,7 +693,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     pkl.dump(merge_list_dict, f, protocol=4)
     f.close()
     if n_chunk_jobs is None:
-        n_chunk_jobs = global_params.config.ncore_total
+        n_chunk_jobs = global_params.config.ncore_total * 2
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
     for i_job in range(len(chunk_blocks)):
@@ -713,7 +707,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     else:
         qu.QSUB_script(multi_params, "apply_merge_list", suffix=filename,
                        n_max_co_processes=n_max_co_processes,
-                       remove_jobfolder=True)
+                       remove_jobfolder=True, n_cores=nb_cpus)
 
 
 def _apply_merge_list_thread(args):

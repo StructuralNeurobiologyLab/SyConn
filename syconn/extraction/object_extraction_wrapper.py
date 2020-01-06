@@ -135,10 +135,11 @@ def from_probabilities_to_kd(
         offset: Optional[np.ndarray] = None, size: Optional[np.ndarray] = None,
         suffix: str = "", n_max_co_processes: Optional[int] = None,
         transform_func: Optional[Callable] = None,
-        func_kwargs: Optional[dict] = None, nb_cpus: Optional[int] = None,
+        func_kwargs: Optional[dict] = None, n_cores: Optional[int] = None,
         n_erosion: Optional[int] = 0, overlap_thresh: Optional[int] = 0,
         stitch_overlap: Optional[int] = None, membrane_filename: str = None,
-        membrane_kd_path: str = None, hdf5_name_membrane: str = None):
+        membrane_kd_path: str = None, hdf5_name_membrane: str = None,
+        n_chunk_jobs: int = None):
     """
     Method for the conversion of classified (hard labels, e.g. 0, 1, 2; see
     `load_from_kd_overlaycubes` and `transf_func_kd_overlay` parameters)
@@ -181,13 +182,16 @@ def from_probabilities_to_kd(
         offset: Offset of the processed volume.
         size: Size of the processed volume of the dataset starting at `offset`.
         suffix: Suffix used for the intermediate processing steps.
-        n_max_co_processes:
+        n_max_co_processes: Number of parallel jobs if batch job is disabled.
         transform_func: [WIP] Segmentation method which is applied, currently
           only func:`~syconn.extraction.object_extraction_steps.
           _gauss_threshold_connected_components_thread`
           is supported for batch jobs.
         func_kwargs: keyword arguments for `transform_func`.
-        nb_cpus: Number of cpus used if batch jobs are disabled.
+        n_chunk_jobs: Number of jobs.
+        n_cores: Number of cores used for each job in
+          :func:`syconn.extraction.object_extraction_steps.object_segmentation`
+          if batch jobs is enabled.
         n_erosion: Number of erosions applied to the segmentation of
           unique_components to avoid segmentation artifacts caused by start
           location dependency in chunk data array.
@@ -238,8 +242,8 @@ def from_probabilities_to_kd(
                 sigmas[nb_sigma] = \
                     basics.switch_array_entries(sigmas[nb_sigma], [0, 2])
 
-    # --------------------------------------------------------------------------
-    #
+    # # --------------------------------------------------------------------------
+
     time_start = time.time()
     cc_info_list, overlap_info = oes.object_segmentation(
         cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
@@ -249,8 +253,8 @@ def from_probabilities_to_kd(
         hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
         suffix=suffix, transform_func=transform_func,
         transform_func_kwargs=func_kwargs, n_max_co_processes=n_max_co_processes,
-        nb_cpus=nb_cpus, load_from_kd_overlaycubes=load_from_kd_overlaycubes,
-        transf_func_kd_overlay=transf_func_kd_overlay)
+        nb_cpus=n_cores, load_from_kd_overlaycubes=load_from_kd_overlaycubes,
+        transf_func_kd_overlay=transf_func_kd_overlay, n_chunk_jobs=n_chunk_jobs)
     if stitch_overlap is None:
         stitch_overlap = overlap_info[1]
     else:
@@ -267,9 +271,8 @@ def from_probabilities_to_kd(
                          "/connected_components.pkl",
                          [cc_info_list, overlap_info])
 
-    #
-    # # ------------------------------------------------------------------------
-    #
+    # # # ------------------------------------------------------------------------
+
     time_start = time.time()
     nb_cc_dict = {}
     max_nb_dict = {}
@@ -291,27 +294,29 @@ def from_probabilities_to_kd(
     step_names.append("max labels")
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          max_labels)
-    #
     # # ------------------------------------------------------------------------
-    #
+
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes,
+                           n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
-    #
+
     # # ------------------------------------------------------------------------
-    #
+
     chunky.save_dataset(cset)  # save dataset to be able to load it during make_stitch_list (this
     # allows to load the ChunkDataset inside the worker instead of pickling it for each, which
     # slows down the submission process.
+
     time_start = time.time()
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, n_erosion=n_erosion,
                                        n_max_co_processes=n_max_co_processes,
-                                       overlap_thresh=overlap_thresh)
+                                       overlap_thresh=overlap_thresh,
+                                       n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
@@ -332,17 +337,19 @@ def from_probabilities_to_kd(
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                          debug, suffix=suffix,
-                         n_max_co_processes=n_max_co_processes)
+                         n_max_co_processes=n_max_co_processes,
+                         n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
 
     time_start = time.time()
     chunky.save_dataset(cset)
-    oes.export_cset_to_kd_batchjob(target_kd_paths,
-        cset, '{}_stitched_components'.format(filename), hdf5names,
-        offset=offset, size=size, stride=cset.chunk_size,
+    oes.export_cset_to_kd_batchjob(
+        target_kd_paths, cset, '{}_stitched_components'.format(filename),
+        hdf5names, offset=offset, size=size, stride=cset.chunk_size,
         as_raw=False, orig_dtype=np.uint64, unified_labels=False, log=log,
-        n_max_co_processes=n_max_co_processes)
+        n_max_co_processes=n_max_co_processes, n_max_job=n_chunk_jobs,
+        n_cores=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("export KD")
 

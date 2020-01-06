@@ -846,7 +846,6 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
 
     # generate parameter for view rendering of individual SSV
-    # TODO: remove SVs below minimum size (-> global_params.config['glia']['min_cc_size_ssv'])
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
     bbs = sds.load_cached_data('bounding_box') * sds.scaling

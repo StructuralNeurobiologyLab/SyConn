@@ -143,7 +143,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     else:
         chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
+        max_n_jobs = global_params.config.ncore_total * 4
         # loading cached data or adapt number of jobs/cache size dynamically,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
@@ -158,7 +158,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         global_params.config['existing_cell_organelles'],
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-        cube_of_interest_bb=cube_of_interest_bb, log=log, n_max_co_processes=max_n_jobs)
+        cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
+        n_cores=n_cores)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'

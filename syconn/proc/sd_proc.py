@@ -159,8 +159,6 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["size"] = so.size
                 if compute_meshprops:
                     # if mesh does not exist beforehand, it will be generated
-                    # TODO: remove the next line
-                    so.load_mesh(recompute=True)
                     so.attr_dict["mesh_bb"] = so.mesh_bb
                     so.attr_dict["mesh_area"] = so.mesh_area
                 for attribute in so.attr_dict.keys():
