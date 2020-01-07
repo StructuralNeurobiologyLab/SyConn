@@ -459,6 +459,7 @@ def _map_subcell_extract_props_thread(args):
 
     # iterate over chunks and store information in property dicts for
     # subcellular and cellular structures
+    # # TODO: add overlap to segmentation passed to Mesher
     for ch_cnt, ch_id in enumerate(chunks):
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
@@ -470,7 +471,7 @@ def _map_subcell_extract_props_thread(args):
             if global_params.config.use_new_meshing:
                 organelle = existing_oragnelles[i]
                 start = time.time()
-                tmp_subcell_meshes = find_meshes(subc_d, offset)
+                tmp_subcell_meshes = find_meshes(subc_d, offset, pad=1)
                 # store reference to partial results of each object
                 for k in tmp_subcell_meshes.keys():
                     ref_mesh_dict[organelle][k].add(ch_id)
@@ -501,7 +502,7 @@ def _map_subcell_extract_props_thread(args):
         # dicts and list of dict of dict of int
         if generate_sv_mesh and global_params.config.use_new_meshing:
             start = time.time()
-            tmp_cell_mesh = find_meshes(cell_d, offset)
+            tmp_cell_mesh = find_meshes(cell_d, offset, pad=1)
             # store reference to partial results of each object
             for k in tmp_cell_mesh.keys():
                 ref_mesh_dict['sv'][k].add(ch_id)
@@ -529,7 +530,7 @@ def _map_subcell_extract_props_thread(args):
     return cpd_lst, scpd_lst, scmd_lst, worker_nr, ref_mesh_dict
 
 
-def find_meshes(chunk: np.ndarray, offset: np.ndarray)\
+def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0)\
         -> Dict[int, List[np.ndarray]]:
     """
     Find meshes within a segmented cube. The offset is given in voxels. Mesh
@@ -539,12 +540,16 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray)\
     Args:
         chunk: Cube which is processed.
         offset: Offset of the cube in voxels.
+        pad: Pad chunk array with mode 'edge'
 
     Returns:
         The mesh of each segmentation ID in the input `chunk`.
     """
     scaling = np.array(global_params.config['scaling'])
     mesher = Mesher(scaling[::-1])  # xyz -> zyx
+    if pad > 0:
+        chunk = np.pad(chunk, 1, mode='edge')
+        offset -= pad
     mesher.mesh(chunk)
     offset = offset * scaling
     meshes = {}
