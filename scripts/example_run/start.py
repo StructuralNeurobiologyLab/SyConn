@@ -60,9 +60,11 @@ if __name__ == '__main__':
     n_folders_fs_sc = 1000
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-    if os.path.isdir(h5_dir):
+    if not os.path.isdir(h5_dir):
         curr_dir = os.path.abspath(os.path.curdir) + '/'
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+        if not os.path.isdir(h5_dir):
+            raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
@@ -164,7 +166,7 @@ if __name__ == '__main__':
     # TODO: launch all inferences in parallel
     exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
     # TODO: if performed, work-in paths of the resulting KDs to the config
-    #  TODO: might also require adaptions in init_cell_subcell_sds
+    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     exec_dense_prediction.predict_synapsetype()
     time_stamps.append(time.time())

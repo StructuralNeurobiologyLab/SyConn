@@ -29,7 +29,7 @@ def test_full_run():
     scale = np.array([10, 10, 20])
     prior_glia_removal = True
     key_val_pairs_conf = [
-        ('prior_glia_removal', prior_glia_removal),
+        ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
@@ -105,7 +105,8 @@ def test_full_run():
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
-                              data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
+                              data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'],
+                              force_overwrite=True)
 
     seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
     kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
@@ -114,28 +115,33 @@ def test_full_run():
     kd_mi = knossosdataset.KnossosDataset()
     kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
                                  offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
+                                 data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'],
+                                 force_overwrite=True)
 
     kd_vc = knossosdataset.KnossosDataset()
     kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
                                  offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+                                 data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'],
+                                 force_overwrite=True)
 
     kd_sj = knossosdataset.KnossosDataset()
     kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
                                  offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+                                 data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'],
+                                 force_overwrite=True)
 
     kd_sym = knossosdataset.KnossosDataset()
     kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
                                   offset=offset, boundary=bd, fast_downsampling=True,
-                                  data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
+                                  data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'],
+                                  force_overwrite=True)
 
     kd_asym = knossosdataset.KnossosDataset()
     kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
                                    experiment_name, offset=offset, boundary=bd,
                                    fast_downsampling=True, data_path=h5_dir + 'asym.h5',
-                                   mags=[1, 2], hdf5_names=['asym'])
+                                   mags=[1, 2], hdf5_names=['asym'],
+                                   force_overwrite=True)
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 

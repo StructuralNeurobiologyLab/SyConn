@@ -61,6 +61,8 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
             cube_of_interest_bb: Tuple[np.ndarray],
             log: Logger):
     """
+    Replaced by a single call of :func:`~generate_subcell_kd_from_proba`.
+
     Initializes a per-object segmentation KnossosDataset for the given supervoxel type
     `co` based on an initial prediction which location has to be defined in the config.yml file
     for the `co` object, e.g. `kd_mi` for `co='mi'`
@@ -69,6 +71,22 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
     Appropriate parameters have to be set inside the config.yml file, see
     :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
     or :func:`~syconn.handler.config.generate_default_conf` for more details.
+
+    Examples:
+        Was used to process sub-cellular structures independently:
+
+                ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
+                      load_cellorganelles_from_kd_overlaycubes,
+                      cube_of_interest_bb, log])
+                    for co in global_params.config['existing_cell_organelles']]
+                for p in ps:
+                    p.start()
+                    time.sleep(5)
+                for p in ps:
+                    p.join()
+                    if p.exitcode != 0:
+                        raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                                        f'code {p.exitcode}.')
 
     Args:
         co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
@@ -92,7 +110,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           max_n_jobs: Optional[int] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
-                          cube_of_interest_bb: Optional[np.ndarray] = None,
+                          cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
                           n_cores: int = 1):
     """
     Todo:
@@ -125,7 +143,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     else:
         chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
+        max_n_jobs = global_params.config.ncore_total * 4
         # loading cached data or adapt number of jobs/cache size dynamically,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
@@ -135,19 +153,13 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
              'type available: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-
-    ps = [Process(target=kd_init, args=[co, chunk_size_kdinit, transf_func_kd_overlay,
-                                        load_cellorganelles_from_kd_overlaycubes,
-                                        cube_of_interest_bb, log])
-          for co in global_params.config['existing_cell_organelles']]
-    for p in ps:
-        p.start()
-        time.sleep(5)
-    for p in ps:
-        p.join()
-        if p.exitcode != 0:
-            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
-                            f'code {p.exitcode}.')
+    # TODO: process all subcellular structures at the same time if they are stored in the same KD
+    oew.generate_subcell_kd_from_proba(
+        global_params.config['existing_cell_organelles'],
+        chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
+        load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
+        cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
+        n_cores=n_cores)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'

@@ -198,11 +198,10 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         scale = np.array(global_params.config['scaling'])
         target_kd.scales = [scale, ]
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ], create_pyk_conf=True,
-                                          create_knossos_conf=False)
+                                          mags=[1, ])
         target_kd = kd_factory(path)
-        export_cset_to_kd_batchjob(
-            cset, target_kd, obj_type, [obj_type],
+        export_cset_to_kd_batchjob({obj_type: path},
+            cset, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
             orig_dtype=np.uint64, unified_labels=False,
             n_max_co_processes=n_max_co_processes, log=log)
@@ -925,11 +924,10 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     target_kd.scales = [scale, ]
     target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
                                       create_pyk_conf=True, create_knossos_conf=False)
-    target_kd = kd_factory(path)
 
     # convert Chunkdataset to KD
-    export_cset_to_kd_batchjob(
-        cset, target_kd, '{}'.format(filename), [hdf5name],
+    export_cset_to_kd_batchjob({hdf5name: target_kd.conf_path},
+        cset, '{}'.format(filename), [hdf5name],
         offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
         orig_dtype=np.uint64, unified_labels=False,
         n_max_co_processes=n_max_co_processes)
