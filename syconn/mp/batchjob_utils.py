@@ -406,7 +406,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags=additional_flags, script_folder=None,
-            job_name="default", suffix=suffix,
+            job_name="default", suffix=suffix, remove_jobfolder=remove_jobfolder,
             sge_additional_flags=sge_additional_flags, iteration=iteration+1,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores,
             params_orig_id=orig_job_ids, use_dill=use_dill)
