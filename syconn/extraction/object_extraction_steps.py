@@ -1283,8 +1283,8 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
         * Only works if data mag = 1.
 
     Args:
+        target_kd_paths: Target KnossosDatasets.
         cset: Source ChunkDataset.
-        kd: Target KnossosDataset.
         name:
         hdf5names:
         n_cores:
@@ -1309,8 +1309,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
     target_kds = {}
     for hdf5name in hdf5names:
         path = target_kd_paths[hdf5name]
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
+        target_kd = kd_factory(path)
         target_kds[hdf5name] = target_kd
 
     for hdf5name in hdf5names[1:]:
@@ -1363,22 +1362,21 @@ def _export_cset_as_kds_thread(args):
 
     # Backwards compatibility
     if type(target_kd_paths) is str and len(hdf5names) == 1:
-        kd = knossosdataset.KnossosDataset()
-        kd.initialize_from_knossos_path(target_kd_paths)
+        kd = kd_factory(target_kd_paths)
         target_kds = {hdf5names[0]: kd}
     else:  # Add proper case handling for incorrect arguments
         target_kds = {}
         for hdf5name in hdf5names:
             path = target_kd_paths[hdf5name]
-            target_kd = knossosdataset.KnossosDataset()
-            target_kd.initialize_from_knossos_path(path)
+            target_kd = kd_factory(path)
             target_kds[hdf5name] = target_kd
 
     for dim in range(3):
         if coords[dim] + size[dim] > cset.box_size[dim]:
             size[dim] = cset.box_size[dim] - coords[dim]
 
-    data_dict = cset.from_chunky_to_matrix(size, coords, name, hdf5names, dtype=orig_dtype)
+    data_dict = cset.from_chunky_to_matrix(size, coords, name, hdf5names,
+                                           dtype=orig_dtype)
     for hdf5name in hdf5names:
         curr_d = data_dict[hdf5name]
         if (curr_d.dtype.kind not in ("u", "i")) and (0 < np.max(curr_d) <= 1.0):
