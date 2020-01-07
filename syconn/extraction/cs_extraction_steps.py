@@ -55,7 +55,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                           log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None,
                           cube_of_interest_bb: Optional[np.ndarray] = None,
-                          n_folders_fs: int = 1000):
+                          n_folders_fs: int = 1000,
+                          cube_shape: Optional[Tuple[int]] = None):
     """
     Extracts contact sites and their overlap with `sj` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
@@ -75,6 +76,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         cube_of_interest_bb: Sub-volume of the data set which is processed.
             Default: Entire data set.
         n_folders_fs: Number of folders used for organizing supervoxel data.
+        cube_shape: Cube shape used within contact site KnossosDataset.
 
     """
     if extract_cs_syntype is None:
@@ -88,6 +90,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     if chunk_size is None:
         chunk_size = (512, 512, 512)
+    if cube_shape is None:
+        cube_shape = (256, 256, 256)
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
 
@@ -193,11 +197,12 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
         target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape
         scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
                                           mags=[1, ])
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
+        target_kd = kd_factory(path)
         export_cset_to_kd_batchjob({obj_type: path},
             cset, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
@@ -886,7 +891,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                               n_folders_fs=10000, suffix="",
                               n_max_co_processes=None, n_chunk_jobs=2000, size=None,
-                              offset=None, log=None):
+                              offset=None, log=None, cube_shape=None):
     """
 
     Parameters
@@ -901,6 +906,7 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     n_chunk_jobs :
     size :
     offset :
+    cube_shape :
 
     Returns
     -------
@@ -908,6 +914,8 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     """
     if log is None:
         log = log_extraction
+    if cube_shape is None:
+        cube_shape = (256, 256, 256)
     chunky.save_dataset(cset)
     # init CS segmentation KD
     kd = kd_factory(global_params.config.kd_seg_path)
@@ -916,10 +924,11 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
     target_kd = knossosdataset.KnossosDataset()
+    target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
-    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
-    target_kd = knossosdataset.KnossosDataset()
-    target_kd.initialize_from_knossos_path(path)
+    target_kd.scales = [scale, ]
+    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
+                                      create_pyk_conf=True, create_knossos_conf=False)
 
     # convert Chunkdataset to KD
     export_cset_to_kd_batchjob({hdf5name: path},

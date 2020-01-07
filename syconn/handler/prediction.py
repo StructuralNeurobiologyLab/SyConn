@@ -9,7 +9,7 @@ from ..reps import log_reps
 from ..mp import batchjob_utils as qu
 from ..handler.basics import chunkify
 
-from ..handler import log_handler, log_main
+from ..handler import log_handler, log_main, basics
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
@@ -69,8 +69,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
     raw_data = []
     label_data = []
     for curr_p in kd_p:
-        kd = KnossosDataset()
-        kd.initialize_from_knossos_path(curr_p)
+        kd = basics.kd_factory(curr_p)
         scaling = np.array(kd.scale, dtype=np.int)
         if np.isscalar(raw_data_offset):
             raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
@@ -231,8 +230,7 @@ def overlaycubes2kzip(dest_p: str, vol: np.ndarray, offset: np.ndarray,
     -------
     np.array [Z, X, Y]
     """
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
+    kd = basics.kd_factory(kd_path)
     kd.from_matrix_to_cubes(offset=offset, kzip_path=dest_p,
                             mags=[1], data=vol)
 
@@ -593,6 +591,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     raw channel as uint8 (0..255).
     Otherwise the classification results will be written to the overlay channel.
 
+    Notes:
+        *  TODO: Currently has a high GPU memory requirement (minimum 12GB).
+
     Args:
         kd_path: Path to KnossosDataset .conf file of the raw data.
         target_path: Destination directory for the output KnossosDataset(s)
@@ -627,6 +628,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             coordinate in voxels in the respective magnification (see kwarg `mag`).
 
     """
+    # TODO: switch to pyk confs
     if log is None:
         log_name = 'dense_prediction'
         if target_names is not None:
@@ -644,14 +646,17 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if channel_thresholds is None:
         channel_thresholds = [None for _ in range(n_channel)]
 
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
+    kd = basics.kd_factory(kd_path)
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
 
+    # TODO: these should be config parameters
     overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
-    chunk_size = np.array([1024, 1024, 512])
+    if qu.batchjob_enabled():
+        chunk_size = np.array([1024, 1024, 512])
+    else:  # assume small dataset volume
+        chunk_size = np.array([482, 481, 236])
     tile_shape = [271, 181, 138]
 
     cd = ChunkDataset()
@@ -668,10 +673,10 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(6)])
+                                          kd.experiment_name, [2**x for x in range(6)],)
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
-    # init QSUB parameters
+    # init batchjob parameters
     multi_params = chunk_ids
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
@@ -735,12 +740,31 @@ def dense_predictor(args):
 
     # init Predictor
     from elektronn3.inference import Predictor
-    out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
-    out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
-    predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
-                          out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
-                          apply_softmax=True)
-    predictor.model.ae = False
+    ix = 0
+    tile_shape = np.array(tile_shape)
+    while True:
+        try:
+            out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
+            out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
+            predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
+                                  out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
+                                  apply_softmax=True)
+            predictor.model.ae = False
+            _ = predictor.predict(np.zeros(out_shape[1:])[None, None])
+            break
+        except RuntimeError:  # cuda MemoryError
+            if np.all(tile_shape % 2):
+                raise ValueError('Cannot reduce tile shape anymore. Please adapt '
+                                 'the tile/overlap/chunk shape in the function '
+                                 'that is calling `dense_predictor`.')
+            while tile_shape[ix] % 2:
+                ix += 1
+            tile_sh_orig = np.array(tile_shape)
+            tile_shape[ix] = tile_shape[ix] // 2
+            log_main.warn(f'Changed tile shape from {tile_sh_orig} to '
+                          f'{tile_shape} to reduce memory requirements.')
+            ix = (ix + 1) % 3  # permute spatial dimension which is reduced
+
     # predict Chunks:
     print(f'Starting prediction of {len(chunk_ids)} Chunks with size {chunk_size}.')
     for ch_id in chunk_ids:

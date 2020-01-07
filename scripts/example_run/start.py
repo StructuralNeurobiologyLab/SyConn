@@ -49,11 +49,11 @@ if __name__ == '__main__':
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),
         ('log_level', log_level),
-        # these will be created during synapse type prediction (
-        # exec_dense_prediction.predict_synapsetype())
-        ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
-                   'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
-        ('cell_objects', {'asym_label': 1, 'sym_label': 2})
+        # # these will be created during synapse type prediction (
+        # # exec_dense_prediction.predict_synapsetype())
+        # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
+        #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
+        # ('cell_objects', {'asym_label': 1, 'sym_label': 2})
     ]
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000
@@ -120,42 +120,43 @@ if __name__ == '__main__':
 
     # INITIALIZE DATA
     # TODO: switch to streaming confs instead of h5 files
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
-                              offset=offset, boundary=bd, fast_downsampling=True,
-                              data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
+    if not os.path.isdir(global_params.config.kd_sj_path):
+        kd = knossosdataset.KnossosDataset()
+        kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
+                                  offset=offset, boundary=bd, fast_downsampling=True,
+                                  data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
-    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-    kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
-                            fast_downsampling=True, as_raw=False)
+        seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
+        kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
+                                fast_downsampling=True, as_raw=False)
 
-    kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
-                                 offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
+        kd_sym = knossosdataset.KnossosDataset()
+        kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
+                                      offset=offset, boundary=bd, fast_downsampling=True,
+                                      data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
 
-    kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
-                                 offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+        kd_asym = knossosdataset.KnossosDataset()
+        kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
+                                       experiment_name, offset=offset, boundary=bd,
+                                       fast_downsampling=True, data_path=h5_dir + 'asym.h5',
+                                       mags=[1, 2], hdf5_names=['asym'])
 
-    kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
-                                 offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+        kd_mi = knossosdataset.KnossosDataset()
+        kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
+                                     offset=offset, boundary=bd, fast_downsampling=True,
+                                     data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
 
-    # kd_sym = knossosdataset.KnossosDataset()
-    # kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
-    #                               offset=offset, boundary=bd, fast_downsampling=True,
-    #                               data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
-    #
-    # kd_asym = knossosdataset.KnossosDataset()
-    # kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
-    #                                experiment_name, offset=offset, boundary=bd,
-    #                                fast_downsampling=True, data_path=h5_dir + 'asym.h5',
-    #                                mags=[1, 2], hdf5_names=['asym'])
-    time_stamps.append(time.time())
-    step_idents.append('Preparation')
+        kd_vc = knossosdataset.KnossosDataset()
+        kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
+                                     offset=offset, boundary=bd, fast_downsampling=True,
+                                     data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+
+        kd_sj = knossosdataset.KnossosDataset()
+        kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
+                                     offset=offset, boundary=bd, fast_downsampling=True,
+                                     data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+        time_stamps.append(time.time())
+        step_idents.append('Preparation')
 
     log.info('Finished example cube initialization (shape: {}). Starting'
              ' SyConn pipeline.'.format(bd))
@@ -168,7 +169,7 @@ if __name__ == '__main__':
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
-    exec_dense_prediction.predict_synapsetype()
+    # exec_dense_prediction.predict_synapsetype()
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
 
@@ -253,5 +254,3 @@ if __name__ == '__main__':
                    '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10001'.format(
         fname_server, example_wd))
-
-

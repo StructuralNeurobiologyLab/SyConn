@@ -311,8 +311,7 @@ def _gauss_threshold_connected_components_thread(args):
                                               offset[2]: membrane_data_shape[2]-offset[2]]
                 tmp_data[membrane_data > 255*.4] = 0
             elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:
-                kd_bar = knossosdataset.KnossosDataset()
-                kd_bar.initialize_from_knossos_path(membrane_kd_path)
+                kd_bar = kd_factory(membrane_kd_path)
                 membrane_data = kd_bar.load_raw(size=size, offset=box_offset,
                                                 mag=1).swapaxes(0, 2)
                 tmp_data[membrane_data > 255*.4] = 0
@@ -1275,30 +1274,33 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
                                as_raw=False, fast_downsampling=False, n_max_job=None,
                                unified_labels=False, orig_dtype=np.uint8, log=None):
     """
-    Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see
-    knossos_utils.chunky for details.
+    Batchjob version of :class:`knossos_utils.chunky.ChunkDataset.export_cset_to_kd`
+    method, see ``knossos_utils.chunky`` for details.
 
-    Parameters
-    ----------
-    target_kd_paths :
-    cset :
-    name :
-    hdf5names :
-    n_cores :
-    offset :
-    size :
-    n_max_co_processes :
-    stride :
-    as_raw :
-    fast_downsampling :
-    overwrite :
-    unified_labels :
-    orig_dtype :
-    log:
-    n_max_job
+    Notes:
+        * KnossosDataset needs to be initialized beforehand (see
+          :func:`~KnossosDataset.initialize_without_conf`).
+        * Only works if data mag = 1.
 
-    Returns
-    -------
+    Args:
+        target_kd_paths: Target KnossosDatasets.
+        cset: Source ChunkDataset.
+        name:
+        hdf5names:
+        n_cores:
+        offset:
+        size:
+        n_max_co_processes:
+        stride:
+        overwrite:
+        as_raw:
+        fast_downsampling:
+        n_max_job:
+        unified_labels:
+        orig_dtype:
+        log:
+
+    Returns:
 
     """
     if n_max_job is None:
@@ -1307,8 +1309,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
     target_kds = {}
     for hdf5name in hdf5names:
         path = target_kd_paths[hdf5name]
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
+        target_kd = kd_factory(path)
         target_kds[hdf5name] = target_kd
 
     for hdf5name in hdf5names[1:]:
@@ -1361,22 +1362,21 @@ def _export_cset_as_kds_thread(args):
 
     # Backwards compatibility
     if type(target_kd_paths) is str and len(hdf5names) == 1:
-        kd = knossosdataset.KnossosDataset()
-        kd.initialize_from_knossos_path(target_kd_paths)
+        kd = kd_factory(target_kd_paths)
         target_kds = {hdf5names[0]: kd}
     else:  # Add proper case handling for incorrect arguments
         target_kds = {}
         for hdf5name in hdf5names:
             path = target_kd_paths[hdf5name]
-            target_kd = knossosdataset.KnossosDataset()
-            target_kd.initialize_from_knossos_path(path)
+            target_kd = kd_factory(path)
             target_kds[hdf5name] = target_kd
 
     for dim in range(3):
         if coords[dim] + size[dim] > cset.box_size[dim]:
             size[dim] = cset.box_size[dim] - coords[dim]
 
-    data_dict = cset.from_chunky_to_matrix(size, coords, name, hdf5names, dtype=orig_dtype)
+    data_dict = cset.from_chunky_to_matrix(size, coords, name, hdf5names,
+                                           dtype=orig_dtype)
     for hdf5name in hdf5names:
         curr_d = data_dict[hdf5name]
         if (curr_d.dtype.kind not in ("u", "i")) and (0 < np.max(curr_d) <= 1.0):

@@ -61,33 +61,40 @@ def generate_subcell_kd_from_proba(
         transf_func_kd_overlay: Optional[Dict[str, Callable]] = None,
         load_cellorganelles_from_kd_overlaycubes: bool = False,
         cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
+        cube_shape: Optional[Tuple[int]] = None,
         log: Logger = None, **kwargs):
     """
-    Generate KnossosDatasets for given subcellular structure key (e.g. ['mi', 'sj', 'vc]).
-    The required initial data format is a chunkdataset located at
-    ``"{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)``.
-    This folder will be removed after the KD has been generated successfully!
-    Resulting KD will be stored at
+    Generates a connected components segmentation for the given the sub-cellular
+    structures (e.g. ['mi', 'sj', 'vc]) as KnossosDatasets.
+    The data format of the source data is KnossosDataset which path(s) is defined
+    in ``global_params.config['paths']`` (e.g. key ``kd_mi_path`` for mitochondria).
+    The resulting KDs will be stored at (for each ``co in subcell_names``)
     ``"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)``.
     See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` for details of
     the conversion process from the initial probability map to the SV segmentation. Default:
     thresholding and connected components, thresholds are set via the `config.yml` file, check
     ``syconn.global_params.config['cell_objects']["probathresholds"]`` of an initialized
-    :calss:`~syconn.handler.config.DynConfig` object.
+    :class:`~syconn.handler.config.DynConfig` object.
 
-    Parameters
-    ----------
-    subcell_names : str
-    chunk_size : Tuple
-    transf_func_kd_overlay : callable
-    load_cellorganelles_from_kd_overlaycubes : bool
-    cube_of_interest_bb : Tuple[np.ndarray] or np.ndarray
-    log : logger
+    Args:
+        subcell_names:
+        chunk_size:
+        transf_func_kd_overlay:
+        load_cellorganelles_from_kd_overlaycubes:
+        cube_of_interest_bb:
+        cube_shape:
+        log:
+        **kwargs:
+
+    Returns:
+
     """
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if log is None:
         log = log_extraction
+    if cube_shape is None:
+        cube_shape = (256, 256, 256)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
@@ -111,7 +118,10 @@ def generate_subcell_kd_from_proba(
             shutil.rmtree(path)
         target_kd = knossosdataset.KnossosDataset()
         scale = np.array(global_params.config['scaling'], dtype=np.float32)
-        target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
+        target_kd._cube_shape = cube_shape
+        target_kd.scales = [scale, ]
+        target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
+                                          create_pyk_conf=True, create_knossos_conf=False)
     if load_cellorganelles_from_kd_overlaycubes:  # no thresholds needed
         prob_threshs = None
     from_probabilities_to_kd(global_params.config.kd_organelle_seg_paths, cd,
@@ -354,7 +364,7 @@ def from_probabilities_to_kd(
     step_names.append("export KD")
 
     # --------------------------------------------------------------------------
-    log.debug("Time overview [from_probabilities_to_objects]:")
+    log.debug("Time overview [from_probabilities_to_kd]:")
     for ii in range(len(all_times)):
         log.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
     log.debug("--------------------------")

@@ -14,6 +14,7 @@ import networkx as nx
 from numba import jit
 import numpy as np
 import scipy
+import time
 import scipy.ndimage
 from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
@@ -31,7 +32,7 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-import time
+from ..handler.basics import kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from . import log_reps
 from .. import global_params
@@ -869,8 +870,7 @@ def map_myelin2coords(coords: np.ndarray,
     myelin_kd_p = global_params.config.working_dir + "/knossosdatasets/myelin/"
     if not os.path.isdir(myelin_kd_p):
         raise ValueError(f'Could not find myelin KnossosDataset at {myelin_kd_p}.')
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(myelin_kd_p)
+    kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
     for ix, c in enumerate(coords):
