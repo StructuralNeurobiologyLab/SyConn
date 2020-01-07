@@ -931,7 +931,7 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                                       create_pyk_conf=True, create_knossos_conf=False)
 
     # convert Chunkdataset to KD
-    export_cset_to_kd_batchjob({hdf5name: target_kd.conf_path},
+    export_cset_to_kd_batchjob({hdf5name: path},
         cset, '{}'.format(filename), [hdf5name],
         offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
         orig_dtype=np.uint64, unified_labels=False,
