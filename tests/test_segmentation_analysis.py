@@ -86,74 +86,64 @@ def test_detect_cs():
     Returns:
 
     """
-    edge_s = 20
-    sample_array = np.random.randint(low=0, size=edge_s ** 3, high=1000).reshape((
-        edge_s, edge_s, edge_s)).astype(np.uint32)
-    # weight = np.array([[[0, 0, 0],
-    #                     [0, 1, 0],
-    #                     [0, 0, 0]],
-    #                    [[0, 1, 0],
-    #                     [1, -6, 1],
-    #                     [0, 1, 0]],
-    #                    [[0, 0, 0],
-    #                     [0, 1, 0],
-    #                     [0, 0, 0]]], dtype=np.int)
-    # sample = np.zeros((edge_s, edge_s, edge_s), dtype=np.uint32)
-    # sample[8][8] = 4
-    # sample[9][9] = 3
-    # sample[10][10] = 5
-    # sample[11][11] = 2
-    # sample[12][12] = 6
-    # aa1 = detect_cs(sample)
-    # # offset = np.array(con['cell_objects']['cs_filtersize'], dtype=np.int) // 2
-    # edge = scipy.ndimage.convolve(sample.astype(np.int), weight) < 0
-    # edge_rel = np.nonzero(edge[offset[0]: -offset[0], offset[1]: -offset[1], offset[2]: -offset[2]])
+    edge_s = 20                                                                          #data cube size
+    # sample_array = np.random.randint(low=0, size=edge_s ** 3, high=1000).reshape((
+    #     edge_s, edge_s, edge_s)).astype(np.uint32)
     sample = np.zeros((edge_s, edge_s, edge_s), dtype=np.uint32)
-    # sample[8][8] = 4
-    sample[9][9] = 3
-    sample[10][10] = 5
-    sample[11][11] = 2
-    sample[10, :, 12] = 7
-    sample[:, 10, 5] = 4
-    # sample[12][12] = 6
-    # sample[10][10][10] = 7
-    # sample[10][10][11] = 7
-    # sample[10][10][9] = 7
-    #sample[9][9][10] = 8
-    offset = np.array(config['cell_objects']['cs_filtersize'], dtype=np.int) // 2
-    #offset = stencil mod 2
-    #stencil = global_params.config['cell_objects']['cs_filtersize']
+    stencil = np.array(config['cell_objects']['cs_filtersize'], dtype=np.int)
+    cube_size = 3                                                                        #cube size
+    distance_between_cube = 1                                                            #distance between cube
+    start_index = 7                                                                      #intial index of first cube
+    sample[7:10, 7:10, 7:10] = 4                                                         #cell_id cube 1
+    sample[7:10, 11:14, 7:10] = 5                                                        #cell_id cube 2
+    offset = np.array(config['cell_objects']['cs_filtersize'], dtype=np.int) // 2        #output offset adjustment due to stencil size
     edge_id_output_sample = detect_cs(sample)
-    aa = detect_cs(sample_array)
-    unique_element, count = np.unique(sample_array, return_counts=True)
-    code_64_unique_element = np.unique(aa)
-    # id1 = np.asarray(code_64_unique_element // (2 ** 32), dtype=np.uint32)
-    # id2 = np.asarray(code_64_unique_element % (2 ** 32), dtype=np.uint32)
-    # raise()
-    id1 = np.unique(np.concatenate((np.asarray(code_64_unique_element // (2 ** 32), dtype=np.uint32), np.asarray(code_64_unique_element % (2 ** 32), dtype=np.uint32)), axis=0))
-    mask = np.isin(id1, unique_element)
-    #print(mask)
-    assert np.all(mask == True), \
-        "Bounding box dictionary mismatch."\
+    higher_id_array = np.asarray(edge_id_output_sample, np.uint32)                       #retracts 32 bit cell id of higher value
+    lower_id_array = np.asarray(edge_id_output_sample, np.uint64) // (2 ** 32)           #retracts 32 bit cell id of lower value
+    counter = 2*cube_size + distance_between_cube + 1                                    #checks if distance between cubes is longer than stencil size
+    output_offset = np.maximum((0), (counter, counter, counter) - stencil)               #adjusts output offset accordingly
+    print(output_offset)
 
+    o_o = output_offset                                                                  #dummy variable for output cube size
+    o = offset                                                                           #dummy variable for offset due to stencil size
 
-    assert np.all(np.asarray(edge_id_output_sample[9-offset[0], 9-offset[1], :], np.uint32) != 0), " Edge detetion along axis=0 or 1 not working"
-    assert np.all(np.asarray(edge_id_output_sample[10-offset[0], 10-offset[1], :], np.uint32) != 0), " Edge detetion along axis=0 or 1 not working"
-    assert np.all(np.asarray(edge_id_output_sample[11-offset[0], 11-offset[1], :], np.uint32) != 0), " Edge detetion along axis=0 or 1 not working"
+    assert np.all(np.asarray(higher_id_array[7 - o[0], 7 - o[1] + o_o[1]: 10 - o[1] - o_o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[9 - o[0], 7 - o[1] + o_o[1]: 10 - o[1] - o_o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0], 11 - o[1] + o_o[1]: 14 - o[1] - o_o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[9 - o[0], 11 - o[1] + o_o[1]: 14 - o[1] - o_o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
 
-    assert np.all(np.asarray(edge_id_output_sample[10-offset[0], :, 12-offset[2]], np.uint32) != 0), " Edge detetion along axis=2 or 0 not working"
+    assert np.all(np.asarray(higher_id_array[7 - o[0] + o_o[0]:10 - o[0] - o_o[0], 7 - o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0] + o_o[0]:10 - o[0] - o_o[0], 9 - o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0] + o_o[0]:10 - o[0] - o_o[0], 11 - o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0] + o_o[0]:10 - o[0] - o_o[0], 13 - o[1], 7 - o[2] + o_o[2]:10 - o[2] - o_o[2]], np.uint32) == 5)
 
-    assert np.all(np.asarray(edge_id_output_sample[:, 10-offset[1], 5-offset[2]], np.uint32) != 0), " Edge detetion along axis=1 or 2 not working"
+    assert np.all(np.asarray(higher_id_array[7 - o[0]:10 - o[0], 7 - o[1]: 10 - o[1], 7 - o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0]:10 - o[0], 7 - o[1]: 10 - o[1], 9 - o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0]:10 - o[0], 11 - o[1]: 14 - o[1], 7 - o[2]], np.uint32) == 5)
+    assert np.all(np.asarray(higher_id_array[7 - o[0]:10 - o[0], 11 - o[1]: 14 - o[1], 9 - o[2] ], np.uint32) == 5)
 
-    # assert np.all(np.asarray([2,5,5,1]) != 0), " Edge detetion in not working"
+    assert np.all(np.asarray(lower_id_array[7 - o[0], 7 - o[1]: 10 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[9 - o[0], 7 - o[1]: 10 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0], 11 - o[1]: 14 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[9 - o[0], 11 - o[1]: 14 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 7 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 9 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 11 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 13 - o[1], 7 - o[2]:10 - o[2]], np.uint32) == 4)
+
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 7 - o[1]: 10 - o[1], 7 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 7 - o[1]: 10 - o[1], 9 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 11 - o[1]: 14 - o[1], 7 - o[2]], np.uint32) == 4)
+    assert np.all(np.asarray(lower_id_array[7 - o[0]:10 - o[0], 11 - o[1]: 14 - o[1], 9 - o[2]], np.uint32) == 4)
+
     print(offset)
-    print(np.asarray(edge_id_output_sample[3, 3, :], np.uint32))
-    # print(id1)
-    # print(unique_element)
-    # print(sample)
-    print(np.asarray(edge_id_output_sample, np.uint32))
+    print(stencil)
+    print(np.asarray(edge_id_output_sample[3, 3, :], np.uint32).shape)
+    print(np.asarray(higher_id_array, np.uint32))
     print("seperation")
-    print(np.asarray(edge_id_output_sample, np.uint64) // (2 ** 32))
+    print(np.asarray(lower_id_array, np.uint32))
+
 
 # def test_detect_cs():
 #     edge_s = 15
