@@ -10,7 +10,7 @@ import os
 from typing import Optional
 from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.handler.config import initialize_logging
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
@@ -136,14 +136,14 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     from knossos_utils import knossosdataset
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
-
     cube_size = np.array([512, 512, 256])
     cd = ChunkDataset()
     boundary = (kd.boundary/2).astype(int) #if later working on mag=2
     cd.initialize(kd, boundary, cube_size, '~/cd_tmp/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True)
-    multi_params = [(cube_size, offset) for offset in cd.coord_dict]
+    multi_params = chunkify(cd.coord_dict, max_n_jobs)
+    multi_params = [(cube_size, offset) for offset in multi_params]
     out_dir = qu.QSUB_script(multi_params, "kimimaroskelgen", log=log,
                    n_max_co_processes=global_params.config.ncore_total, remove_jobfolder=False)
 
@@ -167,11 +167,8 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     pathdict_filepath = ("%s/excube1_path_dict.pkl" % global_params.config.working_dir)
     write_obj2pkl(pathdict_filepath, path_dic)
     multi_params = ssd.ssv_ids
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
-                               for ssv_id in ssd.ssv_ids])
-    ordering = np.argsort(nb_svs_per_ssv)
-    multi_params = multi_params[ordering[::-1]]
-    multi_params = chunkify(multi_params, max_n_jobs)
+    ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
+    multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
 
     # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
     zipname = ("%s/excube1_kimimaro_skels_ads2c100/" % curr_dir)
@@ -184,71 +181,7 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     outfile2 = qu.QSUB_script(multi_params, "kimimaromerge", log=log,
                    n_max_co_processes=global_params.config.ncore_total,
                    remove_jobfolder=False, n_cores=2)
-    '''
-    full_skels = dict()
-    degree_dict_percell = dict()
-    neighbour_dict_percell = dict()
-    nx_skels = dict()
-    for f in os.listdir(outfile2):
-        outlist = load_pkl2obj(outfile2 + "/" + f)
-        full_skel = outlist[0]
-        nx_skel = outlist[1]
-        degrees = outlist[2]
-        neighbour = outlist[3]
-        ssv_id = int(outlist[4])
-        full_skels[ssv_id] = full_skel
-        nx_skels[ssv_id] = nx_skel
-        degree_dict_percell[ssv_id] = degrees
-        neighbour_dict_percell[ssv_id] = neighbour
-    #ssvs = [i for i in ssd.ssvs]
-    #ssv_id_list = []
-    knx_dict = {i: dict() for i in ssd.ssv_ids}
-    for ssv_id in ssd.ssv_ids:
-        if ssv_id not in full_skels:
-            continue
-        ssv = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
-        ssv.k_skeleton = full_skels[ssv.id]
-        ssv.knx_skeleton = nx_skels[ssv.id]
-        ssv.knx_skeleton_dict = knx_dict[ssv.id]
-        ssv.knx_skeleton_dict["neighbours"] = neighbour_dict_percell[ssv.id]
-        ssv.knx_skeleton_dict["nodes"] = full_skels[ssv.id].vertices
-        ssv.knx_skeleton_dict["edges"] = nx_skels[ssv.id].edges
-        ssv.knx_skeleton_dict["degree"] = degree_dict_percell[ssv.id]
-        ssv.save_skeleton_kimimaro(skel="k_skeleton")
-        ssv.save_skeleton_kimimaro(skel="knx_skeleton")
-        ssv.save_skeleton_kimimaro(skel="knx_skeleton_dict")
-        ssv.cnn_axoness2skel_kimimaro()
-    raise ValueError
-    '''
 
     log.info('Finished skeleton generation.')
-
-    #return ssv_id_list
-
-def map_axoness2kimimaro_skeleton(max_n_jobs: Optional[int] = None):
-    #code from exec_multiview rum_semsegaxoness_mapping
-
-    if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
-    """Maps axon prediction of rendering locations onto SSV kimimaro skeletons"""
-    log = initialize_logging('axon_mapping', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
-    pred_key_appendix = ""
-    # Working directory has to be changed globally in global_params
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    # sort ssv ids according to their number of SVs (descending)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
-                               in ssd.ssv_ids])
-    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
-    multi_params = chunkify(multi_params, max_n_jobs)
-
-    multi_params = [(ssv_id, pred_key_appendix) for ssv_id in multi_params]
-    log.info('Starting axoness mapping.')
-    _ = qu.QSUB_script(multi_params, "map_axoness2kimimaroskel", log=log,
-                       n_max_co_processes=global_params.config.ncore_total,
-                       suffix="", n_cores=1, remove_jobfolder=True)
-    # TODO: perform completeness check
-    log.info('Finished axoness mapping.')
 
     raise ValueError

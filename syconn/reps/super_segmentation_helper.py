@@ -1543,74 +1543,6 @@ def cnn_axoness2skel(sso: 'super_segmentation.SuperSegmentationObject',
     sso.skeleton["view_ixs"] = ixs
     if save_skel:
         sso.save_skeleton()
-        
-def cnn_axoness2skel_kimimaro(sso: 'super_segmentation.SuperSegmentationObject',
-                     pred_key_appendix: str = "", k: int = 1,
-                     force_reload: bool = False,
-                     save_skel: bool = True, use_cache: bool = False):
-    """
-    By default, will create 'axoness_preds_cnn' attribute in SSV attribute dict
-    and save new skeleton attributes with keys "axoness" and "axoness_probas".
-
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    pred_key_appendix : str
-    k : int
-    force_reload : bool
-        Reload SV predictions.
-    save_skel : bool
-        Save SSV skeleton with prediction attirbutes
-    use_cache : bool
-        Write intermediate SV predictions in SSV attribute dict to disk
-
-    Returns
-    -------
-
-    """
-    if k != 1:
-        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
-                      "It is not longer used in this method.".format(k))
-    if sso.knx_skeleton_dict is None:
-        sso.load_skeleton_kimimaro(skel = "knx_skeleton_dict")
-    proba_key = "axoness_probas_cnn%s" % pred_key_appendix
-    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or\
-            force_reload:
-        preds = np.array(start_multiprocess_obj(
-            "axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
-                              for sv in sso.svs],
-                                                   nb_cpus=sso.nb_cpus))
-        probas = np.array(start_multiprocess_obj(
-            "axoness_probas", [[sv, {"pred_key_appendix": pred_key_appendix}]
-                               for sv in sso.svs], nb_cpus=sso.nb_cpus))
-        preds = np.concatenate(preds)
-        probas = np.concatenate(probas)
-        sso.attr_dict[proba_key] = probas
-        sso.attr_dict[pred_key] = preds
-        if use_cache:
-            sso.save_attributes([proba_key, pred_key], [probas, preds])
-    else:
-        preds = sso.lookup_in_attribute_dict(pred_key)
-        probas = sso.lookup_in_attribute_dict(proba_key)
-    loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
-                                          "predictions. SSO %d" % sso.id
-    # find NN in loc_coords for every skeleton node and use their majority
-    # prediction
-    node_preds = colorcode_vertices(sso.knx_skeleton_dict["nodes"], # * sso.scaling taking out, already in physical positions?
-                                    loc_coords, preds, colors=[0, 1, 2], k=1)
-    node_probas, ixs = assign_rep_values(sso.knx_skeleton_dict["nodes"], # * sso.scaling taking out, already in physical positions?
-                                         loc_coords, probas, return_ixs=True)
-    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
-                                           "coordinates is bigger than " \
-                                           "length of sample coordinates."
-    sso.knx_skeleton_dict["axoness%s" % pred_key_appendix] = node_preds
-    sso.knx_skeleton_dict["axoness_probas%s" % pred_key_appendix] = node_probas
-    sso.knx_skeleton_dict["view_ixs"] = ixs
-    if save_skel:
-        sso.save_skeleton_kimimaro(skel = "knx_skeleton_dict")
 
 
 def average_node_axoness_views(sso: 'super_segmentation.SuperSegmentationObject',
@@ -1694,48 +1626,6 @@ def average_node_axoness_views(sso: 'super_segmentation.SuperSegmentationObject'
     sso.skeleton["axoness%s_avg%d" % (pred_key_appendix, max_dist)] = avg_pred
 
 
-def majority_vote_compartments_kimimaro(sso, ax_pred_key='axoness'):
-    """
-    By default, will save new skeleton attribute with key
-     ax_pred_key + "_comp_maj". Will not call ``sso.save_skeleton()``.
-
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    ax_pred_key : str
-        Key for the axoness predictions stored in sso.skeleton
-
-    Returns
-    -------
-
-    """
-    sso.load_skeleton_kimimaro(skel = "knx_skeleton")
-    sso.load_skeleton_kimimaro(skel = "knx_skeleton_dict")
-    g = sso.knx_skeleton
-    soma_free_g = g.copy()
-    for i,d in enumerate(sso.knx_skeleton_dict[ax_pred_key]):
-        if d == 2:
-            soma_free_g.remove_node(i)
-    ccs = list(nx.connected_component_subgraphs(soma_free_g))
-    new_axoness_dc = nx.get_node_attributes(g, ax_pred_key)
-    for cc in ccs:
-        preds = [n for n in sso.knx_skeleton_dict[ax_pred_key] ]
-        cls, cnts = np.unique(preds, return_counts=True)
-        majority = cls[np.argmax(cnts)]
-        probas = np.array(cnts, dtype=np.float32) / np.sum(cnts)
-        # positively bias dendrite assignment
-        if (majority == 1) and (probas[cls == 1] < 0.66):
-            majority = 0
-        for n in cc.nodes():
-            new_axoness_dc[n] = majority
-    nx.set_node_attributes(g, new_axoness_dc, ax_pred_key)
-    new_axoness_arr = np.zeros((len(sso.knx_skeleton_dict["nodes"])))
-    for i,d in enumerate(sso.knx_skeleton_dict[ax_pred_key]):
-        new_axoness_arr[i] = d
-    sso.knx_skeleton_dict[ax_pred_key + "_comp_maj"] = new_axoness_arr
-    sso.save_skeleton_kimimaro(skel = "knx_skeleton_dict")
-    sso.save_skeleton_kimimaro(skel = "knx_skeleton")
-
 def majority_vote_compartments(sso, ax_pred_key='axoness'):
     """
     By default, will save new skeleton attribute with key
@@ -1809,46 +1699,6 @@ def majorityvote_skeleton_property(sso: 'super_segmentation.SuperSegmentationObj
     if return_res:
         return avg_prop
     sso.skeleton["%s_avg%d" % (prop_key, max_dist)] = avg_prop
-
-def majorityvote_skeleton_property_kimimaro(sso: 'super_segmentation.SuperSegmentationObject',
-                                   prop_key: str, max_dist: int = 10000,
-                                   return_res: bool = False) -> np.ndarray:
-    """
-    Applies a sliding window majority vote along the skeleton of a given
-    :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`.
-    Will not call ``sso.save_skeleton()``.
-
-    Args:
-        sso: The cell reconstruction object.
-        prop_key: Key of the property which will be processed.
-        max_dist: Maximum traversal distance along L2-distance weighted graph.
-        return_res: If True, majority result will be returned.
-
-    Returns:
-        The majority vote of the requested property.
-    """
-    sso.load_skeleton_kimimaro(skel="knx_skeleton")
-    sso.load_skeleton_kimimaro(skel="knx_skeleton_dict")
-    if not prop_key in sso.knx_skeleton_dict:
-        raise ValueError(f'Given property "{prop_key}" does not exist in '
-                         f'skeleton of SSV {sso.id}.')
-    sso.load_skeleton_kimimaro(skel = "knx_skeleton")
-    sso.load_skeleton_kimimaro(skel = "knx_skeleton_dict")
-    g = sso.knx_skeleton
-    avg_prop = []
-    for n in range(g.number_of_nodes()):
-        paths = nx.single_source_dijkstra_path(g, n, max_dist)
-        neighs = np.array(list(paths.keys()), dtype=np.int)
-        prop_vals, cnts = np.unique(sso.knx_skeleton_dict[prop_key][neighs],
-                                    return_counts=True)
-        c = prop_vals[np.argmax(cnts)]
-        avg_prop.append(c)
-    avg_prop = np.array(avg_prop)
-    if return_res:
-        return avg_prop
-    sso.knx_skeleton_dict["%s_avg%d" % (prop_key, max_dist)] = avg_prop
-    sso.save_skeleton_kimimaro(skel = "knx_skeleton_dict")
-    sso.save_skeleton_kimimaro(skel = "knx_skeleton")
 
 
 def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.config['ncores_per_node']):
