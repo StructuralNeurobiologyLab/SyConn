@@ -10,25 +10,6 @@ import scipy.ndimage
 import networkx as nx
 
 
-# def test_bfs_smoothing():
-#     test_split_subcc()
-#     test_create_graph_from_coords()
-#     G = nx.Graph()
-#     print("Nodes in G: ", G.nodes(data=True))
-#     print("Edges in G: ", G.edges(data=True))
-#     G.add_weighted_edges_from([(0, 1, 3.0), (1, 2, 7.5)])
-#     print("Nodes in G: ", G.nodes(data=True))
-#     print("Edges in G: ", G.edges(data=True))
-#
-# def test_split_subcc():
-#     print("Hi")
-#
-#
-# def test_create_graph_from_coords():
-#     print("Hi")
-
-
-
 def test_detect_cs(distance_between_cube, stencil, cube_size):
     """
 
