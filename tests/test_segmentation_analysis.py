@@ -25,7 +25,7 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
     cube_size = cube_size                                                                #cube size
     distance_between_cube = distance_between_cube                                        #distance between cube
     offset = stencil // 2                                                                #output offset adjustment due to stencil size
-    a = np.amax(offset + 1 )                                                                              #co-ordinate of topmost corner of first cube
+    a = np.amax(offset + 1 )                                                             #co-ordinate of topmost corner of first cube
     edge_s = np.amax(stencil + distance_between_cube + cube_size)  # data cube size
     sample = np.zeros((edge_s, edge_s, edge_s), dtype=np.uint32)
     c = cube_size
@@ -36,7 +36,7 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
     higher_id_array = np.asarray(edge_id_output_sample, np.uint32)                       #retracts 32 bit cell id of higher value
     lower_id_array = np.asarray(edge_id_output_sample, np.uint64) // (2 ** 32)           #retracts 32 bit cell id of lower value
     counter = np.array([c, c, c]) + d + np.array([1, 1, 1])                              #checks if distance between cubes is longer than stencil size
-    output_offset = np.maximum(0, counter - stencil)                                   #adjusts output offset accordingly
+    output_offset = np.maximum(0, counter - stencil)                                     #adjusts output offset accordingly
     output_shape = np.array(sample.shape + np.array([1, 1, 1]) - stencil)
     o_o = output_offset                                                                  #dummy variable for output cube size
     o = offset                                                                           #dummy variable for offset due to stencil size
