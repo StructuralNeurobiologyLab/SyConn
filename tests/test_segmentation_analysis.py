@@ -106,20 +106,20 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
     higher_id_array = np.asarray(edge_id_output_sample, np.uint32)                       #retracts 32 bit cell id of higher value
     lower_id_array = np.asarray(edge_id_output_sample, np.uint64) // (2 ** 32)           #retracts 32 bit cell id of lower value
     counter = np.array([c, c, c]) + d + np.array([1, 1, 1])                              #checks if distance between cubes is longer than stencil size
-    output_offset = np.maximum((0), counter - stencil)                                   #adjusts output offset accordingly
+    output_offset = np.maximum(0, counter - stencil)                                   #adjusts output offset accordingly
     output_shape = np.array(sample.shape + np.array([1, 1, 1]) - stencil)
     o_o = output_offset                                                                  #dummy variable for output cube size
     o = offset                                                                           #dummy variable for offset due to stencil size
 
-    output_id = np.zeros((output_shape[0],output_shape[1],output_shape[2]), dtype=np.uint32)
+    output_id = np.zeros((output_shape[0], output_shape[1], output_shape[2]), dtype=np.uint32)
 
     output_id[a-o[0]+o_o[0]:a+c-o[0], a-o[1]+o_o[1]:a+c-o[1], a-o[2]+o_o[2]:a+c-o[2]] = 1
     output_id[a+d[0]-o[0]:a+d[0]+c-o[0]-o_o[0], a+d[1]-o[1]:a+d[1]+c-o[1]-o_o[1], a+d[2]-o[2]:a+d[2]+c-o[2]-o_o[2]] = 1
     output_id[a-o[0]+1:a+c-o[0]-1, a-o[1]+1:a+c-o[1]-1, a-o[2]+1:a+c-o[2]-1] = 0
     output_id[a+d[0]-o[0]+1:a+d[0]+c-o[0]-1, a+d[1]-o[1]+1:a+d[1]+c-o[1]-1, a+d[2]-o[2]+1:a+d[2]+c-o[2]-1] = 0
 
-    assert np.array_equal(np.array(5*output_id, np.uint32), np.array(higher_id_array,np.uint32)), "higher value cell id array do not match"
-    assert np.array_equal(np.array(4*output_id, np.uint32), np.array(lower_id_array,np.uint32)), "lower value cell id array do not match"
+    assert np.array_equal(np.array(5*output_id, np.uint32), np.array(higher_id_array, np.uint32)), "higher value cell id array do not match"
+    assert np.array_equal(np.array(4*output_id, np.uint32), np.array(lower_id_array, np.uint32)), "lower value cell id array do not match"
 
     # print(5*output_id)
     # print(higher_id_array)
@@ -128,11 +128,10 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
     # sample[7:10, 7:10, 7:10] = 4                                                         #cell_id cube 1
     # sample[7:10, 7:10, 11:14] = 5                                                        #cell_id cube 2
 
+
 def test_process_block_nonzero():
     print("p")
 
 
 if __name__ == '__main__':
-    #test_find_object_properties()
     test_detect_cs(np.array([0, 4, 4]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 3)
-    #test_bfs_smoothing()
