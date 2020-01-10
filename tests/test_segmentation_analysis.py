@@ -83,7 +83,12 @@ import networkx as nx
 def test_detect_cs(distance_between_cube, stencil, cube_size):
     """
 
-    Returns:
+    Args:
+        distance_between_cube: Distance between cubes of two different ids
+        stencil: Generic stencil size
+        cube_size: Generic cube size of two different ids
+
+    Returns: Assert statement fails if detect_cs() method does not work properly
 
     """
     edge_s = 20                                                                          #data cube size
