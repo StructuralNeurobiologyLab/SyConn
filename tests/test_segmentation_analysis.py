@@ -21,6 +21,7 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
     Returns: Assert statement fails if detect_cs() method does not work properly
 
     """
+    assert (np.amax(distance_between_cube) > cube_size), "Distance between cubes should be grater than cube size"
     stencil = stencil
     cube_size = cube_size                                                                #cube size
     distance_between_cube = distance_between_cube                                        #distance between cube
@@ -53,4 +54,4 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
 
 
 if __name__ == '__main__':
-    test_detect_cs(np.array([4, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 3)
+    test_detect_cs(np.array([0, 5, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 4)
