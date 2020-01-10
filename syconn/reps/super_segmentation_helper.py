@@ -53,14 +53,15 @@ def majority_vote(anno, prop, max_dist):
     Smoothes (average using sliding window of 2 times max_dist and majority
     vote) property prediction in annotation, whereas for axoness somata are
     untouched.
+    Args:
+        anno:  SkeletonAnnotation
+        prop:str
+            which property to average
+        max_dist: int
+            maximum distance (in nm) for sliding window used in majority voting
 
-    Parameters
-    ----------
-    anno : SkeletonAnnotation
-    prop : str
-        which property to average
-    max_dist : int
-        maximum distance (in nm) for sliding window used in majority voting
+    Returns:
+
     """
     old_anno = copy.deepcopy(anno)
     nearest_nodes_list = nodes_in_pathlength(old_anno, max_dist)
@@ -79,19 +80,17 @@ def majority_vote(anno, prop, max_dist):
 
 
 def nodes_in_pathlength(anno, max_path_len):
-    """Find nodes reachable in max_path_len from source node, calculated for
+    """
+    Find nodes reachable in max_path_len from source node, calculated for
     every node in anno.
+    Args:
+        anno: AnnotationObject
+        max_path_len: float
+            Maximum distance from source node
 
-    Parameters
-    ----------
-    anno : AnnotationObject
-    max_path_len : float
-        Maximum distance from source node
+    Returns: list of lists containing reachable nodes in max_path_len where
+        outer list has length len(anno.getNodes())
 
-    Returns
-    -------
-    list of lists containing reachable nodes in max_path_len where
-    outer list has length len(anno.getNodes())
     """
     skel_graph = annotation_to_nx_graph(anno)
     list_reachable_nodes = []
@@ -122,18 +121,17 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     :func:`~sso_views_to_modelinput` is used to create the random view subsets.
     The final prediction is the majority class of all subset predictions.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    model : nn.Module
-    nb_views : int
-    overwrite : bool
-    use_syntype : bool
-        Use the type of the pre-synapses.
-    pred_key_appendix : str
+    Args:
+        sso: SuperSegmentationObject
+        model: nn.Module
+        nb_views: int
+        use_syntype: bool
+        overwrite:  bool
+             Use the type of the pre-synapses.
+        pred_key_appendix:  str
+        da_equals_tan:
 
-    Returns
-    -------
+    Returns:
 
     """
     sso.load_attr_dict()
@@ -186,9 +184,9 @@ def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
         nb_views: Number of views in each view subset.
         view_key: Key of the stored views.
 
-    Returns:
-        An array of random view subsets of all 2D projections contained in the
+    Returns: An array of random view subsets of all 2D projections contained in the
         cell reconstruction. Shape: (#subsets, 4 channels, nb_views, 128, 256)
+
     """
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
@@ -215,17 +213,15 @@ def radius_correction_found_vertices(sso: 'super_segmentation.SuperSegmentationO
     Algorithm finds two nearest vertices and takes the median of the
     distances for every node.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    plump_factor : int
-        multiplication factor for the radius
-    num_found_vertices : int
-        number of closest vertices queried for the node
+    Args:
+        sso: SuperSegmentationObject
+        plump_factor: int
+            multiplication factor for the radius
+        num_found_vertices: int
+            number of closest vertices queried for the node
 
-    Returns
-    -------
-    skeleton with diameters estimated
+    Returns: skeleton with diameters estimated
+
     """
 
     skel_node = sso.skeleton['nodes']
@@ -248,17 +244,15 @@ def get_sso_axoness_from_coord(sso, coord, k=5):
     Finds k nearest neighbor nodes within sso skeleton and returns majority
     class of dendrite (0), axon (1) or soma (2).
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    coord : np.array
-        unscaled coordinate
-    k : int
-        Number of nearest neighbors on which the majority vote is computed.
+    Args:
+        sso: SuperSegmentationObject
+        coord: np.array
+            unscaled coordinate
+        k: int
+            Number of nearest neighbors on which the majority vote is computed.
 
-    Returns
-    -------
-    int
+    Returns: int
+
     """
     coord = np.array(coord) * np.array(sso.scaling)
     sso.load_skeleton()
@@ -338,7 +332,24 @@ def calculate_skeleton(sso, size_threshold=1e20, kd=None,
 
 
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
-    def _load_sv_voxels_thread(args):
+    """
+
+    Args:
+        sso:
+        downsampling:
+        nb_threads:
+
+    Returns:
+
+    """
+    def _load_sv_voxels_thread(args): """
+    
+        Args:
+            args: 
+
+        Returns:
+
+        """
         sv_id = args[0]
         sv = segmentation.SegmentationObject(sv_id,
                                              obj_type="sv",
@@ -397,6 +408,15 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
 
 
 def create_new_skeleton(sv_id, sso):
+    """
+
+    Args:
+        sv_id:
+        sso:
+
+    Returns:
+
+    """
     so = SegmentationObject(sv_id, obj_type="sv",
                             version=sso.version_dict[
                                 "sv"],
@@ -410,6 +430,15 @@ def create_new_skeleton(sv_id, sso):
 
 
 def convert_coord(coord_list, scal):
+    """
+
+    Args:
+        coord_list:
+        scal:
+
+    Returns:
+
+    """
     return np.array([coord_list[1] + 1, coord_list[0] + 1,
                      coord_list[2] + 1]) * np.array(scal)
 
@@ -417,22 +446,20 @@ def convert_coord(coord_list, scal):
 def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                         preserve_annotations=True):
     """
-    Removes short stub branches, that are often added by annotators but
+     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    nx_g : network kx graph
-    scal : array of size 3
-        the scaled up factor
-    len_thres : int
-        threshold of the length below which it will be pruned
-    preserve_annotations : bool
+    Args:
+        sso: SuperSegmentationObject
+        nx_g: network kx graph
+        scal: array of size 3
+            the scaled up factor
+        len_thres: int
+            threshold of the length below which it will be pruned
+        preserve_annotations: bool
 
-    Returns
-    -------
-        pruned MST
+    Returns: pruned MST
+
     """
     if scal is None:
         scal = global_params.config['scaling']
@@ -495,22 +522,21 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
     """
     Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
 
-    Parameters
-    ----------
-    sso : Super Segmentation Object
-    dot_prod_thresh : float
-        the 'straightness' of the edges
-    skel_nx : networkx graph of the sso skel
-    max_dist_thresh : int
-        maximum distance desired between every node
-    min_dist_thresh : int
-        minimum distance desired between every node
+    Args:
+        sso: Super Segmentation Object
+        skel_nx:
+            networkx graph of the sso skel
+        dot_prod_thresh: float
+            the 'straightness' of the edges
+        max_dist_thresh: int
+            maximum distance desired between every node
+        min_dist_thresh: int
+            minimum distance desired between every node
 
-    Returns
-    -------
-    sso containing the sparsed skeleton
+    Returns: sso containing the sparsed skeleton
+
+
     """
-
     sso.load_skeleton()
     scal = sso.scaling
     change = 1
@@ -611,6 +637,15 @@ def skeleton_optimization(nx_g: nx.Graph,
 
 
 def from_netkx_to_sso(sso, skel_nx):
+    """
+
+    Args:
+        sso:
+        skel_nx:
+
+    Returns:
+
+    """
     sso.skeleton = {}
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in
                                       skel_nx.nodes()], dtype=np.uint32)
@@ -636,6 +671,14 @@ def from_netkx_to_sso(sso, skel_nx):
 
 
 def from_sso_to_netkx(sso):
+    """
+
+    Args:
+        sso:
+
+    Returns:
+
+    """
     skel_nx = nx.Graph()
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
@@ -665,7 +708,14 @@ def from_sso_to_netkx(sso):
 
 
 def stitch_skel_nx(skel_nx):
+    """
 
+    Args:
+        skel_nx:
+
+    Returns:
+
+    """
     no_of_seg = nx.number_connected_components(skel_nx)
 
     skel_nx_nodes = [ii['position'] for ix, ii in skel_nx.node.items()]
@@ -704,17 +754,14 @@ def stitch_skel_nx(skel_nx):
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
     Creates the super-supervoxel skeleton based on existing supervoxel skeletons.
+    Args:
+        sso: Super Segmentation Object
+        pruning_thresh: int
+            threshold for pruning
+        sparsify:  bool
+           will sparsify if True otherwise not
 
-    Parameters
-    ----------
-    sso : Super Segmentation Object
-    pruning_thresh : int
-        threshold for pruning
-    sparsify : bool
-        will sparsify if True otherwise not
-
-    Returns
-    -------
+    Returns:
 
     """
     # Creating network kx graph from sso skel
