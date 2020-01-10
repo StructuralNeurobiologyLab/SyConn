@@ -24,7 +24,6 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tool
-
 from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
 from . import segmentation
 from .segmentation import SegmentationObject
@@ -603,8 +602,8 @@ def skeleton_optimization(nx_g: nx.Graph,
                 if n2 in deg_2_nodes:
                     deg_2_nodes.remove(n2)
 
-    log_reps.debug(f'sparsening took {time.time() - start}. Reduced {n_nodes_start} to '
-                   f'{nx_g.number_of_nodes()} nodes')
+    # log_reps.debug(f'sparsening took {time.time() - start}. Reduced {n_nodes_start} to '
+    #                f'{nx_g.number_of_nodes()} nodes')
     # reset weighted
     return nx_g
 
@@ -958,8 +957,8 @@ def sparsify_skeleton_fast(skel_nx: nx.Graph, scal: Optional[np.ndarray] = None,
                     skel_nx.remove_node(visiting_node)
                     skel_nx.add_edge(left_node, right_node)
                     change += 1
-    log_reps.debug(f'sparsening took {time.time() - start}. Reduced {n_nodes_start} to '
-                   f'{skel_nx.number_of_nodes()} nodes')
+    # log_reps.debug(f'sparsening took {time.time() - start}. Reduced {n_nodes_start} to '
+    #                f'{skel_nx.number_of_nodes()} nodes')
     return skel_nx
 
 
