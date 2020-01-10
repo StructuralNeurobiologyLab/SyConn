@@ -28,7 +28,7 @@ from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 from syconn import global_params
 from syconn.handler.prediction import get_axoness_model
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.handler.config import initialize_logging
@@ -96,11 +96,9 @@ def run_axoness_mapping(max_n_jobs: Optional[int] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    # sort ssv ids according to their number of SVs (descending)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
-                               in ssd.ssv_ids])
-    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
-    multi_params = chunkify(multi_params, max_n_jobs)
+    # sort ssv ids according to their size(descending)
+    ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
+    multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
 
     multi_params = [(par, pred_key_appendix) for par in multi_params]
     log.info('Starting axoness mapping.')
