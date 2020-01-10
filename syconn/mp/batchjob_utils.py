@@ -59,7 +59,7 @@ python_path_global = sys.executable
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
-                sge_additional_flags=None, iteration=1, max_iterations=3,
+                sge_additional_flags=None, iteration=1, max_iterations=5,
                 params_orig_id=None, python_path=None, disable_mem_flag=False,
                 disable_batchjob=False, send_notification=False, use_dill=False,
                 remove_jobfolder=False, log=None, show_progress=True,
@@ -107,7 +107,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     iteration : int
         This counter stores how often QSUB_script was called for the same job
          submission. E.g. if jobs fail during a submission, it will be repeated
-         max_iterations times.
+         max_iterations times. Starts at 1!
     sge_additional_flags : str
     max_iterations : int
     resume_job : bool
@@ -156,6 +156,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if pe is None:
         pe = global_params.config['batch_pe']
     if resume_job:
+        raise NotImplementedError('Resume jobs requires refactoring.')
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags=additional_flags, script_folder=None,
@@ -166,7 +167,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         python_path = python_path_global
     job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
                                           name, suffix)
-    if os.path.exists(job_folder):
+    if iteration == 1 and os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     if log is None:
         log_batchjob = initialize_logging("{}".format(name + suffix),
@@ -314,7 +315,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # check actually running files
         if nb_rp == 0:
             break
-        n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
+        fname_ids = set([int(re.findall(r"[\d]+", p)[-1]) for p in
+                     glob.glob(path_to_out + "*.pkl")])
+        n_jobs_done = len(fname_ids)
+        if iteration > 1:
+            n_jobs_done = len(set(params_orig_id).intersection(fname_ids))
         diff = n_jobs_done - n_jobs_finished
         pbar.update(diff)
         n_jobs_finished = n_jobs_done
@@ -342,11 +347,20 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     out_files = glob.glob(path_to_out + "*.pkl")
     # only stop if first iteration and script was not resumed (params_orig_id is None)
-    if len(out_files) == 0 and iteration == 1 and params_orig_id is None and not allow_resubm_all_fail:
-        msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
-              ' Please check your submitted code.'
-        log_batchjob.error(msg)
-        raise RuntimeError(msg)
+    if len(out_files) == 0 and iteration == 1 and params_orig_id is None and not \
+            allow_resubm_all_fail:
+        # check if out-of-memory event occurred.
+        err_files = glob.glob(path_to_err + "*.log")
+        found_oom_event = False
+        for fname in err_files:
+            strng = "".join(open(fname).readlines()).lower()
+            if 'killed' in strng or 'oom' in strng or 'out-of-memory' in strng:
+                found_oom_event = True
+        if not found_oom_event:
+            msg = 'All submitted jobs have failed. Re-submission will not be ' \
+                  'initiated. Please check your submitted code.'
+            log_batchjob.error(msg)
+            raise RuntimeError(msg)
     if len(out_files) < len(params):
         log_batchjob.error("%d jobs appear to have failed." % (len(params) - len(out_files)))
         checklist = np.zeros(len(params), dtype=np.bool)
@@ -354,9 +368,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             params_orig_id = np.arange(len(params))
         for p in out_files:
             job_id = int(re.findall(r"[\d]+", p)[-1])
+            if job_id not in params_orig_id:
+                continue
             index = np.nonzero(params_orig_id == job_id)[0]  # still an array, "[0]" only gives
             # us the first dimension
-            assert len(index) == 1  # must be one hit and one only
             checklist[index[0]] = True
 
         missed_params = [params[ii] for ii in range(len(params)) if not checklist[ii]]
@@ -369,7 +384,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
-        n_cores += 2  # increase number of cores per job by at least 2
+        n_cores += 1  # increase number of cores per job by at least 2
         # TODO: activate again
         # n_cores = np.max([np.min([global_params.config['ncores_per_node'], float(n_max_co_processes) //
         #                           len(missed_params)]), n_cores])
@@ -391,7 +406,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags=additional_flags, script_folder=None,
-            job_name="default", suffix=suffix+"_iter"+str(iteration),
+            job_name="default", suffix=suffix, remove_jobfolder=remove_jobfolder,
             sge_additional_flags=sge_additional_flags, iteration=iteration+1,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores,
             params_orig_id=orig_job_ids, use_dill=use_dill)
@@ -590,7 +605,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
         if remove_jobfolder:
             shutil.rmtree(job_folder, ignore_errors=True)
     else:
-        msg = 'Uncritical warnings/errors occurred during ' \
+        msg = 'Warnings/errors occurred during ' \
               '"{}".:\n{} See logs at {} for details.'.format(name, out_str,
                                                               job_folder)
         log_mp.warning(msg)
@@ -602,7 +617,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
 
 def fallback_exec(cmd_exec):
     """
-    Helper function to execute commands using subprocess.
+    Helper function to execute commands via ``subprocess.Popen``.
     """
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)

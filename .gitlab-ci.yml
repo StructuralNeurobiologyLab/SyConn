@@ -1,0 +1,48 @@
+stages:
+  - build
+  - test
+  - cleanup
+
+test:
+  stage: test
+  script:
+    - source ~/.bashrc
+    - conda activate pysyintegration
+    - pip install --upgrade --no-deps -v -e .
+    - pytest --ignore=tests/test_run.py
+  except:
+    - master
+
+test-full:
+  stage: test
+  script:
+    - source ~/.bashrc
+    - conda activate pysyintegration_m
+    - pip install --upgrade --no-deps -v -e .
+    - pytest
+  only:
+    - master
+  tags:
+    - master
+
+build:
+  stage: build
+  # TODO: use conda environment for test stage
+  script:
+    - conda env create -f environment.yml -n pysyintegration_m python --force
+    - source ~/.bashrc
+    - conda activate pysyintegration_m
+  only:
+    - master
+  tags:
+    - master
+
+cleanup:
+  stage: cleanup
+  script:
+    - conda remove --yes -n pysyintegration_m --all
+  when: always
+  only:
+    - master
+  tags:
+    - master

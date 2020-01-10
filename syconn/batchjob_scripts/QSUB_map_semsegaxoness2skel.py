@@ -36,19 +36,20 @@ for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
     sso.load_skeleton()
     if sso.skeleton is None or len(sso.skeleton["nodes"]) < 2:
-        print("Skeleton of SSV %d has zero or less than two nodes." % ix)
+        print("Skeleton of SSV %d has < 2 nodes." % ix)
         continue
     # vertex predictions
     node_preds = sso.semseg_for_coords(
         sso.skeleton['nodes'], semseg_key=global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
-                                       **map_properties)
+        **map_properties)
 
     # perform average only on axon dendrite and soma predictions
     nodes_ax_den_so = np.array(node_preds, dtype=np.int)
-    # set en-passant and terminal boutons to axon class.
+    # set en-passant and terminal boutons to axon class for averaging
+    # bouton labels are stored in node_preds
     nodes_ax_den_so[nodes_ax_den_so == 3] = 1
     nodes_ax_den_so[nodes_ax_den_so == 4] = 1
-    sso.skeleton[pred_key] = node_preds
+    sso.skeleton[pred_key] = nodes_ax_den_so
 
     # average along skeleton, stored as: "{}_avg{}".format(pred_key, max_dist)
     majorityvote_skeleton_property(sso, prop_key=pred_key,

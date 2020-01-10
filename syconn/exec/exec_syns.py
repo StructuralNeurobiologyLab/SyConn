@@ -72,7 +72,7 @@ def run_matrix_export():
     log.info('Connectivity matrix was exported to "{}".'.format(dest_folder))
 
 
-def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
+def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512),
                        n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
                        cube_of_interest_bb: Optional[np.ndarray] = None):
@@ -123,8 +123,10 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
                                      obj_type='syn_ssv')
 
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
+    syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
-             f'objects.')
+             f'objects, {np.sum(syn_sign == -1)} symmetric and '
+             f'{np.sum(syn_sign == 1)} asymmetric.')
 
     cps.map_objects_to_synssv(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
@@ -132,7 +134,7 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
     log.info('Synapse prediction finished.')
 
-    log.info('Collecting and writing syn-ssv objects to SSV attribute '
+    log.info('Collecting and writing syn_ssv objects to SSV attribute '
              'dictionary.')
     # This needs to be run after `classify_synssv_objects` and before
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects

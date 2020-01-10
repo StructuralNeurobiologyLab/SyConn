@@ -249,14 +249,11 @@ class SyConnBackend(object):
         pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                                         global_params.config['compartments']['dist_axoness_averaging'])
         keys = [
-                # "axoness_avg{}".format(avg_dst),
-                # "axoness_avg{}_comp_maj".format(avg_dst),
                 global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                 pred_key_ax,
+                pred_key_ax + '_comp_maj',
                 'myelin_avg10000',  # TODO: use global_params.py value !
-                'myelin',  # TODO: use global_params.py value !
-                "axoness_k{}".format(global_params.config['compartments']['map_properties_semsegax']['k']),
-                "axoness_k{}_comp_maj".format(global_params.config['compartments']['map_properties_semsegax']['k'])]
+                'myelin']  # TODO: use global_params.py value !
         for k in keys:
             if k in skeleton:
                 skel_attr.append(k)

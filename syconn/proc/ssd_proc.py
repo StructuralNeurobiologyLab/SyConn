@@ -284,8 +284,8 @@ def map_synssv_objects_thread(args):
                                                       version_dict=version_dict)
 
     syn_ssv_sd = segmentation.SegmentationDataset(obj_type="syn_ssv",
-                                               working_dir=working_dir,
-                                               version=synssv_version)
+                                                  working_dir=working_dir,
+                                                  version=synssv_version)
 
     ssv_partners = syn_ssv_sd.load_cached_data("neuron_partners")
     syn_prob = syn_ssv_sd.load_cached_data("syn_prob")

@@ -104,6 +104,9 @@ cell_objects:
   # above will be assigned synaptic sign (-1, inhibitory) and <= will be
   # (1, excitatory)
   sym_thresh: 0.225
+  # labels are None by default
+  asym_label:
+  sym_label:
 
 meshes:
   allow_mesh_gen_cells:
@@ -128,13 +131,13 @@ meshes:
   mesh_min_obj_vx: 100  # adapt to size threshold
 
   meshing_props:
-    normals: True
+    normals: False  # True
     simplification_factor: 300
-    max_simplification_error: 40
+    max_simplification_error: 40  # in nm
 
 skeleton:
   allow_skel_gen: True
-  feature_context_rfc: # in NM
+  feature_context_rfc: # in nm
     axoness: 8000
     spiness: 1000
 

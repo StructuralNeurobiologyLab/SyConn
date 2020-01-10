@@ -107,7 +107,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     for ix in neuron_g.nodes():
         glia_g.remove_node(ix)
 
-    # create dictionatry with CC sizes (BBD)
+    # create dictionary with CC sizes (BBD)
     log_proc.info("Finished neuron and glia RAG, now preparing CC size dict.")
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
@@ -116,7 +116,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(g, sv_size_dict)
     log_proc.info("Finished preparation of SSV size dictionary based "
-                  "on bounding box diagional of corresponding SVs.")
+                  "on bounding box diagonal of corresponding SVs.")
 
     # add CCs with single neuron SV manually
     neuron_ids = list(neuron_g.nodes())

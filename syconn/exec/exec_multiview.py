@@ -399,7 +399,7 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
     kwargs_semsegforcoords = global_params.config['spines']['semseg2coords_spines']
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh, kwargs_semsegforcoords) for ssv_ids in multi_params]
-    log.info('Starting mapping of spine predictions to neurite surfaces.')
+    log.info('Started mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=global_params.config.ncore_total,
                    n_cores=4, suffix="", additional_flags="", remove_jobfolder=True, log=log)
     log.info('Finished spine mapping.')
@@ -561,6 +561,9 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
         time.sleep(10)
     for p in ps:
         p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
     log.info('Finished rendering of all SSVs. Checking completeness.')
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.config['ncores_per_node'])
@@ -685,7 +688,7 @@ def run_glia_prediction(e3: bool = False):
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     multi_params = chunkify(sd.so_dir_paths, global_params.config.ngpu_total * 2)
     # get model properties
-    if e3 == True:
+    if e3 is True:
         model_kwargs = 'get_glia_model_e3'
     else:
         m = get_glia_model()
@@ -843,7 +846,6 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
 
     # generate parameter for view rendering of individual SSV
-    # TODO: remove SVs below minimum size (-> global_params.config['glia']['min_cc_size_ssv'])
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
     bbs = sds.load_cached_data('bounding_box') * sds.scaling
@@ -884,6 +886,9 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
         q_in.join_thread()
         for p in ps:
             p.join()
+            if p.exitcode != 0:
+                raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                                f'code {p.exitcode}.')
         if q_out.qsize() != len(big_ssv):
             msg = 'Not all `_run_huge_ssv_render_worker` jobs completed ' \
                   'successfully.'

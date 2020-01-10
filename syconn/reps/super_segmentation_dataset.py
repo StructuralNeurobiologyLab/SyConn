@@ -147,7 +147,7 @@ class SuperSegmentationDataset(object):
                 log_reps.error(msg)
                 raise ValueError(msg)
         elif config is not None:
-            if config.working_dir != working_dir:
+            if os.path.normpath(config.working_dir) != os.path.normpath(working_dir):
                 raise ValueError('Inconsistent working directories in `config` and'
                                  '`working_dir` kwargs.')
             self._config = config
@@ -414,25 +414,26 @@ class SuperSegmentationDataset(object):
             self.load_id_changer()
         return self._id_changer
 
-    def load_cached_data(self, name: str):
+    def load_cached_data(self, prop_name: str):
         """
-        Args:
-            name: Identifier for requested cache array. Ordering of the array
-                is the same as :py:attr:`~ssv_ids`.
-
         Todo:
-            * remove 's' appendix in filenames.
+            * remove 's' appendix in file names.
+
+        Args:
+            prop_name: Identifier for requested cache array. Ordering of the
+                array is the same as :py:attr:`~ssv_ids`.
 
         Returns:
-            Loaded cache array.
+            Numpy array of cached property.
         """
-        # TODO: remove 's' concept
-        if os.path.exists(self.path + name + "s.npy"):
-            return np.load(self.path + name + "s.npy", allow_pickle=True)
+        if os.path.exists(self.path + prop_name + "s.npy"):
+            return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
+        else:
+            log_reps.warning(f'Requested data cache "{prop_name}" '
+                             f'did not exist.')
 
     def sv_id_to_ssv_id(self, sv_id: int) -> int:
         """
-
         Args:
             sv_id: Supervoxel ID.
 
@@ -823,7 +824,7 @@ def _export_ssv_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
@@ -1060,7 +1061,7 @@ def export_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
@@ -1087,10 +1088,8 @@ def convert_knossosdataset_thread(args):
     offsets = args[6]
     size = args[7]
 
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
+    ssv_kd = kd_factory(ssv_kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_id_changer()
@@ -1315,7 +1314,7 @@ def map_ssv_semseg(args: Union[tuple, list]):
         ssv.semseg2mesh(**kwargs_semseg2mesh)
         ssv.load_skeleton()
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
-            log_reps.warning(f"Skeleton of SSV {ssv_id} has zero or less than two nodes.")
+            log_reps.warning(f"Skeleton of SSV {ssv_id} has < 2 nodes.")
             continue
         # vertex predictions
         node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
