@@ -89,6 +89,10 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
     assert np.array_equal(np.array(4*output_id, np.uint32), np.array(lower_id_array, np.uint32)), "lower value cell id array do not match"
 
 
+def test_config():
+
+
+
 if __name__ == '__main__':
     test_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
     test_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)

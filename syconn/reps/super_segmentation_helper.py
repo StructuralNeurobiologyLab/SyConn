@@ -332,24 +332,7 @@ def calculate_skeleton(sso, size_threshold=1e20, kd=None,
 
 
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
-    """
-
-    Args:
-        sso:
-        downsampling:
-        nb_threads:
-
-    Returns:
-
-    """
-    def _load_sv_voxels_thread(args): """
-    
-        Args:
-            args: 
-
-        Returns:
-
-        """
+    def _load_sv_voxels_thread(args):
         sv_id = args[0]
         sv = segmentation.SegmentationObject(sv_id,
                                              obj_type="sv",
