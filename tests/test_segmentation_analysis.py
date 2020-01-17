@@ -8,7 +8,7 @@ import numpy as np
 from syconn.global_params import config
 import scipy.ndimage
 import networkx as nx
-
+from syconn.handler.basics import chunkify_weighted
 
 def test_find_object_properties():
     sample_array = np.array([
@@ -90,10 +90,23 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
 
 
 def test_config():
+    print("None")
 
+
+def test_chunk_weighted():
+    sample_array = np.array([0, 1, 2, 3, 4, 5, 6, 7], np.uint64)
+    weights = np.array([3,1,2,7,5,8,0,], np.uint64)
+    n = 3                      # number_of_sublists
+    output_array = chunkify_weighted(sample_array, n, weights)
+    priority = np.argsort(weights)[::-1]
+    # print(sample_array[priority[0::n]])
+    print(priority)
+    for i in range(n):
+        assert np.array_equal(np.array(output_array[i], np.uint64), np.array(sample_array[priority[i::n]], np.uint64)), "chunk_weighter() function might have some problem "
 
 
 if __name__ == '__main__':
-    test_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    test_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    test_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    test_chunk_weighted()
+    # test_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    # test_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    # test_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
