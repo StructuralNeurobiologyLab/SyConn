@@ -1919,22 +1919,20 @@ class SuperSegmentationObject(object):
         Will be stored in SSV view dict. Default raw/index/prediction views are
         stored decentralized in corresponding SVs.
 
-        Parameters
-        ----------
-        nb_views : int
-        save : bool
-        force_recompute : bool
-        verbose : bool
-        view_key : Optional[str]
-            key used for storing view array. Default: 'index{}'.format(nb_views)
-        ws : Tuple[int]
-            Window size in pixels [y, x]
-        comp_window : float
-            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        Args:
+            nb_views: int
+            save: bool
+            force_recompute: bool
+            verbose: bool
+            view_key: Optional[str]
+                key used for storing view array. Default: 'index{}'.format(nb_views)
+            ws: Tuple[int]
+                Window size in pixels [y, x]
+            comp_window: float
+                Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
 
-        Returns
-        -------
-        np.array
+        Returns: np.array
+
         """
         if view_key is None:
             view_key = 'index{}'.format(nb_views)
@@ -1972,23 +1970,21 @@ class SuperSegmentationObject(object):
         Will be stored in SSV view dict. Default raw/index/prediction views are
         stored decentralized in corresponding SVs.
 
-        Parameters
-        ----------
-        nb_views : int
-        save : bool
-        force_recompute : bool
-        add_cellobjects : bool
-        verbose : bool
-        view_key : Optional[str]
-            key used for storing view array. Default: 'raw{}'.format(nb_views)
-        ws : Tuple[int]
-            Window size in pixels [y, x]
-        comp_window : float
-            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        Args:
+            nb_views: int
+            save: bool
+            force_recompute: bool
+            add_cellobjects: bool
+            verbose: bool
+            view_key: Optional[str]
+                key used for storing view array. Default: 'raw{}'.format(nb_views)
+            ws: Tuple[int]
+                Window size in pixels [y, x]
+            comp_window: float
+                Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
 
-        Returns
-        -------
-        np.array
+        Returns: np.array
+
         """
         if view_key is None:
             view_key = 'raw{}'.format(nb_views)
@@ -2017,6 +2013,7 @@ class SuperSegmentationObject(object):
         else:
             return views
 
+
     def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
                        raw_view_key=None, save=False, ws=None, comp_window=None):
         """
@@ -2032,22 +2029,24 @@ class SuperSegmentationObject(object):
             This method then has to be called like:
                 'self.predict_semseg(m, 'spiness4', nb_views=4)'
 
-        Parameters
-        ----------
-        semseg_key : str
-        nb_views : Optional[int]
-        k : int
-        verbose : bool
-        raw_view_key : str
-            key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
-            If key does not exist, views will be re-rendered with properties defined
-            in global_params.py or as given in the kwargs `ws`, `nb_views` and `comp_window`.
-        save : bool
-            If True, views will be saved.
-        ws : Tuple[int]
-            Window size in pixels [y, x]
-        comp_window : float
-            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        Args:
+            m: int
+            semseg_key: str
+            nb_views: Optional[int]
+            verbose: bool
+            raw_view_key: str
+                key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
+                If key does not exist, views will be re-rendered with properties defined
+                in global_params.py or as given in the kwargs `ws`, `nb_views` and `comp_window`.
+            save: bool
+                If True, views will be saved.
+            ws: Tuple[int]
+                Window size in pixels [y, x]
+            comp_window: float
+                Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+
+        Returns:
+
         """
         if (nb_views is not None) or (raw_view_key is not None):
             # treat as special view rendering
@@ -2092,6 +2091,7 @@ class SuperSegmentationObject(object):
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
                                 nb_cpus=self.nb_cpus, verbose=verbose,
                                 return_pred=self.version == 'tmp')  # do not write to disk
+
 
     def semseg2mesh(self, semseg_key: str, dest_path: Optional[str] = None,
                     nb_views: Optional[int] = None, k: int = 1,
@@ -2151,6 +2151,7 @@ class SuperSegmentationObject(object):
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
 
+
     def semseg_for_coords(self, coords: np.ndarray, semseg_key: str, k: int = 5,
                           ds_vertices: int = 20,
                           ignore_labels: Optional[Iterable[int]] = None):
@@ -2158,24 +2159,22 @@ class SuperSegmentationObject(object):
         Get the semantic segmentation with key `semseg_key` from the `k` nearest
         vertices at every coordinate in `coords`.
 
-        Parameters
-        ----------
-        coords : np.array
-            Voxel coordinates, unscaled! [N, 3]
-        semseg_key : str
-        k : int
-            Number of nearest neighbors (NN) during k-NN classification
-        ds_vertices : int
-            striding factor for vertices
-        ignore_labels : List[int]
-            Vertices with labels in `ignore_labels` will be ignored during
-             majority vote, e.g. used to exclude unpredicted vertices.
+        Args:
+            coords: np.array
+                Voxel coordinates, unscaled! [N, 3]
+            semseg_key: str
+            k: int
+                Number of nearest neighbors (NN) during k-NN classification
+            ds_vertices: int
+                striding factor for vertices
+            ignore_labels: List[int]
+                Vertices with labels in `ignore_labels` will be ignored during
+                majority vote, e.g. used to exclude unpredicted vertices.
 
-        Returns
-        -------
-        np.array
+        Returns: np.array
             Same length as `coords`. For every coordinate in `coords` returns the
             majority label based on its k-nearest neighbors.
+
         """
         # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to
         #  include semseg axoness in a single query
@@ -2199,6 +2198,7 @@ class SuperSegmentationObject(object):
         maj_vote = colorcode_vertices(coords, vertices, vertex_labels, k=k,
                                       return_color=False, nb_cpus=self.nb_cpus)
         return maj_vote
+
 
     def get_spine_compartments(self, semseg_key: str = 'spiness', k: int = 1,
                                min_spine_cc_size: Optional[int] = None,
@@ -2271,24 +2271,23 @@ class SuperSegmentationObject(object):
                 dest_folder, self.id, k, semseg_key, min_spine_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
 
+
     def sample_locations(self, force=False, cache=True, verbose=False,
                          ds_factor=None):
         """
 
-        Parameters
-        ----------
-        force : bool
-            force resampling of locations
-        cache : bool
-            save sample location in SSO attribute dict
-        verbose : bool
-        ds_factor : float
-            Downscaling factor to generate locations
+        Args:
+            force: bool
+                force resampling of locations
+            cache: bool
+                save sample location in SSO attribute dict
+            verbose: bool
+            ds_factor: float
+                Downscaling factor to generate locations
 
-        Returns
-        -------
-        list of array
+        Returns: list of array
             Sample coordinates for each SV in self.svs.
+
         """
         if self.version == 'tmp' and cache:
             cache = False
@@ -2353,17 +2352,18 @@ class SuperSegmentationObject(object):
         """
         Writes mesh of SSV to kzip as .ply file.
 
-        Parameters
-        ----------
-        dest_path :
-        obj_type : str
-            'sv' for cell surface, 'mi': mitochondria, 'vc': vesicle clouds,
-            'sj': synaptic junctions
-        ext_color : np.array of scalar
-            If scalar, it has to be an integer between 0 and 255.
-            If array, it has to be of type uint/int and of shape (N, 4) while N
-            is the number of vertices of the SSV cell surface mesh:
-            N = len(self.mesh[1].reshape((-1, 3)))
+        Args:
+            dest_path:
+            obj_type: str
+                'sv' for cell surface, 'mi': mitochondria, 'vc': vesicle clouds,
+                'sj': synaptic junctions
+            ext_color: np.array of scalar
+                If scalar, it has to be an integer between 0 and 255.
+                If array, it has to be of type uint/int and of shape (N, 4) while N
+                is the number of vertices of the SSV cell surface mesh:
+                N = len(self.mesh[1].reshape((-1, 3)))
+
+        Returns:
 
         """
         color = None
@@ -2415,16 +2415,14 @@ class SuperSegmentationObject(object):
         """
         Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip.
 
-        Parameters
-        ----------
-        dest_path : str
-        sv_color : np.array
-            array with RGBA values or None to use default values
-            (see :func:`~mesh2kzip`).
-        synssv_instead_sj : bool
+        Args:
+            dest_path: str
+            sv_color: np.array
+                array with RGBA values or None to use default values
+                (see :func:`~mesh2kzip`).
+            synssv_instead_sj: bool
 
-        Returns
-        -------
+        Returns:
 
         """
         if dest_path is None:
@@ -2440,16 +2438,18 @@ class SuperSegmentationObject(object):
         Writes mesh to file (e.g. .ply, .stl, .obj) via the 'openmesh' library.
         If possible, writes it as binary.
 
-        Parameters
-        ----------
-        dest_path : str
-        center : np.array
-            scaled center coordinates (in nm)
-        color: np.array
-            Either single color (will be applied to all vertices) or
-            per-vertex color array
-        scale : float
-            Multiplies vertex locations after centering
+        Args:
+            dest_path: str
+            center: np.array
+                scaled center coordinates (in nm)
+            color: np.array
+                Either single color (will be applied to all vertices) or
+                per-vertex color array
+            scale: float
+                Multiplies vertex locations after centering
+
+        Returns:
+
         """
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
@@ -2606,22 +2606,20 @@ class SuperSegmentationObject(object):
         If dest_path or ply_fname is None then indices, vertices, colors are
         returned. Else Mesh is written to k.zip file as specified.
 
-        Parameters
-        ----------
-        pred_coords : np.array
-            N x 3; scaled to nm
-        preds : np.array
-            N x 1
-        ply_fname : str
-        dest_path : str
-        colors : np.array
-            Color for each possible prediction value (range(np.max(preds))
-        k : int
-            Number of nearest neighbors (average prediction)
+        Args:
+            pred_coords: np.array
+                N x 3; scaled to nm
+            preds: np.array
+                N x 1
+            ply_fname: str
+            dest_path: str
+            colors: np.array
+                Color for each possible prediction value (range(np.max(preds))
+            k: int
+                Number of nearest neighbors (average prediction)
 
-        Returns
-        -------
-        None or [np.array, np.array, np.array]
+        Returns: None or [np.array, np.array, np.array]
+
         """
         if ply_fname is not None and not ply_fname.endswith(".ply"):
             ply_fname += ".ply"
@@ -2724,12 +2722,11 @@ class SuperSegmentationObject(object):
     def gliasplit2mesh(self, dest_path=None, pred_key_appendix=""):
         """
 
-        Parameters
-        ----------
-        dest_path :
+        Args:
+            dest_path:
+            pred_key_appendix:
 
-        Returns
-        -------
+        Returns:
 
         """
         # TODO: adapt writemesh2kzip to work with multiple writes
@@ -2844,20 +2841,20 @@ class SuperSegmentationObject(object):
                       max_dist=0, leave_out_classes=()):
         """
         Predicting class c
-        Parameters
-        ----------
-        sc : SkelClassifier
-            Classifier to predict "axoness" or "spiness" for every node on
-            self.skeleton["nodes"]. Target type is defined in SkelClassifier
-        clf_name : str
-        feature_context_nm : int
-        max_dist : int
-            Defines the maximum path length from a source node for collecting
-            neighboring nodes to calculate an average prediction for
-            the source node.
 
-        Returns
-        -------
+        Args:
+            sc: SkelClassifier
+                Classifier to predict "axoness" or "spiness" for every node on
+                self.skeleton["nodes"]. Target type is defined in SkelClassifier
+            clf_name: str
+            feature_context_nm: int
+            max_dist: int
+                Defines the maximum path length from a source node for collecting
+                neighboring nodes to calculate an average prediction for
+                the source node.
+            leave_out_classes:
+
+        Returns:
 
         """
         if feature_context_nm is None:
@@ -2887,43 +2884,39 @@ class SuperSegmentationObject(object):
         """
         Dies not need to be axoness, it supports any attribut stored in self.skeleton.
 
-        Parameters
-        ----------
-        coords : np.array
-            Voxel coordinates, unscaled! [N, 3]
-        radius_nm : float
-        pred_type : str
+        Args:
+            coords: np.array
+                Voxel coordinates, unscaled! [N, 3]
+            radius_nm: float
+            pred_type: str
 
-        Returns
-        -------
-        np.array
+        Returns: np.array
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
+
         """
         return np.array(self.attr_for_coords(coords, [pred_type], radius_nm))
 
     def attr_for_coords(self, coords, attr_keys, radius_nm=None):
         """
         TODO: move to super_segmentation_helper.py
-        Query skeleton node attributes at given coordinates. Supports any
-        attribute stored in self.skeleton. If radius_nm is given, will
-        assign majority attribute value.
+            Query skeleton node attributes at given coordinates. Supports any
+            attribute stored in self.skeleton. If radius_nm is given, will
+            assign majority attribute value.
 
-        Parameters
-        ----------
-        coords : np.array
-            Voxel coordinates, unscaled! [N, 3]
-        radius_nm : Optional[float]
-            If None, will only use attribute of nearest node, otherwise
-            majority attribute value is used.
-        attr_keys : List[str]
-            Attribute identifier
+        Args:
+            coords: np.array
+                Voxel coordinates, unscaled! [N, 3]
+            attr_keys: List[str]
+                Attribute identifier
+            radius_nm: Optional[float]
+                If None, will only use attribute of nearest node, otherwise
+                majority attribute value is used.
 
-        Returns
-        -------
-        List
+        Returns: List
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm or [-1] if Key does not exist.
+
         """
         if type(attr_keys) is str:
             attr_keys = [attr_keys]
@@ -3018,13 +3011,15 @@ class SuperSegmentationObject(object):
         skeleton node location as :py:attr:`~skeleton`['latent_morph'] based on the nearest rendering
         location.
 
-        Parameters
-        ----------
-        model :
-        pred_key_appendix :
-        view_key : str
-            View identifier, e.g. if views have been pre-rendered and are stored in
-            `self.view_dict`
+        Args:
+            model:
+            pred_key_appendix:
+            view_key: str
+                View identifier, e.g. if views have been pre-rendered and are stored in
+                `self.view_dict`
+
+        Returns:
+
         """
         from ..handler.prediction import naive_view_normalization_new
         pred_key = "latent_morph"
@@ -3107,15 +3102,16 @@ class SuperSegmentationObject(object):
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
         cell morphology embedding via `model_tnet` (stored as ``latent_morph_ct``).
 
-        Parameters
-        ----------
-        model : nn.Module
-        pred_key_appendix : str
-        model_tnet : Optional[nn.Module]
-        view_props : Optional[dict]
-            Dictionary which contains view properties. If None, default defined in
-            `global_params.py` will be used.
-        largeFoV : bool
+        Args:
+            model: nn.Module
+            pred_key_appendix: str
+            model_tnet: Optional[nn.Module]
+            view_props: Optional[dict]
+                Dictionary which contains view properties. If None, default defined in
+                `global_params.py` will be used.
+            largeFoV: bool
+
+        Returns:
 
         """
         if not largeFoV:
@@ -3182,12 +3178,14 @@ class SuperSegmentationObject(object):
         vote) property prediction in annotation, whereas for axoness somata are
         untouched.
 
-        Parameters
-        ----------
-        prop_key : str
-            which property to average
-        max_dist : int
-            maximum distance (in nm) for sliding window used in majority voting
+        Args:
+            prop_key: str
+                which property to average
+            max_dist: int
+                maximum distance (in nm) for sliding window used in majority voting
+
+        Returns:
+
         """
         assert prop_key in self.skeleton, "Given key does not exist in self.skeleton"
         prop_array = self.skeleton[prop_key]
@@ -3265,18 +3263,22 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
 
-    Parameters
-    ----------
-    sos : list of SegmentationObject
-    ws : tuple
-    verbose : bool
-    woglia : bool
-        without glia components
-    render_first_only : int
-    add_cellobjects : bool
-    overwrite : bool
-    enable_locking : bool
-        enable system locking when writing views
+    Args:
+        sos: list of SegmentationObject
+        ws: tuple
+        verbose: bool
+        woglia: bool
+            without glia components
+        render_first_only: int
+        add_cellobjects: bool
+        overwrite: bool
+        cellobjects_only: bool
+        index_views: bool
+        enable_locking: bool
+            enable system locking when writing views
+
+    Returns:
+
     """
     # initilaize temporary SSO
     if not overwrite:
@@ -3323,19 +3325,17 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     Render super voxel views located at given locations. Does not write views
     to so.views_path
 
-    Parameters
-    ----------
-    so : SegmentationObject
-        super voxel ID
-    ws : tuple of int
-        Rendering windows size
-    add_cellobjects : bool
-    verbose : bool
+    Args:
+        so: SegmentationObject
+            super voxel ID
+        ws: tuple of int
+            Rendering windows size
+        add_cellobjects: bool
+        verbose: bool
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         views
+
     """
     # initilaize temporary SSO for cellobject mapping purposes
     sso = SuperSegmentationObject(so.id,
@@ -3363,12 +3363,10 @@ def merge_axis02(arr):
 def celltype_predictor(args):
     """
 
-    Parameters
-    ----------
-    args :
+    Args:
+        args:
 
-    Returns
-    -------
+    Returns:
 
     """
     # from ..handler.prediction import get_celltype_model
@@ -3409,12 +3407,10 @@ def semsegaxoness_predictor(args):
     """
     Predicts axoness and stores resulting labels at vertex dictionary.
 
-    Parameters
-    ----------
-    args :
+    Args:
+        args:
 
-    Returns
-    -------
+    Returns:
 
     """
     from ..handler.prediction import get_semseg_axon_model
