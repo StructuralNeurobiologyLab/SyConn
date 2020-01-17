@@ -28,17 +28,18 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
                                            n_jobs=None, nb_cpus=None):
     """
 
-    Parameters
-    ----------
-    ssd : SuperSegmentationDataset
-    obj_types : List[str]
-    n_jobs : int
-    n_max_co_processes : int
-        Number of parallel jobs
-    nb_cpus : int
-        cpus per job when using BatchJob
-    """
+    Args:
+        ssd: SuperSegmentationDataset
+        obj_types: List[str]
+        n_max_co_processes: int
+            Number of parallel jobs
+        n_jobs: int
+        nb_cpus: int
+            cpus per job when using BatchJob
 
+    Returns:
+
+    """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
@@ -100,14 +101,15 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
                             nb_cpus=None, n_max_co_processes=None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
+    Args:
+        ssd: SuperSegmentationDataset
+        obj_types: List[str]
+        n_jobs: int
+        nb_cpus: int
+        n_max_co_processes: int
 
-    Parameters
-    ----------
-    ssd : SuperSegmentationDataset
-    obj_types : List[str]
-    n_jobs : int
-    nb_cpus : int
-    n_max_co_processes: int
+    Returns:
+
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -242,16 +244,15 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
 
-    Parameters
-    ----------
-    synssv_version : str
-    stride : int
-    nb_cpus : int
-    n_max_co_processes : int
-    syn_threshold : float
+    Args:
+        synssv_version: str
+        stride: int
+        log:
+        nb_cpus: int
+        n_max_co_processes: int
+        syn_threshold: float
 
-    Returns
-    -------
+    Returns:
 
     """
     if syn_threshold is None:
@@ -314,17 +315,19 @@ def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):
     """
     Caches the SSV meshes locally with 20 cpus in parallel.
 
-    Parameters
-    ----------
-    working_dir : str
-        Path to working directory.
-    version : str
-        version identifier, like 'spgt' for spine ground truth SSD. Defaults
-        to the SSD of the cellular SSVs.
-    ssd_type : str
-        Default is 'ssv'
-    nb_cpus : int
-        Default is 20.
+    Args:
+        working_dir: str
+            Path to working directory.
+        version: str
+            version identifier, like 'spgt' for spine ground truth SSD. Defaults
+            to the SSD of the cellular SSVs.
+        ssd_type: str
+            Default is 'ssv'
+        nb_cpus: int
+            Default is 20.
+
+    Returns:
+
     """
     ssds = super_segmentation.SuperSegmentationDataset(working_dir=working_dir,
                                                        version=version,
