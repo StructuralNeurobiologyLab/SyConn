@@ -48,20 +48,18 @@ def init_object(indices, vertices, normals, colors, ws):
     """
     Initialize objects for rendering from N triangles and M vertices
 
-    Parameters
-    ----------
-    indices : array_like
-        [3N, 1]
-    vertices : array_like
-        [3M, 1]
-    normals : array_like
-        [3M, 1]
-    colors : array_like
-        [4M, 1]
-    ws : tuple
+    Args:
+        indices: array_like
+            [3N, 1]
+        vertices: array_like
+            [3M, 1]
+        normals: array_like
+            [3M, 1]
+        colors: array_like
+            [4M, 1]
+        ws: tuple
 
-    Returns
-    -------
+    Returns:
 
     """
     global ind_cnt, vertex_cnt
@@ -128,18 +126,16 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     """
     Create screenshot of currently opened window and return as array.
 
-    Parameters
-    ----------
-    ws : tuple
-    colored : bool
-    depth_map : bool
-    clahe : bool
-    triangulation : bool
-    egl_args : bool
+    Args:
+        ws: tuple
+        colored: bool
+        depth_map: bool
+        clahe: bool
+        triangulation: bool
+        egl_args: bool
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
+
     """
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
     draw_object(triangulation)
@@ -173,6 +169,15 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
 
 
 def init_ctx(ws, depth_map):
+    """
+    Initializes egl context
+    Args:
+        ws:
+        depth_map:
+
+    Returns:
+
+    """
     major, minor = ctypes.c_long(), ctypes.c_long()
     num_configs = ctypes.c_long()
     configs = (EGLConfig * 1)()
@@ -236,15 +241,15 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False,
     """
     Initialize OpenGL settings.
 
-    Parameters
-    ----------
-    ws : tuple
-    enable_lightning : bool
-    clear_value : float
-    depth_map : bool
+    Args:
+        ws: tuple
+        enable_lightning: bool
+        clear_value: float
+        depth_map: bool
+        smooth_shade:
+        wire_frame:
 
-    Returns
-    -------
+    Returns:
 
     """
     glEnable(GL_NORMALIZE)
@@ -285,28 +290,24 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     """
     Render mesh from 3 (default) equidistant perspectives.
 
-    Parameters
-    ----------
-    indices :
-    vertices :
-    normals :
-    colors:
-    alpha :
-    nb_simplices :
-    ws :
-    physical_scale :
-    enable_lightning :
-    depth_map :
-    nb_views : int
-        two views parallel to main component, and N-2 views (evenly spaced in
-        angle space) perpendicular to it.
-    background
-        float value for background (clear value) between 0 and 1 (used as RGB
-        values)
+    Args:
+        indices:
+        vertices:
+        normals:
+        colors:
+        alpha:
+        ws:
+        physical_scale:
+        enable_lightning:
+        depth_map:
+        nb_views: int
+            two views parallel to main component, and N-2 views (evenly spaced in
+            angle space) perpendicular to it.
+        background: float
+            float value for background (clear value) between 0 and 1 (used as RGB
+            values)
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         shape: (nb_views, ws[0], ws[1]
     """
     ctx = init_ctx(ws, depth_map=depth_map)
@@ -361,31 +362,29 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
                    triangulation=True):
     """
     Render mesh from nb_views (default: 3) perspectives rotated around the
-     first principle component (angle between adjacent views is 360°/nb_views)
+    first principle component (angle between adjacent views is 360°/nb_views)
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    colors : dict
-    obj_to_render : tuple of str
-        cell objects to render (e.g. 'mi', 'sj', 'vc', ..)
-    ws : tuple
-        window size of output images (width, height)
-    physical_scale :
-    enable_lightning :
-    depth_map :
-    nb_views : int
-        two views parallel to main component, and N-2 views (evenly spaced in
-        angle space) perpendicular to it.
-    background : int
-        float value for background (clear value) between 0 and 1 (used as RGB
-        values)
-    rot_mat : np.array
-        4 x 4 rotation matrix
-    triangulation : bool
+    Args:
+        sso: SuperSegmentationObject
+        colors: dict
+        obj_to_render: tuple of str
+            cell objects to render (e.g. 'mi', 'sj', 'vc', ..)
+        ws: tuple
+            window size of output images (width, height)
+        physical_scale:
+        enable_lightning:
+        depth_map:
+        nb_views: int
+            two views parallel to main component, and N-2 views (evenly spaced in
+            angle space) perpendicular to it.
+        background: int
+            float value for background (clear value) between 0 and 1 (used as RGB
+            values)
+        rot_mat: np.array
+            4 x 4 rotation matrix
+        triangulation: bool
 
-    Returns
-    -------
+    Returns:
 
     """
     if colors is not None:
@@ -458,37 +457,35 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     """
     Same as multi_view_mesh_coords but without creating gl context.
 
-    Parameters
-    ----------
-    mesh : MeshObject
-    rot_matrices : np.array
-        Rotation matrices for each view in ViewContainer list vc_list
-    coords : np.array
-        [N, 3], must correspond to rot_matrices
-    edge_lengths : np.array
-        Spatial extent for sub-volumes
-    alpha : float
-    views_key : str
-    nb_simplices : int
-        Number of simplices used for meshes
-    ws : tuple of ints
-        Window size used for rendering (resolution of array being stored/saved)
-    depth_map : bool
-        Render views as depth, else render without light effects (binary)
-    clahe : bool
-        apply clahe to screenshot
-    wire_frame : bool
-    smooth_shade : bool
-    verbose : bool
-    egl_args : Tuple
-        Optional arguments if EGL platform is used
-    nb_views : int
-    triangulation : bool
+    Args:
+        mesh: MeshObject
+        coords: np.array
+            [N, 3], must correspond to rot_matrices
+        rot_matrices: np.array
+            Rotation matrices for each view in ViewContainer list vc_list
+        edge_lengths: np.array
+            Spatial extent for sub-volumes
+        alpha: float
+        ws: tuple of ints
+            Window size used for rendering (resolution of array being stored/saved)
+        views_key: str
+        nb_simplices: int
+            Number of simplices used for meshes
+        depth_map: bool
+            Render views as depth, else render without light effects (binary)
+        clahe: bool
+            apply clahe to screenshot
+        smooth_shade: bool
+        verbose: bool
+        wire_frame: bool
+        egl_args: Tuple
+            Optional arguments if EGL platform is used
+        nb_views: int
+        triangulation: bool
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Returns array of views, else None
+
     """
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
@@ -586,9 +583,11 @@ def draw_scale(size):
     """
     Draws black bar of given length with fixed width.
 
-    Parameters
-    ----------
-    size : float
+    Args:
+        size: float
+
+    Returns:
+
     """
     glLineWidth(5)
     glBegin(GL_LINES)
@@ -605,29 +604,30 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                         triangulation=True, comp_window=8e3):
     """
     Render raw views located at given coordinates in mesh
-     Returns ViewContainer list if dest_dir is None, else writes
+    Returns ViewContainer list if dest_dir is None, else writes
     views to dest_path.
 
-    Parameters
-    ----------
-    coords : np.array
-    mesh : MeshObject
-    clahe : bool
-    verbose : bool
-    ws : tuple
-        Window size
-    rot_matrices : np.array
-    views_key : str
-    return_rot_matrices : bool
-    depth_map : bool
-    wire_frame : bool
-    comp_window : float
-        window length in NM along main p.c. for mesh view
+    Args:
+        coords: np.array
+        mesh: MeshObject
+        clahe: bool
+        verbose: bool
+        ws: tuple
+            Window size
+        rot_matrices: np.array
+        views_key: str
+        return_rot_matrices: bool
+        depth_map: bool
+        smooth_shade:
+        wire_frame: bool
+        nb_views:
+        triangulation: bool
+        comp_window: float
+            window length in NM along main p.c. for mesh view
 
-    Returns
-    -------
-    numpy.array
+    Returns: numpy.array
         views at each coordinate
+
     """
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
