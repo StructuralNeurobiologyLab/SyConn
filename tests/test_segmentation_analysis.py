@@ -50,13 +50,14 @@ def test_find_object_properties():
 
 def test_detect_cs(distance_between_cube, stencil, cube_size):
     """
+    Assert statement fails if detect_cs() method does not work properly
 
     Args:
         distance_between_cube: Distance between cubes of two different ids
         stencil: Generic stencil size
         cube_size: Generic cube size of two different ids
 
-    Returns: Assert statement fails if detect_cs() method does not work properly
+    Returns:
 
     """
     assert (np.amax(distance_between_cube) > cube_size), "Distance between cubes should be grater than cube size"

@@ -205,30 +205,28 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     """
     Render views of SuperSegmentationObject at given coordinates.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    coords : np.array
-        N, 3
-    add_cellobjects : bool
-    verbose : bool
-    clahe : bool
-    ws : Optional[Tuple[int]]
-        Window size in pixels (y, x). Default: (256, 128)
-    cellobjects_only : bool
-    wire_frame : bool
-    nb_views : int
-    comp_window : Optional[float]
-        window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
-    rot_mat : np.array
-    return_rot_mat : bool
+    Args:
+        sso: SuperSegmentationObject
+        coords: np.array
+            N, 3
+        add_cellobjects: bool
+        verbose: bool
+        clahe: bool
+        ws: Optional[Tuple[int]]
+            Window size in pixels (y, x). Default: (256, 128)
+        cellobjects_only: bool
+        wire_frame: bool
+        nb_views: int
+        comp_window: Optional[float]
+            window size in nm. the clipping box during rendering will have an extent
+            of [comp_window, comp_window / 2, comp_window]. Default: 8 um
+        rot_mat: np.array
+        return_rot_mat: bool
 
-    Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
         Resulting views rendered at each location.
         Output shape: len(coords), 4 [cell outline + number of cell objects], nb_views, y, x
+
     """
     if comp_window is None:
         comp_window = 8e3
@@ -313,32 +311,25 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     Uses per-face color via flattened vertices (i.e. vert[ind] -> slow!). This was added to be able
     to calculate the surface coverage captured by the views.
     TODO: Add fast GL_POINT rendering to omit slow per-face coloring (redundant vertices) and
-     expensive remapping from face IDs to vertex IDs.
+    expensive remapping from face IDs to vertex IDs.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    coords : np.array
-        N, 3
-    rot_mat :
-    comp_window : float
-        window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]
-    return_rot_matrices : bool
-    verbose : bool
-    ws : Optional[Tuple[int]]
-        Window size in pixels (y, x). Default: (256, 128)
-    rot_mat : np.array
-    nb_views : int
-    comp_window : Optional[float]
-        window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
+    Args:
+        sso: SuperSegmentationObject
+        coords: np.array
+            N, 3
+        verbose: bool
+        ws:  Optional[Tuple[int]]
+            Window size in pixels (y, x). Default: (256, 128)
+        rot_mat: np.array
+        nb_views: int
+        comp_window: float
+            window size in nm. the clipping box during rendering will have an extent
+            of [comp_window, comp_window / 2, comp_window]
+        return_rot_matrices:
 
-    Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
         array of views after rendering of locations.
-    -------
+
     """
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     if comp_window is None:
