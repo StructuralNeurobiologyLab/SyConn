@@ -15,6 +15,7 @@ from numba import jit
 import numpy as np
 import scipy
 import time
+import tqdm
 import scipy.ndimage
 from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
@@ -2397,3 +2398,124 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
     else:
         ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
     return ratio
+
+
+def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObject',
+                                  ctx_vol=(200, 200, 100)):
+    """
+    Calculate the volume of spine heads based on a watershed procedure on the
+    cell segmentation. Connected components of spine head skeleton nodes
+    are used as starting point to collect mesh vertices with spine predictions
+    within at least ``2*ctx_vol``. The watershed seeds are extracted from local maxima of the
+    cell mask's distance transform. Each seed is assigned the majority label of its
+    k-nearest vertices.
+    Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+    .skeleton` with the key ``spinehead_vol``.
+
+    Args:
+        sso: Cell object.
+        ctx_vol: Additional volume above and below the bounding box of the extracted
+            connected component spine head skeleton nodes, i.e. the inspected volume is
+            at least ``2*ctx_vol``.
+    """
+    try:
+        from ..proc.in_bounding_boxC import in_bounding_box
+    except ImportError:
+        from ..proc.in_bounding_box import in_bounding_box
+    from skimage.morphology import watershed
+    from skimage.feature import peak_local_max
+    from scipy import ndimage
+
+    # use bigger skel context to get the correspondence to the voxel as accurate as possible
+    ctx_vol = np.array(ctx_vol)
+    sso.load_skeleton()
+    scaling = sso.scaling
+    assert 'spiness' in sso.skeleton
+    g = sso.weighted_graph(add_node_attr=['spiness', 'axoness']).copy()
+    remove_nodes = []
+    for n in g.nodes:
+        sp = g.nodes[n]['spiness']
+        ax = g.nodes[n]['axoness']
+        if sp != 1 or ax != 0:  # sp-1: spine head, ax-0: dendrite
+            remove_nodes.append(n)
+    g.remove_nodes_from(remove_nodes)
+    sh_nodes = nx.connected_components(g)
+    ssv_svids = set(sso.sv_ids)
+    sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness'])
+    verts = sso.mesh[1].reshape(-1, 3) / scaling
+    sp_semseg = sso.label_dict('vertex')['spiness']
+    ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
+    for l in ignore_labels:
+        verts = verts[sp_semseg != l]
+        sp_semseg = sp_semseg[sp_semseg != l]
+
+    # iterate over connected skeleton nodes labeled as spine head
+    for sh in tqdm.tqdm(sh_nodes, leave=False):
+        # get context around spine head via bfs and collect all nodes reached
+        # load segmentation data
+        node_ixs_sh = np.array(list(sh), dtype=np.int)
+        nodes_sh_skel = sso.skeleton['nodes'][node_ixs_sh]
+
+        bb = np.array([np.min(nodes_sh_skel, axis=0), np.max(nodes_sh_skel, axis=0)])
+        offset = bb[0] - ctx_vol
+        size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
+        # get cell segmentation mask
+        kd = kd_factory(global_params.config.kd_seg_path)
+        seg = kd.load_seg(offset=offset, size=size, mag=1).swapaxes(2, 0)
+        orig_sh = seg.shape
+        seg = seg.flatten()
+        for ii, el in enumerate(seg):
+            if el not in ssv_svids:
+                seg[ii] = 0
+            else:
+                seg[ii] = 1
+        seg = seg.reshape(orig_sh)
+        seg = ndimage.binary_fill_holes(seg)
+        # set watershed seeds using vertices
+        vert_ixs_bb = in_bounding_box(verts, np.array([offset + size / 2, size]))
+        vert_ixs_bb = np.array(vert_ixs_bb, dtype=np.bool)
+        verts_bb = verts[vert_ixs_bb]
+        semseg_bb = sp_semseg[vert_ixs_bb]
+        # relabeld spine neck as 9
+        semseg_bb[semseg_bb == 0] = 9
+
+        distance = ndimage.distance_transform_edt(seg)
+        local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3, 3)),
+                                    labels=seg).astype(np.uint)
+        maxima = np.transpose(np.nonzero(local_maxi))
+        # assign labels from nearby vertices
+        maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
+            k=global_params.config['spines']['semseg2coords_spines']['k'],
+            return_color=False, nb_cpus=sso.nb_cpus)
+        local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
+
+        labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
+        labels[labels != 1] = 0
+        labels, nb_obj = ndimage.label(labels)
+        if nb_obj > 1:
+            ids, cnts = np.unique(labels[nodes_sh_skel[:, 0],
+                                         nodes_sh_skel[:, 1],
+                                         nodes_sh_skel[:, 2]],
+                                  return_counts=True)
+            cnts = cnts[ids != 0]
+            ids = ids[ids != 0]
+            assert len(ids) > 0
+            max_id = ids[np.argmax(cnts)]
+        else:
+            max_id = 1
+        n_voxels_spinehead = np.sum(labels == max_id)
+        vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
+        sso.skeleton['spinehead_vol'][node_ixs_sh] = vol_sh
+
+        # print(node_ixs_sh[0], vol_sh)
+        # # DEBUG
+        # labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
+        # nodes_sh_skel = nodes_sh_skel.astype(np.int)
+        # kd.save_to_kzip(labels.swapaxes(2, 0), 1,
+        #                 f'/u/pschuber/tmp/testoverlay_ws/testoverlay_wsmesh_'
+        #                 f'ID{node_ixs_sh[0]}_{nodes_sh_skel[0][0]}_{nodes_sh_skel[0][1]}_'
+        #                 f'{nodes_sh_skel[0][2]}_Vol{vol_sh}.k.zip', offset, mags=[1, ],
+        #                 gen_mergelist=True)
+        #
+        # # DEBUG END
+

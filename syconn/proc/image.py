@@ -403,6 +403,9 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
           ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
+    Todo:
+        * Does not increase subvolume when dilation is applied.
+
     Args:
         mop_func:
         overlay:

@@ -52,8 +52,8 @@ def predict_latent_ssd(ssd, m, ssv_ids=None):
     # shuffle SV IDs
     np.random.seed(0)
     np.random.shuffle(ssv_ids)
-    pbar = tqdm.tqdm(total=len(ssv_ids))
-    for i in xrange(0, len(ssv_ids), 66):
+    pbar = tqdm.tqdm(total=len(ssv_ids), leave=False)
+    for i in range(0, len(ssv_ids), 66):
         ixs = ssv_ids[i:i+66]
         views_chunk = np.zeros((len(ixs), 4, 3, 512, 512))
         for ii, ix in enumerate(ixs):

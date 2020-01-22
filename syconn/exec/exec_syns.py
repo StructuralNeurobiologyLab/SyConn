@@ -27,11 +27,12 @@ def run_matrix_export():
     Also collects the following synapse properties from prior analysis
     steps:
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
-            en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
-        * 'partner_spiness': Spine compartment predictions of both neurons.
+          en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
+        * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
+          1: spine head, 2: spine neck, 3: other) of both neurons.
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
-            synaptic partners.
+          synaptic partners.
 
     Examples:
         See :class:`~syconn.reps.segmentation.SegmentationDataset` for examples.
@@ -117,7 +118,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
-    log.info('Synapse objects were created.')
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')

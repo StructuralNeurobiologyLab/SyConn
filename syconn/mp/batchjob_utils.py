@@ -15,6 +15,8 @@ import numpy as np
 import os
 import io
 import re
+import datetime
+from typing import Dict
 import shutil
 import string
 import subprocess
@@ -56,6 +58,285 @@ username = getpass.getuser()
 python_path_global = sys.executable
 
 
+def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
+                    additional_flags='', suffix="",
+                    job_name="default", script_folder=None,
+                    n_max_co_processes=None, max_iterations=10,
+                    python_path=None, disable_mem_flag=False,
+                    disable_batchjob=False, use_dill=False,
+                    remove_jobfolder=False, log=None, show_progress=True,
+                    sleep_time=5):
+    """
+
+    Todo:
+        * Add sbatch array functionality -> faster submission
+
+    QSUB handler - takes parameter list like normal multiprocessing job and
+    runs them on the specified cluster
+
+    IMPORTANT NOTE: the user has to make sure that queues exist and work; we
+    suggest to generate multiple queues handling different workloads
+
+    Parameters
+    ----------
+    params: List
+        list of all parameter sets to be processed
+    name: str
+        name of job - specifies script with QSUB_%s % name
+    n_cores: int
+        number of cores per job submission
+    batchjob_folder: str
+    additional_flags: str
+        additional command line flags to be passed to qsub
+    suffix: str
+        suffix for folder names - enables the execution of multiple qsub jobs
+        for the same function
+    job_name: str
+        unique name for job - or just 'default' which gets changed into a
+        random name automatically
+    script_folder: str or None
+        directory in which the QSUB_* file is located
+    n_max_co_processes: int or None
+        limits the number of processes that are executed on the cluster at the
+        same time; None: use global_params.config.ncore_total // number of cores per job (n_cores)
+    max_iterations : int
+    python_path : str
+        Default is sys.executable
+    disable_mem_flag : bool
+        If True, memory flag will not be set, otherwise it will be set to the
+         fraction of the cores per job to the total number of cores per node
+    disable_batchjob : bool
+        Overwrites global batchjob settings and will run multiple, independent bash jobs
+        on multiple CPUs instead.
+    remove_jobfolder: bool
+        Remove the created folder after successfully processing.
+    use_dill : bool
+    show_progress : bool
+        Currently only applies for `batchjob_fallback`
+    log: Logger
+        Logger.
+    sleep_time: float
+        Sleep duration before checking batch job states again.
+
+    Returns
+    -------
+    path_to_out: str
+        path to the output directory
+
+    """
+    starttime = datetime.datetime.today().strftime("%m.%d")
+    # Parameter handling
+    if n_cores is None:
+        n_cores = 1
+    if python_path is None:
+        python_path = python_path_global
+    if batchjob_folder is None:
+        batchjob_folder = "{}/{}_folder{}/".format(
+            global_params.config.qsub_work_folder, name, suffix)
+    if os.path.exists(batchjob_folder):
+        shutil.rmtree(batchjob_folder, ignore_errors=True)
+    if log is None:
+        log_batchjob = initialize_logging("{}".format(name + suffix),
+                                          log_dir=batchjob_folder)
+    else:
+        log_batchjob = log
+    if n_max_co_processes is None:
+        n_max_co_processes = np.min([global_params.config.ncore_total // n_cores,
+                                     len(params)])
+    n_max_co_processes = np.max([n_max_co_processes, 1])
+    if script_folder is not None:
+        path_to_scripts = script_folder
+    else:
+        path_to_scripts = path_to_scripts_default
+
+    # Check if any fallback is required
+    if disable_batchjob or not batchjob_enabled():
+        return batchjob_fallback(params, name, n_cores, suffix,
+                                 script_folder, python_path,
+                                 remove_jobfolder=remove_jobfolder,
+                                 show_progress=show_progress, log=log)
+    if global_params.config['batch_proc_system'] != 'SLURM':
+        log_mp.warn('"batchjob_script" currently does not support any other '
+                    'batch processing system than SLURM. Falling back to '
+                    'deprecated "QSUB_script".')
+        return QSUB_script(params, name, n_cores=n_cores,
+                           additional_flags=additional_flags, suffix=suffix,
+                           job_name=job_name, script_folder=script_folder,
+                           n_max_co_processes=n_max_co_processes,
+                           max_iterations=max_iterations,
+                           python_path=python_path,
+                           disable_mem_flag=disable_mem_flag,
+                           disable_batchjob=disable_batchjob, use_dill=use_dill,
+                           remove_jobfolder=remove_jobfolder, log=log,
+                           show_progress=show_progress)
+
+    # Handle memory limits after QSUB fallback.
+    # Node memory limit is 250,000M and not 250G! ->
+    # max memory per core is 250000M/20, leave safety margin
+    mem_lim = int(global_params.config['mem_per_node'] /
+                  global_params.config['ncores_per_node'])
+    if '--mem' in additional_flags:
+        raise ValueError('"--mem" must not be set via the "additional_flags"'
+                         ' kwarg.')
+    additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+
+    # Start SLURM job
+    log_batchjob.info(
+        'Started BatchJob script "{}" with {} tasks using {} parallel jobs, each'
+        ' using {} core(s).'.format(name, len(params), n_max_co_processes, n_cores))
+    if job_name == "default":
+        with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
+            letters = string.ascii_lowercase
+            job_name = "".join([letters[l] for l in
+                                np.random.randint(0, len(letters), 8)])
+            log_batchjob.info("Random job_name created: %s" % job_name)
+    if len(job_name) > 8:
+        msg = "job_name is longer than 8 characters. This is untested."
+        log_batchjob.error(msg)
+        raise ValueError(msg)
+
+    # Create folder structure
+    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
+    path_to_storage = "%s/storage/" % batchjob_folder
+    path_to_sh = "%s/sh/" % batchjob_folder
+    path_to_log = "%s/log/" % batchjob_folder
+    path_to_err = "%s/err/" % batchjob_folder
+    path_to_out = "%s/out/" % batchjob_folder
+    if not os.path.exists(path_to_storage):
+        os.makedirs(path_to_storage)
+    if not os.path.exists(path_to_sh):
+        os.makedirs(path_to_sh)
+    if not os.path.exists(path_to_log):
+        os.makedirs(path_to_log)
+    if not os.path.exists(path_to_err):
+        os.makedirs(path_to_err)
+    if not os.path.exists(path_to_out):
+        os.makedirs(path_to_out)
+
+    # Submit jobs
+    log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
+    pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
+    dtime_sub = 0
+    start_all = time.time()
+    job_exec_dc = {}
+    job2slurm_dc = {}  # stores mapping of internal to SLURM job ID
+    slurm2job_dc = {}  # stores mapping of SLURM to internal job ID
+    for job_id in range(len(params)):
+        this_storage_path = path_to_storage + "job_%d.pkl" % job_id
+        this_sh_path = path_to_sh + "job_%d.sh" % job_id
+        this_out_path = path_to_out + "job_%d.pkl" % job_id
+        job_log_path = path_to_log + "job_%d.log" % job_id
+        job_err_path = path_to_err + "job_%d.log" % job_id
+
+        with open(this_sh_path, "w") as f:
+            f.write("#!/bin/bash -l\n")
+            f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
+                python_path, path_to_script, this_storage_path,
+                this_out_path, global_params.config.working_dir))
+
+        with open(this_storage_path, "wb") as f:
+            for param in params[job_id]:
+                if use_dill:
+                    dill.dump(param, f)
+                else:
+                    pkl.dump(param, f)
+
+        os.chmod(this_sh_path, 0o744)
+        cmd_exec = "{0} --output={1} --error={2} --job-name={3} {4}".format(
+            additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
+
+        job_exec_dc[job_id] = cmd_exec
+        start = time.time()
+        process = subprocess.Popen(f'sbatch -n{n_cores} {cmd_exec}', shell=True,
+                                   stdout=subprocess.PIPE)
+        out_str = io.TextIOWrapper(process.stdout, encoding="utf-8").read()
+        slurm_id = int(re.findall(r'(\d+)', out_str)[0])
+        job2slurm_dc[job_id] = slurm_id
+        slurm2job_dc[slurm_id] = job_id
+        dtime_sub += time.time() - start
+        time.sleep(0.05)
+
+    # wait for jobs to be in SLURM memory
+    time.sleep(sleep_time)
+    # requeue failed jobs `scontrol requeue $SLURM_JOBID` for `max_iterations`-times
+    js_dc = jobstates_slurm(job_name, starttime)
+    requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
+    nb_completed_compare = 0
+    while True:
+        nb_failed = 0
+        # get internal job ids from current job dict
+        job_ids = np.array(list(slurm2job_dc.values()))
+        # get states of slurm jobs with the same ordering as 'job_ids'
+        job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
+        for j in job_ids[job_states == 'FAILED']:
+            if requeue_dc[j] == max_iterations:
+                nb_failed += 1
+                continue
+            # restart job
+            requeue_dc[j] += 1
+            # increment number of cores by one.
+            job_cmd = f'sbatch -n{requeue_dc[j] + n_cores} {job_exec_dc[j]}'
+            process = subprocess.Popen(job_cmd, shell=True,
+                                       stdout=subprocess.PIPE)
+            out_str = io.TextIOWrapper(process.stdout, encoding="utf-8").read()
+            slurm_id = int(re.findall(r'(\d+)', out_str)[0])
+            slurm_id_orig = job2slurm_dc[j]
+            del slurm2job_dc[slurm_id_orig]
+            job2slurm_dc[j] = slurm_id
+            slurm2job_dc[slurm_id] = j
+            log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
+                              f'{slurm_id_orig} (old).')
+        nb_completed = np.sum(job_states == 'COMPLETED')
+        pbar.update(nb_completed - nb_completed_compare)
+        nb_completed_compare = nb_completed
+        nb_finished = nb_completed + nb_failed
+        # check actually running files
+        if nb_finished == len(params):
+            break
+        time.sleep(sleep_time)
+        js_dc = jobstates_slurm(job_name, starttime)
+    pbar.close()
+
+    dtime_all = time.time() - start_all
+    log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
+                      f"{dtime_all:.2f} s ({dtime_sub:.2f} s submission): "
+                      f"{nb_completed} completed, {nb_failed} failed.")
+    out_files = glob.glob(path_to_out + "*.pkl")
+    if len(out_files) < len(params):
+        msg = f'Batch processing error during execution of {name} in job ' \
+              f'\"{job_name}\": Found {len(out_files)}, expected {len(params)}.'
+        log_batchjob.error(msg)
+        raise ValueError(msg)
+    if remove_jobfolder:
+        shutil.rmtree(batchjob_folder)
+    return path_to_out
+
+
+def jobstates_slurm(job_name: str, start_time: str) -> Dict[int, str]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+        job_name:
+        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
+            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
+
+    Returns:
+        Dictionary with the job states. (key: job ID, value: state)
+    """
+    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
+    process = subprocess.Popen(cmd_stat, shell=True,
+                               stdout=subprocess.PIPE)
+    job_states = dict()
+    for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
+        str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
+        if len(str_parsed) == 1:
+            str_parsed = str_parsed[0]
+            job_states[int(str_parsed[0])] = str_parsed[1]
+    return job_states
+
+
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
@@ -92,7 +373,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     priority: int
         -1024 .. 1023, job priority, higher is more important
     additional_flags: str
-        additional command line flags to be passed to qsub
+        additional command line flags to be passed to QSUB/SLURM. Changes to
+        "--cpus-per-task=X" will be overwritten by "--cpus-per-task={n_cores}"
     suffix: str
         suffix for folder names - enables the execution of multiple qsub jobs
         for the same function
@@ -167,6 +449,15 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         python_path = python_path_global
     job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
                                           name, suffix)
+
+    # TODO: replace QSUB_script by batchjob_script package-wide
+    return batchjob_script(params, name, job_folder, n_cores, additional_flags,
+                    suffix, job_name, script_folder,
+                    n_max_co_processes, max_iterations,
+                    python_path, disable_mem_flag,
+                    disable_batchjob, use_dill,
+                    remove_jobfolder, log, show_progress)
+
     if iteration == 1 and os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     if log is None:
@@ -247,6 +538,12 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 'Memory requirements were not set explicitly. Setting to 250,000 MB'
                 ' * n_cores / {} = {} MB'.format(global_params.config['ncores_per_node'],
                                                  mem_lim))
+        if n_cores > 1:
+            # remove existing cpus per task
+            if '--cpus-per-task' in additional_flags:
+                m = re.search(r'(?<=--cpus-per-task=)\w+', additional_flags)
+                additional_flags = additional_flags.replace('--cpus-per-task=' + m.group(0), '')
+            additional_flags += f" --cpus-per-task={n_cores}"
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1)
@@ -294,8 +591,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif global_params.config['batch_proc_system'] == 'SLURM':
-            if n_cores > 1:
-                additional_flags += " -n%d" % n_cores
             cmd_exec = "sbatch {0} --output={1} --error={2}" \
                        " --job-name={3} {4}".format(
                 additional_flags, job_log_path, job_err_path,
@@ -708,10 +1003,3 @@ def delete_jobs_by_name(job_name):
                          stdout=subprocess.PIPE)
     else:
         raise NotImplementedError
-
-
-def negative_to_zero(a):
-    if a > 0:
-        return a
-    else:
-        return 0

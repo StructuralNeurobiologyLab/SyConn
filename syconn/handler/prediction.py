@@ -421,7 +421,7 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
     if debug:
-        raw = (raw * 255).astype(np.uint8)
+        raw = (raw * 255).astype(np.uint8, copy=False)
         label = label.astype(np.uint8) * 255
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 

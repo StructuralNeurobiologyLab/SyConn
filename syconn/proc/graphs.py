@@ -72,7 +72,7 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     subnodes = {}
     if verbose:
         nb_nodes = g.number_of_nodes()
-        pbar = tqdm.tqdm(total=nb_nodes)
+        pbar = tqdm.tqdm(total=nb_nodes, leave=False)
     if start_nodes is None:
         iter_ixs = g.nodes()
     else:
@@ -664,7 +664,7 @@ def nxGraph2kzip(g, coords, kzip_path):
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     node_mapping = {}
-    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()))
+    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()), leave=False)
     for v in g.nodes():
         c = coords[v]
         n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
@@ -696,7 +696,7 @@ def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
     anno = SkeletonAnnotation()
     anno.scaling = ssv.scaling
     node_mapping = {}
-    pbar = tqdm.tqdm(total=len(coords) + len(sv_graph.edges()))
+    pbar = tqdm.tqdm(total=len(coords) + len(sv_graph.edges()), leave=False)
     for v in sv_graph.nodes:
         c = coords[v]
         n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])

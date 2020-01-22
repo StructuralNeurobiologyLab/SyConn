@@ -528,8 +528,8 @@ def _make_stitch_list_thread(args):
 
         if n_erosion > 0:
             # erode segmentation once to avoid start location dependent segmentation artifacts
-            struct = np.zeros((3, 3, 3)).astype(np.bool)
-            mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]).astype(np.bool)
+            struct = np.zeros((3, 3, 3), dtype=np.bool)
+            mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.bool)
             struct[:, :, 1] = mask  # only perform erosion in xy plane
             for kk in range(len(cc_data_list)):
                 cc_data_list[kk] = multi_mop(scipy.ndimage.binary_erosion,

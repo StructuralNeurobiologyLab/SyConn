@@ -566,7 +566,8 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
         log_proc.critical('No rendering locations found for SSV {}.'.format(ssv.id))
         # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
         #  `global_params`
-        return np.ones((0, global_params.config['views']['nb_views'], 256, 128), dtype=np.uint8) * 255
+        return np.ones((0, global_params.config['views']['nb_views'], 256, 128),
+                       dtype=np.uint8) * 255
     params = np.array_split(rendering_locations, n_jobs)
 
     ssv_id = ssv.id
@@ -576,7 +577,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                   "version": ssv.version,
                   'nb_cpus': n_cores,
                   'sv_ids': [sv.id for sv in ssv.svs]}
-    # TODOO: refactor kwargs!
+    # TODO: refactor kwargs!
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None, 'woglia': True,

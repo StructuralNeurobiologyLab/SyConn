@@ -667,14 +667,16 @@ class SuperSegmentationObject(object):
         """
         Creates a Euclidean distance (in nanometers) weighted graph representation of the
         skeleton of this SSV object. The node IDs represent the index in
-        the ``'node'`` array part of :py:attr:`~skeleton`.
+        the ``'node'`` array part of :py:attr:`~skeleton`. Weights are stored
+        as 'weight' in the graph, this allows to use e.g.
+        ``nx.single_source_dijkstra_path(..)``.
 
         Args:
             add_node_attr: To-be-added node attributes. Must exist in
             :py:attr`~skeleton`.
 
         Returns:
-            The skeleton of this SSV object as a graph.
+            The skeleton of this SSV object as a networkx graph.
         """
         if self._weighted_graph is None or np.any([len(nx.get_node_attributes(
                 self._weighted_graph, k)) == 0 for k in add_node_attr]):

@@ -630,7 +630,7 @@ def run_create_neuron_ssd():
     ssd.save_dataset_deep(n_max_co_processes=global_params.config.ncore_total)
 
     # Write SSV RAGs
-    pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5)
+    pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5, leave=False)
     for ssv in ssd.ssvs:
         # get all nodes in CC of this SSV
         if len(cc_dict[ssv.id]) > 1:  # CCs with 1 node do not exist in the global RAG

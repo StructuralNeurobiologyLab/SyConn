@@ -11,6 +11,7 @@ try:
 except ImportError:
     import pickle as pkl
 import time
+import numpy as np
 # get paths to job handling directories
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,10 +25,13 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-numbers = args[0]
+worker_id = args[0]
+numbers = args[1]
+if np.random.randint(0, 5) == 1:
+    raise ValueError('lalelu')
 for n in numbers:
     print(n)
     time.sleep(1)
 
 with open(path_out_file, "wb") as f:
-    pkl.dump(None, f)
+    pkl.dump(worker_id, f)

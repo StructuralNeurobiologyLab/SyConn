@@ -452,7 +452,7 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
-        pbar = tqdm.tqdm(total=nb_files)
+        pbar = tqdm.tqdm(total=nb_files, leave=False)
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:

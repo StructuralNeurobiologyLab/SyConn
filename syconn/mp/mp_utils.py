@@ -118,11 +118,11 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
 
 
 def start_multiprocess_imap(func, params, debug=False, verbose=False,
-                            nb_cpus=None, show_progress=True):
+                            nb_cpus=None, show_progress=True,
+                            ignore_cpu_cnt=False):
     """
-    # TODO: support generator params; currently length is required for pbar
-    Multiprocessing method which supports progress bar (therefore using
-    imap instead of map).
+    # TODO: support generator params; currently length is required for pbar.
+    Multiprocessing method with progress bar.
 
     Parameters
     ----------
@@ -141,8 +141,11 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()
-
-    nb_cpus = min(nb_cpus, len(params), cpu_count())
+    if ignore_cpu_cnt:
+        cpu_cnt = 999999999
+    else:
+        cpu_cnt = cpu_count()
+    nb_cpus = min(nb_cpus, len(params), cpu_cnt)
 
     if debug:
         nb_cpus = 1
