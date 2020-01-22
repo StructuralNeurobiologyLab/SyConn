@@ -94,16 +94,6 @@ def test_detect_cs(distance_between_cube, stencil, cube_size):
         "lower value cell id array do not match"
 
 
-def test_config():
-    print("None")
-    # config.working_dir() = "~/SyConn/"
-    # print(config.working_dir())
-    p = Config("~/SyConn/")
-    config = DynConfig(p)
-    print(p)
-    raise()
-
-
 def test_chunk_weighted():
     sample_array = np.array([0, 1, 2, 3, 4, 5, 6, 7], np.uint64)
     weights = np.array([3, 1, 2, 7, 5, 8, 0, 8], np.uint64)

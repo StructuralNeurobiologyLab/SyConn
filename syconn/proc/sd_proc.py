@@ -195,7 +195,8 @@ def _write_mapping_to_sv_thread(args):
 def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000, n_folders_fs_sc=1000,
                               n_chunk_jobs=None, n_cores=1, n_max_co_processes=None,
                               cube_of_interest_bb=None, chunk_size=None, log=None):
-    """Replaces `map_objects_to_sv` and parts of `from_ids_to_objects`.
+    """
+    Replaces `map_objects_to_sv` and parts of `from_ids_to_objects`.
 
     Extracts segmentation properties for each SV in cell and subcellular segmentation.
     Requires KDs at `kd_seg_path` and `kd_organelle_paths`.
@@ -205,21 +206,20 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     Step 3: Write out combined results for each SV object according to
         SegmentationDataset chunking
 
-    Parameters
-    ----------
-    kd_seg_path : str
-    kd_organelle_paths : Dict[int]
-    n_folders_fs
-    n_folders_fs_sc :
-        `n_folders_fs` for subcellular structures
-    n_chunk_jobs
-    n_cores
-    n_max_co_processes
-    cube_of_interest_bb
-    chunk_size
+    Args:
+        kd_seg_path: str
+        kd_organelle_paths: Dict[int]
+        n_folders_fs:
+        n_folders_fs_sc:
+            `n_folders_fs` for subcellular structures
+        n_chunk_jobs:
+        n_cores:
+        n_max_co_processes:
+        cube_of_interest_bb:
+        chunk_size:
+        log:
 
-    Returns
-    -------
+    Returns:
 
     """
     kd = basics.kd_factory(kd_seg_path)
@@ -573,22 +573,32 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0)\
 
 
 def merge_meshes_dict(m_storage, tmp_dict):
+    """
+    Merge meshes dictionaries
 
-    """ Merge meshes dictionaries:
+    Args:
+        m_storage: list dictionary
+        tmp_dict: list dictionary
+            {obj_id: [faces, vertices, normals]}
 
-    m_storage: list dictionary
-    tmp_dict: list dictionary
-    {obj_id: [faces, vertices, normals]}
+    Returns:
+
     """
     for obj_id in tmp_dict:
         merge_meshes_single(m_storage, obj_id, tmp_dict[obj_id])
 
 
 def merge_meshes_single(m_storage, obj_id, tmp_dict):
+    """
+    Merge meshes dictionaries
 
-    """ Merge meshes dictionaries:
-    m_storage: objec of type MeshStorage
-    tmp_dict: list dictionary
+    Args:
+        m_storage: object of type MeshStorage
+        obj_id:
+        tmp_dict: list dictionary
+
+    Returns:
+
     """
     if obj_id not in m_storage:
         m_storage[obj_id] = [tmp_dict[0], tmp_dict[1], tmp_dict[2]]
@@ -656,12 +666,10 @@ def merge_map_dicts(map_dicts):
     """
     Merge map dictionaries in-place. Values will be stored in first dictionary
 
-    Parameters
-    ----------
-    map_dicts
+    Args:
+        map_dicts:
 
-    Returns
-    -------
+    Returns:
 
     """
     tot_map = map_dicts[0]
@@ -1076,20 +1084,18 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       return_proba=False):
     """
 
-    Parameters
-    ----------
-    model :
-    sos :
-    pred_key :
-    nb_cpus :
-    woglia :
-    verbose :
-    raw_only :
-    single_cc_only :
-    return_proba :
+    Args:
+        model:
+        sos:
+        pred_key:
+        nb_cpus:
+        woglia:
+        verbose:
+        raw_only:
+        single_cc_only:
+        return_proba:
 
-    Returns
-    -------
+    Returns:
 
     """
     nb_chunks = np.max([1, len(sos) // 200])
@@ -1119,19 +1125,17 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
     """
     Will not be written to disk if return_proba is True.
 
-    Parameters
-    ----------
-    model : nn.Model
-    views : np.array
-    ch : List[SegmentationObject]
-    pred_key : str
-    single_cc_only : bool
-    verbose : bool
-    return_proba : bool
-    nb_cpus : int
+    Args:
+        model: nn.Model
+        views: np.array
+        ch: List[SegmentationObject]
+        pred_key: str
+        single_cc_only: bool
+        verbose: bool
+        return_proba: bool
+        nb_cpus: int
 
-    Returns
-    -------
+    Returns:
 
     """
     for kk in range(len(views)):
@@ -1254,16 +1258,18 @@ def _export_sd_to_knossosdataset_thread(args):
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=None):
     """
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
-     with object type 'obj_type'.
+    with object type 'obj_type'.
 
-    Parameters
-    ----------
-    working_dir : str
-        Path to working directory
-    obj_type : str
-        Object type identifier, like 'sj', 'vc' or 'mi'
-    nb_cpus : int
-        Default is 20.
+    Args:
+        working_dir: str
+            Path to working directory
+        obj_type: str
+            Object type identifier, like 'sj', 'vc' or 'mi'
+        nb_cpus: int
+            Default is 20.
+
+    Returns:
+
     """
     if nb_cpus is None:
         nb_cpus = global_params.config['ncores_per_node']
