@@ -25,9 +25,14 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
+sso_ids = args[0]
+
 ssd = SuperSegmentationDataset()
-for sso in ssd.get_super_segmentation_object(args):
-    extract_spine_volume_mesh(sso)
+for sso in ssd.get_super_segmentation_object(sso_ids):
+    assert sso.load_skeleton(), f"Skeleton of SSO {sso.id} does not exist."
+    # if 'spinehead_vol' in sso.skeleton:
+    #     continue
+    extract_spinehead_volume_mesh(sso)
     sso.save_skeleton()
 
 with open(path_out_file, "wb") as f:

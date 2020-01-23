@@ -2412,6 +2412,10 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
     .skeleton` with the key ``spinehead_vol``.
 
+    Notes:
+        * Requires a (loaded, ``sso.load_skeleton``) skeleton, i.e. ``sso.skeleton`` must be present.
+        * If the results have to be stored, call ``sso.save_skeleton()``
+
     Args:
         sso: Cell object.
         ctx_vol: Additional volume above and below the bounding box of the extracted
@@ -2428,7 +2432,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
     # use bigger skel context to get the correspondence to the voxel as accurate as possible
     ctx_vol = np.array(ctx_vol)
-    sso.load_skeleton()
     scaling = sso.scaling
     assert 'spiness' in sso.skeleton
     g = sso.weighted_graph(add_node_attr=['spiness', 'axoness']).copy()
@@ -2450,11 +2453,11 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         sp_semseg = sp_semseg[sp_semseg != l]
 
     # iterate over connected skeleton nodes labeled as spine head
-    for sh in tqdm.tqdm(sh_nodes, leave=False):
+    for sh in sh_nodes:
         # get context around spine head via bfs and collect all nodes reached
         # load segmentation data
         node_ixs_sh = np.array(list(sh), dtype=np.int)
-        nodes_sh_skel = sso.skeleton['nodes'][node_ixs_sh]
+        nodes_sh_skel = sso.skeleton['nodes'][node_ixs_sh].astype(np.int)
 
         bb = np.array([np.min(nodes_sh_skel, axis=0), np.max(nodes_sh_skel, axis=0)])
         offset = bb[0] - ctx_vol
@@ -2492,17 +2495,22 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         labels[labels != 1] = 0
         labels, nb_obj = ndimage.label(labels)
+        nodes_sh_skel = nodes_sh_skel - offset
+        max_id = 1
         if nb_obj > 1:
-            ids, cnts = np.unique(labels[nodes_sh_skel[:, 0],
-                                         nodes_sh_skel[:, 1],
-                                         nodes_sh_skel[:, 2]],
-                                  return_counts=True)
+            collected_labels = []
+            for n in nodes_sh_skel:
+                ls = labels[(n[0]-1):(n[0]+2), (n[1]-1):(n[1]+2),
+                     (n[2]-1):(n[2]+2)]
+                collected_labels.extend(ls.tolist())
+            ids, cnts = np.unique(collected_labels, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]
-            assert len(ids) > 0
-            max_id = ids[np.argmax(cnts)]
-        else:
-            max_id = 1
+            if len(ids) == 0:
+                log_reps.warn(f'SSO {sso.id} contained erroneous volume'
+                              ' to spine head assignment.')
+            else:
+                max_id = ids[np.argmax(cnts)]
         n_voxels_spinehead = np.sum(labels == max_id)
         vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
         sso.skeleton['spinehead_vol'][node_ixs_sh] = vol_sh
@@ -2512,7 +2520,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         # labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         # nodes_sh_skel = nodes_sh_skel.astype(np.int)
         # kd.save_to_kzip(labels.swapaxes(2, 0), 1,
-        #                 f'/u/pschuber/tmp/testoverlay_ws/testoverlay_wsmesh_'
+        #                 f'/u/pschuber/tmp/testoverlay_ws_{sso.id}/testoverlay_wsmesh_'
         #                 f'ID{node_ixs_sh[0]}_{nodes_sh_skel[0][0]}_{nodes_sh_skel[0][1]}_'
         #                 f'{nodes_sh_skel[0][2]}_Vol{vol_sh}.k.zip', offset, mags=[1, ],
         #                 gen_mergelist=True)

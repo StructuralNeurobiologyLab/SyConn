@@ -44,7 +44,7 @@ if __name__ == '__main__':
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
+        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),

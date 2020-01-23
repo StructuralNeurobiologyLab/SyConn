@@ -8,6 +8,7 @@
 from knossos_utils import knossosdataset
 import numpy as np
 from typing import Tuple, Optional
+from syconn.mp.batchjob_utils import QSUB_script
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
@@ -16,7 +17,7 @@ from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.config import initialize_logging
-from syconn.handler.basics import kd_factory
+from syconn.handler.basics import kd_factory, chunkify
 knossosdataset._set_noprint(True)
 
 
@@ -143,3 +144,31 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # TODO: decide whether this should happen after prob thresholding or not
     map_synssv_objects(log=log)
     log.info('Finished.')
+
+
+def run_spinehead_volume_calc():
+    """
+
+    """
+    log = initialize_logging('spinehead_calc', global_params.config.working_dir+ '/logs/',
+                             overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    # shuffle SV IDs
+    np.random.seed(0)
+
+    log.info('Starting spine head volume calculation.')
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    multi_params = ssd.ssv_ids
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
+    # job parameter will be read sequentially, i.e. in order to provide only
+    # one list as parameter one needs an additonal axis
+    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
+    multi_params = [(ixs, ) for ixs in multi_params]
+
+    QSUB_script(multi_params, "calculate_spinehead_volume", log=log,
+                n_max_co_processes=global_params.config.ncore_total,
+                remove_jobfolder=True)
+    log.info('Finished processing of {} SSVs.'
+             ''.format(len(ordering)))
