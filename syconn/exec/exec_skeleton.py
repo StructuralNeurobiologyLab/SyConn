@@ -142,8 +142,7 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     cd.initialize(kd, boundary, cube_size, '~/cd_tmp/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True)
-    multi_params = chunkify(cd.coord_dict, max_n_jobs)
-    multi_params = [(cube_size, offset) for offset in multi_params]
+    multi_params = [(cube_size, offset) for offset in cd.coord_dict]
     out_dir = qu.QSUB_script(multi_params, "kimimaroskelgen", log=log,
                    n_max_co_processes=global_params.config.ncore_total, remove_jobfolder=False)
 
@@ -184,4 +183,3 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
 
     log.info('Finished skeleton generation.')
 
-    raise ValueError

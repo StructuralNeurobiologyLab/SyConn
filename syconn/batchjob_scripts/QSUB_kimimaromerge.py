@@ -7,6 +7,7 @@ except ImportError:
 from syconn.proc.skeleton import kimimaro_mergeskels, kimimaro_skels_tokzip
 from syconn import global_params
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
+import numpy as np
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -27,7 +28,12 @@ for ssv_id in ssv_ids:
     sso = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
     sso.skeleton = dict()
     sso.skeleton["neighbours"] = neighbour_dict
-    sso.skeleton["nodes"] = combined_skel.vertices
+    if combined_skel.vertices.size > 0:
+        sso.skeleton["nodes"] = combined_skel.vertices/global_params.config["scaling"] #to fit voxel coordinates
+        sso.skeleton["diameters"] = (combined_skel.radii / np.mean(global_params.config["scaling"])) * 2
+    else:
+        sso.skeleton["nodes"] = combined_skel.vertices
+        sso.skeleton["diameters"] = combined_skel.radii
     sso.skeleton["edges"] = combined_skel.edges
     sso.skeleton["degree"] = degree_dict
     sso.save_skeleton()
