@@ -133,7 +133,7 @@ def subfold_from_ix(ix, n_folders, old_version=False):
     -------
     str
     """
-    assert n_folders in [10**i for i in range(6)]
+    assert n_folders % 10 == 0
     if not global_params.config.use_new_subfold:
         return subfold_from_ix_OLD(ix, n_folders, old_version)
     order = int(np.log10(n_folders))

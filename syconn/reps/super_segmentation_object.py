@@ -2904,7 +2904,7 @@ class SuperSegmentationObject(object):
         """
         return np.array(self.attr_for_coords(coords, [pred_type], radius_nm))
 
-    def attr_for_coords(self, coords, attr_keys, radius_nm=None):
+    def attr_for_coords(self, coords, attr_keys, radius_nm=None, k=1):
         """
         TODO: move to super_segmentation_helper.py
         Query skeleton node attributes at given coordinates. Supports any
@@ -2920,6 +2920,8 @@ class SuperSegmentationObject(object):
             majority attribute value is used.
         attr_keys : List[str]
             Attribute identifier
+        k : int
+            Number of nearest neighbors, only if `radius_nm` is None.
 
         Returns
         -------
@@ -2930,7 +2932,8 @@ class SuperSegmentationObject(object):
         if type(attr_keys) is str:
             attr_keys = [attr_keys]
         coords = np.array(coords)
-        self.load_skeleton()
+        if self.skeleton is None:
+            self.load_skeleton()
         if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
             log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
                           "{}).".format(self.id, self.size, self.rep_coord))
@@ -2939,7 +2942,7 @@ class SuperSegmentationObject(object):
         # get close locations
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
         if radius_nm is None:
-            _, close_node_ids = kdtree.query(coords * self.scaling, k=1,
+            _, close_node_ids = kdtree.query(coords * self.scaling, k=k,
                                              n_jobs=self.nb_cpus)
         else:
             close_node_ids = kdtree.query_ball_point(coords * self.scaling,

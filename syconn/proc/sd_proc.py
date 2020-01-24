@@ -257,17 +257,17 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     all_times = []
     step_names = []
 
-    # remove previous results.
-    for p in glob.glob(f'{global_params.config.temp_path}/tmp_meshes_*'):
-        shutil.rmtree(p)
+    # # remove previous results.
+    # for p in glob.glob(f'{global_params.config.temp_path}/tmp_meshes_*'):
+    #     shutil.rmtree(p)
 
     # extract mapping
     start = time.time()
-    # random assignment to improve workload balance
-    rand_ixs = np.arange(len(chunk_list))
-    np.random.seed(0)
-    np.random.shuffle(chunk_list)
-    chunk_list = np.array(chunk_list)[rand_ixs]
+    # # random assignment to improve workload balance
+    # rand_ixs = np.arange(len(chunk_list))
+    # np.random.seed(0)
+    # np.random.shuffle(chunk_list)
+    # chunk_list = np.array(chunk_list)[rand_ixs]
     multi_params = list(basics.chunkify_successive(
         chunk_list, np.max([len(chunk_list) // n_chunk_jobs, 1])))
     multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values()),
@@ -281,93 +281,93 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     subcell_prop_workers = [dict() for _ in range(len(kd_organelle_paths))]
     dict_paths_tmp = []
 
-    # TODO: refactor write-out (and read in batchjob_enabled)
-    if qu.batchjob_enabled():
-        # # TODO: uncomment
-        path_to_out = qu.QSUB_script(
-            multi_params, "map_subcell_extract_props", n_cores=n_cores,
-            n_max_co_processes=n_max_co_processes)
-        out_files = glob.glob(path_to_out + "/*")
-        # # TODO: remove
-        # out_files = glob.glob("/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019"
-        #                       "/SLURM/map_subcell_extract_props_folder/out/*_converted.pkl")
-        for out_file in tqdm.tqdm(out_files, leave=False):
-            with open(out_file, 'rb') as f:
-                worker_nr, ref_mesh_dc = pkl.load(f)
-            for chunk_id, cell_ids in ref_mesh_dc['sv'].items():
-                cell_mesh_workers[chunk_id] = (worker_nr, cell_ids)
-            cell_prop_worker[worker_nr] = set().union(*ref_mesh_dc['sv'].values())
-        c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
-        with open(c_mesh_worker_dc, 'wb') as f:
-            pkl.dump(cell_mesh_workers, f, protocol=4)
-        del cell_mesh_workers
-        c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
-        with open(c_prop_worker_dc, 'wb') as f:
-            pkl.dump(cell_prop_worker, f, protocol=4)
-        del cell_prop_worker
-
-        for out_file in tqdm.tqdm(out_files, leave=False):
-            with open(out_file, 'rb') as f:
-                worker_nr, ref_mesh_dc = pkl.load(f)
-            # iterate over each subcellular structure
-            for ii in range(len(kd_organelle_paths)):
-                organelle = global_params.config['existing_cell_organelles'][ii]
-                for chunk_id, subcell_ids in ref_mesh_dc[organelle].items():
-                    subcell_mesh_workers[ii][chunk_id] = (worker_nr, subcell_ids)
-                subcell_prop_workers[ii][worker_nr] = set().union(*ref_mesh_dc[organelle].values())
-        for ii in range(len(kd_organelle_paths)):
-            organelle = global_params.config['existing_cell_organelles'][ii]
-            sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
-                global_params.config.temp_path, organelle)
-            with open(sc_mesh_worker_dc, 'wb') as f:
-                pkl.dump(subcell_mesh_workers[ii], f, protocol=4)
-            dict_paths_tmp += [sc_mesh_worker_dc]
-
-            sc_prop_worker_dc = "{}/sc_{}_prop_worker_dict.pkl".format(
-                global_params.config.temp_path, organelle)
-            with open(sc_prop_worker_dc, 'wb') as f:
-                pkl.dump(subcell_prop_workers[ii], f, protocol=4)
-            dict_paths_tmp += [sc_prop_worker_dc]
-    else:
-        results = sm.start_multiprocess_imap(
-            _map_subcell_extract_props_thread, multi_params, nb_cpus=n_max_co_processes,
-            verbose=False, debug=False)
-
-        for worker_nr, ref_mesh_dc in tqdm.tqdm(results, leave=False):
-            for chunk_id, cell_ids in ref_mesh_dc['sv'].items():
-                cell_mesh_workers[chunk_id] = (worker_nr, cell_ids)
-            cell_prop_worker[worker_nr] = set().union(*ref_mesh_dc['sv'].values())
-            # iterate over each subcellular structure
-            for ii in range(len(kd_organelle_paths)):
-                organelle = global_params.config['existing_cell_organelles'][ii]
-                for chunk_id, subcell_ids in ref_mesh_dc[organelle].items():
-                    subcell_mesh_workers[ii][chunk_id] = (worker_nr, subcell_ids)
-                subcell_prop_workers[ii][worker_nr] = set().union(*ref_mesh_dc[organelle].values())
-
-        c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
-        with open(c_mesh_worker_dc, 'wb') as f:
-            pkl.dump(cell_mesh_workers, f, protocol=4)
-        del cell_mesh_workers
-        c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
-        with open(c_prop_worker_dc, 'wb') as f:
-            pkl.dump(cell_prop_worker, f, protocol=4)
-        del cell_prop_worker
-
-        for ii in range(len(kd_organelle_paths)):
-            organelle = global_params.config['existing_cell_organelles'][ii]
-            sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
-                global_params.config.temp_path, organelle)
-            with open(sc_mesh_worker_dc, 'wb') as f:
-                pkl.dump(subcell_mesh_workers[ii], f, protocol=4)
-            dict_paths_tmp += [sc_mesh_worker_dc]
-
-            sc_prop_worker_dc = "{}/sc_{}_prop_worker_dict.pkl".format(
-                global_params.config.temp_path, organelle)
-            with open(sc_prop_worker_dc, 'wb') as f:
-                pkl.dump(subcell_prop_workers[ii], f, protocol=4)
-            dict_paths_tmp += [sc_prop_worker_dc]
-
-    del subcell_mesh_workers, subcell_prop_workers
+    # # TODO: refactor write-out (and read in batchjob_enabled)
+    # if qu.batchjob_enabled():
+    #     # # TODO: uncomment
+    #     # path_to_out = qu.QSUB_script(
+    #     #     multi_params, "map_subcell_extract_props", n_cores=n_cores,
+    #     #     n_max_co_processes=n_max_co_processes)
+    #     # out_files = glob.glob(path_to_out + "/*")
+    #     # # TODO: remove
+    #     out_files = glob.glob("/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019"
+    #                           "/SLURM/map_subcell_extract_props_folder/out/*_converted.pkl")
+    #     for out_file in tqdm.tqdm(out_files, leave=False):
+    #         with open(out_file, 'rb') as f:
+    #             worker_nr, ref_mesh_dc = pkl.load(f)
+    #         for chunk_id, cell_ids in ref_mesh_dc['sv'].items():
+    #             cell_mesh_workers[chunk_id] = (worker_nr, cell_ids)
+    #         cell_prop_worker[worker_nr] = set().union(*ref_mesh_dc['sv'].values())
+    #     c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    #     with open(c_mesh_worker_dc, 'wb') as f:
+    #         pkl.dump(cell_mesh_workers, f, protocol=4)
+    #     del cell_mesh_workers
+    #     c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
+    #     with open(c_prop_worker_dc, 'wb') as f:
+    #         pkl.dump(cell_prop_worker, f, protocol=4)
+    #     del cell_prop_worker
+    #
+    #     for out_file in tqdm.tqdm(out_files, leave=False):
+    #         with open(out_file, 'rb') as f:
+    #             worker_nr, ref_mesh_dc = pkl.load(f)
+    #         # iterate over each subcellular structure
+    #         for ii in range(len(kd_organelle_paths)):
+    #             organelle = global_params.config['existing_cell_organelles'][ii]
+    #             for chunk_id, subcell_ids in ref_mesh_dc[organelle].items():
+    #                 subcell_mesh_workers[ii][chunk_id] = (worker_nr, subcell_ids)
+    #             subcell_prop_workers[ii][worker_nr] = set().union(*ref_mesh_dc[organelle].values())
+    #     for ii in range(len(kd_organelle_paths)):
+    #         organelle = global_params.config['existing_cell_organelles'][ii]
+    #         sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
+    #             global_params.config.temp_path, organelle)
+    #         with open(sc_mesh_worker_dc, 'wb') as f:
+    #             pkl.dump(subcell_mesh_workers[ii], f, protocol=4)
+    #         dict_paths_tmp += [sc_mesh_worker_dc]
+    #
+    #         sc_prop_worker_dc = "{}/sc_{}_prop_worker_dict.pkl".format(
+    #             global_params.config.temp_path, organelle)
+    #         with open(sc_prop_worker_dc, 'wb') as f:
+    #             pkl.dump(subcell_prop_workers[ii], f, protocol=4)
+    #         dict_paths_tmp += [sc_prop_worker_dc]
+    # else:
+    #     # results = sm.start_multiprocess_imap(
+    #     #     _map_subcell_extract_props_thread, multi_params, nb_cpus=n_max_co_processes,
+    #     #     verbose=False, debug=False)
+    #
+    #     for worker_nr, ref_mesh_dc in tqdm.tqdm(results, leave=False):
+    #         for chunk_id, cell_ids in ref_mesh_dc['sv'].items():
+    #             cell_mesh_workers[chunk_id] = (worker_nr, cell_ids)
+    #         cell_prop_worker[worker_nr] = set().union(*ref_mesh_dc['sv'].values())
+    #         # iterate over each subcellular structure
+    #         for ii in range(len(kd_organelle_paths)):
+    #             organelle = global_params.config['existing_cell_organelles'][ii]
+    #             for chunk_id, subcell_ids in ref_mesh_dc[organelle].items():
+    #                 subcell_mesh_workers[ii][chunk_id] = (worker_nr, subcell_ids)
+    #             subcell_prop_workers[ii][worker_nr] = set().union(*ref_mesh_dc[organelle].values())
+    #
+    #     c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    #     with open(c_mesh_worker_dc, 'wb') as f:
+    #         pkl.dump(cell_mesh_workers, f, protocol=4)
+    #     del cell_mesh_workers
+    #     c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
+    #     with open(c_prop_worker_dc, 'wb') as f:
+    #         pkl.dump(cell_prop_worker, f, protocol=4)
+    #     del cell_prop_worker
+    #
+    #     for ii in range(len(kd_organelle_paths)):
+    #         organelle = global_params.config['existing_cell_organelles'][ii]
+    #         sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
+    #             global_params.config.temp_path, organelle)
+    #         with open(sc_mesh_worker_dc, 'wb') as f:
+    #             pkl.dump(subcell_mesh_workers[ii], f, protocol=4)
+    #         dict_paths_tmp += [sc_mesh_worker_dc]
+    #
+    #         sc_prop_worker_dc = "{}/sc_{}_prop_worker_dict.pkl".format(
+    #             global_params.config.temp_path, organelle)
+    #         with open(sc_prop_worker_dc, 'wb') as f:
+    #             pkl.dump(subcell_prop_workers[ii], f, protocol=4)
+    #         dict_paths_tmp += [sc_prop_worker_dc]
+    #
+    # del subcell_mesh_workers, subcell_prop_workers
 
     # dict_paths_tmp += [c_mesh_worker_dc, c_prop_worker_dc]
     step_names.append("extract and map segmentation objects")
@@ -376,21 +376,21 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     # reduce step
     start = time.time()
 
-    # create folders for existing (sub-)cell supervoxels to prevent concurrent makedirs
-    ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
-    for k in tqdm.tqdm(ids, leave=False):
-        curr_dir = sv_sd.so_storage_path + rep_helper.subfold_from_ix(k, n_folders_fs)
-        os.makedirs(curr_dir, exist_ok=True)
-
-    for organelle in global_params.config['existing_cell_organelles']:
-        sc_sd = segmentation.SegmentationDataset(
-            working_dir=global_params.config.working_dir, obj_type=organelle, version=0,
-            n_folders_fs=n_folders_fs_sc)
-        ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
-        for ix in tqdm.tqdm(ids, leave=False):
-            curr_dir = sc_sd.so_storage_path + rep_helper.subfold_from_ix(
-                ix, n_folders_fs_sc)
-            os.makedirs(curr_dir, exist_ok=True)
+    # # create folders for existing (sub-)cell supervoxels to prevent concurrent makedirs
+    # ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
+    # for k in tqdm.tqdm(ids, leave=False):
+    #     curr_dir = sv_sd.so_storage_path + rep_helper.subfold_from_ix(k, n_folders_fs)
+    #     os.makedirs(curr_dir, exist_ok=True)
+    #
+    # for organelle in global_params.config['existing_cell_organelles']:
+    #     sc_sd = segmentation.SegmentationDataset(
+    #         working_dir=global_params.config.working_dir, obj_type=organelle, version=0,
+    #         n_folders_fs=n_folders_fs_sc)
+    #     ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
+    #     for ix in tqdm.tqdm(ids, leave=False):
+    #         curr_dir = sc_sd.so_storage_path + rep_helper.subfold_from_ix(
+    #             ix, n_folders_fs_sc)
+    #         os.makedirs(curr_dir, exist_ok=True)
 
     all_times.append(time.time() - start)
     step_names.append("conversion of results")
@@ -399,17 +399,16 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     start = time.time()
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
+    n_jobs = int(max(2 * global_params.config.ncore_total, len(storage_location_ids) / 15))
     multi_params = [(sv_id_block, n_folders_fs,
                      global_params.config.allow_mesh_gen_cells)
-                    for sv_id_block in basics.chunkify(storage_location_ids,
-                                                       global_params.config['nnodes_total'] * 4)]
+                    for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
     else:
-        qu.QSUB_script(multi_params, "write_props_to_sv_singlenode",
-                       n_cores=global_params.config['ncores_per_node'],
-                       n_max_co_processes=global_params.config['nnodes_total'],
+        qu.QSUB_script(multi_params, "write_props_to_sv",
+                       n_max_co_processes=global_params.config.ncore_total,
                        remove_jobfolder=True)
     if global_params.config.use_new_meshing:
         dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
@@ -419,16 +418,15 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     # write to subcell. SV attribute dicts
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
+    n_jobs = int(max(global_params.config.ncore_total, len(storage_location_ids) / 10))
     multi_params = [(sv_id_block, n_folders_fs_sc)
-                    for sv_id_block in basics.chunkify(storage_location_ids,
-                                                       global_params.config['nnodes_total'] * 4)]
+                    for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
     else:
-        qu.QSUB_script(multi_params, "write_props_to_sc_singlenode", script_folder=None,
-                       n_cores=global_params.config['ncores_per_node'],
-                       n_max_co_processes=global_params.config['nnodes_total'],
+        qu.QSUB_script(multi_params, "write_props_to_sc", script_folder=None,
+                       n_max_co_processes=global_params.config.ncore_total,
                        remove_jobfolder=True)
     step_names.append("write subcellular SV dataset")
 
@@ -790,15 +788,19 @@ def _write_props_to_sc_thread(args):
             all_ids.update(v)
         # store destinations for each existing obj
         dest_dc = defaultdict(list)
+        dest_dc_tmp = defaultdict(list)
         for subcell_id in all_ids:
-            dest_dc[rep_helper.subfold_from_ix(
+            dest_dc_tmp[rep_helper.subfold_from_ix(
                 subcell_id, n_folders_fs)].append(subcell_id)
 
         all_obj_keys = set()
+        # TODO: optimize
         for obj_id_mod in obj_id_chs:
-            all_obj_keys.update(set(dest_dc[rep_helper.subfold_from_ix(
+            all_obj_keys.update(set(dest_dc_tmp[rep_helper.subfold_from_ix(
                 obj_id_mod, n_folders_fs)]))
-
+            dest_dc[rep_helper.subfold_from_ix(
+                obj_id_mod, n_folders_fs)] = dest_dc_tmp[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
+        del dest_dc_tmp
         # Now given to IDs of interest, load properties and mapping info
         prop_dict = [{}, defaultdict(list), {}]
         mapping_dict = dict()
@@ -834,28 +836,6 @@ def _write_props_to_sc_thread(args):
                 sc_mesh_worker_dc[k][worker_id].append(ch_id)
         del subcell_mesh_workers_tmp
 
-        # fetch all required mesh data
-        if global_params.config.use_new_meshing:
-            # get cached mesh dicts for segmentation object 'organelle'
-            cached_mesh_dc = defaultdict(list)
-            worker_ids = defaultdict(set)
-            for k in all_obj_keys:
-                if prop_dict[2][k] < global_params.config['meshes']['mesh_min_obj_vx']:
-                    # do not load mesh-cache of small objects
-                    continue
-                for worker_id, ch_ids in sc_mesh_worker_dc[k].items():
-                    worker_ids[worker_id].update(ch_ids)
-            for worker_nr, chunk_ids in worker_ids.items():
-                for ch_id in chunk_ids:
-                    p = "{}/tmp_meshes_{}/{}_{}_ch{}.pkl".format(
-                        global_params.config.temp_path, worker_nr, organelle, worker_nr, ch_id)
-                    pkl_file = open(p, "rb")
-                    partial_mesh_dc = pkl.load(pkl_file)
-                    pkl_file.close()
-                    # only loaded keys which are part of the worker's chunk
-                    for el in all_obj_keys.intersection(set(list(partial_mesh_dc.keys()))):
-                        cached_mesh_dc[el].append(partial_mesh_dc[el])
-
         # get SegmentationDataset of current subcell.
         sc_sd = segmentation.SegmentationDataset(
             n_folders_fs=n_folders_fs, obj_type=organelle,
@@ -864,6 +844,29 @@ def _write_props_to_sc_thread(args):
         # iterate over the subcellular SV ID chunks
         for obj_id_mod in obj_id_chs:
             obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
+            obj_keys = set(obj_keys)
+
+            # fetch all required mesh data
+            if global_params.config.use_new_meshing:
+                # get cached mesh dicts for segmentation object 'organelle'
+                cached_mesh_dc = defaultdict(list)
+                worker_ids = defaultdict(set)
+                for k in obj_keys:
+                    if prop_dict[2][k] < global_params.config['meshes']['mesh_min_obj_vx']:
+                        # do not load mesh-cache of small objects
+                        continue
+                    for worker_id, ch_ids in sc_mesh_worker_dc[k].items():
+                        worker_ids[worker_id].update(ch_ids)
+                for worker_nr, chunk_ids in worker_ids.items():
+                    for ch_id in chunk_ids:
+                        p = "{}/tmp_meshes_{}/{}_{}_ch{}.pkl".format(
+                            global_params.config.temp_path, worker_nr, organelle, worker_nr, ch_id)
+                        pkl_file = open(p, "rb")
+                        partial_mesh_dc = pkl.load(pkl_file)
+                        pkl_file.close()
+                        # only load keys which are part of the worker's chunk
+                        for el in obj_keys.intersection(set(list(partial_mesh_dc.keys()))):
+                            cached_mesh_dc[el].append(partial_mesh_dc[el])
 
             # get dummy segmentation object to fetch attribute
             # dictionary for this batch of object IDs
@@ -952,16 +955,19 @@ def _write_props_to_sv_thread(args):
         all_ids.update(v)
 
     # store destinations for each existing obj
+    dest_dc_tmp = defaultdict(list)
     dest_dc = defaultdict(list)
+    # TODO: optimize
     # use dictionary for rep coord (just use any, they all share the same keys)
     for k in all_ids:
-        dest_dc[rep_helper.subfold_from_ix(k, n_folders_fs)].append(k)
+        dest_dc_tmp[rep_helper.subfold_from_ix(k, n_folders_fs)].append(k)
     all_obj_keys = set()
     for obj_id_mod in obj_id_chs:
-        all_obj_keys.update(set(dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]))
+        all_obj_keys.update(set(dest_dc_tmp[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]))
+        dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)] = dest_dc_tmp[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
     if len(all_obj_keys) == 0:
         return
-
+    del dest_dc_tmp
     # Now given to IDs of interest, load properties and mapping info
     prop_dict = [{}, defaultdict(list), {}]
     mapping_dicts = {k: {} for k in global_params.config['existing_cell_organelles']}
@@ -992,32 +998,18 @@ def _write_props_to_sv_thread(args):
         md = invert_mdc(md)  # invert to have cell IDs in highest layer
         mapping_dicts[md_k] = md
 
-    c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
-    with open(c_mesh_worker_dc, "rb") as f:
-        cell_mesh_workers_tmp = pkl.load(f)
+    if global_params.config.use_new_meshing and generate_sv_mesh:
+        c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+        with open(c_mesh_worker_dc, "rb") as f:
+            cell_mesh_workers_tmp = pkl.load(f)
 
-    # convert into object ID -> worker_ids -> chunk_ids
-    mesh_worker_dc = {k: defaultdict(list) for k in all_obj_keys}
-    for ch_id, (worker_id, obj_ids) in cell_mesh_workers_tmp.items():
-        for k in set(obj_ids).intersection(all_obj_keys):
-            mesh_worker_dc[k][worker_id].append(ch_id)
+        # convert into object ID -> worker_ids -> chunk_ids
+        mesh_worker_dc = {k: defaultdict(list) for k in all_obj_keys}
+        for ch_id, (worker_id, obj_ids) in cell_mesh_workers_tmp.items():
+            for k in set(obj_ids).intersection(all_obj_keys):
+                mesh_worker_dc[k][worker_id].append(ch_id)
 
-    del cell_mesh_workers_tmp
-
-    # # iterate over the subcell structures
-    # # get cached mapping and property dicts of current subcellular structure
-    # mapping_dicts = {k: {} for k in global_params.config['existing_cell_organelles']}
-    # for ii, k in enumerate(global_params.config['existing_cell_organelles']):
-    #     mapping_dict_path = "{}/{}_mapping_dict_inv.pkl".format(global_params.config.temp_path, k)
-    #     with open(mapping_dict_path, "rb") as f:
-    #         mapping_dict_tmp = pkl.load(f)
-    #
-    #     for ix in all_obj_keys:
-    #         try:
-    #             mapping_dicts[k][ix] = mapping_dict_tmp[ix]
-    #         except KeyError:  # no object of current type mapped to cell SV
-    #             pass
-    #     del mapping_dict_tmp
+        del cell_mesh_workers_tmp
 
     dt_loading_cache = time.time() - dt_loading_cache
 
@@ -1026,34 +1018,6 @@ def _write_props_to_sv_thread(args):
 
     # fetch all required mesh data
     dt_mesh_merge_io = 0
-
-    if global_params.config.use_new_meshing:
-        # get cached mesh dicts for segmentation object k
-        cached_mesh_dc = defaultdict(list)
-        start = time.time()
-        worker_ids = defaultdict(set)
-        for k in all_obj_keys:
-            # ignore mesh of small objects
-            if prop_dict[2][k] < global_params.config['meshes']['mesh_min_obj_vx']:
-                continue
-            # mesh_worker_dc contains a dict with keys: worker_nr (int) and chunk_ids (set)
-            for worker_id, ch_ids in mesh_worker_dc[k].items():
-                worker_ids[worker_id].update(ch_ids)
-        log_proc.debug('Loading meshes of {} SVs from {} worker '
-                       'caches.'.format(len(all_obj_keys), len(worker_ids)))
-        for worker_nr, chunk_ids in worker_ids.items():
-            for ch_id in chunk_ids:
-                p = "{}/tmp_meshes_{}/{}_{}_ch{}.pkl".format(
-                    global_params.config.temp_path, worker_nr, "sv", worker_nr, ch_id)
-                pkl_file = open(p, "rb")
-                partial_mesh_dc = pkl.load(pkl_file)
-                pkl_file.close()
-                # only loaded keys which are part of the worker's chunk
-                for el in all_obj_keys.intersection(set(list(partial_mesh_dc.keys()))):
-                    cached_mesh_dc[el].append(partial_mesh_dc[el])
-        dt_mesh_merge_io += time.time() - start
-        log_proc.debug('Loading meshes from worker caches took'
-                       ' {:.2f} min'.format(dt_mesh_merge_io / 60))
 
     # get SegmentationDataset of cell SV
     sv_sd = segmentation.SegmentationDataset(
@@ -1065,6 +1029,36 @@ def _write_props_to_sv_thread(args):
 
     for obj_id_mod in obj_id_chs:
         obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
+        obj_keys = set(obj_keys)
+
+        # load meshes of current batch
+        if global_params.config.use_new_meshing and generate_sv_mesh:
+            # get cached mesh dicts for segmentation object k
+            cached_mesh_dc = defaultdict(list)
+            start = time.time()
+            worker_ids = defaultdict(set)
+            for k in obj_keys:
+                # ignore mesh of small objects
+                if prop_dict[2][k] < global_params.config['meshes']['mesh_min_obj_vx']:
+                    continue
+                # mesh_worker_dc contains a dict with keys: worker_nr (int) and chunk_ids (set)
+                for worker_id, ch_ids in mesh_worker_dc[k].items():
+                    worker_ids[worker_id].update(ch_ids)
+            log_proc.debug('Loading meshes of {} SVs from {} worker '
+                           'caches.'.format(len(obj_keys), len(worker_ids)))
+            for worker_nr, chunk_ids in worker_ids.items():
+                for ch_id in chunk_ids:
+                    p = "{}/tmp_meshes_{}/{}_{}_ch{}.pkl".format(
+                        global_params.config.temp_path, worker_nr, "sv", worker_nr, ch_id)
+                    pkl_file = open(p, "rb")
+                    partial_mesh_dc = pkl.load(pkl_file)
+                    pkl_file.close()
+                    # only loaded keys which are part of the worker's chunk
+                    for el in obj_keys.intersection(set(list(partial_mesh_dc.keys()))):
+                        cached_mesh_dc[el].append(partial_mesh_dc[el])
+            dt_mesh_merge_io += time.time() - start
+            log_proc.debug('Loading meshes from worker caches took'
+                           ' {:.2f} min'.format(dt_mesh_merge_io / 60))
 
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sv_sd.get_segmentation_object(obj_id_mod)
@@ -1401,6 +1395,5 @@ def mesh_proc_chunked(working_dir, obj_type, nb_cpus=None):
         nb_cpus = global_params.config['ncores_per_node']
     sd = segmentation.SegmentationDataset(obj_type, working_dir=working_dir)
     multi_params = sd.so_dir_paths
-    print("Processing %d mesh dicts of %s." % (len(multi_params), obj_type))
     sm.start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=nb_cpus,
                                debug=False)

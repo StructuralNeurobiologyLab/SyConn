@@ -135,10 +135,6 @@ def _collect_properties_from_ssv_partners_thread(args):
             ct = -1
         celltypes = [ct] * len(ssv_synids)
 
-        # # This does not allow to query a sliding window averaged prediction
-        # pred_key = global_params.config['compartments']['view_properties_semsegax']['semseg_key']
-        # curr_ax = ssv_o.semseg_for_coords(ssv_syncoords, pred_key,
-        #                                   **global_params.config['compartments']['map_properties_semsegax'])
         pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
                                             'view_properties_semsegax']['semseg_key'],
                                         global_params.config['compartments'][
@@ -146,10 +142,20 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
-        # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness',
                                           **global_params.config['spines']['semseg2coords_spines'])
+        sh_vol = np.zeros_like(curr_ax)
+        # TODO: check if there is actually an error if spinehead_vol is not in the skeleton
+        try:
+            sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'])
+            sh_vol_zero = sh_vol == 0
+            if np.any(sh_vol_zero):
+                log_extraction.warn(f'Empty spine head volume at {ssv_syncoords[sh_vol_zero]}'
+                                    f' in SSO {ssv_id}.')
+        except:
+            pass
 
+        cache_dc['partner_spineheadvol'] = np.array(sh_vol)
         cache_dc['partner_axoness'] = np.array(curr_ax)
         cache_dc['synssv_ids'] = np.array(ssv_synids)
         cache_dc['partner_spiness'] = np.array(curr_sp)

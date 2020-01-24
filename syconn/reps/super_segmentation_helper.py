@@ -2444,7 +2444,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     g.remove_nodes_from(remove_nodes)
     sh_nodes = nx.connected_components(g)
     ssv_svids = set(sso.sv_ids)
-    sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness'])
+    sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness']).astype(np.float32)
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
     ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
@@ -2515,7 +2515,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
         sso.skeleton['spinehead_vol'][node_ixs_sh] = vol_sh
 
-        # print(node_ixs_sh[0], vol_sh)
         # # DEBUG
         # labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         # nodes_sh_skel = nodes_sh_skel.astype(np.int)

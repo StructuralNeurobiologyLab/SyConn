@@ -268,7 +268,10 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
         job_ids = np.array(list(slurm2job_dc.values()))
         # get states of slurm jobs with the same ordering as 'job_ids'
         job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
-        for j in job_ids[job_states == 'FAILED']:
+        # all jobs which are not running, completed or pending have failed for
+        # some reason (states: failed, out_out_memory, ..).
+        for j in job_ids[(job_states != 'COMPLETED') & (job_states != 'PENDING')
+                         & (job_states != 'RUNNING')]:
             if requeue_dc[j] == max_iterations:
                 nb_failed += 1
                 continue
