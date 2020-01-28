@@ -26,10 +26,10 @@ from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
 from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
-from ..proc.image import multi_mop
+from ..proc.image import multi_mop, apply_morphological_operations
 from .. import global_params
 from ..handler.basics import kd_factory
-from syconn.reps.rep_helper import find_object_properties
+from ..reps.rep_helper import find_object_properties
 
 try:
     from vigra.filters import gaussianSmoothing
@@ -244,6 +244,9 @@ def _gauss_threshold_connected_components_thread(args):
     load_from_kd_overlaycubes = args[15]
     transf_func_kd_overlay = args[16]
 
+    # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'cell': []}
+    morph_ops = global_params.config['cel_objects']['extract_morph_op']
+
     nb_cc_list = []
     for chunk in chunks:
         box_offset = np.array(chunk.coordinates) - np.array(overlap)
@@ -319,6 +322,9 @@ def _gauss_threshold_connected_components_thread(args):
             if thresholds[nb_hdf5_name] != 0 and not load_from_kd_overlaycubes:
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name],
                                     dtype=np.uint8)
+
+            if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
+                tmp_data = apply_morphological_operations(tmp_data, morph_ops[hdf5_name])
 
             this_labels_data, nb_cc = scipy.ndimage.label(tmp_data)
             nb_cc_list.append([chunk.number, hdf5_name, nb_cc])

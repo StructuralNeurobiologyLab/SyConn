@@ -2433,33 +2433,38 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     # use bigger skel context to get the correspondence to the voxel as accurate as possible
     ctx_vol = np.array(ctx_vol)
     scaling = sso.scaling
-    assert 'spiness' in sso.skeleton
-    g = sso.weighted_graph(add_node_attr=['spiness', 'axoness']).copy()
-    remove_nodes = []
-    for n in g.nodes:
-        sp = g.nodes[n]['spiness']
-        ax = g.nodes[n]['axoness']
-        if sp != 1 or ax != 0:  # sp-1: spine head, ax-0: dendrite
-            remove_nodes.append(n)
-    g.remove_nodes_from(remove_nodes)
-    sh_nodes = nx.connected_components(g)
+    if 'spiness' not in sso.skeleton:
+        log_reps.warn(f'"spiness" not available in skeleton of SSO {sso.id}. '
+                      f'Skipping.')
+        sso.skeleton['spinehead_vol'] = np.zeros((len(sso.skeleton['nodes']), )).astype(np.float32)
+        return
     ssv_svids = set(sso.sv_ids)
     sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness']).astype(np.float32)
+    ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
+    if len(ssv_syncoords) == 0:
+        return
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
     ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
     for l in ignore_labels:
         verts = verts[sp_semseg != l]
         sp_semseg = sp_semseg[sp_semseg != l]
-
+    curr_sp = sso.semseg_for_coords(ssv_syncoords, 'spiness',
+                                    **global_params.config['spines']['semseg2coords_spines'])
+    pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                        'view_properties_semsegax']['semseg_key'],
+                                    global_params.config['compartments'][
+                                        'dist_axoness_averaging'])
+    curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
+    ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
+    if len(ssv_syncoords) == 0:  # node spine head synapses
+        return
+    kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
+    _, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
     # iterate over connected skeleton nodes labeled as spine head
-    for sh in sh_nodes:
-        # get context around spine head via bfs and collect all nodes reached
-        # load segmentation data
-        node_ixs_sh = np.array(list(sh), dtype=np.int)
-        nodes_sh_skel = sso.skeleton['nodes'][node_ixs_sh].astype(np.int)
-
-        bb = np.array([np.min(nodes_sh_skel, axis=0), np.max(nodes_sh_skel, axis=0)])
+    for c, node_ix in zip(ssv_syncoords, close_node_ids):
+        # get closest skeleton node
+        bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
         size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
         # get cell segmentation mask
@@ -2479,7 +2484,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         vert_ixs_bb = np.array(vert_ixs_bb, dtype=np.bool)
         verts_bb = verts[vert_ixs_bb]
         semseg_bb = sp_semseg[vert_ixs_bb]
-        # relabeld spine neck as 9
+        # relabelled spine neck as 9, actually not needed here
         semseg_bb[semseg_bb == 0] = 9
 
         distance = ndimage.distance_transform_edt(seg)
@@ -2495,32 +2500,45 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         labels[labels != 1] = 0
         labels, nb_obj = ndimage.label(labels)
-        nodes_sh_skel = nodes_sh_skel - offset
+        c = c - offset
         max_id = 1
         if nb_obj > 1:
-            collected_labels = []
-            for n in nodes_sh_skel:
-                ls = labels[(n[0]-1):(n[0]+2), (n[1]-1):(n[1]+2),
-                     (n[2]-1):(n[2]+2)]
-                collected_labels.extend(ls.tolist())
-            ids, cnts = np.unique(collected_labels, return_counts=True)
+            # query many voxels or use NN approach?
+            ls = labels[(c[0]-10):(c[0]+11), (c[1]-10):(c[1]+11),
+                 (c[2]-10):(c[2]+11)]
+            ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]
             if len(ids) == 0:
+                coords = []
+                ids = []
+                for ii in range(1, nb_obj + 1):
+                    curr_coords = np.transpose(np.nonzero(labels == ii))
+                    coords.append(curr_coords)
+                    ids.extend(len(curr_coords) * [ii])
+                coords = np.concatenate(coords) + offset
+                nn_kdt = spatial.cKDTree(coords * sso.scaling)
+                _, nn_id = nn_kdt.query([(c + offset) * sso.scaling])
+                max_id = ids[nn_id[0]]
                 log_reps.warn(f'SSO {sso.id} contained erroneous volume'
-                              ' to spine head assignment.')
+                              f' to spine head assignment. Found no spine head cluster '
+                              f'within 10x10x10 voxel subcube at {c + offset},'
+                              f' expected 1. '
+                              f'Fall-back is using the volume of the closest'
+                              f' spine head cluster via nearest-neighbor.')
             else:
                 max_id = ids[np.argmax(cnts)]
+
         n_voxels_spinehead = np.sum(labels == max_id)
         vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
-        sso.skeleton['spinehead_vol'][node_ixs_sh] = vol_sh
+        sso.skeleton['spinehead_vol'][node_ix] = vol_sh
 
         # # DEBUG
         # labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         # nodes_sh_skel = nodes_sh_skel.astype(np.int)
         # kd.save_to_kzip(labels.swapaxes(2, 0), 1,
         #                 f'/u/pschuber/tmp/testoverlay_ws_{sso.id}/testoverlay_wsmesh_'
-        #                 f'ID{node_ixs_sh[0]}_{nodes_sh_skel[0][0]}_{nodes_sh_skel[0][1]}_'
+        #                 f'ID{node_ix}_{nodes_sh_skel[0][0]}_{nodes_sh_skel[0][1]}_'
         #                 f'{nodes_sh_skel[0][2]}_Vol{vol_sh}.k.zip', offset, mags=[1, ],
         #                 gen_mergelist=True)
         #

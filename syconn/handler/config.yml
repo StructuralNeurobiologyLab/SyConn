@@ -62,6 +62,15 @@ versions:
 
 # Cell object properties
 cell_objects:
+  # threshold applied during object extraction
+  min_obj_vx:
+    mi: 100
+    sj: 100
+    vc: 100
+    sv: 1  # all cell supervoxels are extracted
+    cs: 10  # contact sites tend to be small
+    syn: 10  # these are overlayed with contact sites and therefore tend to be small
+
   lower_mapping_ratios:
     mi: 0.5
     sj: 0.1
@@ -72,6 +81,7 @@ cell_objects:
     sj: 0.9
     vc: 1.
 
+  # size threshold (in voxels) applied when mapping them to cells
   sizethresholds:
     mi: 2786
     sj: 498
@@ -81,6 +91,14 @@ cell_objects:
     mi: 0.428571429
     sj: 0.19047619
     vc: 0.285714286
+
+  # Hook for morphological operations from scipy.ndimage applied during object extraction.
+  # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
+  extract_morph_op:
+    mi: []
+    sj: []
+    vc: []
+    sv: []  # these are the cell supervoxels
 
   # bounding box criteria for mapping mitochondria objects
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM

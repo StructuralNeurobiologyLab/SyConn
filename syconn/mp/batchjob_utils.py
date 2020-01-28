@@ -61,7 +61,7 @@ python_path_global = sys.executable
 def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
                     additional_flags='', suffix="",
                     job_name="default", script_folder=None,
-                    n_max_co_processes=None, max_iterations=10,
+                    n_max_co_processes=None, max_iterations=5,
                     python_path=None, disable_mem_flag=False,
                     disable_batchjob=False, use_dill=False,
                     remove_jobfolder=False, log=None, show_progress=True,
@@ -170,9 +170,6 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
                            remove_jobfolder=remove_jobfolder, log=log,
                            show_progress=show_progress)
 
-    # Handle memory limits after QSUB fallback.
-    # Node memory limit is 250,000M and not 250G! ->
-    # max memory per core is 250000M/20, leave safety margin
     mem_lim = int(global_params.config['mem_per_node'] /
                   global_params.config['ncores_per_node'])
     if '--mem' in additional_flags:
@@ -247,8 +244,8 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
 
         job_exec_dc[job_id] = cmd_exec
         start = time.time()
-        process = subprocess.Popen(f'sbatch -n{n_cores} {cmd_exec}', shell=True,
-                                   stdout=subprocess.PIPE)
+        process = subprocess.Popen(f'sbatch --cpus-per-task={n_cores} {cmd_exec}',
+                                   shell=True, stdout=subprocess.PIPE)
         out_str = io.TextIOWrapper(process.stdout, encoding="utf-8").read()
         slurm_id = int(re.findall(r'(\d+)', out_str)[0])
         job2slurm_dc[job_id] = slurm_id
@@ -267,7 +264,14 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
         # get internal job ids from current job dict
         job_ids = np.array(list(slurm2job_dc.values()))
         # get states of slurm jobs with the same ordering as 'job_ids'
-        job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
+        try:
+            job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
+        except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
+            log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
+                                 f'again, SLURM cache might have been delayed.')
+            time.sleep(1.5*sleep_time)
+            js_dc = jobstates_slurm(job_name, starttime)
+            job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         # all jobs which are not running, completed or pending have failed for
         # some reason (states: failed, out_out_memory, ..).
         for j in job_ids[(job_states != 'COMPLETED') & (job_states != 'PENDING')
@@ -278,7 +282,7 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
             # restart job
             requeue_dc[j] += 1
             # increment number of cores by one.
-            job_cmd = f'sbatch -n{requeue_dc[j] + n_cores} {job_exec_dc[j]}'
+            job_cmd = f'sbatch --cpus-per-task={requeue_dc[j] + n_cores} {job_exec_dc[j]}'
             process = subprocess.Popen(job_cmd, shell=True,
                                        stdout=subprocess.PIPE)
             out_str = io.TextIOWrapper(process.stdout, encoding="utf-8").read()

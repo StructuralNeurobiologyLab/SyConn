@@ -136,6 +136,23 @@ def subfold_from_ix(ix, n_folders, old_version=False):
     assert n_folders % 10 == 0
     if not global_params.config.use_new_subfold:
         return subfold_from_ix_OLD(ix, n_folders, old_version)
+    else:
+        return subfold_from_ix_new(ix, n_folders)
+
+
+def subfold_from_ix_new(ix, n_folders):
+    """
+
+    Parameters
+    ----------
+    ix : int
+    n_folders: int
+
+    Returns
+    -------
+    str
+    """
+    assert n_folders % 10 == 0
     order = int(np.log10(n_folders))
     subfold = "/"
     div_base = 1e3  # TODO: make this a parameter

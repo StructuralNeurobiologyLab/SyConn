@@ -21,6 +21,7 @@ import datetime
 import tqdm
 import shutil
 import pickle as pkl
+import numpy as np
 
 from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
@@ -118,6 +119,10 @@ def _collect_properties_from_ssv_partners_thread(args):
                                                       version=ssd_version)
 
     syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
+    pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                        'view_properties_semsegax']['semseg_key'],
+                                    global_params.config['compartments'][
+                                        'dist_axoness_averaging'])
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
         ssv_o.load_attr_dict()
@@ -135,10 +140,6 @@ def _collect_properties_from_ssv_partners_thread(args):
             ct = -1
         celltypes = [ct] * len(ssv_synids)
 
-        pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
-                                            'view_properties_semsegax']['semseg_key'],
-                                        global_params.config['compartments'][
-                                            'dist_axoness_averaging'])
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
@@ -147,7 +148,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         sh_vol = np.zeros_like(curr_ax)
         # TODO: check if there is actually an error if spinehead_vol is not in the skeleton
         try:
-            sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'])
+            sh_vol = np.max(ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0], axis=1)
             sh_vol_zero = sh_vol == 0
             if np.any(sh_vol_zero):
                 log_extraction.warn(f'Empty spine head volume at {ssv_syncoords[sh_vol_zero]}'

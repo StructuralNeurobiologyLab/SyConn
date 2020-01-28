@@ -62,7 +62,7 @@ def generate_subcell_kd_from_proba(
         load_cellorganelles_from_kd_overlaycubes: bool = False,
         cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
         cube_shape: Optional[Tuple[int]] = None,
-        log: Logger = None, **kwargs):
+        log: Logger = None, overwrite=False, **kwargs):
     """
     Generates a connected components segmentation for the given the sub-cellular
     structures (e.g. ['mi', 'sj', 'vc]) as KnossosDatasets.
@@ -84,6 +84,7 @@ def generate_subcell_kd_from_proba(
         cube_of_interest_bb:
         cube_shape:
         log:
+        overwrite:
         **kwargs:
 
     Returns:
@@ -101,6 +102,15 @@ def generate_subcell_kd_from_proba(
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
     cd_dir = "{}/chunkdatasets/{}/".format(global_params.config.working_dir, "_".join(subcell_names))
+    if os.path.isdir(cd_dir):
+        if not overwrite:
+            msg = f'Could not start generation of sub-cellular objects ' \
+                  f'"{subcell_names}" ChunkDataset because it already exists ' \
+                  f'and overwrite was not set to True.'
+            log_extraction.error(msg)
+            raise FileExistsError(msg)
+        log.debug('Found existing ChunkDataset at {}. Removing it now.'.format(cd_dir))
+        shutil.rmtree(cd_dir)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True,
@@ -114,6 +124,12 @@ def generate_subcell_kd_from_proba(
         prob_threshs.append(global_params.config['cell_objects']["probathresholds"][co])
         path = global_params.config.kd_organelle_seg_paths[co]
         if os.path.isdir(path):
+            if not overwrite:
+                msg = f'Could not start generation of sub-cellular object ' \
+                      f'"{co}" KnossosDataset because it already exists and overwrite ' \
+                      f'was not set to True.'
+                log_extraction.error(msg)
+                raise FileExistsError(msg)
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
         target_kd = knossosdataset.KnossosDataset()
