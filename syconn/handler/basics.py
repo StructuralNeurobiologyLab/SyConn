@@ -45,6 +45,7 @@ def kd_factory(kd_path: str, channel: str = 'jpg'):
 
     Notes:
         * Prioritizes pyk.conf files.
+
     Todo:
         * Requires additional adjustment of the data type,
           i.e. setting the channel explicitly currently leads to uint32 <->
@@ -787,6 +788,7 @@ def parse_cc_dict_from_kzip(k_path):
 def temp_seed(seed):
     """
     From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+
     Parameters
     ----------
     seed :

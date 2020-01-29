@@ -21,7 +21,6 @@ import datetime
 import tqdm
 import shutil
 import pickle as pkl
-import numpy as np
 
 from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
@@ -132,6 +131,15 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
+        if len(ssv_synids) == 0:
+            cache_dc['partner_spineheadvol'] = np.zeros((0, ), dtype=np.float)
+            cache_dc['partner_axoness'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['synssv_ids'] = ssv_synids
+            cache_dc['partner_spiness'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['partner_celltypes'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['latent_morph'] = np.zeros((0, ), dtype=np.float)
+            cache_dc.push()
+            continue
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
 
         try:
@@ -145,23 +153,23 @@ def _collect_properties_from_ssv_partners_thread(args):
 
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness',
                                           **global_params.config['spines']['semseg2coords_spines'])
-        sh_vol = np.zeros_like(curr_ax)
-        # TODO: check if there is actually an error if spinehead_vol is not in the skeleton
-        try:
-            sh_vol = np.max(ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0], axis=1)
-            sh_vol_zero = sh_vol == 0
-            if np.any(sh_vol_zero):
-                log_extraction.warn(f'Empty spine head volume at {ssv_syncoords[sh_vol_zero]}'
-                                    f' in SSO {ssv_id}.')
-        except:
-            pass
+        sh_vol = np.max(ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'],
+                                              k=2)[0], axis=1)
+        # # This should be reported during spine head volume calculation.
+        # sh_vol_zero = (sh_vol == 0) & (curr_sp == 1) & (curr_ax == 0)
+        # if np.any(sh_vol_zero):
+        #     log_extraction.warn(f'Empty spinehead volume at {ssv_syncoords[sh_vol_zero]}'
+        #                         f' in SSO {ssv_id}.')
+        if np.any(sh_vol == -1):
+            log_extraction.warn(f'No spinehead volume at {ssv_syncoords[sh_vol == -1]}'
+                                f' in SSO {ssv_id}.')
 
         cache_dc['partner_spineheadvol'] = np.array(sh_vol)
-        cache_dc['partner_axoness'] = np.array(curr_ax)
-        cache_dc['synssv_ids'] = np.array(ssv_synids)
-        cache_dc['partner_spiness'] = np.array(curr_sp)
+        cache_dc['partner_axoness'] = curr_ax
+        cache_dc['synssv_ids'] = ssv_synids
+        cache_dc['partner_spiness'] = curr_sp
         cache_dc['partner_celltypes'] = np.array(celltypes)
-        cache_dc['latent_morph'] = np.array(latent_morph)
+        cache_dc['latent_morph'] = latent_morph
         cache_dc.push()
 
 
@@ -190,6 +198,7 @@ def _from_cell_to_syn_dict(args):
 
             axoness = []
             latent_morph = []
+            spinehead_vol = []
             spiness = []
             celltypes = []
 
@@ -208,10 +217,12 @@ def _from_cell_to_syn_dict(args):
                 spiness.append(cache_dc['partner_spiness'][index])
                 celltypes.append(cache_dc['partner_celltypes'][index])
                 latent_morph.append(cache_dc['latent_morph'][index])
+                spinehead_vol.append(cache_dc['partner_spineheadvol'][index])
 
             synssv_o.attr_dict.update({'partner_axoness': axoness,
                                        'partner_spiness': spiness,
                                        'partner_celltypes': celltypes,
+                                       'partner_spineheadvol': spinehead_vol,
                                        'syn_sign': syn_sign,
                                        'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
@@ -1928,6 +1939,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_syn_prob = syn_prob[m]
     m_syn_sign = sd_syn_ssv.load_cached_data("syn_sign")[m]
     m_syn_asym_ratio = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
+    m_spineheadvol = sd_syn_ssv.load_cached_data("partner_spineheadvol")[m]
     m_latent_morph = sd_syn_ssv.load_cached_data("latent_morph")[m]  # N, 2, m
     m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
@@ -1938,7 +1950,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_sp = m_sp.squeeze()  # N, 2
     m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,
-                            m_sp, m_syn_prob, m_latent_morph], axis=1)
+                            m_sp, m_syn_prob, m_spineheadvol, m_latent_morph], axis=1)
 
     # do not overwrite previous files
     if os.path.isfile(dest_name + '.csv'):
@@ -1947,7 +1959,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tcelltype1\t"
-                      "celltype2\tspiness1\tspiness2\tsynprob" +
+                      "celltype2\tspiness1\tspiness2\tsynprob\tspinehead_vol" +
                       "".join(["\tlatentmorph1_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])]) +
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(

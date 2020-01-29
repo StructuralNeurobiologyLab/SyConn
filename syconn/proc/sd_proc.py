@@ -116,6 +116,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         # TODO: spawn this as QSUB job!
         for attribute in tqdm.tqdm(res_keys, leave=False):
             attr_res = []
+            # start_multiprocess_imap obeys parameter order and therefore the
+            # collected attributes will share the same ordering.
             params = list(basics.chunkify([(p, attribute) for p in out_files], global_params.config['ncores_per_node'] * 2))
             tmp_res = sm.start_multiprocess_imap(load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
             for ii in range(len(tmp_res)):
@@ -785,12 +787,11 @@ def _write_props_to_sc_thread(args):
     # iterate over the subcell structures
     for ii, organelle in enumerate(kd_subcell_ps):
         log_proc.debug(f'Processing objects of type {organelle}.')
+        start = time.time()
         # get cached mapping and property dicts of current subcellular structure
         sc_prop_worker_dc = f"{global_tmp_path}/sc_{organelle}_prop_worker_dict.pkl"
         with open(sc_prop_worker_dc, "rb") as f:
             subcell_prop_workers_tmp = pkl.load(f)
-
-        log_proc.debug(f'Loaded sc worker dict.')
 
         # load target storage folders for all objects in this chunk
         dest_dc = defaultdict(list)
@@ -806,7 +807,6 @@ def _write_props_to_sc_thread(args):
         if len(all_obj_keys) == 0:
             continue
 
-        log_proc.debug(f'Generated target directories for objects in this chunk.')
         # Now given to IDs of interest, load properties and mapping info
         prop_dict = [{}, defaultdict(list), {}]
         mapping_dict = dict()
@@ -828,7 +828,6 @@ def _write_props_to_sc_thread(args):
                 del dc
         del subcell_prop_workers_tmp
         convert_nvox2ratio_mapdict(mapping_dict)
-        log_proc.debug('Loaded mapping dicts.')
         # Trim mesh info to objects of interest
         # keys: chunk IDs, values: (worker_nr, object IDs)
         sc_mesh_worker_dc_p = f"{global_tmp_path}/sc_{organelle}_mesh_worker_dict.pkl"
@@ -840,6 +839,11 @@ def _write_props_to_sc_thread(args):
             for k in set(obj_ids).intersection(all_obj_keys):
                 sc_mesh_worker_dc[k][worker_id].append(ch_id)
         del subcell_mesh_workers_tmp
+
+        dt_loading_cache = time.time() - start
+        log_proc.debug(f'[{organelle}] loading property cache for '
+                       f'{len(all_obj_keys)} objects took '
+                       f'{(dt_loading_cache / 60):.2f} min.')
 
         # get SegmentationDataset of current subcell.
         sc_sd = segmentation.SegmentationDataset(
@@ -853,6 +857,7 @@ def _write_props_to_sc_thread(args):
 
             # fetch all required mesh data
             if global_params.config.use_new_meshing:
+                start = time.time()
                 # get cached mesh dicts for segmentation object 'organelle'
                 cached_mesh_dc = defaultdict(list)
                 worker_ids = defaultdict(set)
@@ -878,7 +883,10 @@ def _write_props_to_sc_thread(args):
                         # only load keys which are part of the worker's chunk
                         for el in obj_keys.intersection(set(list(partial_mesh_dc.keys()))):
                             cached_mesh_dc[el].append(partial_mesh_dc[el])
-
+                dt_loading_cache = time.time() - start
+                log_proc.debug(f'[{organelle}] loading mesh cache for '
+                               f'{len(obj_keys)} objects took '
+                               f'{(dt_loading_cache / 60):.2f} min.')
             # get dummy segmentation object to fetch attribute
             # dictionary for this batch of object IDs
             dummy_so = sc_sd.get_segmentation_object(obj_id_mod)
@@ -896,6 +904,9 @@ def _write_props_to_sc_thread(args):
 
             for sc_id in obj_keys:
                 if sc_id in mapping_dict:
+                    # TODO: remove the properties mapping_ratios and mapping_ids as
+                    #  they are not required anymore (make sure to delete
+                    #  `correct_for_background` in _apply_mapping_decisions_thread
                     this_attr_dc[sc_id]["mapping_ids"] = \
                         list(mapping_dict[sc_id].keys())
                     this_attr_dc[sc_id]["mapping_ratios"] = \
@@ -1026,7 +1037,7 @@ def _write_props_to_sv_thread(args):
 
     dt_loading_cache = time.time() - dt_loading_cache
 
-    log_proc.debug('[SV] loaded cache dicts after {:.2f} min'.format(
+    log_proc.debug('[SV] loaded cache dicts after {:.2f} min.'.format(
         dt_loading_cache / 60))
 
     # fetch all required mesh data
@@ -1070,9 +1081,9 @@ def _write_props_to_sv_thread(args):
                     # only loaded keys which are part of the worker's chunk
                     for el in obj_keys.intersection(set(list(partial_mesh_dc.keys()))):
                         cached_mesh_dc[el].append(partial_mesh_dc[el])
-            dt_mesh_merge_io += time.time() - start
+            dt_mesh_merge_io = time.time() - start
             log_proc.debug('Loading meshes from worker caches took'
-                           ' {:.2f} min'.format(dt_mesh_merge_io / 60))
+                           ' {:.2f} min.'.format(dt_mesh_merge_io / 60))
 
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sv_sd.get_segmentation_object(obj_id_mod)

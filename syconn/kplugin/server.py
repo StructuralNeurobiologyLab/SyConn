@@ -23,9 +23,7 @@ from syconn.handler.multiviews import int2str_converter
 from syconn.reps.segmentation import SegmentationDataset
 
 app = Flask(__name__)
-
-
-global sg_state
+sg_state = None
 
 
 @app.route('/ssv_skeleton/<ssv_id>', methods=['GET'])
@@ -633,33 +631,44 @@ class MyEncoder(json.JSONEncoder):
         else:
             return super(MyEncoder, self).default(obj)
 
-"""
-Alternative way of running the server is currently:
-export FLASK_APP=server.py
-flask run --host=0.0.0.0 --port=10001 --debugger
 
-OR
+def main():
+    """
+    Alternative way of running the server is currently:
+    export FLASK_APP=server.py
+    flask run --host=0.0.0.0 --port=10001 --debugger
 
-FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 10001
+    OR
 
-"""
+    FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 10001
 
-parser = argparse.ArgumentParser(description='SyConn Gate')
-parser.add_argument('--working_dir', type=str, default=global_params.wd,
-                    help='Working directory of SyConn')
-parser.add_argument('--port', type=int, default=10001,
-                    help='Port to connect to SyConn Gate')
-parser.add_argument('--host', type=str, default='0.0.0.0',
-                    help='IP address to SyConn Gate')
-args = parser.parse_args()
-server_wd = os.path.expanduser(args.working_dir)
-server_port = args.port
-server_host = args.host
-global_params.wd = server_wd
+    """
+    global sg_state
+    parser = argparse.ArgumentParser(description='SyConn Gate')
+    parser.add_argument('--working_dir', type=str,
+                        default=global_params.config.working_dir,
+                        help='Working directory of SyConn')
+    parser.add_argument('--port', type=int, default=10001,
+                        help='Port to connect to SyConn Gate')
+    parser.add_argument('--host', type=str, default='0.0.0.0',
+                        help='IP address to SyConn Gate')
+    args = parser.parse_args()
+    if args.working_dir is None:
+        raise RuntimeError('SyConn working directory not set. Please use the '
+                           '"--working_dir" argument or set "syconn_wd" in your'
+                           ' shell environment.')
+    server_wd = os.path.expanduser(args.working_dir)
+    server_port = args.port
+    server_host = args.host
+    global_params.wd = server_wd
 
-sg_state = ServerState(server_host, server_port)
+    sg_state = ServerState(server_host, server_port)
 
-# context = ('cert.crt', 'key.key') enable later
-app.run(host=server_host,  # do not run this on a non-firewalled machine!
-       port=server_port, # ssl_context=context,
-       threaded=True, debug=True, use_reloader=True)
+    # context = ('cert.crt', 'key.key') enable later
+    app.run(host=server_host,  # do not run this on a non-firewalled machine!
+            port=server_port,  # ssl_context=context,
+            threaded=True, debug=True, use_reloader=True)
+
+
+if __name__ == '__main__':
+    main()

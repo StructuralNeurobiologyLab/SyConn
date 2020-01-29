@@ -20,7 +20,7 @@ import scipy.ndimage
 from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
-    load_skeleton as load_skeleton_kzip
+    load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
 from collections.abc import Iterable
 try:
     from knossos_utils import mergelist_tools
@@ -2533,14 +2533,32 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
         sso.skeleton['spinehead_vol'][node_ix] = vol_sh
 
-        # # DEBUG
-        # labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
-        # nodes_sh_skel = nodes_sh_skel.astype(np.int)
-        # kd.save_to_kzip(labels.swapaxes(2, 0), 1,
-        #                 f'/u/pschuber/tmp/testoverlay_ws_{sso.id}/testoverlay_wsmesh_'
-        #                 f'ID{node_ix}_{nodes_sh_skel[0][0]}_{nodes_sh_skel[0][1]}_'
-        #                 f'{nodes_sh_skel[0][2]}_Vol{vol_sh}.k.zip', offset, mags=[1, ],
-        #                 gen_mergelist=True)
-        #
-        # # DEBUG END
 
+def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):
+    """
+    Store SV graph in KNOSSOS compatible kzip.
+
+    Args:
+        dest_path: Path to k.zip.
+        sso: Cell object.
+    """
+    sv_edges = sso.load_edgelist()
+    anno = SkeletonAnnotation()
+    anno.scaling = sso.scaling
+    sd = sso.get_seg_dataset('sv')
+    coord_dc = dict()
+    for ii in range(len(sd.ids)):
+        coord_dc[sd.ids[ii]] = sd.rep_coords[ii]
+    for sv1, sv2 in sv_edges:
+        sv1_coord = coord_dc[sv1.id] * sso.scaling
+        sv2_coord = coord_dc[sv2.id] * sso.scaling
+        n1 = SkeletonNode().from_scratch(anno, sv1_coord[0], sv1_coord[1], sv1_coord[2])
+        n1.data['svid'] = sv1.id
+        n2 = SkeletonNode().from_scratch(anno, sv2_coord[0], sv2_coord[1], sv2_coord[2])
+        n2.data['svid'] = sv2.id
+        anno.addNode(n1)
+        anno.addNode(n2)
+        anno.addEdge(n1, n2)
+    dummy_skel = Skeleton()
+    dummy_skel.add_annotation(anno)
+    dummy_skel.to_kzip(dest_path)

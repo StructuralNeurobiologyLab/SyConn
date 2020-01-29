@@ -54,6 +54,7 @@ setup(
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [
+            'syconn.server=syconn.kplugin.server:main'
         ],
     },
 )

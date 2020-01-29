@@ -129,6 +129,7 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
 
 def _apply_mapping_decisions_thread(args):
     # TODO: investigate `correct_for_background` when `obj_type=='sj'`
+    #  correct_for_background is not required anymore with the new mapping procedure
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]

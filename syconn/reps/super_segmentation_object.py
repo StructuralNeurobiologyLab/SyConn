@@ -911,6 +911,8 @@ class SuperSegmentationObject(object):
             The :class:`~syconn.reps.segmentation.SegmentationObject`s of type `obj_type`
             sharing the same working directory as this SSV object.
         """
+        # TODO: initialize basic attributes such as rep. coord. from cache arrays of the
+        #  SegmentationDataset (via `get_seg_dataset`).
         if obj_type not in self._objects:
             objs = []
 
@@ -1014,6 +1016,8 @@ class SuperSegmentationObject(object):
 
     def load_edgelist(self) -> List[Tuple[int, int]]:
         """
+        # TODO: rename
+
         Load the edges within the supervoxel graph.
 
         Returns:
@@ -1544,6 +1548,7 @@ class SuperSegmentationObject(object):
                                sizethreshold: Optional[float] = None,
                                save: bool = True):
         """
+        # TODO: duplicate of ssd_proc._apply_mapping_decisions_thread
         Applies mapping decision of cellular organelles to this SSV object. A
         :class:`~syconn.reps.segmentation.SegmentationObject` in question is
         assigned to this :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
@@ -2846,6 +2851,7 @@ class SuperSegmentationObject(object):
                       max_dist=0, leave_out_classes=()):
         """
         Predicting class c
+
         Parameters
         ----------
         sc : SkelClassifier
@@ -2952,7 +2958,8 @@ class SuperSegmentationObject(object):
             curr_close_node_ids = close_node_ids[i_coord]
             for attr_key in attr_keys:
                 if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
-                    attr_dc[attr_key].append(-1)
+                    el = -1 if k == 1 else [-1] * k
+                    attr_dc[attr_key].append(el)
                     # # this is commented because there a legitimate cases for missing keys.
                     # # TODO: think of a better warning / error raise
                     # log_reps.warning(
@@ -3441,5 +3448,3 @@ def semsegaxoness_predictor(args):
         pbar.update()
     pbar.close()
     return missing_ssvs
-
-

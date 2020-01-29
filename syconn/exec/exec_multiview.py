@@ -576,7 +576,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     log.info('Success.')
 
 
-def run_create_neuron_ssd():
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -592,8 +592,10 @@ def run_create_neuron_ssd():
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
 
-    # e.g. if rag was not created by glia splitting procedure this filtering is required
-    if not global_params.config.prior_glia_removal:
+    # if rag was not created by glia splitting procedure this filtering is required
+    if apply_ssv_size_threshold is None:
+        apply_ssv_size_threshold = not global_params.config.prior_glia_removal
+    if apply_ssv_size_threshold:
         sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
         sv_size_dict = {}
