@@ -18,6 +18,7 @@ dependencies:
   - vigra
   - freeglut
   - pyopengl
+  - pyopengl-accelerate
   - python-snappy
   - ipython
   - h5py

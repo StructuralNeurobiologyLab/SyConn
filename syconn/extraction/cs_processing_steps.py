@@ -1959,7 +1959,8 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tcelltype1\t"
-                      "celltype2\tspiness1\tspiness2\tsynprob\tspinehead_vol" +
+                      "celltype2\tspiness1\tspiness2\tsynprob\tspinehead_vol1"
+                      "\tspinehead_vol2" +
                       "".join(["\tlatentmorph1_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])]) +
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(

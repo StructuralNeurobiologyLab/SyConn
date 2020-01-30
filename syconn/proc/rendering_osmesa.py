@@ -72,7 +72,6 @@ def init_object(indices, vertices, normals, colors, ws):
     data = np.concatenate((vertices, normals, colors),
                           axis=1).astype(np.float32).reshape(-1)
     del vertices, normals, colors
-    log_proc.debug('Finished array conversion.')
     # enabling arrays
     glEnableClientState(GL_VERTEX_ARRAY)
     glEnableClientState(GL_NORMAL_ARRAY)
