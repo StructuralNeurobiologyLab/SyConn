@@ -68,7 +68,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   qsub_queue=None,
                                   n_max_co_processes=None,
                                   transform_func=None,
-                                  func_kwargs=None,
+                                  transform_func_kwargs=None,
                                   nb_cpus=1,
                                   workfolder=None,
                                   n_erosion=0,
@@ -134,7 +134,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         qsub queue
     transform_func: callable
         Segmentation method which is applied
-    func_kwargs : dict
+    transform_func_kwargs : dict
         key word arguments for transform_func
     nb_cpus : int
         Number of cpus used if QSUB is disabled
@@ -194,7 +194,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane,
         fast_load=True, suffix=suffix,
-        qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
+        qsub_pe=qsub_pe, transform_func=transform_func,
+        transform_func_kwargs=transform_func_kwargs,
         qsub_queue=qsub_queue,
         n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     if stitch_overlap is None:
