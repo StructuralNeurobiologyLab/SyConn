@@ -478,7 +478,7 @@ def _make_stitch_list_thread(args):
     mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]).astype(np.bool)
     struct[:, :, 1] = mask  # only perform erosion in xy plane
     for kk in range(len(cc_data_list)):
-        cc_data_list[kk] = multi_mop(scipy.ndimage.binary_erosion, cc_data_list[kk], n_iters=n_erosion, background_only=True,
+        cc_data_list[kk] = multi_mop(scipy.ndimage.binary_erosion, cc_data_list[kk], n_iters=n_erosion,
                                      use_find_objects=True, mop_kwargs={'structure': struct}, verbose=False)
     # TODO: opztimize get_neighbouring_chunks
     neighbours, pos = cset.get_neighbouring_chunks(chunk, chunklist=chunk_list,

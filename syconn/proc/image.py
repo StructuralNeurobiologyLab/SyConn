@@ -392,15 +392,16 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
     """
     Generic function for binary morphological image operations with multi-label content
     using 'find_objects' from scipy.ndimage to reduce processed volume.
+
     Parameters
     ----------
     mop_func : func
         e.g. binary_dilation, binary_erosion etc
     overlay
     n_iters
-    background_only
     verbose
     mop_kwargs
+
     Returns
     -------
     """
