@@ -1096,10 +1096,9 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
             raise ValueError('object_names were specified but did not match length of "dataset_names"/"hdf5names"')
         for kk, hdf5_name in enumerate(hdf5names):
             object_name = object_names[kk]
-            segdataset = segmentation.SegmentationDataset(obj_type=object_name,
-                                                      working_dir=workfolder,
-                                                      create=True,
-                                                      n_folders_fs=n_folders_fs)
+            segdataset = segmentation.SegmentationDataset(
+                obj_type=object_name, working_dir=workfolder, create=True,
+                n_folders_fs=n_folders_fs, version=0)
             dataset_path = segdataset.so_storage_path
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
@@ -1148,7 +1147,7 @@ def _extract_voxels_combined_thread(args):
         object_name = object_names[nb_hdf5_name]
         segdataset = segmentation.SegmentationDataset(obj_type=object_name,
                                                       working_dir=workfolder,
-                                                      create=True,
+                                                      version=0,
                                                       n_folders_fs=n_folders_fs)
 
         for i_chunk, chunk in enumerate(chunks):

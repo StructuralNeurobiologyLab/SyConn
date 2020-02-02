@@ -181,120 +181,120 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
             if len(sigmas[nb_sigma]) == 3:
                 sigmas[nb_sigma] = \
                     basics.switch_array_entries(sigmas[nb_sigma], [0, 2])
-
-    # --------------------------------------------------------------------------
-    #
-    time_start = time.time()
-    cc_info_list, overlap_info = oes.object_segmentation(
-        cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
-        thresholds=thresholds, chunk_list=chunk_list, debug=debug,
-        swapdata=swapdata,
-        prob_kd_path_dict=prob_kd_path_dict,
-        membrane_filename=membrane_filename,
-        membrane_kd_path=membrane_kd_path,
-        hdf5_name_membrane=hdf5_name_membrane,
-        fast_load=True, suffix=suffix,
-        qsub_pe=qsub_pe, transform_func=transform_func,
-        transform_func_kwargs=transform_func_kwargs,
-        qsub_queue=qsub_queue,
-        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
-    if stitch_overlap is None:
-        stitch_overlap = overlap_info[1]
-    else:
-        overlap_info[1] = stitch_overlap
-    if not np.all(stitch_overlap < overlap_info[0]):
-        msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({})." \
-              "".format(overlap_info[1], overlap_info[0])
-        log_extraction.error(msg)
-        raise ValueError(msg)
-    overlap = overlap_info[0]
-    all_times.append(time.time() - time_start)
-    step_names.append("conneceted components")
-    log_extraction.info(
-        "Time needed for connected components: %.3fs" % all_times[-1])
-    basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
-                         [cc_info_list, overlap_info])
-
     #
     # # --------------------------------------------------------------------------
+    # #
+    # time_start = time.time()
+    # cc_info_list, overlap_info = oes.object_segmentation(
+    #     cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
+    #     thresholds=thresholds, chunk_list=chunk_list, debug=debug,
+    #     swapdata=swapdata,
+    #     prob_kd_path_dict=prob_kd_path_dict,
+    #     membrane_filename=membrane_filename,
+    #     membrane_kd_path=membrane_kd_path,
+    #     hdf5_name_membrane=hdf5_name_membrane,
+    #     fast_load=True, suffix=suffix,
+    #     qsub_pe=qsub_pe, transform_func=transform_func,
+    #     transform_func_kwargs=transform_func_kwargs,
+    #     qsub_queue=qsub_queue,
+    #     n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+    # if stitch_overlap is None:
+    #     stitch_overlap = overlap_info[1]
+    # else:
+    #     overlap_info[1] = stitch_overlap
+    # if not np.all(stitch_overlap < overlap_info[0]):
+    #     msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({})." \
+    #           "".format(overlap_info[1], overlap_info[0])
+    #     log_extraction.error(msg)
+    #     raise ValueError(msg)
+    # overlap = overlap_info[0]
+    # all_times.append(time.time() - time_start)
+    # step_names.append("conneceted components")
+    # log_extraction.info(
+    #     "Time needed for connected components: %.3fs" % all_times[-1])
+    # basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
+    #                      [cc_info_list, overlap_info])
     #
-    time_start = time.time()
-    nb_cc_dict = {}
-    max_nb_dict = {}
-    max_labels = {}
-    for hdf5_name in hdf5names:
-        nb_cc_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
-        max_nb_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
-    for cc_info in cc_info_list:
-        nb_cc_dict[cc_info[1]][chunk_translator[cc_info[0]]] = cc_info[2]
-    for hdf5_name in hdf5names:
-        max_nb_dict[hdf5_name][0] = 0
-        for nb_chunk in range(1, len(chunk_list)):
-            max_nb_dict[hdf5_name][nb_chunk] = \
-                max_nb_dict[hdf5_name][nb_chunk - 1] + \
-                nb_cc_dict[hdf5_name][nb_chunk - 1]
-        max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + \
-                                    nb_cc_dict[hdf5_name][-1])
-    all_times.append(time.time() - time_start)
-    step_names.append("extracting max labels")
-    log_extraction.info("Time needed for extracting max labels: %.6fs" % all_times[-1])
-    log_extraction.info("Max labels: {}".format(max_labels))
-    basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
-                         [max_labels])
+    # #
+    # # # --------------------------------------------------------------------------
+    # #
+    # time_start = time.time()
+    # nb_cc_dict = {}
+    # max_nb_dict = {}
+    # max_labels = {}
+    # for hdf5_name in hdf5names:
+    #     nb_cc_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
+    #     max_nb_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
+    # for cc_info in cc_info_list:
+    #     nb_cc_dict[cc_info[1]][chunk_translator[cc_info[0]]] = cc_info[2]
+    # for hdf5_name in hdf5names:
+    #     max_nb_dict[hdf5_name][0] = 0
+    #     for nb_chunk in range(1, len(chunk_list)):
+    #         max_nb_dict[hdf5_name][nb_chunk] = \
+    #             max_nb_dict[hdf5_name][nb_chunk - 1] + \
+    #             nb_cc_dict[hdf5_name][nb_chunk - 1]
+    #     max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + \
+    #                                 nb_cc_dict[hdf5_name][-1])
+    # all_times.append(time.time() - time_start)
+    # step_names.append("extracting max labels")
+    # log_extraction.info("Time needed for extracting max labels: %.6fs" % all_times[-1])
+    # log_extraction.info("Max labels: {}".format(max_labels))
+    # basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
+    #                      [max_labels])
+    # #
+    # # # --------------------------------------------------------------------------
+    # #
+    # time_start = time.time()
+    # oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
+    #                        chunk_translator, debug, suffix=suffix,
+    #                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+    #                        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("unique labels")
+    # log_extraction.info("Time needed for unique labels: %.3fs" % all_times[-1])
+    # #
+    # # # --------------------------------------------------------------------------
+    # #
+    # time_start = time.time()
+    # stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
+    #                                    stitch_overlap, overlap, debug,
+    #                                    suffix=suffix, qsub_pe=qsub_pe,
+    #                                    qsub_queue=qsub_queue, n_erosion=n_erosion,
+    #                                    n_max_co_processes=n_max_co_processes,
+    #                                    overlap_thresh=overlap_thresh)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("stitch list")
+    # log_extraction.info(
+    #     "Time needed for stitch list: {:.3f}s.\nLength of stitch-lists for"
+    #     " hdf5-names {}: {}".format(all_times[-1], hdf5names, [
+    #         len(stitch_list[key]) for key in hdf5names]))
+    # basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
+    #                      [stitch_list])
+    # #
+    # # # --------------------------------------------------------------------------
+    # #
+    # time_start = time.time()
+    # merge_dict, merge_list_dict = oes.make_merge_list(hdf5names, stitch_list,
+    #                                                   max_labels)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("merge list")
+    # log_extraction.info("Time needed for merge list: %.3fs" % all_times[-1])
+    # basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/merge_list.pkl",
+    #                      [merge_dict, merge_list_dict])
+    # # if all_times[-1] < 0.01:
+    # #     raise Exception("That was too fast!")
+    #
+    # # -------------------------------------------------------------------------
+    #
+    # time_start = time.time()
+    # oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
+    #                      debug, suffix=suffix, qsub_pe=qsub_pe, nb_cpus=nb_cpus,
+    #                      qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("apply merge list")
+    # log_extraction.info("Time needed for applying merge list: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
-    #
-    time_start = time.time()
-    oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                           chunk_translator, debug, suffix=suffix,
-                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                           n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
-    all_times.append(time.time() - time_start)
-    step_names.append("unique labels")
-    log_extraction.info("Time needed for unique labels: %.3fs" % all_times[-1])
-    #
-    # # --------------------------------------------------------------------------
-    #
-    time_start = time.time()
-    stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
-                                       stitch_overlap, overlap, debug,
-                                       suffix=suffix, qsub_pe=qsub_pe,
-                                       qsub_queue=qsub_queue, n_erosion=n_erosion,
-                                       n_max_co_processes=n_max_co_processes,
-                                       overlap_thresh=overlap_thresh)
-    all_times.append(time.time() - time_start)
-    step_names.append("stitch list")
-    log_extraction.info(
-        "Time needed for stitch list: {:.3f}s.\nLength of stitch-lists for"
-        " hdf5-names {}: {}".format(all_times[-1], hdf5names, [
-            len(stitch_list[key]) for key in hdf5names]))
-    basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
-                         [stitch_list])
-    #
-    # # --------------------------------------------------------------------------
-    #
-    time_start = time.time()
-    merge_dict, merge_list_dict = oes.make_merge_list(hdf5names, stitch_list,
-                                                      max_labels)
-    all_times.append(time.time() - time_start)
-    step_names.append("merge list")
-    log_extraction.info("Time needed for merge list: %.3fs" % all_times[-1])
-    basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/merge_list.pkl",
-                         [merge_dict, merge_list_dict])
-    # if all_times[-1] < 0.01:
-    #     raise Exception("That was too fast!")
-
-    # -------------------------------------------------------------------------
-
-    time_start = time.time()
-    oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                         debug, suffix=suffix, qsub_pe=qsub_pe, nb_cpus=nb_cpus,
-                         qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
-    all_times.append(time.time() - time_start)
-    step_names.append("apply merge list")
-    log_extraction.info("Time needed for applying merge list: %.3fs" % all_times[-1])
-
-    # --------------------------------------------------------------------------
 
     time_start = time.time()
     oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
@@ -305,19 +305,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     log_extraction.info("Time needed for extracting voxels: %.3fs" % all_times[-1])
-    # TODO: Remove map-reduce procedure or make it optional with kwarg
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-    #                    hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
-    #                    qsub_queue=qsub_queue,
-    #                    n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("combine voxels")
-    # print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
-    # --------------------------------------------------------------------------
     log_extraction.info("Time overview:")
     for ii in range(len(all_times)):
         log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
