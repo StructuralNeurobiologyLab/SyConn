@@ -153,8 +153,10 @@ def _collect_properties_from_ssv_partners_thread(args):
 
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness',
                                           **global_params.config['spines']['semseg2coords_spines'])
-        sh_vol = np.max(ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'],
-                                              k=2)[0], axis=1)
+        sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0]
+        if len(ssv_o.skeleton['nodes']) > 1:
+            # if only one skeleton node, sh_vol only contains one element per location
+            sh_vol = np.max(sh_vol, axis=1)
         # # This should be reported during spine head volume calculation.
         # sh_vol_zero = (sh_vol == 0) & (curr_sp == 1) & (curr_ax == 0)
         # if np.any(sh_vol_zero):

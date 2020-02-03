@@ -34,7 +34,7 @@ log_level: 10  # INFO: 20, DEBUG: 10
 # will be stored at wd + '/logs/'.
 disable_file_logging: True
 
-# File locking - True is untested yet.
+# File locking - deprecated.
 disable_locking: False
 
 # Data paths
@@ -117,9 +117,12 @@ cell_objects:
   # organelles to syn_ssv
   max_vx_dist_nm: 2000
   max_rep_coord_dist_nm: 4000
-  thresh_synssv_proba: 0.5  # RFC probability used for classifying whether syn or not
-  thresh_synssv_size: 10  # minimum number of voxel for synapses in SSVs, TODO: tweak, increase
-  # above will be assigned synaptic sign (-1, inhibitory) and <= will be
+  # RFC probability used for classifying whether syn or not
+  thresh_synssv_proba: 0.5
+  # minimum number of voxel for synapses in SSVs
+  # TODO: tweak, increase, move to entry 'min_obj_vx'
+  thresh_synssv_size: 10
+  # > sym_thresh will be assigned synaptic sign -1 (inhibitory) and <= will be
   # (1, excitatory)
   sym_thresh: 0.225
   # labels are None by default

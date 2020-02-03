@@ -2946,6 +2946,10 @@ class SuperSegmentationObject(object):
             return -1 * np.ones((len(coords), len(attr_keys)))
 
         # get close locations
+        if k > 1 and len(self.skeleton["nodes"]) < k:
+            log_reps.warn(f'Number of skeleton nodes ({len(self.skeleton["nodes"])}) '
+                          f'is smaller than k={k} in SSO {self.id}. Lowering k.')
+            k = len(self.skeleton["nodes"])
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
         if radius_nm is None:
             _, close_node_ids = kdtree.query(coords * self.scaling, k=k,
@@ -2957,16 +2961,13 @@ class SuperSegmentationObject(object):
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
             for attr_key in attr_keys:
-                if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
+                # e.g. for glia SSV axoness does not exist.
+                if attr_key not in self.skeleton:
                     el = -1 if k == 1 else [-1] * k
                     attr_dc[attr_key].append(el)
-                    # # this is commented because there a legitimate cases for missing keys.
-                    # # TODO: think of a better warning / error raise
-                    # log_reps.warning(
-                    #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
-                    #     "".format(attr_key, self.id))
                     continue
-                if radius_nm is not None:  # use nodes within radius_nm, there might be multiple node ids
+                # use nodes within radius_nm, there might be multiple node ids
+                if radius_nm is not None:
                     if len(curr_close_node_ids) == 0:
                         dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
                         log_reps.info(
@@ -2985,7 +2986,7 @@ class SuperSegmentationObject(object):
                         attr_dc[attr_key].append(-1)
                 else:  # only nearest node ID
                     attr_dc[attr_key].append(self.skeleton[attr_key][curr_close_node_ids])
-        # safety in case latent morphology was not predicted / needed
+        # in case latent morphology was not predicted / needed
         # TODO: refine mechanism for this scenario, i.e. for exporting matrix
         if "latent_morph" in attr_keys:
             latent_morph = attr_dc["latent_morph"]
