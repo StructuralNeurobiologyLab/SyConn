@@ -16,7 +16,7 @@ import os
 import io
 import re
 import datetime
-from typing import Dict
+from typing import Dict, Optional
 import shutil
 import string
 import subprocess
@@ -24,6 +24,7 @@ import tqdm
 import sys
 import time
 from multiprocessing import cpu_count
+from logging import Logger
 
 from ..handler.basics import temp_seed
 from ..handler.config import initialize_logging
@@ -33,6 +34,12 @@ from . import log_mp
 
 
 def batchjob_enabled():
+    """
+    Checks if active batch processing system is actually working.
+
+    Returns:
+        True if either SLURM or QSUB is active.
+    """
     batch_proc_system = global_params.config['batch_proc_system']
     if batch_proc_system is None or batch_proc_system == 'None':
         return False
@@ -58,71 +65,53 @@ username = getpass.getuser()
 python_path_global = sys.executable
 
 
-def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
-                    additional_flags='', suffix="",
-                    job_name="default", script_folder=None,
-                    n_max_co_processes=None, max_iterations=5,
-                    python_path=None, disable_mem_flag=False,
-                    disable_batchjob=False, use_dill=False,
-                    remove_jobfolder=False, log=None, show_progress=True,
-                    sleep_time=5):
+def batchjob_script(params: list, name: str,
+                           batchjob_folder: Optional[str] = None,
+                           n_cores: int = 1, additional_flags: str = '',
+                           suffix: str = "", job_name: str = "default",
+                           script_folder: Optional[str] = None,
+                           n_max_co_processes: Optional[int] = None,
+                           max_iterations: int = 5,
+                           python_path: Optional[str] = None,
+                           disable_batchjob: bool = False,
+                           use_dill: bool = False,
+                           remove_jobfolder: bool = False,
+                           log: Logger = None, sleep_time: int = 5):
     """
+    Submits batch jobs to process a list of parameters `params` with a python
+    script on the specified environment (either None, SLURM or QSUB; run
+    ``global_params.config['batch_proc_system']`` to get the active system).
+
+    Notes:
+        * The memory available for each job is coupled to the number of cores
+          per job (`n_cores`).
 
     Todo:
-        * Add sbatch array functionality -> faster submission
+        * Add sbatch array support -> faster submission
+        * Make script specification more generic
 
-    QSUB handler - takes parameter list like normal multiprocessing job and
-    runs them on the specified cluster
-
-    IMPORTANT NOTE: the user has to make sure that queues exist and work; we
-    suggest to generate multiple queues handling different workloads
-
-    Parameters
-    ----------
-    params: List
-        list of all parameter sets to be processed
-    name: str
-        name of job - specifies script with QSUB_%s % name
-    n_cores: int
-        number of cores per job submission
-    batchjob_folder: str
-    additional_flags: str
-        additional command line flags to be passed to qsub
-    suffix: str
-        suffix for folder names - enables the execution of multiple qsub jobs
-        for the same function
-    job_name: str
-        unique name for job - or just 'default' which gets changed into a
-        random name automatically
-    script_folder: str or None
-        directory in which the QSUB_* file is located
-    n_max_co_processes: int or None
-        limits the number of processes that are executed on the cluster at the
-        same time; None: use global_params.config.ncore_total // number of cores per job (n_cores)
-    max_iterations : int
-    python_path : str
-        Default is sys.executable
-    disable_mem_flag : bool
-        If True, memory flag will not be set, otherwise it will be set to the
-         fraction of the cores per job to the total number of cores per node
-    disable_batchjob : bool
-        Overwrites global batchjob settings and will run multiple, independent bash jobs
-        on multiple CPUs instead.
-    remove_jobfolder: bool
-        Remove the created folder after successfully processing.
-    use_dill : bool
-    show_progress : bool
-        Currently only applies for `batchjob_fallback`
-    log: Logger
-        Logger.
-    sleep_time: float
-        Sleep duration before checking batch job states again.
-
-    Returns
-    -------
-    path_to_out: str
-        path to the output directory
-
+    Args:
+        params: List of all parameter sets to be processed.
+        name: Name of batch job submitted via the batch processing system.
+        batchjob_folder: Directory which contains all submission relevant files,
+            e.g. bash scripts, logs, output files, .. Defaults to
+            ``"{}/{}_folder{}/".format(global_params.config.qsub_work_folder, name, suffix)``.
+        n_cores: Number of cores used for each job.
+        additional_flags: Used to set additional parameters for each job. To
+            allocate one GPU for each worker use: ``additional_flags=--gres=gpu:1``.
+        suffix: Suffix added to `batchjob_folder`.
+        job_name: Name of the jobs submitted via the batch processing system.
+            Defaults to a random string of 8 letters.
+        script_folder: Directory where to look for the script which is executed.
+            Looks for ``QSUB_{name}.py``.
+        n_max_co_processes: Not needed / not monitored anymore.
+        max_iterations: Maximum number of retries of failed jobs.
+        python_path: Path to python binary.
+        disable_batchjob: Use single node multiprocessing.
+        use_dill: Use dill to enable pickling of lambda expressions.
+        remove_jobfolder: Remove `batchjob_folder` after successful termination.
+        log: Logger.
+        sleep_time: Sleep duration before checking batch job states again.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -153,8 +142,7 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path,
-                                 remove_jobfolder=remove_jobfolder,
-                                 show_progress=show_progress, log=log)
+                                 remove_jobfolder=remove_jobfolder, log=log)
     if global_params.config['batch_proc_system'] != 'SLURM':
         log_mp.warn('"batchjob_script" currently does not support any other '
                     'batch processing system than SLURM. Falling back to '
@@ -165,10 +153,8 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
                            n_max_co_processes=n_max_co_processes,
                            max_iterations=max_iterations,
                            python_path=python_path,
-                           disable_mem_flag=disable_mem_flag,
                            disable_batchjob=disable_batchjob, use_dill=use_dill,
-                           remove_jobfolder=remove_jobfolder, log=log,
-                           show_progress=show_progress)
+                           remove_jobfolder=remove_jobfolder, log=log)
 
     mem_lim = int(global_params.config['mem_per_node'] /
                   global_params.config['ncores_per_node'])
@@ -251,11 +237,11 @@ def batchjob_script(params, name, batchjob_folder=None, n_cores=1,
         job2slurm_dc[job_id] = slurm_id
         slurm2job_dc[slurm_id] = job_id
         dtime_sub += time.time() - start
-        time.sleep(0.05)
+        time.sleep(0.1)
 
     # wait for jobs to be in SLURM memory
     time.sleep(sleep_time)
-    # requeue failed jobs `scontrol requeue $SLURM_JOBID` for `max_iterations`-times
+    # requeue failed jobs for `max_iterations`-times
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
     nb_completed_compare = 0
