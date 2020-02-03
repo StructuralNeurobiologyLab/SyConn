@@ -687,9 +687,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         ", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
         'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
-    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
-                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
-                   additional_flags="--gres=gpu:1")
+    qu.batchjob_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
+                       n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
+                       additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 

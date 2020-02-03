@@ -34,9 +34,9 @@ def qsub_glia_splitting():
             len(huge_ssvs), global_params.config['glia']['rendering_max_nb_sv']))
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
                    global_params.config.ncore_total * 2)
-    qu.QSUB_script(chs, "split_glia", n_cores=1,
-                   n_max_co_processes=global_params.config.ncore_total * 2,
-                   remove_jobfolder=True)
+    qu.batchjob_script(chs, "split_glia", n_cores=1,
+                       n_max_co_processes=global_params.config.ncore_total * 2,
+                       remove_jobfolder=True)
 
 
 def collect_glia_sv():

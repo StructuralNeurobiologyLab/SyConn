@@ -1857,7 +1857,7 @@ class SuperSegmentationObject(object):
     def render_views(self, add_cellobjects: bool = False, verbose: bool = False,
                      overwrite: bool = True, cellobjects_only: bool =False,
                      woglia: bool = True, skip_indexviews: bool = False,
-                     qsub_co_jobs: int = 300, resume_job: bool = False):
+                     qsub_co_jobs: int = 300):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -1878,7 +1878,6 @@ class SuperSegmentationObject(object):
             skip_indexviews: Index views will not be generated, used for initial SSV
                 glia-removal rendering.
             qsub_co_jobs: Number of parallel jobs if batchjob is used.
-            resume_job: Batchjob parameter. Resumes a interrupted batchjob.
         """
         # TODO: partial rendering currently does not support index view generation (-> vertex
         #  indices will be different for each partial mesh)
@@ -1903,11 +1902,11 @@ class SuperSegmentationObject(object):
                              "cellobjects_only": cellobjects_only,
                              'skip_indexviews': skip_indexviews}
             params = [[par, so_kwargs, render_kwargs] for par in params]
-            qu.QSUB_script(
+            qu.batchjob_script(
                 params, "render_views_partial", suffix="_SSV{}".format(self.id),
                 n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True, allow_resubm_all_fail=True,
-                resume_job=resume_job, additional_flags="--gres=gpu:1")
+                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True,
+                additional_flags="--gres=gpu:1")
         else:
             # render raw data
             rot_mat = render_sampled_sso(

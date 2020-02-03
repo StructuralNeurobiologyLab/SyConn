@@ -73,7 +73,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             _collect_properties_from_ssv_partners_thread, multi_params,
             nb_cpus=n_max_co_processes, debug=debug)
     else:
-        _ = qu.QSUB_script(
+        _ = qu.batchjob_script(
             multi_params, "collect_properties_from_ssv_partners",
             n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
@@ -90,9 +90,9 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             _from_cell_to_syn_dict, multi_params,
             nb_cpus=n_max_co_processes, debug=debug)
     else:
-        _ = qu.QSUB_script(multi_params, "from_cell_to_syn_dict",
-                           n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "from_cell_to_syn_dict",
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
     sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
@@ -289,7 +289,7 @@ def filter_relevant_syn(sd_syn, ssd):
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          nb_cpus=None, resume_job=False, n_max_co_processes=None,
+                          nb_cpus=None, n_max_co_processes=None,
                           n_folders_fs=10000, log=None):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
@@ -351,16 +351,16 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn",
-                           resume_job=resume_job, remove_jobfolder=True,
-                           n_max_co_processes=n_max_co_processes, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "combine_and_split_syn", remove_jobfolder=True,
+            n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
 
 
-def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          nb_cpus=None, resume_job=False, n_max_co_processes=None,
-                          n_folders_fs=10000, log=None):
+def combine_and_split_syn_old(
+        wd, cs_gap_nm=300, ssd_version=None, syn_version=None, nb_cpus=None,
+        n_max_co_processes=None, n_folders_fs=10000, log=None):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
@@ -379,7 +379,6 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
     cs_gap_nm :
     ssd_version :
     syn_version :
-    resume_job :
     nb_cpus :
     n_max_co_processes :
     log:
@@ -421,9 +420,9 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread_old,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn_old",
-                           resume_job=resume_job, remove_jobfolder=True,
-                           n_max_co_processes=n_max_co_processes, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "combine_and_split_syn_old", remove_jobfolder=True,
+            n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
 
@@ -813,9 +812,9 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                               multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "combine_and_split_cs_agg",
-                       n_max_co_processes=n_max_co_processes,
-                       remove_jobfolder=True)
+        qu.batchjob_script(multi_params, "combine_and_split_cs_agg",
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
 
     return cs
 
@@ -989,8 +988,8 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
         sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
                               multi_params, nb_cpus=nb_cpus)
     else:
-        qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs",
-                       n_max_co_processes=n_max_co_processes)
+        qu.batchjob_script(multi_params, "overlap_mapping_sj_to_cs",
+                           n_max_co_processes=n_max_co_processes)
 
 
 # TODO: SegmentationDataset version of below, probably not necessary anymore
@@ -1097,7 +1096,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
 
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
-                     n_chunk_jobs=1000, resume_job=False, nb_cpus=None,
+                     n_chunk_jobs=1000, nb_cpus=None,
                      n_max_co_processes=None):
     """
     Creates a :class:`~syconn.reps.segmentation.SegmentationDataset`
@@ -1115,7 +1114,6 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     cs_cset :
     n_folders_fs :
     n_chunk_jobs :
-    resume_job :
     nb_cpus :
     n_max_co_processes :
 
@@ -1157,10 +1155,9 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                                        multi_params, nb_cpus=n_max_co_processes)
 
     else:
-        _ = qu.QSUB_script(multi_params, "syn_gen_via_cset",
-                           resume_job=resume_job,
-                           script_folder=None, n_cores=nb_cpus,
-                           n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "syn_gen_via_cset", script_folder=None,
+            n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
 
     return sd_syn
 
@@ -1294,12 +1291,13 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
 
     # Running workers - Extracting mapping
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_synapse_type_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess_imap(_extract_synapse_type_thread,
+                                       multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_synapse_type",
-                                     n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "extract_synapse_type", n_cores=nb_cpus,
+            n_max_co_processes=n_max_co_processes)
 
 
 def _extract_synapse_type_thread(args):
@@ -1399,8 +1397,8 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                               multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs_via_kd",
-                       n_max_co_processes=n_max_co_processes)
+        qu.batchjob_script(multi_params, "overlap_mapping_sj_to_cs_via_kd",
+                           n_max_co_processes=n_max_co_processes)
     return conn_sd
 
 
@@ -1682,8 +1680,8 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                                    multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "map_objects_to_synssv", log=log,
-                       n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+        qu.batchjob_script(multi_params, "map_objects_to_synssv", log=log,
+                           n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _map_objects_to_synssv_thread(args):
@@ -1869,9 +1867,9 @@ def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
-        _ = qu.QSUB_script(multi_params,  "classify_synssv_objects",
-                           n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(
+            multi_params,  "classify_synssv_objects", log=log,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _classify_synssv_objects_thread(args):

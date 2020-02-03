@@ -8,6 +8,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
+import ipdb
 from typing import Iterable, List, Tuple
 import glob
 import numpy as np
@@ -52,12 +53,12 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
-            multi_params, nb_cpus=n_max_co_processes)
+            multi_params, nb_cpus=n_max_co_processes, debug=False)
 
     else:
-        _ = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
-                           n_max_co_processes=n_max_co_processes, n_cores=nb_cpus,
-                           remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "aggregate_segmentation_object_mappings",
+            n_max_co_processes=n_max_co_processes, n_cores=nb_cpus, remove_jobfolder=True)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -84,7 +85,6 @@ def _aggregate_segmentation_object_mappings_thread(args):
                     keys = sv.attr_dict["mapping_%s_ids" % obj_type]
                     values = sv.attr_dict["mapping_%s_ratios" % obj_type]
                     mappings[obj_type] += Counter(dict(zip(keys, values)))
-
         ssv.load_attr_dict()
         for obj_type in obj_types:
             if obj_type in mappings:
@@ -119,12 +119,12 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                       multi_params, nb_cpus=n_max_co_processes)
+                                       multi_params, debug=False, nb_cpus=n_max_co_processes)
 
     else:
-        _ = qu.QSUB_script(multi_params, "apply_mapping_decisions",
-                           n_cores=nb_cpus, n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "apply_mapping_decisions", n_cores=nb_cpus,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _apply_mapping_decisions_thread(args):
@@ -144,6 +144,8 @@ def _apply_mapping_decisions_thread(args):
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id, True)
+        version_dc = ssv.config["versions"]
+        cell_objects_dc = ssv.config['cell_objects']
         ssv.load_attr_dict()
 
         for obj_type in obj_types:
@@ -171,7 +173,7 @@ def _apply_mapping_decisions_thread(args):
 
             if lower_ratio is None:
                 try:
-                    lower_ratio = ssv.config['cell_objects']["lower_mapping_ratios"][
+                    lower_ratio = cell_objects_dc["lower_mapping_ratios"][
                         obj_type]
                 except:
                     msg = "Lower ratio undefined. SSV {}.".format(ssv_id)
@@ -180,7 +182,7 @@ def _apply_mapping_decisions_thread(args):
 
             if upper_ratio is None:
                 try:
-                    upper_ratio = ssv.config['cell_objects']["upper_mapping_ratios"][
+                    upper_ratio = cell_objects_dc["upper_mapping_ratios"][
                         obj_type]
                 except:
                     log_proc.error("Upper ratio undefined - 1. assumed. "
@@ -189,7 +191,7 @@ def _apply_mapping_decisions_thread(args):
 
             if sizethreshold is None:
                 try:
-                    sizethreshold = ssv.config['cell_objects']["sizethresholds"][
+                    sizethreshold = cell_objects_dc["sizethresholds"][
                         obj_type]
                 except:
                     msg = "Size threshold undefined. SSV {}.".format(ssv_id)
@@ -202,14 +204,13 @@ def _apply_mapping_decisions_thread(args):
                 for i_so_id in range(
                         len(ssv.attr_dict["mapping_%s_ids" % obj_type])):
                     so_id = ssv.attr_dict["mapping_%s_ids" % obj_type][i_so_id]
-                    obj_version = ssv.config["versions"][obj_type]
+                    obj_version = version_dc[obj_type]
                     this_so = segmentation.SegmentationObject(
                         so_id, obj_type,
                         version=obj_version,
                         scaling=ssv.scaling,
                         working_dir=ssv.working_dir)
                     this_so.load_attr_dict()
-
                     if 0 in this_so.attr_dict["mapping_ids"]:
                         ratio_0 = this_so.attr_dict["mapping_ratios"][
                             this_so.attr_dict["mapping_ids"] == 0][0]
@@ -271,9 +272,9 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
             multi_params, nb_cpus=nb_cpus)
 
     else:
-        _ = qu.QSUB_script(multi_params, "map_synssv_objects",
-                           n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "map_synssv_objects", n_max_co_processes=n_max_co_processes,
+            remove_jobfolder=True, log=log)
 
 
 def map_synssv_objects_thread(args):

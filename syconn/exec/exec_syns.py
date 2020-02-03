@@ -8,7 +8,7 @@
 from knossos_utils import knossosdataset
 import numpy as np
 from typing import Tuple, Optional
-from syconn.mp.batchjob_utils import QSUB_script
+from syconn.mp.batchjob_utils import batchjob_script
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
@@ -116,7 +116,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
 
     # # TODO: add check for SSD existence, which is required at this point
     # # This creates an SD of type 'syn_ssv'
-    cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
+    cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
 
@@ -167,8 +167,8 @@ def run_spinehead_volume_calc():
     multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    QSUB_script(multi_params, "calculate_spinehead_volume", log=log,
-                n_max_co_processes=global_params.config.ncore_total,
-                remove_jobfolder=True)
+    batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
+                    n_max_co_processes=global_params.config.ncore_total,
+                    remove_jobfolder=True)
     log.info('Finished processing of {} SSVs.'
              ''.format(len(ordering)))

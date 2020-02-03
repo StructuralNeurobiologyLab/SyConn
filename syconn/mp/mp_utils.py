@@ -69,6 +69,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
         except Exception as e:
             msg = "In function '{}': {}".format(str(function), e)
             log_mp.error(msg)
+            raise Exception(e)
             out.append(e)
     return front + out
 

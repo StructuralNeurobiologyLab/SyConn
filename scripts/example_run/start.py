@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_level', type=str, default='INFO',
                         help='Level of logging (INFO, DEBUG).')
     args = parser.parse_args()
-    example_cube_id = args.example_cube
+    example_cube_id = int(args.example_cube)
     log_level = args.log_level
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
@@ -55,7 +55,12 @@ if __name__ == '__main__':
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
         # ('cell_objects', {'asym_label': 1, 'sym_label': 2})
     ]
-    chunk_size = (256, 256, 256)
+    if example_cube_id == 1:
+        chunk_size = (256, 256, 128)
+    elif example_cube_id == 2:
+        chunk_size = (256, 256, 256)
+    else:
+        chunk_size = (512, 512, 512)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'

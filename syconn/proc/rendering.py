@@ -14,7 +14,7 @@ import pickle as pkl
 from importlib import reload
 import sys
 
-from ..mp.batchjob_utils import QSUB_script
+from ..mp.batchjob_utils import batchjob_script
 from . import log_proc
 from .. import global_params
 from ..handler.basics import flatten_list
@@ -588,7 +588,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     params = [[par, sso_kwargs, render_kwargs_def, ix] for ix, par in
               enumerate(params)]
     # This is single node multiprocessing -> `disable_batchjob=False`
-    path_to_out = QSUB_script(
+    path_to_out = batchjob_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         n_cores=n_cores, disable_batchjob=disable_batchjob,
         n_max_co_processes=n_jobs,

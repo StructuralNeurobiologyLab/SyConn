@@ -839,8 +839,9 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
         _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
                                     debug=False, nb_cpus=n_max_co_processes)
     else:
-        _ = qu.QSUB_script(multi_params, "contact_site_detection",
-                           n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "contact_site_detection",
+            n_max_co_processes=n_max_co_processes)
     chunky.save_dataset(cset)
 
 
