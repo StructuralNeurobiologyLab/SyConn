@@ -60,7 +60,7 @@ if __name__ == '__main__':
     elif example_cube_id == 2:
         chunk_size = (256, 256, 256)
     else:
-        chunk_size = (512, 512, 512)
+        chunk_size = (512, 512, 256)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'

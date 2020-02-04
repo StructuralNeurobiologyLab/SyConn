@@ -47,6 +47,9 @@ try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
+from skimage.morphology import watershed
+from skimage.feature import peak_local_max
+from scipy import ndimage
 
 
 def majority_vote(anno, prop, max_dist):
@@ -2422,14 +2425,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
             connected component spine head skeleton nodes, i.e. the inspected volume is
             at least ``2*ctx_vol``.
     """
-    try:
-        from ..proc.in_bounding_boxC import in_bounding_box
-    except ImportError:
-        from ..proc.in_bounding_box import in_bounding_box
-    from skimage.morphology import watershed
-    from skimage.feature import peak_local_max
-    from scipy import ndimage
-
     # use bigger skel context to get the correspondence to the voxel as accurate as possible
     ctx_vol = np.array(ctx_vol)
     scaling = sso.scaling
@@ -2521,11 +2516,11 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 _, nn_id = nn_kdt.query([(c + offset) * sso.scaling])
                 max_id = ids[nn_id[0]]
                 log_reps.warn(f'SSO {sso.id} contained erroneous volume'
-                              f' to spine head assignment. Found no spine head cluster '
-                              f'within 10x10x10 voxel subcube at {c + offset},'
-                              f' expected 1. '
-                              f'Fall-back is using the volume of the closest'
-                              f' spine head cluster via nearest-neighbor.')
+                              f' to spine head assignment. Found no spine head '
+                              f'cluster within 10x10x10 voxel subcube at '
+                              f'{c + offset}, expected 1. Fall-back is using '
+                              f'the volume of the closest spine head cluster '
+                              f'via nearest-neighbor.')
             else:
                 max_id = ids[np.argmax(cnts)]
 
