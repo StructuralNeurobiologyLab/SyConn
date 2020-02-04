@@ -1,42 +1,27 @@
 # Config
+Each working directory has a single `config.yml` file which stores dataset
+specific parameters. The `Config` class is implemented in `syconn.handler.config`.
+The `config` itself is stored as `config.yml` in the working directory.
+It is used for setting the versions and paths of the different dataset, e.g.
+KnossosDataset of source data like cell segmentation or predictions of
+sub-cellular structures (synaptic junctions, mitochondria, ..).
 
-Each working directory has a single `config` file which stores some parameters for convenience. The `config` parser is implemented in `syconn.config.parser`. The `config` itself is stored as `config.ini` in the working directory.
-It is mostly used for setting the versions of the latest datasets for each object type. All parameters are defaults for various functions and class initialization.
+A default config is created inside `generate_default_conf()` function
+implemented in `syconn.handler.config`. The default values can be found at
+`syconn.handler.config.yml` and are always used as fallback if a value cannot
+be found in the config file of the current working directory.
 
-An example `config` using all defined categories:
 
-```
-[Versions]
-sv = 0
-vc = 0
-sj = 5
-mi = 0
-ssv = 0
-cs = 29
-cs_agg = 26
-conn = 12
-ax_gt = 0
+# Modifying parameters in a config file
+Parameters can be adapted while creating the config file for a new run.
+In the script that starts the whole pipeline, e.g. `example_run.py` or `full_run.py`,
+one has to extend the `key_val_pairs_conf` list by a tuple (key, value).
 
-[Dataset]
-scaling = 10., 10., 20.
-seg_path = /path/to/knossosdataset/with/seg/
-super_seg_path = /path/to/knossosdataset/with/superseg/
 
-[LowerMappingRatios]
-mi = 0.5
-sj = 0.1
-vc = 0.5
+# Working directory
+The working directory stores SegmentationDatasets and SuperSegmentationDatasets
+of the initial, the glia split RAG, the cell organelles and contact sites /
+synapses and is specified in `syconn.global_params.py`. The above config has to
+be placed within the working directory.
 
-[UpperMappingRatios]
-mi = 1.
-sj = 0.9
-vc = 1.
 
-[Sizethresholds]
-mi = 2786
-sj = 498
-vc = 1584
-```
-
-Additionally, `syconn.config.global_params.py` stores `SyConn`-wide(!) parameters such as currently active working directory and meshing parameters.
-This will be refactored at some point into a single configuration location.

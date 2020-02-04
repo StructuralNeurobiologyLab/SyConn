@@ -4,24 +4,26 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+
+import numpy as np
+from collections import defaultdict
+from typing import Any, Tuple, Optional, Union, Dict, List
 from ..backend import log_backend
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:
-    import fasteners
-    LOCKING = True
-except ImportError:
-    print("fasteners could not be imported. Locking will be disabled by default."
-          "Please install fasteners to enable locking (pip install fasteners).")
-    LOCKING = False
-import numpy as np
+
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+from ..handler.basics import kd_factory
 from ..backend import StorageClass
 
 
 class AttributeDict(StorageClass):
+    """
+    General purpose dictionary class inherited from
+    :class:`syconn.backend.base.StorageClass`.
+    """
     def __init__(self, inp_p, **kwargs):
         super(AttributeDict, self).__init__(inp_p, **kwargs)
 
@@ -49,10 +51,10 @@ class CompressedStorage(StorageClass):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
-    def __init__(self, inp, **kwargs):
+    def __init__(self, inp: str, **kwargs):
         super(CompressedStorage, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]):
         try:
             return self._cache_dc[item]
         except KeyError:
@@ -65,7 +67,7 @@ class CompressedStorage(StorageClass):
             self._cache_dc[item] = decomp_arr
         return decomp_arr
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: Union[int, str], value: np.ndarray):
         if type(value) is not np.ndarray:
             msg = "CompressedStorage supports np.array values only."
             log_backend.error(msg)
@@ -87,19 +89,17 @@ class VoxelStorageL(StorageClass):
     additionally (save decompressing time).
     """
 
-    def __init__(self, inp, **kwargs):
+    def __init__(self, inp: str, **kwargs):
         super(VoxelStorageL, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]):
         """
-        Parameters
-        ----------
-        item : int/str
 
-        Returns
-        -------
-        list of np.array, list of np.array
-            Decompressed voxel masks with corresponding offsets
+        Args:
+            item ():
+
+        Returns:
+            Decompressed voxel masks with corresponding offsets.
         """
         try:
             return self._cache_dc[item], self._dc_intern[item]["off"]
@@ -117,15 +117,16 @@ class VoxelStorageL(StorageClass):
             self._cache_dc[item] = decomp_arrs
         return decomp_arrs, offsets
 
-    def __setitem__(self, key, values):
+    def __setitem__(self, key: Union[int, str],
+                    values: Tuple[List[np.ndarray], List[np.ndarray]]):
         """
 
-        Parameters
-        ----------
-        key : int/str
-            E.g. SO ID.
-        values : list of np.array
-            E.g. voxel masks
+        Args:
+            key: E.g. SO ID.
+            values: E.g. voxel masks
+
+        Returns:
+
         """
         voxel_masks, offsets = values
         assert np.all([voxel_masks[0].dtype == v.dtype for v in voxel_masks])
@@ -142,7 +143,7 @@ class VoxelStorageL(StorageClass):
                         "off": offsets}
         self._dc_intern[key] = value_intern
 
-    def append(self, key, voxel_mask, offset):
+    def append(self, key: int, voxel_mask: np.ndarray, offset: np.ndarray):
         value_intern = self._dc_intern[key]
         dt = np.dtype(value_intern["dt"])
         sh = value_intern["sh"]
@@ -158,6 +159,179 @@ class VoxelStorageL(StorageClass):
         value_intern = {"arr": comp_arrs + [arrtolz4string_list(voxel_mask)],
                         "sh": sh, "dt": dt, "off": offsets}
         self._dc_intern[key] = value_intern
+
+
+def VoxelStorage(inp, **kwargs):
+    """
+    Deprecated storage for voxel data.
+
+    Args:
+        inp:
+        **kwargs:
+
+    Returns:
+
+    """
+    obj = VoxelStorageClass(inp, **kwargs)
+    if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
+        obj = VoxelStorageDyn(inp, **kwargs)
+    # # TODO: activate as soon as synapse-detection pipelines is refactored.
+    # else:
+    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
+    #                         ' VoxelStorageDyn.')
+    return obj
+
+
+class VoxelStorageClass(VoxelStorageL):
+    """
+    Customized dictionary to store compressed numpy arrays, but with a
+    intuitive user interface, i.e. compression will happen in background.
+    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
+    additionally (save decompressing time).
+
+    No locking provided in this class!
+    """
+
+    def __init__(self, inp: str, **kwargs):
+        if "disable_locking" in kwargs:
+            assert kwargs["disable_locking"], "Locking must be disabled " \
+                                              "in this class. Use VoxelDictL " \
+                                              "to enable locking."
+        super(VoxelStorageL, self).__init__(inp, **kwargs)
+
+
+class VoxelStorageDyn(CompressedStorage):
+    """
+    Similar to `VoxelStorageL` but does not store the voxels explicitly,
+    but the information necessary to query the voxels of an object.
+
+    If ``voxel_mode = True`` getter method will operate on underlying data set
+    to retrieve voxels of an object. `__setitem__` throws `RuntimeError`.
+    `__getitem__` will return a list of 3D binary cubes with ones at the
+    object's locations (key: object ID). Note: The item ID has to match the
+    object ID in the segmentation.
+
+    Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
+    manipulation of the object's bounding box. In this case `voxeldata_path`
+    has to be given or already be existent in loaded dictionary. Expects the
+    source path of a KnossoDataset (see knossos_utils), like:
+
+        kd = KnossoDataset()
+        kd.initialize_from_knossos_path(SOURCE_PATH)
+
+    or
+
+        kd = kd_factory(SOURCE_PATH)
+
+    `__setitem__` requires the object ID as key and an 3 dimensional array with
+     all bounding boxes defining the object (N, 2, 3). Those BBs are then used to
+     query the object voxels. The bounding box is expected to be two 3D
+     coordinates which define the lower and the upper limits.
+
+
+    """
+
+    def __init__(self, inp: str, voxel_mode: bool = True,
+                 voxeldata_path: Optional[str] = None, **kwargs):
+        super().__init__(inp, **kwargs)
+        self.voxel_mode = voxel_mode
+        if not 'meta' in self._dc_intern:
+            # add meta information about underlying voxel data set to internal dictionary
+            self._dc_intern['meta'] = dict(voxeldata_path=voxeldata_path)
+        if not 'size' in self._dc_intern:
+            self._dc_intern['size'] = defaultdict(int)
+        if not 'rep_coord' in self._dc_intern:
+            self._dc_intern['rep_coord'] = dict()
+        if voxeldata_path is not None:
+            old_p = self._dc_intern['meta']['voxeldata_path']
+            new_p = voxeldata_path
+            if old_p != new_p:
+                log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorag'
+                                 'eDyn` object (stored at "{}") '
+                                 'from `{}` to `{}`.'.format(inp, old_p, new_p))
+                self._dc_intern['meta']['voxeldata_path'] = voxeldata_path
+        voxeldata_path = self._dc_intern['meta']['voxeldata_path']
+        if voxel_mode:
+            if voxeldata_path is None:
+                msg = '`voxel_mode` is True but no path to' \
+                      ' voxeldata given / found.'
+                log_backend.error(msg)
+                raise ValueError(msg)
+            kd = kd_factory(voxeldata_path)
+            self.voxeldata = kd
+
+    def __setitem__(self, key: int, value: Any):
+        if self.voxel_mode:
+            raise RuntimeError('`VoxelStorageDyn.__setitem__` may only '
+                               'be used when `voxel_mode=False`.')
+        else:
+            return super().__setitem__(key, value)
+
+    def __getitem__(self, item: int):
+        if self.voxel_mode:
+            res = []
+            bbs = super().__getitem__(item)
+            for bb in bbs:  # iterate over all bounding boxes
+                size = bb[1] - bb[0]
+                off = bb[0]
+                curr_mask = self.voxeldata.load_seg(
+                    size=size, offset=off, mag=1) == item
+                res.append(curr_mask.swapaxes(0, 2))
+            return res, bbs[:, 0]  # N, 3 --> all offset
+        else:
+            return super().__getitem__(item)
+
+    def object_size(self, item):
+        if not self.voxel_mode:
+            log_backend.warn('`object_size` sould only be called during `voxel_mode=True`.')
+        if item not in self._dc_intern:
+            raise KeyError('KeyError: Could not find key "{}" in `self._dc_intern`.`'.format(item))
+        return self._dc_intern['size'][item]
+
+    def increase_object_size(self, item, value):
+        if self.voxel_mode:
+            log_backend.warn('`increase_object_size` sould only be called when `voxel_mode=False`.')
+        self._dc_intern['size'][item] += value
+
+    def object_repcoord(self, item):
+        if not self.voxel_mode:
+            log_backend.warn('`object_repcoord` sould only be called when `voxel_mode=True`.')
+        if item not in self._dc_intern:
+            raise KeyError('KeyError: Could not find key "{}" in `self._dc_intern`.`'.format(item))
+        return self._dc_intern['rep_coord'][item]
+
+    def set_object_repcoord(self, item, value):
+        if self.voxel_mode:
+            log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
+        self._dc_intern['rep_coord'][item] = value
+
+    def get_voxeldata(self, item):
+        old_vx_mode = self.voxel_mode
+        self.voxel_mode = True
+        if self._dc_intern['meta']['voxeldata_path'] is None:
+            msg = '`voxel_mode` is True but no path to' \
+                  ' voxeldata given / found.'
+            log_backend.error(msg)
+            raise ValueError(msg)
+        kd = kd_factory(self._dc_intern['meta']['voxeldata_path'])
+        self.voxeldata = kd
+        res = self[item]
+        self.voxel_mode = old_vx_mode
+        return res
+
+    def get_boundingdata(self, item):
+        old_vx_mode = self.voxel_mode
+        self.voxel_mode = False
+        res = self[item]
+        self.voxel_mode = old_vx_mode
+        return res
+
+    def keys(self):
+        # do not return 'meta' and other helper items in self._dc_intern, only object IDs
+        # TODO: make this a generator
+        obj_elements = list([k for k in self._dc_intern.keys() if (type(k) is str and k.isdigit())
+                             or (type(k) is not str)])
+        return obj_elements
 
 
 class MeshStorage(StorageClass):
@@ -220,7 +394,7 @@ class MeshStorage(StorageClass):
             mesh.append(np.zeros((0, ), dtype=np.uint8))
         if self._cache_decomp:
             self._cache_dc[key] = mesh
-        if len(mesh[2]) > 0 and len(mesh[1]) != len(mesh[2]):
+        if len(mesh[1]) != len(mesh[2]) > 0:
             log_backend.warning('Lengths of vertex array and length of normal'
                                 ' array differ!')
         # test if lengths of vertex and color array are identical or test
@@ -234,24 +408,6 @@ class MeshStorage(StorageClass):
         comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
         comp_col = arrtolz4string_list(mesh[3].astype(dtype=np.uint8))
         self._dc_intern[key] = [comp_ind, comp_vert, comp_norm, comp_col]
-
-
-class VoxelStorage(VoxelStorageL):
-    """
-    Customized dictionary to store compressed numpy arrays, but with a
-    intuitive user interface, i.e. compression will happen in background.
-    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
-    additionally (save decompressing time).
-
-    No locking provided in this class!
-    """
-
-    def __init__(self, inp, **kwargs):
-        if "disable_locking" in kwargs:
-            assert kwargs["disable_locking"], "Locking must be disabled " \
-                                              "in this class. Use VoxelDictL" \
-                                              "to enable locking."
-        super(VoxelStorageL, self).__init__(inp, **kwargs)
 
 
 class SkeletonStorage(StorageClass):

@@ -28,6 +28,22 @@ syconn.handler.prediction module
     :undoc-members:
     :show-inheritance:
 
+syconn.handler.config module
+--------------------------------
+
+.. automodule:: syconn.handler.config
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+syconn.handler.logger module
+--------------------------------
+
+.. automodule:: syconn.handler.logger
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

@@ -83,7 +83,7 @@ attr_dict = sj_obj.attr_dict
 ```
 sj_obj.mesh_caching = False
 sj_obj.voxel_caching = False
-sj_obj.vskeleton_caching = False
+sj_obj.skeleton_caching = False
 ```
 
 and the cache can be cleared by 

@@ -5,8 +5,9 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 
-from ..handler.logger import initialize_logging
-log_handler = initialize_logging('handler')
+from ..handler.logger import log_main
+
+log_handler = log_main
 
 
 __all__ = ['log_handler']

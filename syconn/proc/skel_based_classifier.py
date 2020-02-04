@@ -14,22 +14,19 @@ import numpy as np
 import os
 import re
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
-from sklearn.externals import joblib
-from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+import joblib
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
 
 from . import skel_based_classifier_helper as sbch
 from ..handler.basics import load_pkl2obj
-from ..handler.logger import initialize_logging
+from ..handler.config import initialize_logging
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..config.global_params import wd
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
@@ -140,7 +137,7 @@ class SkelClassifier(object):
         paths = glob.glob(self.clf_path + "/*{}*.pkl".format(clf_name))
         feature_contexts = set()
         for path in paths:
-            fc = int(re.findall("[\d]+", os.path.basename(path))[-1])
+            fc = int(re.findall(r"[\d]+", os.path.basename(path))[-1])
             feature_contexts.add(fc)
 
         return np.array(list(feature_contexts))
@@ -160,8 +157,8 @@ class SkelClassifier(object):
             assert os.path.isfile(self.splitting_fname)
             self.splitting_dict = load_pkl2obj(self.splitting_fname)
 
-    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000), stride=10,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1, overwrite=True):
+    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000),
+                      stride=10, nb_cpus=1, overwrite=True):
         self.load_label_dict()
         self.load_splitting_dict()
         multi_params = []
@@ -177,44 +174,29 @@ class SkelClassifier(object):
                                      self.feat_path + "/features_%d_%d.npy",
                                     comment_converter[self.ssd_version], overwrite])
 
-        if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(sbch.generate_clf_data_thread,
-                multi_params, nb_cpus=nb_cpus)
+        if not qu.batchjob_enabled():
+            sm.start_multiprocess(sbch.generate_clf_data_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "generate_clf_data",
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
         else:
-            msg = "QSUB not available"
-            logger_skel.critical(msg)
-            raise Exception(msg)
+            qu.batchjob_script(multi_params, "generate_clf_data")
 
     def classifier_production(self, clf_name="rfc", n_estimators=2000,
-                              feature_contexts_nm=(500, 1000, 2000, 4000, 8000), qsub_pe=None,
-                              qsub_queue=None, nb_cpus=1, production=False):
+                              feature_contexts_nm=(500, 1000, 2000, 4000, 8000),
+                              nb_cpus=1, production=False):
         self.load_label_dict()
         multi_params = []
         for feature_context_nm in feature_contexts_nm:
             multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
                                  feature_context_nm, production])
-        if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(classifier_production_thread,
-                multi_params, nb_cpus=nb_cpus)
-
-        elif qu.__QSUB__:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "classifier_production",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+        if not qu.batchjob_enabled():
+            sm.start_multiprocess(classifier_production_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
         else:
-            msg = "QSUB not available"
-            logger_skel.critical(msg)
-            raise Exception(msg)
+            qu.batchjob_script(multi_params, "classifier_production",
+                               n_cores=nb_cpus)
 
     def create_splitting(self, ratios=(.6, .2, .2)):
         assert not os.path.isfile(self.splitting_fname), "Splitting file exists."
@@ -544,7 +526,13 @@ class SkelClassifier(object):
                         prefix=""):
         save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (
         name, feature_context_nm, "_prod" if production else "", prefix)
-        clf = joblib.load(save_p)
+        try:
+            clf = joblib.load(save_p)
+        except AttributeError:
+            logger_skel.warning('DeprecationWarning: Use joblib package instead '
+                                'of sklearn.externals.joblib!')
+            from sklearn.externals import joblib as joblib_sklearn  # soon to be deprecated
+            clf = joblib_sklearn.load(save_p)
         return clf
 
     def plot_lines(self, data, x_label, y_label, path, legend_labels=None):

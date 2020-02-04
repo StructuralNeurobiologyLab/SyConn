@@ -12,32 +12,52 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_data2kzip, data2kzip
-from .image import apply_pca
-from ..proc import log_proc
-import openmesh
+
 from plyfile import PlyData, PlyElement
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
-    get_dataset_scaling
+from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
+import time
 try:
-    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
-except ImportError as e:
-    boundaryDistanceTransform, gaussianSmoothing = None, None
-    log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
-                   'Mesh generation will not be possible.')
-from scipy.ndimage.morphology import binary_closing
-from ..proc import log_proc
-try:
-    import vtkInterface
+    import vtki
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
+
+from skimage.measure import mesh_surface_area
+from ..proc import log_proc
+from ..handler.basics import write_data2kzip, data2kzip
+from .image import apply_pca
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+try:
+    # set matplotlib backend to offscreen
+    import matplotlib
+    matplotlib.use('agg')
+    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+except ImportError as e:
+    boundaryDistanceTransform, gaussianSmoothing = None, None
+    log_proc.error('ImportError. Could not import VIGRA. '
+                   'Mesh generation will not be possible. {}'.format(e))
+try:
+    import openmesh
+except ImportError as e:
+    log_proc.error('ImportError. Could not import openmesh. '
+                   'Writing meshes as `.obj` files will not be'
+                   ' possible. {}'.format(e))
+
+try:
+    from .in_bounding_boxC import in_bounding_box
+except ImportError:
+    from .in_bounding_box import in_bounding_box
+    log_proc.error('ImportError. Could not import `in_boundinb_box` from '
+                   '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
+
+
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
-           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso']
+           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
+           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices']
 
 
 class MeshObject(object):
@@ -108,10 +128,10 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            print("Calculating normals")
+            log_proc.warning("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
-            print("Calculating normals, because their shape differs from"
+            log_proc.debug("Calculating normals, because their shape differs from"
                   " vertices: %s (normals) vs. %s (vertices)" %
                   (str(self._normals.shape), str(self.vertices.shape)))
             self._normals = unit_normal(self.vertices, self.indices)
@@ -186,8 +206,17 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
-def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
-                  single_cc=False, decimate_mesh=0, gradient_direction='ascent'):
+def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
+                  decimate_mesh=0, gradient_direction='ascent',
+                  force_single_cc=False):
+    # TODO: write wrapper method to handle triangulation of big objects by
+    #  recursive chunking. The resulting meshes can be merged via `merge_meshes`
+    return
+
+
+def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
+                  decimate_mesh=0, gradient_direction='descent',
+                  force_single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -208,7 +237,11 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
     gradient_direction : str
-        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS compatibility.
+        defines orientation of triangle indices. '?' is needed for KNOSSOS
+         compatibility. TODO: check compatible index orientation, switched to `descent`, 23April2019
+    force_single_cc : bool
+        If True, performans dilations until only one foreground CC is present
+        and then erodes with the same number to maintain size.
 
     Returns
     -------
@@ -216,7 +249,10 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         indices [M, 3], vertices [N, 3], normals [N, 3]
 
     """
-    assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
+    if boundaryDistanceTransform is None:
+        raise ImportError('"boundaryDistanceTransform" could not be imported from VIGRA. '
+                          'Please install vigra, see SyConn documentation.')
+    assert type(downsampling) in (tuple, list), "Downsampling has to be of type 'tuple' or list"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
     if pts.ndim == 2:
@@ -229,19 +265,34 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         pts -= offset
         pts = (pts / downsampling).astype(np.uint32)
         # add zero boundary around object
-        pts += 5
-        bb = np.max(pts, axis=0) + 5
+        margin = n_closings + 5
+        pts += margin
+        bb = np.max(pts, axis=0) + margin
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
     else:
         volume = pts
         if np.any(np.array(downsampling) != 1):
-            # volume = measure.block_reduce(volume, downsampling, np.max)
             ndimage.zoom(volume, downsampling, order=0)
         offset = np.array([0, 0, 0])
-    # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+        if force_single_cc:
+            n_dilations = 0
+            while True:
+                labeled, nb_cc = ndimage.label(volume)
+                # log_proc.debug('Forcing single CC, additional dilations {}, num'
+                #                'ber connected components: {}'
+                #                ''.format(n_dilations, nb_cc))
+                if nb_cc == 1:  # does not count background
+                    break
+                # pad volume to maintain margin at boundary and correct offset
+                volume = np.pad(volume, [(1, 1), (1, 1), (1, 1)],
+                                mode='constant', constant_values=0)
+                offset -= 1
+                volume = binary_dilation(volume, iterations=1).astype(
+                    np.float32)
+                n_dilations += 1
     else:
         volume = volume.astype(np.float32)
     if single_cc:
@@ -259,41 +310,34 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
             volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
-        print(e)
-        raise RuntimeError
+        raise ValueError(e)
     if pts.ndim == 2:  # account for [5, 5, 5] offset
-        verts -= 5
+        verts -= margin
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
         if not __vtk_avail__:
-            msg = "vtkInterface not installed. Please install vtkInterface.'" \
-                  "git clone https://github.com/akaszynski/vtkInterface.git' " \
-                  "and 'pip install -e vtkInterface'."
+            msg = "vtki not installed. Please install vtki.'" \
+                  "pip install vtki'."
             log_proc.error(msg)
             raise ImportError(msg)
-        log_proc.warning("'triangulation': Currently mesh-sparsification"
-                         " may not preserve volume.")
-        # add number of vertices in front of every face (required by vtkInterface)
+        # log_proc.warning("'triangulation': Currently mesh-sparsification"
+        #                  " may not preserve volume.")
+        # add number of vertices in front of every face (required by vtki)
         ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind],
                              axis=1)
-        mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
-        decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
-        if decimated_mesh is None:  # maybe vtkInterface API changes and operates in-place -> TODO: check version differences and require one of them
-            decimated_mesh = mesh
-            if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
-                log_proc.error(
-                    "'triangulation': Mesh-sparsification could not sparsify"
-                    " mesh.")
+        mesh = vtki.PolyData(verts, ind.flatten())
+        mesh.decimate(decimate_mesh, volume_preservation=True)
         # remove face sizes again
-        ind = decimated_mesh.faces.reshape((-1, 4))[:, 1:]
-        verts = decimated_mesh.points
+        ind = mesh.faces.reshape((-1, 4))[:, 1:]
+        verts = mesh.points
         mo = MeshObject("", ind, verts)
         # compute normals
         norm = mo.normals.reshape((-1, 3))
     return np.array(ind, dtype=np.int), verts, norm
 
 
-def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
+def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
+                    triangulation_kwargs=None):
     """
     Get object mesh from object voxels using marching cubes.
 
@@ -305,18 +349,39 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
     n_closings : int
         Number of closings before mesh generation
     decimate_mesh : float
+    triangulation_kwargs : dict
+     Keyword arguments parsed to 'traingulation' call
 
     Returns
     -------
-    array [N, 1], array [M, 1], array
-        vertices, indices
+    array [N, 1], array [M, 1], array [M, 1]
+        vertices, indices, normals
     """
+    if triangulation_kwargs is None:
+        triangulation_kwargs = {}
     if np.isscalar(obj.voxels):
-        return np.zeros((0, )), np.zeros((0, ))
-
-    indices, vertices, normals = triangulation(
-        np.array(obj.voxel_list), downsampling=downsampling,
-        n_closings=n_closings, decimate_mesh=decimate_mesh)
+        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
+               np.zeros((0,), dtype=np.float32)
+    try:
+        min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj.type]
+    except KeyError:
+        min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
+    try:
+        indices, vertices, normals = triangulation(
+            obj.voxel_list, downsampling=downsampling, n_closings=n_closings,
+            decimate_mesh=decimate_mesh, **triangulation_kwargs)
+    except ValueError as e:
+        if len(obj.voxel_list) <= min_obj_vx:
+            # log_proc.debug('Did not create mesh for object of type "{}" '
+            #                ' with ID {} because its size is {} voxels.'
+            #                ''.format(obj.type, obj.id, len(obj.voxel_list)))
+            return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32), \
+                   np.zeros((0,), dtype=np.float32)
+        msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
+              ' of type "{}". It contained {} voxels.'.format(str(e), obj.id, obj.type,
+                                                              len(obj.voxel_list))
+        log_proc.error(msg)
+        return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
     vertices += 1  # account for knossos 1-indexing
     vertices = np.round(vertices * obj.scaling)
     assert len(vertices) == len(normals) or len(normals) == 0, \
@@ -348,7 +413,43 @@ def normalize_vertices(vertices):
     return vertices
 
 
-def calc_rot_matrices(coords, vertices, edge_length):
+def calc_rot_matrices(coords, vertices, edge_length, nb_cpus=1):
+    """
+    # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
+
+    Fits a PCA to local sub-volumes in order to rotate them according to
+    its main process (e.g. x-axis will be parallel to the long axis of a tube)
+
+    Parameters
+    ----------
+    coords : np.array [M x 3]
+    vertices : np.array [N x 3]
+    edge_length : float, int
+        spatial extent of box for querying vertices for pca fit
+    nb_cpus : int
+
+    Returns
+    -------
+    np.array [M x 16]
+        Fortran flattened OpenGL rotation matrix
+    """
+    if not np.isscalar(edge_length):
+        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
+                         '. Choosing np.min(edge_length) as query box edge'
+                         ' length.')
+        edge_length = np.min(edge_length)
+    if len(vertices) > 1e5:
+        vertices = vertices[::8]
+    vertices = vertices.astype(np.float32)
+    params = [(coords_ch, vertices, edge_length) for coords_ch in
+              np.array_split(coords, nb_cpus, axis=0)]
+    res = start_multiprocess_imap(calc_rot_matrices_helper, params,
+                                  nb_cpus=nb_cpus, show_progress=False)
+    rot_matrices = np.concatenate(res)
+    return rot_matrices
+
+
+def calc_rot_matrices_helper(args):
     """
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
@@ -365,17 +466,12 @@ def calc_rot_matrices(coords, vertices, edge_length):
     np.array [M x 16]
         Fortran flattened OpenGL rotation matrix
     """
-    if not np.isscalar(edge_length):
-        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
-                         '. Choosing np.min(edge_length) as query box edge'
-                         ' length.')
-        edge_length = np.min(edge_length)
-    if len(vertices) > 1e5:
-        vertices = vertices[::8]
+    coords, vertices, edge_length = args
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
+    vertices = vertices.astype(np.float32)
     for ii, c in enumerate(coords):
-        bounding_box = (c, edge_lengths)
+        bounding_box = np.array([c, edge_lengths], dtype=np.float32)
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
     return rot_matrices
@@ -426,7 +522,7 @@ def flag_empty_spaces(coords, vertices, edge_length):
         
     """
     if not np.isscalar(edge_length):
-        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
+        log_proc.warning('"flag_empty_spaces" now takes only scalar edgelengths'
                          '. Choosing np.min(edge_length) as query box edge'
                          ' length.')
         edge_length = np.min(edge_length)
@@ -463,32 +559,6 @@ def get_bounding_box(coordinates):
     mean = np.mean(coord_resh, axis=0)
     max_dist = np.max(np.abs(coord_resh - mean))
     return mean, max_dist
-
-
-@jit
-def in_bounding_box(coords, bounding_box):
-    """
-    Loop version with numba
-    Parameters
-    ----------
-    coords : np.array (N x 3)
-    bounding_box : tuple (np.array, np.array)
-        center coordinate and edge lengths of bounding box
-
-    Returns
-    -------
-    np.array of bool
-        inlying coordinates are indicated as true
-    """
-    edge_sizes = bounding_box[1] / 2
-    coords = np.array(coords) - bounding_box[0]
-    inlier = np.zeros((len(coords)), dtype=np.bool)
-    for i in range(len(coords)):
-        x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
-        y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
-        z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
-        inlier[i] = x_cond & y_cond & z_cond
-    return inlier
 
 
 @jit
@@ -581,13 +651,60 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     """
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
-    all_ind = np.zeros((0, ), dtype=np.uint)
-    all_vert = np.zeros((0, ))
-    for i in range(len(vert_lst)):
-        all_ind = np.concatenate([all_ind, ind_lst[i] +
-                                  len(all_vert)/nb_simplices])
-        all_vert = np.concatenate([all_vert, vert_lst[i]])
+    if len(vert_lst) == 0:
+        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
+    else:
+        all_vert = np.concatenate(vert_lst)
+    # store index and vertex offset of every partial mesh
+    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+        np.uint)
+    ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+    all_ind = np.concatenate(ind_lst)
+    for i in range(0, len(vert_lst)):
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        all_ind[start_ix:end_ix] += vert_offset[i]
     return all_ind, all_vert
+
+
+def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
+    """
+    Combine several meshes into a single one.
+
+    Parameters
+    ----------
+    ind_lst : List[np.ndarray]
+        array shapes [M, 1]
+    vert_lst : List[np.ndarray]
+        array shapes [N, 1]
+    norm_lst : List[np.ndarray]
+        array shapes [N, 1]
+    nb_simplices : int
+        Number of simplices, e.g. for triangles nb_simplices=3
+
+    Returns
+    -------
+    [np.array, np.array, np.array]
+    """
+    assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
+                                          "from vertices list."
+    if len(vert_lst) == 0:
+        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
+    else:
+        all_vert = np.concatenate(vert_lst)
+
+    if len(norm_lst) == 0:
+        all_norm = np.zeros((0,))
+    else:
+        all_norm = np.concatenate(norm_lst)
+    # store index and vertex offset of every partial mesh
+    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+        np.uint)
+    ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+    all_ind = np.concatenate(ind_lst)
+    for i in range(0, len(vert_lst)):
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        all_ind[start_ix:end_ix] += vert_offset[i]
+    return [all_ind, all_vert, all_norm]
 
 
 def mesh_loader(so):
@@ -595,7 +712,7 @@ def mesh_loader(so):
 
 
 def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
-                  cmap=None, alpha=1.0):
+                   cmap=None, alpha=1.0):
     """
     Merge meshes of SegmentationObjects.
 
@@ -616,24 +733,53 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     np.array, np.array [, np.array]
         indices, vertices (scaled) [,colors]
     """
-    all_ind = np.zeros((0, ), dtype=np.uint)
-    all_vert = np.zeros((0, ))
-    all_norm = np.zeros((0, ))
-    colors = np.zeros((0, ))
+    # TODO: check if this works reliably now
+    # if nb_cpus > 1:
+    #     log_proc.debug('`merge_someshes` is not working with `n_cpus > 1`:'
+    #                    ' `cant pickle _thread.RLock objects`')
+    #     nb_cpus = 1
     meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
                                      show_progress=False)
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
-    for i in range(len(meshes)):
-        ind, vert, norm = meshes[i]
-        assert len(vert) == len(norm) or len(norm) == 0, "Length of normals " \
-                                                         "and vertices differ."
-        all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
-        all_vert = np.concatenate([all_vert, vert])
-        all_norm = np.concatenate([all_norm, norm])
+
+    ind_lst = []
+    vert_lst = []
+    norm_lst = []
+    color_lst = []
+    for i, (ind, vert, norm) in enumerate(meshes):
+        ind_lst.append(ind)
+        vert_lst.append(vert)
+        norm_lst.append(norm)
         if color_vals is not None:
-            curr_color = np.array([color_vals[i]]*len(vert))
-            colors = np.concatenate([colors, curr_color])
+            color_lst.append(np.array([color_vals[i]]*len(vert)))
+
+    # merge results
+    if color_vals is not None:
+        colors = np.concatenate(color_lst)
+        del color_lst
+    if len(norm_lst) == 0:
+        all_norm = np.zeros((0,))
+    else:
+        all_norm = np.concatenate(norm_lst)
+        del norm_lst
+
+    if len(vert_lst) == 0:
+        all_vert = np.zeros((0,))
+    else:
+        all_vert = np.concatenate(vert_lst)
+    if len(ind_lst) == 0:
+        all_ind = np.zeros((0,), dtype=np.uint)
+    else:
+        all_ind = np.concatenate(ind_lst)
+        # store index and vertex offset of every partial mesh
+        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+            np.uint)
+        ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+        for i in range(0, len(vert_lst)):
+            start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+            all_ind[start_ix:end_ix] += vert_offset[i]
+
     assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
         "Length of combined normals and vertices differ."
     if color_vals is not None:
@@ -642,7 +788,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
 
 
 def make_ply_string(dest_path, indices, vertices, rgba_color,
-                            invert_vertex_order=False):
+                    invert_vertex_order=False):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -660,15 +806,18 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
     str
     """
     # create header
+    vertices = vertices.astype(np.float32)
+    indices = indices.astype(np.int32)
     if not rgba_color.ndim == 2:
-        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
+        rgba_color = np.array(rgba_color, dtype=np.uint8).reshape((
+            -1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
-    if len(rgba_color) != len(vertices) and len(rgba_color) == 4:
+    if len(rgba_color) != len(vertices) and len(rgba_color) == 1 and rgba_color.shape[1] == 4:
         # TODO: create per tree color instead of per vertex color
-        rgba_color = np.array([rgba_color for i in range(len(vertices))],
+        rgba_color = np.array([rgba_color[0] for i in range(len(vertices))],
                               dtype=np.uint8)
     else:
         if not (len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4):
@@ -682,7 +831,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
                       "automatically, data will be unusable if not normalized"
                       " between 0 and 255. min/max of data:"
                       " {}, {}".format(rgba_color.min(), rgba_color.max()))
-    elif rgba_color.dtype.kind not in ("u", "i"):
+    elif not np.issubdtype(rgba_color.dtype, np.uint8):
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
@@ -724,6 +873,8 @@ def make_ply_string_wocolor(dest_path, indices, vertices,
     str
     """
     # create header
+    vertices = vertices.astype(np.float32)
+    indices = indices.astype(np.int32)
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -736,7 +887,7 @@ def make_ply_string_wocolor(dest_path, indices, vertices,
 
 
 def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
-                    force_overwrite=False, invert_vertex_order=False):
+                    force_overwrite=False, invert_vertex_order=True):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -750,11 +901,13 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
     color : tuple or np.array
         rgba between 0 and 255
     ply_fname : str
-    invert_vertex_order: Invert the vertex order.
+    force_overwrite: bool
+    invert_vertex_order: bool
+        Invert the vertex order.
     """
     if len(vert) == 0:
-        log_proc.warn("'write_mesh2kzip' call with empty vertex array. Did not"
-                      " write data to kzip.")
+        log_proc.warn("'write_mesh2kzip' called with empty vertex array. Did not"
+                      " write data to kzip. `ply_fname`. {}".format(ply_fname))
         return
     tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
     if color is not None:
@@ -769,7 +922,7 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
                       force_overwrite=True, verbose=True,
-                      invert_vertex_order=False):
+                      invert_vertex_order=True):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -787,12 +940,11 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     verbose : bool
     invert_vertex_order: Invert the vertex order.
     """
-    if not force_overwrite:
-        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')
-        pbar = tqdm.tqdm(total=len(inds))
+        pbar = tqdm.tqdm(total=len(inds), leave=False)
+    write_out_ply_fnames = []
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
@@ -801,7 +953,8 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         ply_fname = ply_fnames[i]
         tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
         if len(vert) == 0:
-            raise ValueError("Mesh with zero-length vertex array.")
+            log_proc.warning("Mesh with zero-length vertex array. Skipping.")
+            continue
         if color is not None:
             make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color,
                             invert_vertex_order=invert_vertex_order)
@@ -809,11 +962,12 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
             make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32),
                                     invert_vertex_order=invert_vertex_order)
         tmp_paths.append(tmp_dest_p)
+        write_out_ply_fnames.append(ply_fname)
         if verbose:
             pbar.update(1)
     if verbose:
         pbar.close()
-    data2kzip(k_path, tmp_paths, ply_fnames, force_overwrite=force_overwrite,
+    data2kzip(k_path, tmp_paths, write_out_ply_fnames, force_overwrite=force_overwrite,
               verbose=verbose)
 
 
@@ -902,64 +1056,86 @@ def mesh_creator_sso(ssv):
         ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
         _ = ssv._load_obj_mesh(obj_type="conn", rewrite=False)
     except KeyError:
-        print("Loading 'conn' objects failed for SSV %s."
+        log_proc.error("Loading 'conn' objects failed for SSV %s."
               % ssv.id)
     ssv.clear_cache()
 
 
 def mesh_chunk(args):
-    scaling = get_dataset_scaling()
     attr_dir, obj_type = args
+    scaling = global_params.config['scaling']
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
-        print("EMPTY ATTRIBUTE DICT", attr_dir)
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
-    valid_obj_types = ["vc", "sj", "mi", "con"]
-    if not obj_type in valid_obj_types:
-        raise NotImplementedError("Object type must be one of the following:\n"
-                                  "%s" % str(valid_obj_types))
+    valid_obj_types = ["vc", "sj", "mi", "con", 'syn', 'syn_ssv']
+    if global_params.config.allow_mesh_gen_cells:
+        valid_obj_types += ["sv"]
+    if obj_type not in valid_obj_types:
+        raise NotImplementedError("Object type '{}' must be one of the following:\n"
+                                  "{}".format(obj_type, str(valid_obj_types)))
     for ix in obj_ixs:
         # create voxel_list
         bin_arrs, block_offsets = voxel_dc[ix]
-        voxel_list = np.array([], dtype=np.int32)
+        voxel_list = []
         for i_bin_arr in range(len(bin_arrs)):
-            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
-                                    dtype=np.int32)
-            block_voxels += np.array(block_offsets[i_bin_arr])
-
-            if len(voxel_list) == 0:
-                voxel_list = block_voxels
-            else:
-                voxel_list = np.concatenate([voxel_list, block_voxels])
+            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr]))
+            block_voxels += block_offsets[i_bin_arr]
+            voxel_list.append(block_voxels)
+        voxel_list = np.concatenate(voxel_list)
         # create mesh
-        indices, vertices, normals = triangulation(np.array(voxel_list),
-                                     downsampling=MESH_DOWNSAMPLING[obj_type],
-                                     n_closings=MESH_CLOSING[obj_type])
-        vertices *= scaling
+
+        try:
+            min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj_type]
+        except KeyError:
+            min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
+        if obj_type == 'sv':
+            decimate_mesh = 0.3  # remove 30% of the verties  # TODO: add to global params
+        else:
+            decimate_mesh = 0
+        try:
+            indices, vertices, normals = triangulation(
+                voxel_list, downsampling=global_params.config['meshes']['downsampling'][obj_type],
+                n_closings=global_params.config['meshes']['closings'][obj_type],
+                force_single_cc=obj_type == 'syn_ssv', decimate_mesh=decimate_mesh)
+            vertices += 1  # account for knossos 1-indexing
+            vertices = np.round(vertices * scaling)
+        except ValueError as e:
+            if len(voxel_list) > min_obj_vx:
+                msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
+                      ' of type "{}". It contained {} voxels.'.format(str(e), ix, obj_type,
+                                                                      len(voxel_list))
+                log_proc.error(msg)
+            indices, vertices, normals = np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
+
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
 
 
-def mesh2obj_file(dest_path, mesh, color=None, center=None):
+def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     """
     Writes mesh to .obj file.
 
     Parameters
     ----------
+    dest_path : str
     mesh : List[np.array]
      flattend arrays of indices (triangle faces), vertices and normals
+    color :
     center : np.array
-
+        Subtracts center from original vertex locations
+    scale : float
+        Multiplies vertex locations after centering
 
     Returns
     -------
 
     """
-    options = openmesh.Options()
-    options += openmesh.Options.Binary
+    # # Commented lines belonged to self-compiled openmesh version
+    # options = openmesh.Options()
+    # options += openmesh.Options.Binary
     mesh_obj = openmesh.TriMesh()
     ind, vert, norm = mesh
     if vert.ndim == 1:
@@ -968,23 +1144,41 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None):
         ind = ind.reshape(-1 ,3)
     if center is not None:
         vert -= center
+    if scale is not None:
+        vert *= scale
     vert_openmesh = []
     if color is not None:
         mesh_obj.request_vertex_colors()
-        options += openmesh.Options.VertexColor
+        # options += openmesh.Options.VertexColor
         if color.ndim == 1:
             color = np.array([color] * len(vert))
         color = color.astype(np.float64)  # required by openmesh
     for ii, v in enumerate(vert):
         v = v.astype(np.float64)  # Point requires double
-        v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        # v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        v_openmesh = mesh_obj.add_vertex(v)
         if color is not None:
-            mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+            # mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+            mesh_obj.set_color(v_openmesh, color[ii])
         vert_openmesh.append(v_openmesh)
     for f in ind:
         f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
                       vert_openmesh[f[2]]]
         mesh_obj.add_face(f_openmesh)
-    result = openmesh.write_mesh(mesh_obj, dest_path, options)
-    if not result:
-        log_proc.error("Error occured when writing mesh to .obj file.")
+    # result = openmesh.write_mesh(mesh_obj, dest_path, options)
+    # result = openmesh.write_mesh(mesh_obj, dest_path)
+    result = openmesh.write_mesh(dest_path, mesh_obj)
+    # if not result:
+    #     log_proc.error("Error occured when writing mesh to .obj file.")
+
+
+def mesh_area_calc(mesh):
+    """
+
+    Returns
+    -------
+    float
+        Mesh area in um^2
+    """
+    return mesh_surface_area(mesh[1].reshape(-1, 3),
+                             mesh[0].reshape(-1, 3)) / 1e6

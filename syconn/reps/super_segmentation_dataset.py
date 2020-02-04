@@ -5,55 +5,131 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
+import numpy as np
+import re
+import glob
+from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
+import os
+import shutil
+from multiprocessing.pool import ThreadPool
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation_helper import create_sso_skeleton, extract_skel_features, associate_objs_with_skel_nodes
-from syconn.reps.super_segmentation_object import SuperSegmentationObject
-import numpy as np
-import re
-import glob
-import os
-from collections import Counter
-from multiprocessing.pool import ThreadPool
-
 from knossos_utils import knossosdataset
-from . import segmentation  # TODO: del
-# from ..reps import segmentation
-from ..config import parser
-from ..handler.basics import load_pkl2obj, write_obj2pkl
+knossosdataset._set_noprint(True)
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-from ..proc.ssd_assembly import assemble_from_mergelist
-from ..mp import qsub_utils as qu
+from multiprocessing import cpu_count
+from .segmentation import SegmentationDataset, SegmentationObject
+from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
+from ..handler.config import DynConfig
+from .super_segmentation_helper import create_sso_skeleton, associate_objs_with_skel_nodes
+from .super_segmentation_helper import assemble_from_mergelist
+from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-try:
-    default_wd_available = True
-    from ..config.global_params import wd
-except:
-    default_wd_available = False
+from .. import global_params
+from . import log_reps
 
 
 class SuperSegmentationDataset(object):
-    def __init__(self, working_dir=None, version=None, ssd_type='ssv',
-                 version_dict=None, sv_mapping=None, scaling=None, config=None):
-        """
+    """
+    This class represents a set of agglomerated supervoxels, which themselves are
+    represented by :class:`~syconn.reps.segmentation.SegmentationObject`.
 
-        Parameters
-        ----------
-        working_dir : str
-        version : str
-        version_dict : dict
-        sv_mapping : dict or str
-        scaling : tuple
+    Examples:
+        After successfully executing :func:`syconn.exec.exec_multiview.run_create_neuron_ssd`,
+        and subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) it is
+        possible to load SSV properties via :func:`~load_cached_data` with the following keys
+        (the ordering of the arrays corresponds to :py:attr:`~ssv_ids`):
+            * 'id': ID array, identical to :py:attr:`~ssv_ids`. All other properties have the same
+              ordering as this array, i.e. if SSV with ID 1234 has index 42 in the 'id'-array you
+              will find its properties at index 42 in all other cache-arrays.
+            * 'bounding_box': Bounding box of every SSV.
+            * 'size': Number voxels of each SSV.
+            * 'rep_coord': Representative coordinates for each SSV.
+            * 'sv': Supervoxel IDs for every SSV.
+            * 'sample_locations': Lists of rendering locations for each SSV. Each entry is a
+              list (length corresponds to the number of supervoxels) of coordinate arrays for
+              the corresponding SSV.
+            * 'celltype_cnn_e3': Celltype classifications based on the elektronn3 CMN.
+            * 'celltype_cnn_e3_probas': Celltype logits for the different types as an array of
+              shape (M, C; M: Number of predicted random multi-view sets, C: Number of
+              classes). In the example run there are currently 9 predicted classes:
+              STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
+            * 'syn_ssv': Synapse IDs assigned to each SSV.
+            * 'syn_sign_ratio': Area-weighted atio of symmetric synapses, see
+              :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ratio`.
+            * 'sj': Synaptic junction object IDs which were mapped to each SSV. These are used
+              for view rendering and also to generate the 'syn_ssv' objects in combination
+              with contact sites (see corresponding section in the documentation).
+            * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
+              SSVs.
+            * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
+            * 'vc': Vesicle clouds mapped to each SSV.
+            * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
+            * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
+            * 'mi': Mitochondria mapped to each SSV.
+            * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SSVs.
+            * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
+
+        The following lines initialize the
+        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` of the
+        example run and explore some of the existing attributes::
+
+            import numpy as np
+            from syconn.reps.super_segmentation import *
+            ssd = SuperSegmentationDataset(working_dir='~/SyConn/example_cube1/')
+            n_synapses = [len(ssv.syn_ssv) for ssv in ssd.ssvs]
+            path_length = [ssv.total_edge_length() for ssv in ssd.ssvs]  # in nanometers
+            syn_densities = np.array(n_synapses) / np.array(path_length)
+            print(np.mean(syn_densities), np.std(syn_densities))
+
+        We can make use of the cached arrays to obtain the total number of synapses per
+        cell type as follows::
+
+            celltypes = ssd.load_cached_data('celltype_cnn_e3')
+            n_synapses = np.array([len(el) for el in ssd.load_cached_data('syn_ssv')])
+            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(9)}
+            print(n_synapes_per_type)
+
+    Attributes:
+        sso_caching: WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+            `get_super_segmentation_object`
+        sso_locking: If True, locking is enabled for SSV files.
+    """
+    def __init__(self, working_dir: Optional[str] = None,
+                 version: Optional[str] = None, ssd_type: str = 'ssv',
+                 version_dict: Optional[Dict[str, str]] = None,
+                 sv_mapping: Optional[Union[Dict[int, int], str]] = None,
+                 scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
+                 config: DynConfig = None, sso_caching: bool = False,
+                 sso_locking: bool = False):
+        """
+        Args:
+            working_dir: Path to the working directory.
+            version: Indicates the version of the dataset, e.g. '0', 'groundtruth' etc.
+            ssd_type: Changes the directory prefix the dataset is stored in. Currently
+                there is no real use-case for this.
+            version_dict: Dictionary which contains the versions of other dataset types which share
+                the same working directory.
+            sv_mapping: Dictionary mapping sueprvoxel IDs (key) to the super-supervoxel ID it
+                belongs to.
+            scaling: Array defining the voxel size in XYZ. Default is taken from the
+                `config.yml` file.
+            config: Config. object, see :class:`~syconn.handler.config.DynConfig`.
+            sso_caching: WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+                `get_super_segmentation_object`
+            sso_locking: If True, locking is enabled for SSV files.
+
         """
         self.ssv_dict = {}
-        self.mapping_dict = {}
+        self._mapping_dict = None
+        self.sso_caching = sso_caching
+        self.sso_locking = sso_locking
         self._mapping_dict_reversed = None
 
         self._type = ssd_type
@@ -62,17 +138,31 @@ class SuperSegmentationDataset(object):
         self._config = config
 
         if working_dir is None:
-            if default_wd_available:
-                self._working_dir = wd
+            if version == 'tmp' or global_params.config.working_dir is not None:
+                self._working_dir = global_params.config.working_dir
             else:
-                raise Exception("No working directory (wd) specified in config")
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
+        elif config is not None:
+            if os.path.normpath(config.working_dir) != os.path.normpath(working_dir):
+                raise ValueError('Inconsistent working directories in `config` and'
+                                 '`working_dir` kwargs.')
+            self._config = config
+            self._working_dir = working_dir
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
 
         if scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
+                    np.array(self.config['scaling'])
             except:
                 self._scaling = np.array([1, 1, 1])
         else:
@@ -80,18 +170,22 @@ class SuperSegmentationDataset(object):
 
         if version is None:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         elif version == "new":
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
             for other_dataset in other_datasets:
-                other_version = \
-                    int(re.findall("[\d]+",
-                                   os.path.basename(other_dataset))[-1])
-                if max_version < other_version:
-                    max_version = other_version
+                try:
+                    other_version = \
+                        int(re.findall(r"[\d]+",
+                                       os.path.basename(other_dataset))[-1])
+                    if max_version < other_version:
+                        max_version = other_version
+                # version is not an integer, found version could be e.g. 'tmp'
+                except IndexError:
+                    pass
 
             self._version = max_version + 1
         else:
@@ -99,7 +193,7 @@ class SuperSegmentationDataset(object):
 
         if version_dict is None:
             try:
-                self.version_dict = self.config.entries["Versions"]
+                self.version_dict = self.config["versions"]
             except:
                 raise Exception("No version dict specified in config")
         else:
@@ -117,66 +211,132 @@ class SuperSegmentationDataset(object):
         if sv_mapping is not None:
             self.apply_mergelist(sv_mapping)
 
+    def __repr__(self):
+        return '{} of type: "{}", version: "{}", path: "{}"'.format(
+            type(self).__name__, self.type, self.version, self.path)
+
     @property
-    def type(self):
+    def type(self) -> str:
+        """
+        The type of the underlying supervoxel objects. See
+        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`.
+        """
         return str(self._type)
 
     @property
-    def scaling(self):
+    def scaling(self) -> np.ndarray:
+        """
+        Voxel size in nanometers (XYZ). Default is taken from the `config.yml`
+        file and accessible via :py:attr:`~config`.
+        """
         return self._scaling
 
     @property
-    def working_dir(self):
+    def working_dir(self) -> str:
+        """
+        Working directory.
+        """
         return self._working_dir
 
     @property
-    def config(self):
+    def config(self) -> DynConfig:
+        """
+        Config. object which contains all dataset-sepcific parameters.
+        """
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property
-    def path(self):
+    def path(self) -> str:
+        """
+        Full path to dataset directory.
+        """
         return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
 
     @property
-    def version(self):
+    def version(self) -> str:
+        """
+        Indicates the version of the dataset. The version is part of the
+        dataset's folder name.
+        """
         return str(self._version)
 
     @property
-    def version_dict_path(self):
+    def version_dict_path(self) -> str:
+        """
+        Path to version dictionary file.
+        """
         return self.path + "/version_dict.pkl"
 
     @property
-    def mapping_dict_exists(self):
+    def mapping_dict_exists(self) -> bool:
+        """
+        Checks if the mapping dictionary exists (uper-supervoxel ID to sueprvoxel IDs).
+        """
         return os.path.exists(self.mapping_dict_path)
 
     @property
-    def mapping_dict_reversed_exists(self):
+    def mapping_dict_reversed_exists(self) -> bool:
+        """
+        Checks if the inverse mapping dictionary exists (supervoxel ID to
+        super-supervoxel ID).
+        """
         return os.path.exists(self.mapping_dict_reversed_path)
 
     @property
-    def mapping_dict_path(self):
+    def mapping_dict_path(self) -> str:
+        """
+        Path to the mapping dictionary pkl file.
+        """
         return self.path + "/mapping_dict.pkl"
 
     @property
-    def mapping_dict_reversed_path(self):
+    def mapping_dict_reversed_path(self) -> str:
+        """
+        Path to the inverse mapping dictionary pkl file.
+        """
         return self.path + "/mapping_dict_reversed.pkl"
 
     @property
-    def id_changer_path(self):
+    def id_changer_path(self) -> str:
+        """
+        Path to the ID change array.
+        """
         return self.path + "/id_changer.npy"
 
     @property
-    def version_dict_exists(self):
+    def version_dict_exists(self) -> bool:
+        """
+        Checks whether the version dictionary exists at :py:attr:`~version_dict_path`.
+        """
         return os.path.exists(self.version_dict_path)
 
     @property
-    def id_changer_exists(self):
+    def id_changer_exists(self) -> bool:
+        """
+        Checks whether the version dictionary exists at :py:attr:`~id_changer_path`.
+        """
         return os.path.exists(self.id_changer_path)
 
     @property
-    def mapping_dict_reversed(self):
+    def mapping_dict(self) -> Dict[int, np.ndarray]:
+        """
+        Dictionary which contains the supervoxel IDs for each super-supervoxel.
+        """
+        if self._mapping_dict is None:
+            if self.mapping_dict_exists:
+                self.load_mapping_dict()
+            else:
+                self._mapping_dict = {}
+        return self._mapping_dict
+
+
+    @property
+    def mapping_dict_reversed(self) -> Dict[int, int]:
+        """
+        Dictionary which contains the super-supervoxel ID for every supervoxel.
+        """
         if self._mapping_dict_reversed is None:
             if self.mapping_dict_reversed_exists:
                 self.load_mapping_dict_reversed()
@@ -191,15 +351,22 @@ class SuperSegmentationDataset(object):
 
 
     @property
-    def ssv_ids(self):
+    def ssv_ids(self) -> np.ndarray:
+        """
+        Super-supervoxel IDs which are part of this
+        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+        """
         if self._ssv_ids is None:
-            if len(self.mapping_dict) > 0:
+            # do not change the order of the if statements as it is crucial
+            # for the resulting ordering of self.ssv_ids (only ids.npy matches
+            # with all the other cached numpy arrays).
+            if os.path.exists(self.path + "/ids.npy"):
+                self._ssv_ids = np.load(self.path + "/ids.npy")
+            elif len(self.mapping_dict) > 0:
                 self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif self.mapping_dict_exists:
                 self.load_mapping_dict()
                 self._ssv_ids = np.array(list(self.mapping_dict.keys()))
-            elif os.path.exists(self.path + "/ids.npy"):
-                self._ssv_ids = np.load(self.path + "/ids.npy")
             else:
                 paths = glob.glob(self.path + "/so_storage/*/*/*/")
                 self._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
@@ -207,7 +374,16 @@ class SuperSegmentationDataset(object):
         return self._ssv_ids
 
     @property
-    def ssvs(self):
+    def ssvs(self) -> Generator[SuperSegmentationObject, None, None]:
+        """
+        Generator of
+        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+        objects which are part of this
+        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+
+        Yields:
+            :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+        """
         ix = 0
         tot_nb_ssvs = len(self.ssv_ids)
         while ix < tot_nb_ssvs:
@@ -215,51 +391,102 @@ class SuperSegmentationDataset(object):
             ix += 1
 
     @property
-    def sv_ids(self):
+    def sv_ids(self) -> np.ndarray:
+        """
+        Flat array of supervoxels which are part of all super-supervoxels in this
+        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+
+        Todo:
+            * add a non-flat, ragged array version and rename this into `sv_ids_flat`.
+        """
         self.load_mapping_dict()
-        return np.concatenate(self.mapping_dict.values())
+        return np.concatenate(list(self.mapping_dict.values()))
 
     @property
-    def id_changer(self):
-        # TODO: Understand reason for 'id_changer' and
-        # replace it by 'mapping_dict_reversed'
+    def id_changer(self) -> List[int]:
+        """
+
+        Todo:
+            * Understand reason for 'id_changer' and replace it by 'mapping_dict_reversed' if
+              appropriate.
+        """
         if len(self._id_changer) == 0:
             self.load_id_changer()
         return self._id_changer
 
-    def load_cached_data(self, name):
-        if os.path.exists(self.path + name + "s.npy"):
-            return np.load(self.path + name + "s.npy")
+    def load_cached_data(self, prop_name: str):
+        """
+        Todo:
+            * remove 's' appendix in file names.
 
-    def sv_id_to_ssv_id(self, sv_id):
+        Args:
+            prop_name: Identifier for requested cache array. Ordering of the
+                array is the same as :py:attr:`~ssv_ids`.
+
+        Returns:
+            Numpy array of cached property.
+        """
+        if os.path.exists(self.path + prop_name + "s.npy"):
+            return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
+        else:
+            log_reps.warning(f'Requested data cache "{prop_name}" '
+                             f'did not exist.')
+
+    def sv_id_to_ssv_id(self, sv_id: int) -> int:
+        """
+        Args:
+            sv_id: Supervoxel ID.
+
+        Returns:
+            The super-supervoxel ID which `sv_id` is part of.
+        """
         return self.id_changer[sv_id]
 
     def get_segmentationdataset(self, obj_type):
         assert obj_type in self.version_dict
-        return segmentation.SegmentationDataset(obj_type,
-                                                version=self.version_dict[
-                                                    obj_type],
-                                                working_dir=self.working_dir)
+        return SegmentationDataset(obj_type, version=self.version_dict[obj_type],
+                                   working_dir=self.working_dir)
 
-    def apply_mergelist(self, sv_mapping):
+    def apply_mergelist(self, sv_mapping: Union[Dict[int, int], str]):
+        """
+        See :func:`~syconn.reps.super_segmentation_helper.assemble_from_mergelist`.
+
+        Args:
+            sv_mapping: Supervoxel agglomeration.
+
+        """
         assemble_from_mergelist(self, sv_mapping)
 
-    def get_super_segmentation_object(self, obj_id, new_mapping=False,
-                                      caching=True, create=False):
+    def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]],
+                                      new_mapping: bool = False,
+                                      caching: Optional[bool] = None,
+                                      create: bool = False)\
+            -> Union[SuperSegmentationObject, List[SuperSegmentationObject]]:
         """
-        SuperSegmentationObject factory method for single ID or list of IDs.
+        Factory method for
+        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`s.
+        `bj_id` might be a single ID or list of IDs.
 
-        Parameters
-        ----------
-        obj_id : int or list of int
-        new_mapping : bool
-        caching : bool
-        create : bool
+        Args:
+            obj_id: ID of the super-supervoxel which should be instantiated. Can also be an
+                iterable.
+            new_mapping: If True, the returned
+                :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` object will
+                be built on the supervoxel agglomeration stored in
+                :py:attr:`~mapping_dict`.
+            caching: Enable caching of various attributes.
+            create: If True, creates the directory of the super-supervoxel inside the folder
+                structure of this dataset.
 
-        Returns
-        -------
-        SuperSegmentationObject or list of SuperSegmentationObject
+        Notes:
+            * Set the default value of `caching` to False, PS 20Feb2019
+
+        Returns:
+            SuperSegmentationObject(s) corresponding to the given `obj_id`
+            (int or Iterable[int]).
         """
+        if caching is None:
+            caching = self.sso_caching
         if np.isscalar(obj_id):
             if new_mapping:
                 sso = SuperSegmentationObject(obj_id,
@@ -274,7 +501,9 @@ class SuperSegmentationDataset(object):
                                               voxel_caching=caching,
                                               mesh_caching=caching,
                                               view_caching=caching,
-                                              enable_locking_so=False)
+                                              enable_locking_so=False,
+                                              enable_locking=self.sso_locking,
+                                              config=self.config)
             else:
                 sso = SuperSegmentationObject(obj_id,
                                               self.version,
@@ -287,7 +516,9 @@ class SuperSegmentationDataset(object):
                                               voxel_caching=caching,
                                               mesh_caching=caching,
                                               view_caching=caching,
-                                              enable_locking_so=False)
+                                              enable_locking_so=False,
+                                              enable_locking=self.sso_locking,
+                                              config=self.config)
             sso._dataset = self
         else:
             sso = []
@@ -298,144 +529,50 @@ class SuperSegmentationDataset(object):
         return sso
 
     def save_dataset_shallow(self):
+        """
+        Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict` and :py:attr:`~id_changer`.
+        """
         self.save_version_dict()
         self.save_mapping_dict()
         self.save_id_changer()
 
-    def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
-                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                          n_max_co_processes=None, new_mapping=True):
+    def save_dataset_deep(self, extract_only: bool = False,
+                          attr_keys: Iterable[str] = (),
+                          n_jobs: Optional[int] = None,
+                          nb_cpus: Optional[int] = None,
+                          n_max_co_processes: Optional[int] = None,
+                          new_mapping: bool = True):
+        """
+        Saves attributes of all SSVs within the given SSD and computes properties
+        like size and representative coordinate. The order of :py:attr:`~ssv_ids`
+        may change each run.
+        See :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
+
+        Args:
+            extract_only: Only cache attributes `attr_keys` from attribute dict.
+                This will add suffix '_sel' to the numpy cache array file names (->
+                updates will not apply to the :func:`~load_cached_data` method).
+            attr_keys: Attributes to cache, only used if ``extract_only=True``.
+            n_jobs: Currently requires any string to enable batch job system,
+                will be replaced by a global flag soon.
+            nb_cpus: CPUs per worker.
+            n_max_co_processes: Number of parallel worker.
+            new_mapping: Whether to apply new mapping (see :func:`~mapping_dict`).
+
+        Returns:
+
+        """
         save_dataset_deep(self, extract_only=extract_only,
-                          attr_keys=attr_keys, stride=stride,
-                          qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                          attr_keys=attr_keys, n_jobs=n_jobs,
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
 
-    def reskeletonize_objects(self, stride=200, small=True, big=True,
-                              qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                              n_max_co_processes=None):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir])
-
-        if small:
-            if qsub_pe is None and qsub_queue is None:
-                results = sm.start_multiprocess(
-                    reskeletonize_objects_small_ones_thread,
-                    multi_params, nb_cpus=nb_cpus)
-
-            elif qu.__QSUB__:
-                path_to_out = qu.QSUB_script(multi_params,
-                                             "reskeletonize_objects_small_ones",
-                                             n_cores=nb_cpus,
-                                             pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=script_folder,
-                                             n_max_co_processes=
-                                             n_max_co_processes)
-            else:
-                raise Exception("QSUB not available")
-
-        if big:
-            if qsub_pe is None and qsub_queue is None:
-                results = sm.start_multiprocess(
-                    reskeletonize_objects_big_ones_thread,
-                    multi_params, nb_cpus=1)
-
-            elif qu.__QSUB__:
-                path_to_out = qu.QSUB_script(multi_params,
-                                             "reskeletonize_objects_big_ones",
-                                             n_cores=10,
-                                             n_max_co_processes=int(n_max_co_processes/10*nb_cpus),
-                                             pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=script_folder)
-            else:
-                raise Exception("QSUB not available")
-
-    def export_skeletons(self, obj_types, apply_mapping=True, stride=1000,
-                         qsub_pe=None, qsub_queue=None, nb_cpus=1):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir, obj_types, apply_mapping])
-
-        if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(
-                reskeletonize_objects_small_ones_thread,
-                multi_params, nb_cpus=nb_cpus)
-            no_skel_cnt = np.sum(results)
-
-        elif qu.__QSUB__:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "export_skeletons",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
-            out_files = glob.glob(path_to_out + "/*")
-            no_skel_cnt = 0
-            for out_file in out_files:
-                with open(out_file, 'rb') as f:
-                    no_skel_cnt += np.sum(pkl.load(f))
-
-        else:
-            raise Exception("QSUB not available")
-
-        print("N no skeletons: %d" % no_skel_cnt)
-
-    def associate_objs_with_skel_nodes(self, obj_types, stride=1000,
-                                       qsub_pe=None, qsub_queue=None,
-                                       nb_cpus=1):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir, obj_types])
-
-        if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(
-                associate_objs_with_skel_nodes_thread,
-                multi_params, nb_cpus=nb_cpus)
-            no_skel_cnt = np.sum(results)
-
-        elif qu.__QSUB__:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "associate_objs_with_skel_nodes",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
-        else:
-            raise Exception("QSUB not available")
-
-    def predict_axoness_skelbased(self, stride=1000, qsub_pe=None, qsub_queue=None,
-                        nb_cpus=1):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir])
-
-        if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(
-                predict_axoness_skelbased_thread,
-                multi_params, nb_cpus=nb_cpus)
-
-        elif qu.__QSUB__:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "predict_axoness_skelbased",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
-        else:
-            raise Exception("QSUB not available")
-
-    def predict_cell_types_skelbased(self, stride=1000, qsub_pe=None, qsub_queue=None,
+    def predict_cell_types_skelbased(self, stride: int = 1000,
                            nb_cpus=1):
+        """
+        Todo:
+            * Check usage and remove code trace if appropriate.
+        """
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
@@ -443,87 +580,124 @@ class SuperSegmentationDataset(object):
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
-        if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(
-                predict_cell_type_skelbased_thread,
-                multi_params, nb_cpus=nb_cpus)
+        if not qu.batchjob_enabled():
+            sm.start_multiprocess(predict_cell_type_skelbased_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "predict_cell_type_skelbased",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
         else:
-            raise Exception("QSUB not available")
+            qu.batchjob_script(multi_params, "predict_cell_type_skelbased",
+                               n_cores=nb_cpus, remove_jobfolder=True)
 
     def save_version_dict(self):
+        """
+        Save the version dictionary to a `.pkl` file.
+        """
         if len(self.version_dict) > 0:
             write_obj2pkl(self.version_dict_path, self.version_dict)
 
     def load_version_dict(self):
+        """
+        Load the version dictionary from the `.pkl` file.
+        """
         assert self.version_dict_exists
         self.version_dict = load_pkl2obj(self.version_dict_path)
 
     def save_mapping_dict(self):
+        """
+        Save the mapping dictionary to a `.pkl` file.
+        """
         if len(self.mapping_dict) > 0:
             write_obj2pkl(self.mapping_dict_path, self.mapping_dict)
 
     def save_mapping_dict_reversed(self):
+        """
+        Save the reversed mapping dictionary to a `.pkl` file.
+        """
         if len(self.mapping_dict_reversed) > 0:
             write_obj2pkl(self.mapping_dict_reversed_path,
                           self._mapping_dict_reversed)
 
     def load_mapping_dict(self):
+        """
+        Load the mapping dictionary from the `.pkl` file.
+        """
         assert self.mapping_dict_exists
-        self.mapping_dict = load_pkl2obj(self.mapping_dict_path)
+        self._mapping_dict = load_pkl2obj(self.mapping_dict_path)
 
     def load_mapping_dict_reversed(self):
+        """
+        Load the reversed mapping dictionary from the `.pkl` file.
+        """
         assert self.mapping_dict_reversed_exists
         self._mapping_dict_reversed = load_pkl2obj(self.mapping_dict_reversed_path)
 
     def save_id_changer(self):
+        """
+        Save the ID changer as `.npy` file.
+        """
         if len(self._id_changer) > 0:
             np.save(self.id_changer_path, self._id_changer)
 
     def load_id_changer(self):
+        """
+        Load the ID changer from the `.npy` file.
+        """
         assert self.id_changer_exists
         self._id_changer = np.load(self.id_changer_path)
 
 
-def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                      n_max_co_processes=None, new_mapping=True):
+def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
+                      attr_keys: Iterable = (), n_jobs: Optional[int] = None,
+                      nb_cpus: Optional[int] = None,
+                      n_max_co_processes: Optional[int] = None,
+                      new_mapping: bool = True):
+    """
+    Saves attributes of all SSVs within the given SSD and computes properties
+    like size and representative coordinate. `ids.npy` order may change after
+    repeated runs.
+
+    Todo:
+        * allow partial updates of a subset of attributes (e.g. use already
+          existing `ids.npy` in case of updating, aka `extract_only=True`).
+        * Check consistency of ordering for different runs.
+
+    Args:
+        ssd: SuperSegmentationDataset
+        extract_only: Only cache attributes (see`attr_keys` from attribute dict.
+            This will add a suffix `_sel` to the numpy cache array file names
+            (-> updates will not apply to the `load_cached_data` method).
+        attr_keys: Attributes to cache, only used if `extract_only=True`
+        n_jobs: Currently requires any string to enable batch job system,
+            will be replaced by a global flag soon
+        nb_cpus: CPUs per worker
+        n_max_co_processes: Number of parallel worker
+        new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`)
+    """
     ssd.save_dataset_shallow()
+    if n_jobs is None:
+        n_jobs = global_params.config.ncore_total
+    multi_params = chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
+                     ssd.working_dir, extract_only, attr_keys,
+                     ssd._type, new_mapping) for ssv_id_block in multi_params]
 
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, extract_only, attr_keys,
-                             ssd._type, new_mapping])
-
-    if qsub_pe is None and qsub_queue is None:
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "write_super_segmentation_dataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
-                                     n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+    else:
+        path_to_out = qu.batchjob_script(multi_params,
+                                         "write_super_segmentation_dataset",
+                                         n_cores=nb_cpus,
+                                         n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
-
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     attr_dict = {}
     for this_attr_dict in results:
         for attribute in this_attr_dict.keys():
@@ -532,20 +706,21 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
 
             attr_dict[attribute] += this_attr_dict[attribute]
 
-    if not ssd.mapping_dict_exists:
-        ssd.mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
+    if not ssd.mapping_dict_exists or len(ssd.mapping_dict) == 0:
+        # initialize mapping dict
+        ssd._mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
         ssd.save_dataset_shallow()
 
     for attribute in attr_dict.keys():
         if extract_only:
-            np.save(ssd.path + "/%ss_sel.npy" % attribute,
+            np.save(ssd.path + "/%ss_sel.npy" % attribute,  # Why '_sel'?
                     attr_dict[attribute])
         else:
             np.save(ssd.path + "/%ss.npy" % attribute,
                     attr_dict[attribute])
+    log_reps.info('Finished `save_dataset_deep`of {}.'.format(repr(ssd)))
 
-#
-#
+
 def _write_super_segmentation_dataset_thread(args):
     ssv_obj_ids = args[0]
     version = args[1]
@@ -625,26 +800,20 @@ def _write_super_segmentation_dataset_thread(args):
     return attr_dict
 
 
-def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
-                             qsub_queue=None, nb_cpus=10):
+def export_to_knossosdataset(ssd, kd, stride=1000, nb_cpus=10):
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, kd.knossos_path, nb_cpus])
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "export_ssv_to_knossosdataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
+                              multi_params, nb_cpus=nb_cpus)
 
     else:
-        raise Exception("QSUB not available")
+        qu.batchjob_script(
+            multi_params, "export_ssv_to_knossosdataset", remove_jobfolder=True)
 
 
 def _export_ssv_to_knossosdataset_thread(args):
@@ -655,14 +824,12 @@ def _export_ssv_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
-
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
         offset = ssv_obj.bounding_box[0]
@@ -675,18 +842,15 @@ def _export_ssv_to_knossosdataset_thread(args):
 
 
 def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
-                           stride=256, qsub_pe=None, qsub_queue=None,
-                           nb_cpus=None):
+                           stride=256, nb_cpus=None):
     ssd.save_dataset_shallow()
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-
+    sv_kd = kd_factory(sv_kd_path)
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
-        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary,
-                                       sv_kd.scale,
-                                       sv_kd.experiment_name,
-                                       mags=[1])
+        scale = np.array(global_params.config['scaling'],
+                         dtype=np.float32)
+        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
+                                       sv_kd.experiment_name, mags=[1])
 
     size = np.ones(3, dtype=np.int) * stride
     multi_params = []
@@ -708,18 +872,12 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                              sv_kd_path, ssv_kd_path, offsets,
                              size])
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_convert_knossosdataset_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "convert_knossosdataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess(_convert_knossosdataset_thread,
+                              multi_params, nb_cpus=nb_cpus)
 
     else:
-        raise Exception("QSUB not available")
+        qu.batchjob_script(multi_params, "convert_knossosdataset")
 
 
 def _convert_knossosdataset_thread(args):
@@ -732,10 +890,8 @@ def _convert_knossosdataset_thread(args):
     offsets = args[6]
     size = args[7]
 
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
+    ssv_kd = kd_factory(ssv_kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_id_changer()
@@ -764,49 +920,12 @@ def _convert_knossosdataset_thread(args):
                                     nb_threads=nb_threads)
 
 
-def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
-                     qsub_pe=None, qsub_queue=None, nb_cpus=1):
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in
-                         range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, obj_types, apply_mapping])
-    # TODO @Sven: which function is requiered here? I changed it from _export_skeletons to ssh.export_skeletons
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(
-            export_skeletons_thread,
-            multi_params, nb_cpus=nb_cpus)
-        no_skel_cnt = np.sum(results)
-
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "export_skeletons",
-                                     n_cores=nb_cpus,
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
-        out_files = glob.glob(path_to_out + "/*")
-        no_skel_cnt = 0
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                no_skel_cnt += np.sum(pkl.load(f))
-
-    else:
-        raise Exception("QSUB not available")
-
-    print("N no skeletons: %d" % no_skel_cnt)
-
-
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     def _load_sv_voxels_thread(args):
         sv_id = args[0]
-        sv = segmentation.SegmentationObject(sv_id,
-                                             obj_type="sv",
-                                             version=sso.version_dict[
-                                                 "sv"],
-                                             working_dir=sso.working_dir,
-                                             config=sso.config,
-                                             voxel_caching=False)
+        sv = SegmentationObject(sv_id, obj_type="sv", version=sso.version_dict["sv"],
+                                working_dir=sso.working_dir, config=sso.config,
+                                voxel_caching=False)
         if sv.voxels_exist:
             box = [np.array(sv.bounding_box[0] - sso.bounding_box[0],
                             dtype=np.int)]
@@ -856,50 +975,6 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     return voxels
 
 
-def associate_objs_with_skel_nodes_thread(args):
-    # TODO: check functionality and whether this is deprecated, use 'skel_features'!
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        if len(ssv.skeleton["nodes"]) > 0:
-            ssv.associate_objs_with_skel_nodes(obj_types)
-
-
-def predict_axoness_skelbased_thread(args):
-    """Skeleton-based axoness prediction"""
-    # TODO: check functionality, use 'predict_nodes'!
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
-                ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-            except:
-                pass
-
-
 def predict_cell_type_skelbased_thread(args):
     """Skeleton-based celltype prediction"""
     # TODO: check functionality, use 'predict_nodes'!
@@ -921,7 +996,7 @@ def predict_cell_type_skelbased_thread(args):
             ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
         elif len(ssv.skeleton["nodes"]) > 0:
             try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
+                associate_objs_with_skel_nodes(ssv, ("sj", "mi", "vc"))
                 ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
             except:
                 pass
@@ -986,19 +1061,17 @@ def export_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
-
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
         offset = ssv_obj.bounding_box[0]
         if not 0 in offset:
-            kd.from_matrix_to_cubes(ssv_obj.bounding_booffset,
+            kd.from_matrix_to_cubes(ssv_obj.bounding_box,
                                     data=ssv_obj.voxels.astype(np.uint32) *
                                          ssv_obj_id,
                                     overwrite=False,
@@ -1015,10 +1088,8 @@ def convert_knossosdataset_thread(args):
     offsets = args[6]
     size = args[7]
 
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
+    ssv_kd = kd_factory(ssv_kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_id_changer()
@@ -1047,50 +1118,16 @@ def convert_knossosdataset_thread(args):
                                     nb_threads=nb_threads)
 
 
-def reskeletonize_objects_small_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
+def write_super_segmentation_dataset_thread(args: Tuple):
+    """
+    Todo:
+        * Check use-cases.
+    Args:
+        args:
 
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
+    Returns:
 
-    for ssv_id in ssv_obj_ids:
-        print("------------", ssv_id)
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            continue
-        # elif np.product(ssv.shape) > 10**3:
-        #     ssv.calculate_skeleton(coord_scaling=(8, 8, 4))
-        elif ssv.size > 0:
-            ssv.calculate_skeleton(coord_scaling=(8, 8, 4), plain=True)
-        else:
-            ssv.skeleton = {"nodes": [], "edges": [], "diameters": []}
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
-def reskeletonize_objects_big_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            ssv.calculate_skeleton(coord_scaling=(10, 10, 5), plain=True)
-        else:
-            continue
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
-def write_super_segmentation_dataset_thread(args):
+    """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -1109,7 +1146,6 @@ def write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)
@@ -1170,27 +1206,35 @@ def write_super_segmentation_dataset_thread(args):
     return attr_dict
 
 
-def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
+def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
+                             new_version: str, target_wd: Optional[str] = None,
+                             n_jobs: int = 1, safe: bool = True):
     """
-    Creates a new SSD specified with 'version' with a copy of the given SSVs.
-    Usually used for generating distinct GT SSDs. Based on the common supervoxel
-    dataset.
+    Creates a new SSD specified with `new_version` and a copy of the given SSVs.
+    Usually used for generating distinct GT SSDs. Based on the common
+    super-supervoxel dataset (as specified in the `config.yml` file, default:
+     ``version=ssv_0``).
 
-    Parameters
-    ----------
-    ssvs : list of SuperSegmentationObject
-        source SuperSegmentationObjects
-    new_version : str
-        version of the new SSV SuperSegmentationDataset
-    target_wd :
-        path to working directory. If None, the one set in gloabal_prams is used
-    n_jobs : int
+    Args:
+        ssvs: Source SuperSegmentationObjects taken from default SSD in
+            working directory.
+        new_version: Version of the new SSV SuperSegmentationDataset where
+            SSVs will be copied to.
+        target_wd: Path to working directory. If None, the one set in
+            :py:attr:`~syconn.gloabal_params` is used.
+        n_jobs: Number of jobs used.
+        safe: If True, will not overwrite existing data.
+
+    Returns:
+
     """
+    # update existing SSV IDs  # TODO: currently this requires a new mapping dict Unclear what to
+    #  do in order to enable updates on existing SSD (e.g. after adding new SSVs)
+    # paths = glob.glob(ssd.path + "/so_storage/*/*/*/")
+    # ssd._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
+    #                           for p in paths], dtype=np.uint)
     if target_wd is None:
-        if not default_wd_available:
-            raise ValueError("Global working directory not set, 'target_wd' "
-                             "has to be given.")
-        target_wd = wd
+        target_wd = global_params.config.working_dir
     scaling = ssvs[0].scaling
     new_ssd = SuperSegmentationDataset(working_dir=target_wd, version=new_version,
                                        scaling=scaling)
@@ -1198,29 +1242,22 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
         new_ssv = SuperSegmentationObject(old_ssv.id, version=new_version,
                                           working_dir=target_wd, sv_ids=old_ssv.sv_ids,
                                           scaling=old_ssv.scaling)
-        old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir)
-    print("Saving dataset deep.")
+        old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir, safe=safe)
+    log_reps.info("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
 
 
-def create_sso_skeletons_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
+def preproc_sso_skelfeature_thread(args: Tuple):
+    """
+    Helper function to compute skeleton feature of a cell reconstruction. See
+    :func:`~reps.super_segmentation_object.SuperSegmentationObject.skel_features`
+    for details.
 
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        create_sso_skeleton(ssv)
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
-            continue
-        ssv.save_skeleton()
-
-
-def preproc_sso_skelfeature_thread(args):
+    Args:
+        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
+            initialize the :class:`~syconn.reps.super_segmentation_dataset
+            .SuperSegmentationDataset`.
+    """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -1232,25 +1269,85 @@ def preproc_sso_skelfeature_thread(args):
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_skeleton()
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) <= 1:
-            print("Skeleton of SSV %d has zero nodes." % ssv_id)
+            log_reps.warning("Skeleton of SSV %d has zero nodes." % ssv_id)
             continue
         for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
             try:
                 _ = ssv.skel_features(feat_ctx_nm)
             except IndexError as e:
-                print("Error at SSO %d (context: %d).\n%s" % (
-                      ssv.id, feat_ctx_nm, e))
+                log_reps.error("Error at SSO %d (context: %d).\n%s" % (
+                               ssv.id, feat_ctx_nm, e))
 
 
-def map_ssv_semseg(args):
+def map_ssv_semseg(args: Union[tuple, list]):
+    """
+    # TODO: Use also for axoness?
+    Helper function to map predicted vertex labels on the cell reconstruction
+    mesh and its skeleton.
+    See :py:func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+    .semseg2mesh` (vertex predictions to mesh) and
+    :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+    .semseg_for_coords` (mesh labels to skeleton nodes) for details.
+
+    Args:
+        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
+            initialize the :class:`~syconn.reps.super_segmentation_dataset
+            .SuperSegmentationDataset`, `kwargs_semseg2mesh`: kwargs used in
+            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.semseg2mesh`,
+            `kwargs_semsegforcoords`: kwargs used in
+            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+            .semseg_for_coords`.
+    """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
     working_dir = args[3]
     kwargs_semseg2mesh = args[4]
+    kwargs_semsegforcoords = args[5]
+    global_params.wd = working_dir
 
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.semseg2mesh(**kwargs_semseg2mesh)
+        ssv.load_skeleton()
+        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
+            log_reps.warning(f"Skeleton of SSV {ssv_id} has < 2 nodes.")
+            continue
+        # vertex predictions
+        node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
+                                           kwargs_semseg2mesh['semseg_key'],
+                                           **kwargs_semsegforcoords)
+        ssv.skeleton[kwargs_semseg2mesh['semseg_key']] = node_preds
+        ssv.save_skeleton()
+
+
+def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
+    """
+    Helper function to infer local morphology embeddings of a cell
+    reconstruction. See :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+    .predict_views_embedding` for details.
+
+    Args:
+        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
+            initialize the :class:`~syconn.reps.super_segmentation_dataset
+            .SuperSegmentationDataset`, `pred_key_appendix`: addition to the default
+            key for storing the embeddings.
+    """
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+    pred_key_appendix = args[4]
+    global_params.wd = working_dir
+
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   version_dict=version_dict)
+    from ..handler.prediction import get_tripletnet_model_e3
+    for ssv_id in ssv_obj_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        m = get_tripletnet_model_e3()
+        ssv.predict_views_embedding(m, pred_key_appendix)
+

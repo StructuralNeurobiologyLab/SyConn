@@ -61,14 +61,25 @@ def cut_array_in_one_dim(array, start, end, dim):
     """
     start = int(start)
     end = int(end)
-    if dim == 0:
-        array = array[start: end, :, :]
-    elif dim == 1:
-        array = array[:, start: end, :]
-    elif dim == 2:
-        array = array[:, :, start:end]
+    if start < 0 and end == 0:  # handle case if only last elements should be retrieved, e.g.
+        # -2:-0 which only works if second indexing is not used, i.e. [-2:]
+        if dim == 0:
+            array = array[start:, :, :]
+        elif dim == 1:
+            array = array[:, start:, :]
+        elif dim == 2:
+            array = array[:, :, start:]
+        else:
+            raise NotImplementedError()
     else:
-        raise NotImplementedError()
+        if dim == 0:
+            array = array[start:end, :, :]
+        elif dim == 1:
+            array = array[:, start:end, :]
+        elif dim == 2:
+            array = array[:, :, start:end]
+        else:
+            raise NotImplementedError()
     return array
 
 

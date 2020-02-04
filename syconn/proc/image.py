@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
 import numpy as np
 __cv2__ = True
 try:
@@ -15,10 +14,10 @@ except ImportError as e:
     __cv2__ = False
     createCLAHE = None
     equalizeHist = None
-import warnings
-from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
+from scipy import spatial, sparse, ndimage
 import tqdm
+from typing import List
 from ..proc import log_proc
 
 
@@ -48,7 +47,7 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
         num_neighbours = np.array([len(sublist) for sublist in contact_ids])
         if np.sum(num_neighbours>0) >= 1:
             break
-    contact_coords_a = coords_a[num_neighbours>0]
+    contact_coords_a = coords_a[num_neighbours > 0]
     contact_ids_b = set([id for sublist in contact_ids for id in sublist])
     contact_coords_b = coords_b[list(contact_ids_b)]
     if contact_coords_a.ndim == 1:
@@ -295,10 +294,9 @@ def remove_outlier(sv, edge_size):
               (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
     nb_outlier = np.sum(~inlier)
     if (float(nb_outlier) / len(sv)) > 0.5:
-        warnings.warn("Found %d/%d outlier after PCA while preprocessing"
+        log_proc.warn("Found %d/%d outlier after PCA while preprocessing"
                       "supervoexl. Removing %d%% of voxels" % (nb_outlier,
-                      len(sv), int(float(nb_outlier)/len(sv)*100)),
-                      RuntimeWarning)
+                      len(sv), int(float(nb_outlier)/len(sv)*100)))
     new_sv = sv[inlier]
     assert np.all(np.min(new_sv, axis=0) >= 0), \
         "%s" % np.min(new_sv, axis=0)
@@ -312,7 +310,7 @@ def normalize_vol(sv, edge_size, center_coord):
     """
     returns cube with given edge size and sv centered at center coordinate
 
-    Paraemters
+    Parameters
     ----------
     sv :  np.array [N x 3]
         coordinates of voxels in supervoxel
@@ -332,7 +330,8 @@ def normalize_vol(sv, edge_size, center_coord):
     return sv.astype(np.uint)
 
 
-def multi_dilation(overlay, n_dilations, use_find_objects=False):
+def multi_dilation(overlay, n_dilations, use_find_objects=False,
+                   background_only=True):
     """
     Wrapper function for dilation
 
@@ -341,20 +340,25 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False):
     overlay
     n_dilations
     use_find_objects
+    background_only
 
     Returns
     -------
 
     """
     return multi_mop(ndimage.binary_dilation, overlay, n_dilations,
-                     use_find_objects)
+                     use_find_objects, background_only)
 
 
 def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
-              mop_kwargs=None, verbose=False):
+              background_only=True, mop_kwargs=None, verbose=False):
     """
     Generic function for binary morphological image operations with multi-label
-     content.
+    content.
+
+    Currently supported operations:
+        * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
+          ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
     Parameters
     ----------
@@ -362,6 +366,8 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     overlay
     n_iters
     use_find_objects
+    background_only : bool
+        only works in combination with 'use_find_objects'
     mop_kwargs
     verbose
 
@@ -375,7 +381,7 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     if n_iters == 0:
         return overlay
     if use_find_objects:
-        return _multi_mop_findobjects(mop_func, overlay, n_iters,
+        return _multi_mop_findobjects(mop_func, overlay, n_iters, background_only,
                                       mop_kwargs=mop_kwargs, verbose=verbose)
     unique_ixs = np.unique(overlay)
     for ix in unique_ixs:
@@ -387,23 +393,29 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     return overlay
 
 
-def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
-                           mop_kwargs=None):
+def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
+                           verbose=False, mop_kwargs=None):
     """
     Generic function for binary morphological image operations with multi-label content
-    using 'find_objects' from scipy.ndimage to reduce processed volume.
+    using 'find_objects' from scipy.ndimage to reduce the processed volume and
+    to apply the operation per object, which enables to process multi-label
+    data.
+    Currently supported operations:
+        * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
+          ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
-    Parameters
-    ----------
-    mop_func : func
-        e.g. binary_dilation, binary_erosion etc
-    overlay
-    n_iters
-    verbose
-    mop_kwargs
+    Todo:
+        * Does not increase subvolume when dilation is applied.
 
-    Returns
-    -------
+    Args:
+        mop_func:
+        overlay:
+        n_iters:
+        verbose:
+        mop_kwargs:
+
+    Returns:
+
     """
     if mop_kwargs is None:
         mop_kwargs = {}
@@ -423,7 +435,10 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         binary_mask = (sub_vol == ix).astype(np.int)
         if verbose:
             nb_occ = np.sum(binary_mask)
-        res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
+        if "fill_holes" in mop_func.__name__:
+            res = mop_func(binary_mask, **mop_kwargs)
+        else:
+            res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
         # remove overlap
         if "closing" in mop_func.__name__:
             res = res[n_iters:-n_iters, n_iters:-n_iters,
@@ -439,7 +454,8 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
                     log_proc.debug("Object with ID={} and size={} is not present after"
                                    " erosion with N={}.".format(ix, nb_occ, n_iters))
             overlay[obj_slice][binary_mask == 1] = res[binary_mask == 1] * ix
-        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__):
+        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__) or\
+            ("fill_holes" in mop_func.__name__):
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
             overlay[obj_slice][proc_mask] = res[proc_mask] * ix
         else:
@@ -457,10 +473,12 @@ def multi_dilation_backgroundonly(overlay, n_dilations, mop_kwargs=None):
     Same as :func:`~multi_dilation`, but processes each object in `overlay` independently.
     In addition, changes only apply to the background (0). E.g. objects will not
     dilate into other objects.
+
     Args:
         overlay: 3D volume of type uint.
         n_dilations: Number of dilations.
         mop_kwargs: Additional keyword arguments passed to `mop_func`.
+
     Returns:
         Dilated overlay.
     """
@@ -474,19 +492,44 @@ def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
     In addition, changes only apply to the background (0). E.g. objects will not
     dilate into other objects. The original regions/segmentation is only
     affected in case of erosion.
+
     Notes:
         * For ``binary_closing`` it is advised to pass ``structure=np.ones((2, 2, 2))``
           in order to fill gaps at the array boundaries. See https://docs.scip
           y.org/doc/scipy-0.14.0/reference/generated/scipy.ndimage.morphology
           .binary_closing.html for an example.
+
     Args:
         mop_func: One of ``binary_closing``, ``binary_dilation``,
-            ``binary_erosion`` (see ``scipy``).
+            ``binary_erosion``, ``binary_fill_holes``
+            (see ``scipy.ndimage``).
         overlay: 3D volume of type uint.
         iterations: Number of iterations.
         mop_kwargs: Additional keyword arguments passed to `mop_func`.
+
     Returns:
         Volume processed by the given morphological operation.
     """
     return _multi_mop_findobjects(mop_func, overlay, iterations,
                                   mop_kwargs=mop_kwargs)
+
+
+def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str])\
+        -> np.ndarray:
+    """
+    Applies morphological operations on the input volume. String identifier in
+    the `morph_ops` list must match scipy.ndimage functions.
+
+    Args:
+        vol: Input array (3D).
+        morph_ops: List with string identifier.
+
+    Returns:
+        Processed volume.
+    """
+    if len(morph_ops) == 0:
+        return vol
+    for mop in morph_ops:
+        func = getattr(ndimage, mop)
+        vol = func(vol)
+    return vol

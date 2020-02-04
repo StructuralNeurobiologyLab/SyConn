@@ -1,13 +1,13 @@
 # SyConn
 # Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
 # All rights reserved
-from syconn.config.global_params import wd, get_dataset_scaling
-from syconn.handler.prediction import get_tripletnet_model_ortho, NeuralNetworkInterface
+from syconn.handler.prediction import NeuralNetworkInterface
 from syconn.handler.basics import chunkify, get_filepaths_from_dir
-from syconn.proc.stats import projection_pca, projection_tSNE
+from syconn.proc.stats import projection_pca
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.proc.rendering import render_sso_ortho_views
+from syconn import global_params
 import numpy as np
 import tqdm
 import os
@@ -21,7 +21,7 @@ def latent_data_loader(args):
         ssv = ssd.get_super_segmentation_object(ix)
         ssv.load_attr_dict()
         if diagonal_size is not None:
-            bb = np.array(ssv.bounding_box) * get_dataset_scaling()
+            bb = np.array(ssv.bounding_box) * global_params.config['scaling']
             diagonal = np.linalg.norm(bb[1] - bb[0])
             if not diagonal > diagonal_size:
                 continue
@@ -52,8 +52,8 @@ def predict_latent_ssd(ssd, m, ssv_ids=None):
     # shuffle SV IDs
     np.random.seed(0)
     np.random.shuffle(ssv_ids)
-    pbar = tqdm.tqdm(total=len(ssv_ids))
-    for i in xrange(0, len(ssv_ids), 66):
+    pbar = tqdm.tqdm(total=len(ssv_ids), leave=False)
+    for i in range(0, len(ssv_ids), 66):
         ixs = ssv_ids[i:i+66]
         views_chunk = np.zeros((len(ixs), 4, 3, 512, 512))
         for ii, ix in enumerate(ixs):

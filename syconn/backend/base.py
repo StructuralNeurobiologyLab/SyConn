@@ -8,28 +8,29 @@ try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:
+try:  # TODO: check in global_params.py
     import fasteners
     LOCKING = True
 except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
+
 import os
-import warnings
 import time
 import shutil
+from pickle import UnpicklingError
+
 from ..extraction import log_extraction
 from ..handler.basics import write_obj2pkl, load_pkl2obj
+from .. import global_params
 __all__ = ['FSBase', 'BTBase']
 # TODO: adapt to new class interface all-over syconn
 
 
 class StorageBase(dict):
     """
-    Base class for data interface with all attributes and methods necessary:
-    input parameter for init:
-    identifier, read_only=True, disable_locking=False
+    Interface class for data IO.
     """
     def __init__(self, cache_decomp):
         super(StorageBase, self).__init__()
@@ -53,7 +54,7 @@ class StorageBase(dict):
         return self._dc_intern.__len__()
 
     def __eq__(self, other):
-        if not isinstance(other, FSBase):
+        if not isinstance(other, StorageBase):
             return False
         return self._dc_intern.__eq__(other._dc_intern)
 
@@ -117,10 +118,24 @@ class FSBase(StorageBase):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
-    def __init__(self, inp_p, cache_decomp=False, read_only=True,
-                 max_delay=100, timeout=1000, disable_locking=not LOCKING,
-                 max_nb_attempts=100):
+    def __init__(self, inp_p: str, cache_decomp: bool = False,
+                 read_only: bool = True, max_delay: int = 100,
+                 timeout: int = 1000, disable_locking: bool = False,
+                 max_nb_attempts: int = 100):
+        """
+
+        Args:
+            inp_p: Path to file.
+            cache_decomp: Cache deserialized arrays.
+            read_only: In case locking is enabled, no semaphore will be placed.
+            max_delay: attempt delay
+            timeout: Will throw `RuntimeError` after `timeout` seconds.
+            disable_locking: Disable file locking
+            max_nb_attempts: Number of total attempts
+        """
         super(FSBase, self).__init__(cache_decomp)
+        if not LOCKING or global_params.config['disable_locking']:
+            disable_locking = True
         self.read_only = read_only
         self.a_lock = None
         self.max_delay = max_delay
@@ -190,20 +205,37 @@ class FSBase(StorageBase):
     def keys(self):
         return self._dc_intern.keys()
 
-    def push(self, dest=None):
+    def push(self, dest: str = None):
+        """
+        Pushes data to destination.
+
+        Args:
+            dest: storage destination
+        """
         if dest is None:
             dest = self._path
+        if self._path is None:  # support virtual / temporary SSO objects
+            log_extraction.warning('"push" called but Storage object was initialized '
+                                   'with "None". Content will not be written.')
+            return
         write_obj2pkl(dest + ".tmp", self._dc_intern)
         shutil.move(dest + ".tmp", dest)
         if not self.read_only and not self.disable_locking:
             self.a_lock.release()
 
-    def pull(self, source=None):
+    def pull(self, source: str = None):
+        """
+        Fetches data from source.
+
+        Args:
+            source: Source location
+        """
         if source is None:
             source = self._path
         fold, fname = os.path.split(source)
         lock_path = fold + "/." + fname + ".lk"
-        if not os.path.isdir(fold):
+        # only create directory if read_only is false. -> support virtual SSO
+        if not os.path.isdir(fold) and not self.read_only:
             try:
                 os.makedirs(fold)
             except OSError as e:  # if to jobs create the folder at the same time
@@ -232,9 +264,9 @@ class FSBase(StorageBase):
         if os.path.isfile(source):
             try:
                 self._dc_intern = load_pkl2obj(source)
-            except EOFError:
+            except (UnpicklingError, EOFError) as e:
                 log_extraction.warning("Could not load LZ4Dict ({}). 'push' will"
-                                       " overwrite broken .pkl file.".format(self._path))
+                                       " overwrite broken .pkl file: {}.".format(self._path, e))
                 self._dc_intern = {}
         else:
             self._dc_intern = {}

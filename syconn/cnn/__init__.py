@@ -6,8 +6,9 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 
 
-from ..handler.logger import initialize_logging
-log_cnn = initialize_logging('cnn')
+from ..handler.logger import log_main
+
+log_cnn = log_main
 
 __all__ = ['log_cnn']
 

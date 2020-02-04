@@ -6,9 +6,10 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
+import os
+
 from ..reps import super_segmentation as ss
 from ..reps import super_segmentation_helper as ssh
-import os
 from ..proc import log_proc
 
 
@@ -26,11 +27,11 @@ def generate_clf_data_thread(args):
     sso.enable_locking = False
 
     for feature_context_nm in feature_contexts_nm:
-        print("---", this_id, feature_context_nm)
+        log_proc.info("---", this_id, feature_context_nm)
         if os.path.isfile(sso.skeleton_kzip_path):
             label_array = ssh.label_array_for_sso_skel(sso, comment_converter)
             if not np.all(label_array == -1):
-                print("Found node-wise annotations in {}.".format(sso.skeleton_kzip_path))
+                log_proc.info("Found node-wise annotations in {}.".format(sso.skeleton_kzip_path))
                 label_dir, label_fname = os.path.split(save_path)
                 label_save_path = label_dir + "/" + \
                                   label_fname.replace("features", "labels")
