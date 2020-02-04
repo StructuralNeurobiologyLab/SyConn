@@ -317,18 +317,18 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
     dir_props = f"{global_params.config.temp_path}/tmp_props/"
     dir_meshes = f"{global_params.config.temp_path}/tmp_meshes/"
-    # # remove previous temporary results.
-    # if os.path.isdir(dir_props):
-    #     if not overwrite:
-    #         msg = f'Could not start extraction of supervoxel objects ' \
-    #               f'because temporary files already existed at "{dir_props}" ' \
-    #               f'and overwrite was set to False.'
-    #         log_proc.error(msg)
-    #         raise FileExistsError(msg)
-    #     log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
-    #     shutil.rmtree(dir_props)
-    # if os.path.isdir(dir_meshes):
-    #     shutil.rmtree(dir_meshes)
+    # remove previous temporary results.
+    if os.path.isdir(dir_props):
+        if not overwrite:
+            msg = f'Could not start extraction of supervoxel objects ' \
+                  f'because temporary files already existed at "{dir_props}" ' \
+                  f'and overwrite was set to False.'
+            log_proc.error(msg)
+            raise FileExistsError(msg)
+        log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
+        shutil.rmtree(dir_props)
+    if os.path.isdir(dir_meshes):
+        shutil.rmtree(dir_meshes)
     os.makedirs(dir_props)
     os.makedirs(dir_meshes)
 
@@ -530,15 +530,15 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     all_times.append(time.time() - start)
     step_names.append("write cell SD")
 
-    # # clear temporary files
-    # if global_params.config.use_new_meshing:
-    #     shutil.rmtree(dir_meshes)
-    # for p in dict_paths_tmp:
-    #     os.remove(p)
-    # shutil.rmtree(cd_dir, ignore_errors=True)
-    # shutil.rmtree(dir_props, ignore_errors=True)
-    # if qu.batchjob_enabled():  # remove job directory of `map_subcell_extract_props`
-    #     shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
+    # clear temporary files
+    if global_params.config.use_new_meshing:
+        shutil.rmtree(dir_meshes)
+    for p in dict_paths_tmp:
+        os.remove(p)
+    shutil.rmtree(cd_dir, ignore_errors=True)
+    shutil.rmtree(dir_props, ignore_errors=True)
+    if qu.batchjob_enabled():  # remove job directory of `map_subcell_extract_props`
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
     log.debug("Time overview [map_subcell_extract_props]:")
     for ii in range(len(all_times)):
@@ -556,12 +556,7 @@ def _map_subcell_extract_props_thread(args):
     kd_subcell_ps = args[3]  # Dict
     worker_nr = args[4]
     generate_sv_mesh = args[5]
-    # TODO: Currently min obj size is applied to property dicts and only indirectly to the mesh
-    #  dicts, meaning: Meshes are generated regardless of the object size and stored to file but
-    #  only collected for the object IDs in the property dicts. -> prevent saving meshes of small
-    #  objects in the first place.
-    # worker_dir_meshes = f"{global_params.config.temp_path}/tmp_meshes/meshes_{worker_nr}/"
-    worker_dir_meshes = f"{global_params.config.temp_path}/tmp_meshes_{worker_nr}/"
+    worker_dir_meshes = f"{global_params.config.temp_path}/tmp_meshes/meshes_{worker_nr}/"
     os.makedirs(worker_dir_meshes, exist_ok=True)
     worker_dir_props = f"{global_params.config.temp_path}/tmp_props/props_{worker_nr}/"
     os.makedirs(worker_dir_props, exist_ok=True)
@@ -868,8 +863,7 @@ def _write_props_to_sc_thread(args):
                         # using min. number of voxels as a lower bound for number of vertices.
                         for worker_nr, chunk_ids in sc_mesh_worker_dc[k].items():
                             for ch_id in chunk_ids:
-                                # p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
-                                p = f"{global_tmp_path}/tmp_meshes_{worker_nr}/" \
+                                p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
                                     f"{organelle}_{worker_nr}_ch{ch_id}.pkl"
                                 with open(p, "rb") as pkl_file:
                                     partial_mesh_dc = pkl.load(pkl_file)
@@ -893,8 +887,7 @@ def _write_props_to_sc_thread(args):
                         worker_ids[worker_id].update(ch_ids)
                 for worker_nr, chunk_ids in worker_ids.items():
                     for ch_id in chunk_ids:
-                        # p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
-                        p = f"{global_tmp_path}/tmp_meshes_{worker_nr}/" \
+                        p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
                             f"{organelle}_{worker_nr}_ch{ch_id}.pkl"
                         with open(p, "rb") as pkl_file:
                             partial_mesh_dc = pkl.load(pkl_file)
@@ -1114,8 +1107,7 @@ def _write_props_to_sv_thread(args):
             #                'caches.'.format(len(obj_keys), len(worker_ids)))
             for worker_nr, chunk_ids in worker_ids.items():
                 for ch_id in chunk_ids:
-                    # p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
-                    p = f"{global_tmp_path}/tmp_meshes_{worker_nr}/" \
+                    p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
                         f"sv_{worker_nr}_ch{ch_id}.pkl"
                     pkl_file = open(p, "rb")
                     partial_mesh_dc = pkl.load(pkl_file)

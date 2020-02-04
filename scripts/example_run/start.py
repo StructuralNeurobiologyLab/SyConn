@@ -172,7 +172,7 @@ if __name__ == '__main__':
     # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    # exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+    exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
