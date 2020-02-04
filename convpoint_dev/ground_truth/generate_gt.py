@@ -11,8 +11,6 @@ import glob
 import re
 import pickle as pkl
 from syconn.proc.meshes import mesh_area_calc
-from syconn.handler.multiviews import generate_rendering_locs
-from syconn.proc.graphs import create_graph_from_coords
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
 from syconn.reps.super_segmentation import SuperSegmentationObject
@@ -20,6 +18,9 @@ from syconn.reps.super_segmentation_helper import create_sso_skeleton_fast
 from syconn import global_params
 from syconn.mp.mp_utils import start_multiprocess_imap
 from multiprocessing import cpu_count
+from morphx.classes.meshcloud import MeshCloud
+from morphx.classes.hybridmesh import HybridMesh
+from morphx.classes.cloudensemble import CloudEnsemble
 
 
 def comment2int(comment: str):
@@ -56,44 +57,21 @@ def labels2mesh(args):
     sso = SuperSegmentationObject(sso_id)
     sso.load_attr_dict()
 
-    encoding = {0: 'dendrite', 1: 'axon', 2: 'soma', 3: 'bouton', 4: 'terminal',
-                5: 'neck', 6: 'head', 7: 'mi', 8: 'vc', 9: 'sj'}
-
     # load cell and cell organelles (order of meshes in array is important for later merging process)
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
     mesh_areas = [mesh_area_calc(meshes[0]), mesh_area_calc(meshes[1]),
                   mesh_area_calc(meshes[2]), mesh_area_calc(meshes[3])]
     label_map = [-1, 7, 8, 9]
-    vertices_l = 0
-    indices_l = 0
 
-    # find sizes
-    for mesh in meshes:
-        indices, vertices, normals = mesh
-        vertices = vertices.reshape((-1, 3))
-        indices = indices.reshape((-1, 3))
-        vertices_l += len(vertices)
-        indices_l += len(indices)
-
-    # prepare merged arrays
-    t_vertices = np.zeros((vertices_l, 3))
-    t_indices = np.zeros((indices_l, 3))
-    t_labels = np.zeros((vertices_l, 1))
-
-    # merge meshes
-    vertices_o = 0
-    indices_o = 0
-
+    mcs = []
     for ix, mesh in enumerate(meshes):
         indices, vertices, normals = mesh
         vertices = vertices.reshape((-1, 3))
+        labels = np.ones((len(vertices), 1)) * label_map[ix]
         indices = indices.reshape((-1, 3))
+        mcs.append(MeshCloud(vertices, indices, np.array([]), labels))
 
-        t_vertices[vertices_o:vertices_o+len(vertices)] = vertices
-        t_labels[vertices_o:vertices_o+len(vertices)] = label_map[ix]
-        vertices_o += len(vertices)
-        t_indices[indices_o:indices_o+len(indices)] = indices
-        indices_o += len(indices)
+    # CREATE CELL HYBRIDMESH #
 
     # load annotation object
     a_obj = load_skeleton(kzip_path)
@@ -115,34 +93,43 @@ def labels2mesh(args):
     tree = KDTree(a_node_coords)
 
     # transfer labels from skeleton to mesh
-    indices, vertices, normals = meshes[0]
-    vertices = vertices.reshape((-1, 3))
+    vertices = mcs[0].vertices
     dist, ind = tree.query(vertices, k=1)  # k-nearest neighbour
     vertex_labels = a_node_labels[ind]  # retrieving labels of vertices
-
-    # save labels in merged label array
-    t_labels[0:len(vertex_labels)] = vertex_labels
 
     # load skeleton (skeletons were already generated before)
     sso = create_sso_skeleton_fast(sso, max_dist_thresh_iter2=10000)
     skel = sso.skeleton
     skel['nodes'] = skel['nodes']*sso.scaling
 
-    # pack all results into single dict
-    gt_dict = {'nodes': skel['nodes'], 'edges': skel['edges'], 'vertices': t_vertices,
-               'indices': t_indices, 'normals': np.array([]), 'labels': t_labels, 'encoding': encoding,
-               'areas': mesh_areas}
+    encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
+    mcs[0] = HybridMesh(skel['nodes'], skel['edges'], vertices, mcs[0].faces, mcs[0].normals,
+                        labels=vertex_labels, encoding=encoding)
 
-    # save gt as pickle
+    # CREATE CLOUD ENSEMBLE #
+
+    obj_names = ['cell', 'mi', 'vc', 'syn']
+    clouds = {}
+    for ix, cloud in enumerate(mcs):
+        clouds[obj_names[ix]] = mcs[ix]
+    ce = CloudEnsemble(clouds)
+
+    # save cloud ensemble and additional information as pickle
     with open("{}/sso_{}.pkl".format(out_path, sso.id), 'wb') as f:
-        pkl.dump(gt_dict, f)
+        pkl.dump(ce, f)
+
+    info_folder = out_path + '/info/'
+    if not os.path.isdir(info_folder):
+        os.makedirs(info_folder)
+    with open("{}/sso_{}.pkl".format(info_folder, sso.id), 'wb') as f:
+        pkl.dump(mesh_areas, f)
 
 
 def gt_generation(kzip_paths, dest_dir=None):
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
 
-    dest_p_results = "{}/gt_all/".format(dest_dir)
+    dest_p_results = "{}/gt_ensembles/".format(dest_dir)
     if not os.path.isdir(dest_p_results):
         os.makedirs(dest_p_results)
 
@@ -162,3 +149,34 @@ if __name__ == "__main__":
 
     # generate ground truth
     gt_generation(file_paths, dest_dir=dest_gt_dir)
+
+    # vertices_l = 0
+    # indices_l = 0
+    #
+    # # find sizes
+    # for mesh in meshes:
+    #     indices, vertices, normals = mesh
+    #     vertices = vertices.reshape((-1, 3))
+    #     indices = indices.reshape((-1, 3))
+    #     vertices_l += len(vertices)
+    #     indices_l += len(indices)
+    #
+    # # prepare merged arrays
+    # t_vertices = np.zeros((vertices_l, 3))
+    # t_indices = np.zeros((indices_l, 3))
+    # t_labels = np.zeros((vertices_l, 1))
+    #
+    # # merge meshes
+    # vertices_o = 0
+    # indices_o = 0
+    #
+    # for ix, mesh in enumerate(meshes):
+    #     indices, vertices, normals = mesh
+    #     vertices = vertices.reshape((-1, 3))
+    #     indices = indices.reshape((-1, 3))
+    #
+    #     t_vertices[vertices_o:vertices_o+len(vertices)] = vertices
+    #     t_labels[vertices_o:vertices_o+len(vertices)] = label_map[ix]
+    #     vertices_o += len(vertices)
+    #     t_indices[indices_o:indices_o+len(indices)] = indices
+    #     indices_o += len(indices)

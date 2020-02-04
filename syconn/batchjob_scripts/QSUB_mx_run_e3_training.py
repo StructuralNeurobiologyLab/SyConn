@@ -3,7 +3,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from neuronx import e3_trainings as train
+from neuronx.convpoint import e3_trainings as train
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
