@@ -37,12 +37,17 @@ The Synaptic connectivity inference toolkit is currently developed at the Max-Pl
 
 Acknowledgements
 ----------------
-We are especially grateful for the support by Winfried Denk who enabled this work in his department. We also want to thank Christian Guggenberger
-and his group at the MPCDF for cluster support and deepmind for providing egl extension code to handle multi-gpu rendering on the same machine.
-The original code snippet (under the Apache License 2.0) used for our project can be found
+We are especially grateful for the support by Winfried Denk who enabled
+this work in his department. We also want to thank Christian
+Guggenberger and his group at the MPCDF for cluster support and deepmind
+for providing egl extension code to handle multi-gpu rendering on the
+same machine. The original code snippet (under the Apache License 2.0)
+used for our project can be found
 [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
-Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful work) for designing and creating the logo and to
- Rangoli Saxena, Mariana Shumliakivska and Josef Mark for code contributions.
+Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful
+work) for designing and creating the logo and to Rangoli Saxena, Mariana
+Shumliakivska, Josef Mark, Maria Kawula, Atul Mohite, Alexandra Rother
+and Martin Drawitsch and for code contributions.
 
 
 Publications

@@ -155,12 +155,12 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    oew.generate_subcell_kd_from_proba(
-        global_params.config['existing_cell_organelles'],
-        chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
-        load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-        cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
-        n_cores=n_cores, overwrite=overwrite)
+    # oew.generate_subcell_kd_from_proba(
+    #     global_params.config['existing_cell_organelles'],
+    #     chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
+    #     load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
+    #     cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
+    #     n_cores=n_cores, overwrite=overwrite)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
