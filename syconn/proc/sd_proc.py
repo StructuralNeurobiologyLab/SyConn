@@ -60,8 +60,8 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
     # Running workers
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_dataset_analysis_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        results = sm.start_multiprocess_imap(_dataset_analysis_thread,
+                                             multi_params, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
