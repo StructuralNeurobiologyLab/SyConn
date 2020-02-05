@@ -18,7 +18,8 @@ try:
                            'cdivision': False, 'overflowcheck': True})
 except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner"]
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'lz4',
+                      'termcolor', 'fasteners', 'pyaml']
     cython_out = None
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 with open(readme_file) as f:

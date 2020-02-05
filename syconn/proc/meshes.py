@@ -48,9 +48,9 @@ except ImportError as e:
 
 try:
     from .in_bounding_boxC import in_bounding_box
-except ImportError:
+except (ImportError, ModuleNotFoundError) as e:
     from .in_bounding_box import in_bounding_box
-    log_proc.error('ImportError. Could not import `in_boundinb_box` from '
+    log_proc.error(f'ImportError: {e}\nCould not import `in_bounding_box` from '
                    '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 
 

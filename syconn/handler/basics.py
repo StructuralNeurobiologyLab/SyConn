@@ -39,7 +39,7 @@ __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g']
 
 
-def kd_factory(kd_path: str, channel: str = 'jpg'):
+def kd_factory(kd_path: str, channel: str = 'raw'):
     """
     Initializes a KnossosDataset at the given `kd_path`.
 

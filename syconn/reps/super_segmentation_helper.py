@@ -45,8 +45,10 @@ if TYPE_CHECKING:
     from torch.nn import Module
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
-except ImportError:
+except (ImportError, ModuleNotFoundError) as e:
     from ..proc.in_bounding_box import in_bounding_box
+    log_proc.error(f'ImportError: {e}\nCould not import `in_bounding_box` from '
+                   '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 from skimage.morphology import watershed
 from skimage.feature import peak_local_max
 from scipy import ndimage
