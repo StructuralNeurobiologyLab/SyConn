@@ -6,10 +6,9 @@ from syconn.reps.rep_helper import find_object_properties
 from syconn.extraction.cs_extraction_steps import detect_cs
 import numpy as np
 from syconn.global_params import config
-import scipy.ndimage
-import networkx as nx
 from syconn.handler.basics import chunkify_weighted
-from syconn.handler.config import DynConfig, Config
+from syconn.reps.rep_helper import colorcode_vertices
+from scipy import spatial
 
 
 def test_find_object_properties():
@@ -105,9 +104,37 @@ def test_chunk_weighted():
             "chunk_weighted() function might have some problem "
 
 
+def test_colourcode_vertices(grid_size, number_of_test_vertices):
+    """
+    Test case fails if colourcode_vertices() is not working
+    Args:
+        grid_size: basis points for k-d tree
+        number_of_test_vertices: Number of vertices to be tested for colorcode_verices()
+
+    Returns:
+
+    """
+    n = number_of_test_vertices
+    a = grid_size
+    rep_values = np.arange(a*a*a)                                    #id values of grid vertices, 125 is number of rep_coords
+    rep_coords = np.mgrid[0:a, 0:a, 0:a]                             #grid vertices for k-d tree, 5 is generic length os grid rep_coords
+    rep_coords = rep_coords.reshape(3, -1).T                         #grid vertices for k-d tree
+    vertices = 5*np.random.rand(n, 3)                                #vertices to be fited to k-d tree, 50 is number of vertices to be tested for
+    colors = np.c_[rep_coords, np.ones(a*a*a)]                       #colours of grid vertices of k-d tree
+    hull_tree = spatial.cKDTree(rep_coords)                          #processing to get nearest neighbour on grid
+    dists, ixs = hull_tree.query(vertices)                           #processing to get nearest neighbour on grid
+    output = colorcode_vertices(vertices, rep_coords, rep_values, colors=colors, return_color=False)     #output from colorcode_vertices()
+    # vertices_index = [31, 93, 51, 27, 0]
+    assert np.array_equal(output, ixs), \
+        "colorcode_vertices() function might have some problem"                      #check 1
+    output1 = colorcode_vertices(vertices, rep_coords, rep_values, colors=colors, return_color=True)     #output from colorcode_vertices() with color enabled
+    assert np.array_equal(output1, colors[ixs]), \
+        "colorcode_vertices() function might have some problem with input colors"    #check 2
+
+
 if __name__ == '__main__':
     test_chunk_weighted()
-    # test_config()
+    test_colourcode_vertices(5, 50)
     test_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
     test_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
     test_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
