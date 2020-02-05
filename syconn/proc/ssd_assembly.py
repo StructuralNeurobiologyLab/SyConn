@@ -66,7 +66,8 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
         sso_id = meta_dc['sso_id']
         del meta_dc['sso_id']
     sso = SuperSegmentationObject(sso_id, **meta_dc)
-    # Required to enable prediction in 'tmp' SSVs # TODO: change those properties in SSO constructor
+    # TODO: change those properties in SSO constructor
+    # Required to enable prediction in 'tmp' SSVs
     sso._mesh_caching = True
     sso._view_caching = True
 

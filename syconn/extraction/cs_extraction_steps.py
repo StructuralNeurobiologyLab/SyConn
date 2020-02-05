@@ -300,7 +300,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         data = kd.load_seg(size=size + 2 * stencil_offset,
                            offset=offset - stencil_offset,
-                           mag=1, datatype=np.uint64).astype(np.uint32).swapaxes(0, 2)
+                           mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
         cum_dt_data += time.time() - start
         start = time.time()
         # contacts has size as given with `size`, because it performs valid conv.
@@ -313,24 +313,24 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
         syn_d = (kd_syn.load_seg(size=size, offset=offset, mag=1,
-                                 datatype=np.uint64) > 0).astype(np.uint8).swapaxes(0, 2)
+                                 datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
                 # TODO: add thresholds to global_params
                 if global_params.config.sym_label is None:
                     sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                             >= 123).astype(np.uint8)
+                             >= 123).astype(np.uint8, copy=False)
                 else:
                     sym_d = (kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                             == global_params.config.sym_label).astype(np.uint8)
+                             == global_params.config.sym_label).astype(np.uint8, copy=False)
 
                 if global_params.config.asym_label is None:
                     asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                              >= 123).astype(np.uint8)
+                              >= 123).astype(np.uint8, copy=False)
                 else:
                     asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                              == global_params.config.asym_label).astype(np.uint8)
+                              == global_params.config.asym_label).astype(np.uint8, copy=False)
             else:
                 assert global_params.config.asym_label is not None,\
                     'Label of asymmetric synapses is not set.'
@@ -361,7 +361,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
-            binary_mask = (sub_vol == ix).astype(np.int)
+            binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
             # TODO: add to parameters to config
@@ -839,8 +839,9 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
         _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
                                     debug=False, nb_cpus=n_max_co_processes)
     else:
-        _ = qu.QSUB_script(multi_params, "contact_site_detection",
-                           n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "contact_site_detection",
+            n_max_co_processes=n_max_co_processes)
     chunky.save_dataset(cset)
 
 
@@ -855,7 +856,7 @@ def _contact_site_detection_thread(args):
     offset = np.array(chunk.coordinates - overlap)
     size = 2 * overlap + np.array(chunk.size)
     data = kd.load_seg(size=size, offset=offset, mag=1,
-                       datatype=np.uint64).astype(np.uint32).swapaxes(0, 2)
+                       datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
     compression.save_to_h5py([contacts],
@@ -881,8 +882,8 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     jac[2, 1, 1] = 1
     jac[0, 1, 1] = 1
     edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
-    edges = edges.astype(np.uint32)
-    arr = arr.astype(np.uint32)
+    edges = edges.astype(np.uint32, copy=False)
+    arr = arr.astype(np.uint32, copy=False)
     cs_seg = process_block_nonzero(
         edges, arr, global_params.config['cell_objects']['cs_filtersize'])
     return cs_seg

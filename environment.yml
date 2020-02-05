@@ -18,13 +18,15 @@ dependencies:
   - vigra
   - freeglut
   - pyopengl
+  - pyopengl-accelerate
   - python-snappy
   - ipython
   - h5py
   - matplotlib
   - tqdm
   - scipy
-  - networkx <= 2.3  # AttributeError: module 'networkx' has no attribute 'connected_component_subgraphs'
+  # AttributeError: module 'networkx' has no attribute 'connected_component_subgraphs'
+  - networkx <= 2.3
   - m2r
   - lz4
   - flask
@@ -46,6 +48,8 @@ dependencies:
   - pyyaml
   - cython
   - colorlog
+   # >= 7 raises "cannot import name 'PILLOW_VERSION' from 'PIL'" with torchvision=0.3.0
+  - pillow <7
 
   # From -c menpo
   - osmesa

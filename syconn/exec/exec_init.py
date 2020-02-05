@@ -43,13 +43,14 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
 
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
             global_params.config.allow_mesh_gen_cells)):
-        _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
-                           n_max_co_processes=global_params.config.ncore_total, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
+            n_max_co_processes=global_params.config.ncore_total, log=log)
 
     if co == "sv":
-        _ = qu.QSUB_script(multi_params, "sample_location_caching",
-                           n_max_co_processes=global_params.config.ncore_total,
-                           suffix=co, remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True,
+            n_max_co_processes=global_params.config.ncore_total, log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
     if not global_params.config.use_new_meshing:
@@ -111,7 +112,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
                           cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
-                          n_cores: int = 1):
+                          n_cores: int = 1, overwrite=False):
     """
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
@@ -132,6 +133,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
             which is processed (minimum and maximum coordinates in mag1 voxels,
             XYZ).
         n_cores: Cores used within :func:`~map_subcell_extract_props`.
+        overwrite: If True, will overwrite existing data.
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
@@ -150,16 +152,15 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
-             'type available: {}.'.format(global_params.config['existing_cell_organelles']))
+    log.info('Converting the predictions of the following cellular organelles to'
+             ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    # TODO: process all subcellular structures at the same time if they are stored in the same KD
     oew.generate_subcell_kd_from_proba(
         global_params.config['existing_cell_organelles'],
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
         cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
-        n_cores=n_cores)
+        n_cores=n_cores, overwrite=overwrite)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -169,7 +170,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
         cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log,
-        n_cores=n_cores)
+        n_cores=n_cores, overwrite=overwrite)
     log.info('Finished extraction and mapping after {:.2f}s.'
              ''.format(time.time() - start))
 

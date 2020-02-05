@@ -26,10 +26,10 @@ from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
 from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
-from ..proc.image import multi_mop
+from ..proc.image import multi_mop, apply_morphological_operations
 from .. import global_params
 from ..handler.basics import kd_factory
-from syconn.reps.rep_helper import find_object_properties
+from ..reps.rep_helper import find_object_properties
 
 try:
     from vigra.filters import gaussianSmoothing
@@ -192,11 +192,9 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     else:
         assert transform_func == _gauss_threshold_connected_components_thread,\
             "QSUB currently only supported for gaussian threshold CC."
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "gauss_threshold_connected_components",
-                                     n_cores=nb_cpus,
-                                     n_max_co_processes=n_chunk_jobs,
-                                     use_dill=True, suffix=filename)
+        path_to_out = qu.batchjob_script(
+            multi_params, "gauss_threshold_connected_components", n_cores=nb_cpus,
+            n_max_co_processes=n_chunk_jobs, use_dill=True, suffix=filename)
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
@@ -243,6 +241,9 @@ def _gauss_threshold_connected_components_thread(args):
     transform_func_kwargs = args[14]
     load_from_kd_overlaycubes = args[15]
     transf_func_kd_overlay = args[16]
+
+    # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'cell': []}
+    morph_ops = global_params.config['cell_objects']['extract_morph_op']
 
     nb_cc_list = []
     for chunk in chunks:
@@ -320,6 +321,9 @@ def _gauss_threshold_connected_components_thread(args):
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name],
                                     dtype=np.uint8)
 
+            if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
+                tmp_data = apply_morphological_operations(tmp_data, morph_ops[hdf5_name])
+
             this_labels_data, nb_cc = scipy.ndimage.label(tmp_data)
             nb_cc_list.append([chunk.number, hdf5_name, nb_cc])
             labels_data.append(this_labels_data)
@@ -378,15 +382,15 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         multi_params_glob.append(multi_params)
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_make_unique_labels_thread,
+        _ = sm.start_multiprocess_imap(_make_unique_labels_thread,
                                          multi_params_glob, debug=debug,
                                              nb_cpus=n_max_co_processes)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params_glob,
-                                     "make_unique_labels", suffix=filename,
-                                     n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True, n_cores=nb_cpus)
+        _ = qu.batchjob_script(
+            multi_params_glob, "make_unique_labels", suffix=filename,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True,
+            n_cores=nb_cpus)
 
 
 def _make_unique_labels_thread(func_args):
@@ -482,9 +486,9 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                     stitch_list[hdf5_name].append(elem)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "make_stitch_list",
-                                     suffix=filename, n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+        path_to_out = qu.batchjob_script(multi_params, "make_stitch_list",
+                                         suffix=filename, n_cores=nb_cpus,
+                                         n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
 
@@ -528,8 +532,8 @@ def _make_stitch_list_thread(args):
 
         if n_erosion > 0:
             # erode segmentation once to avoid start location dependent segmentation artifacts
-            struct = np.zeros((3, 3, 3)).astype(np.bool)
-            mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]).astype(np.bool)
+            struct = np.zeros((3, 3, 3), dtype=np.bool)
+            mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.bool)
             struct[:, :, 1] = mask  # only perform erosion in xy plane
             for kk in range(len(cc_data_list)):
                 cc_data_list[kk] = multi_mop(scipy.ndimage.binary_erosion,
@@ -704,9 +708,9 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                                    debug=debug, nb_cpus=n_max_co_processes)
 
     else:
-        qu.QSUB_script(multi_params, "apply_merge_list", suffix=filename,
-                       n_max_co_processes=n_max_co_processes,
-                       remove_jobfolder=True, n_cores=nb_cpus)
+        qu.batchjob_script(
+            multi_params, "apply_merge_list", suffix=filename, n_cores=nb_cpus,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _apply_merge_list_thread(args):
@@ -815,10 +819,9 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params, debug=debug,
                                              nb_cpus=n_max_co_processes, verbose=debug)
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "extract_voxels", suffix=filename,
-                                     n_max_co_processes=n_max_co_processes,
-                                     n_cores=nb_cpus)
+        path_to_out = qu.batchjob_script(
+            multi_params, "extract_voxels", suffix=filename,
+            n_max_co_processes=n_max_co_processes, n_cores=nb_cpus)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -1006,14 +1009,14 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                  n_folders_fs])
 
         if not qu.batchjob_enabled():
-            results = sm.start_multiprocess_imap(_combine_voxels_thread,
-                                            multi_params, nb_cpus=n_max_co_processes)
+            _ = sm.start_multiprocess_imap(_combine_voxels_thread,
+                                           multi_params, nb_cpus=n_max_co_processes)
 
         else:
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "combine_voxels", suffix=dataset_names[ii],
-                                         n_max_co_processes=n_max_co_processes,
-                                         n_cores=nb_cpus, remove_jobfolder=True)
+            _ = qu.batchjob_script(
+                multi_params, "combine_voxels", suffix=dataset_names[ii],
+                n_max_co_processes=n_max_co_processes, n_cores=nb_cpus,
+                remove_jobfolder=True)
         shutil.rmtree(dataset_temp_path)
 
 
@@ -1121,13 +1124,14 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                              suffix, n_folders_fs, sd_version])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
-                                        multi_params, nb_cpus=n_max_co_processes, verbose=True)
+        _ = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
+                                       multi_params, nb_cpus=n_max_co_processes,
+                                       verbose=True)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined", suffix=filename, n_cores=n_cores,
-                                     max_iterations=10, n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "extract_voxels_combined", suffix=filename, n_cores=n_cores,
+            max_iterations=10, n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _extract_voxels_combined_thread(args):
@@ -1337,9 +1341,9 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
                      fast_downsampling, overwrite] for coords in multi_params]
 
     job_suffix = "_" + "_".join(hdf5names)
-    qu.QSUB_script(multi_params, "export_cset_to_kds", n_cores=n_cores,
-                   n_max_co_processes=n_max_co_processes, suffix=job_suffix,
-                   remove_jobfolder=True, log=log)
+    qu.batchjob_script(
+        multi_params, "export_cset_to_kds", n_cores=n_cores, remove_jobfolder=True,
+        n_max_co_processes=n_max_co_processes, suffix=job_suffix, log=log)
 
 
 def _export_cset_as_kds_thread(args):

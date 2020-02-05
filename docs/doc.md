@@ -3,15 +3,17 @@
 ## Installation
 * Python 3.6/3.7
 * The whole pipeline was designed and tested on Linux systems
-* SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
+* SyConn functionality is mostly based on the packages
+  [elektronn3](https://github.com/ELEKTRONN/elektronn3) and
+  [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
 Before you can set up SyConn, ensure that the
 [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
-package manager is installed on your system.
-Then you can install SyConn and all of its dependencies into a new conda
+package manager is installed on your system. Then you can install SyConn
+and all of its dependencies into a new conda
 [environment](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html)
-named "pysy" by running::
+named "pysy" by running:
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn
     cd SyConn
@@ -22,19 +24,22 @@ named "pysy" by running::
 
 The last command will install SyConn in
 [editable](https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs)
-mode, which is useful for development on SyConn itself. If you want to install
-it as a regular read-only package instead, replace the last command with::
+mode, which is useful for development on SyConn itself. If you want to
+install it as a regular read-only package instead, replace the last
+command with:
 
     pip install --no-deps -v .
 
 
+To update the pysy environment after the environment file changed, use:
+
+    conda env update --name pysy --file environment.yml --prune
 
 ## Example run
 Place the example and model data (provided upon request) in `SyConn/scripts/example_run/`,
 cd to `SyConn/scripts/example_run/` and run
-```
-python start.py
-```
+
+    python start.py [--working_dir=..]
 
 The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of sub-cellular structures
 (mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory).
@@ -118,16 +123,20 @@ The following packages have to be available in the system's python2 interpreter
 
 In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
 
-- Wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/server.py --working_dir=<path>`
-pointing to your working directory (`<path>`). The server address and port will be printed here.
+- Wait until `start.py` finished. For starting the server manually run
+  `syconn.server --working_dir=<path>` which executes
+  `syconn/kplugin/server.py` and allows to visualize the analysis
+  results of the working directory at (`<path>`) in KNOSSOS. The server
+  address and port will be printed.
 
 - Download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
 
 - In KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
 `knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
 
-- Then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py`, open it and enter
-the port and address of the syconn server.
+- Then go to Scripting (top row) -> Run file -> browse to
+  `syconn/kplugin/syconn_knossos_viewer.py`, open it and enter the port
+  and address of the syconn server.
 
 - After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
 list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.

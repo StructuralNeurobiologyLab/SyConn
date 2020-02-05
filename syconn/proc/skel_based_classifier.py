@@ -179,7 +179,7 @@ class SkelClassifier(object):
                                   multi_params, nb_cpus=nb_cpus)
 
         else:
-            qu.QSUB_script(multi_params, "generate_clf_data")
+            qu.batchjob_script(multi_params, "generate_clf_data")
 
     def classifier_production(self, clf_name="rfc", n_estimators=2000,
                               feature_contexts_nm=(500, 1000, 2000, 4000, 8000),
@@ -195,8 +195,8 @@ class SkelClassifier(object):
                                   multi_params, nb_cpus=nb_cpus)
 
         else:
-            qu.QSUB_script(multi_params, "classifier_production",
-                           n_cores=nb_cpus)
+            qu.batchjob_script(multi_params, "classifier_production",
+                               n_cores=nb_cpus)
 
     def create_splitting(self, ratios=(.6, .2, .2)):
         assert not os.path.isfile(self.splitting_fname), "Splitting file exists."

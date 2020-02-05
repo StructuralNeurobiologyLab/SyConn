@@ -14,7 +14,7 @@ import pickle as pkl
 from importlib import reload
 import sys
 
-from ..mp.batchjob_utils import QSUB_script
+from ..mp.batchjob_utils import batchjob_script
 from . import log_proc
 from .. import global_params
 from ..handler.basics import flatten_list
@@ -549,7 +549,8 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
         log_proc.critical('No rendering locations found for SSV {}.'.format(ssv.id))
         # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
         #  `global_params`
-        return np.ones((0, global_params.config['views']['nb_views'], 256, 128), dtype=np.uint8) * 255
+        return np.ones((0, global_params.config['views']['nb_views'], 256, 128),
+                       dtype=np.uint8) * 255
     params = np.array_split(rendering_locations, n_jobs)
 
     ssv_id = ssv.id
@@ -559,7 +560,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                   "version": ssv.version,
                   'nb_cpus': n_cores,
                   'sv_ids': [sv.id for sv in ssv.svs]}
-    # TODOO: refactor kwargs!
+    # TODO: refactor kwargs!
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None, 'woglia': True,
@@ -570,7 +571,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     params = [[par, sso_kwargs, render_kwargs_def, ix] for ix, par in
               enumerate(params)]
     # This is single node multiprocessing -> `disable_batchjob=False`
-    path_to_out = QSUB_script(
+    path_to_out = batchjob_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         n_cores=n_cores, disable_batchjob=disable_batchjob,
         n_max_co_processes=n_jobs,

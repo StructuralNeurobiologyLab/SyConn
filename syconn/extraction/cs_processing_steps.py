@@ -43,11 +43,12 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     The following keys will be available in the ``attr_dict`` of ``syn_ssv``
     typed :class:`~syconn.reps.segmentation.SegmentationObject`:
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
-            en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
-        * 'partner_spiness': Spine compartment predictions of both neurons.
+          en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
+        * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
+          1: spine head, 2: spine neck, 3: other) of both neurons.
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
-            synaptic partners.
+          synaptic partners.
 
     Parameters
     ----------
@@ -72,7 +73,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             _collect_properties_from_ssv_partners_thread, multi_params,
             nb_cpus=n_max_co_processes, debug=debug)
     else:
-        _ = qu.QSUB_script(
+        _ = qu.batchjob_script(
             multi_params, "collect_properties_from_ssv_partners",
             n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
@@ -89,9 +90,9 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             _from_cell_to_syn_dict, multi_params,
             nb_cpus=n_max_co_processes, debug=debug)
     else:
-        _ = qu.QSUB_script(multi_params, "from_cell_to_syn_dict",
-                           n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "from_cell_to_syn_dict",
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
     sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
@@ -117,6 +118,10 @@ def _collect_properties_from_ssv_partners_thread(args):
                                                       version=ssd_version)
 
     syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
+    pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                        'view_properties_semsegax']['semseg_key'],
+                                    global_params.config['compartments'][
+                                        'dist_axoness_averaging'])
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
         ssv_o.load_attr_dict()
@@ -126,6 +131,15 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
+        if len(ssv_synids) == 0:
+            cache_dc['partner_spineheadvol'] = np.zeros((0, ), dtype=np.float)
+            cache_dc['partner_axoness'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['synssv_ids'] = ssv_synids
+            cache_dc['partner_spiness'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['partner_celltypes'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['latent_morph'] = np.zeros((0, ), dtype=np.float)
+            cache_dc.push()
+            continue
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
 
         try:
@@ -134,26 +148,30 @@ def _collect_properties_from_ssv_partners_thread(args):
             ct = -1
         celltypes = [ct] * len(ssv_synids)
 
-        # # This does not allow to query a sliding window averaged prediction
-        # pred_key = global_params.config['compartments']['view_properties_semsegax']['semseg_key']
-        # curr_ax = ssv_o.semseg_for_coords(ssv_syncoords, pred_key,
-        #                                   **global_params.config['compartments']['map_properties_semsegax'])
-        pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
-                                            'view_properties_semsegax']['semseg_key'],
-                                        global_params.config['compartments'][
-                                            'dist_axoness_averaging'])
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
-        # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness',
                                           **global_params.config['spines']['semseg2coords_spines'])
+        sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0]
+        if len(ssv_o.skeleton['nodes']) > 1:
+            # if only one skeleton node, sh_vol only contains one element per location
+            sh_vol = np.max(sh_vol, axis=1)
+        # # This should be reported during spine head volume calculation.
+        # sh_vol_zero = (sh_vol == 0) & (curr_sp == 1) & (curr_ax == 0)
+        # if np.any(sh_vol_zero):
+        #     log_extraction.warn(f'Empty spinehead volume at {ssv_syncoords[sh_vol_zero]}'
+        #                         f' in SSO {ssv_id}.')
+        if np.any(sh_vol == -1):
+            log_extraction.warn(f'No spinehead volume at {ssv_syncoords[sh_vol == -1]}'
+                                f' in SSO {ssv_id}.')
 
-        cache_dc['partner_axoness'] = np.array(curr_ax)
-        cache_dc['synssv_ids'] = np.array(ssv_synids)
-        cache_dc['partner_spiness'] = np.array(curr_sp)
+        cache_dc['partner_spineheadvol'] = np.array(sh_vol)
+        cache_dc['partner_axoness'] = curr_ax
+        cache_dc['synssv_ids'] = ssv_synids
+        cache_dc['partner_spiness'] = curr_sp
         cache_dc['partner_celltypes'] = np.array(celltypes)
-        cache_dc['latent_morph'] = np.array(latent_morph)
+        cache_dc['latent_morph'] = latent_morph
         cache_dc.push()
 
 
@@ -182,6 +200,7 @@ def _from_cell_to_syn_dict(args):
 
             axoness = []
             latent_morph = []
+            spinehead_vol = []
             spiness = []
             celltypes = []
 
@@ -200,10 +219,12 @@ def _from_cell_to_syn_dict(args):
                 spiness.append(cache_dc['partner_spiness'][index])
                 celltypes.append(cache_dc['partner_celltypes'][index])
                 latent_morph.append(cache_dc['latent_morph'][index])
+                spinehead_vol.append(cache_dc['partner_spineheadvol'][index])
 
             synssv_o.attr_dict.update({'partner_axoness': axoness,
                                        'partner_spiness': spiness,
                                        'partner_celltypes': celltypes,
+                                       'partner_spineheadvol': spinehead_vol,
                                        'syn_sign': syn_sign,
                                        'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
@@ -268,7 +289,7 @@ def filter_relevant_syn(sd_syn, ssd):
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          nb_cpus=None, resume_job=False, n_max_co_processes=None,
+                          nb_cpus=None, n_max_co_processes=None,
                           n_folders_fs=10000, log=None):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
@@ -330,16 +351,16 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn",
-                           resume_job=resume_job, remove_jobfolder=True,
-                           n_max_co_processes=n_max_co_processes, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "combine_and_split_syn", remove_jobfolder=True,
+            n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
 
 
-def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          nb_cpus=None, resume_job=False, n_max_co_processes=None,
-                          n_folders_fs=10000, log=None):
+def combine_and_split_syn_old(
+        wd, cs_gap_nm=300, ssd_version=None, syn_version=None, nb_cpus=None,
+        n_max_co_processes=None, n_folders_fs=10000, log=None):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
@@ -358,7 +379,6 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
     cs_gap_nm :
     ssd_version :
     syn_version :
-    resume_job :
     nb_cpus :
     n_max_co_processes :
     log:
@@ -400,9 +420,9 @@ def combine_and_split_syn_old(wd, cs_gap_nm=300, ssd_version=None, syn_version=N
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread_old,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn_old",
-                           resume_job=resume_job, remove_jobfolder=True,
-                           n_max_co_processes=n_max_co_processes, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "combine_and_split_syn_old", remove_jobfolder=True,
+            n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
 
@@ -792,9 +812,9 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                               multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "combine_and_split_cs_agg",
-                       n_max_co_processes=n_max_co_processes,
-                       remove_jobfolder=True)
+        qu.batchjob_script(multi_params, "combine_and_split_cs_agg",
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
 
     return cs
 
@@ -968,8 +988,8 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
         sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
                               multi_params, nb_cpus=nb_cpus)
     else:
-        qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs",
-                       n_max_co_processes=n_max_co_processes)
+        qu.batchjob_script(multi_params, "overlap_mapping_sj_to_cs",
+                           n_max_co_processes=n_max_co_processes)
 
 
 # TODO: SegmentationDataset version of below, probably not necessary anymore
@@ -1076,7 +1096,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
 
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
-                     n_chunk_jobs=1000, resume_job=False, nb_cpus=None,
+                     n_chunk_jobs=1000, nb_cpus=None,
                      n_max_co_processes=None):
     """
     Creates a :class:`~syconn.reps.segmentation.SegmentationDataset`
@@ -1094,7 +1114,6 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     cs_cset :
     n_folders_fs :
     n_chunk_jobs :
-    resume_job :
     nb_cpus :
     n_max_co_processes :
 
@@ -1136,10 +1155,9 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                                        multi_params, nb_cpus=n_max_co_processes)
 
     else:
-        _ = qu.QSUB_script(multi_params, "syn_gen_via_cset",
-                           resume_job=resume_job,
-                           script_folder=None, n_cores=nb_cpus,
-                           n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "syn_gen_via_cset", script_folder=None,
+            n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
 
     return sd_syn
 
@@ -1273,12 +1291,13 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
 
     # Running workers - Extracting mapping
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_synapse_type_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess_imap(_extract_synapse_type_thread,
+                                       multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_synapse_type",
-                                     n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "extract_synapse_type", n_cores=nb_cpus,
+            n_max_co_processes=n_max_co_processes)
 
 
 def _extract_synapse_type_thread(args):
@@ -1378,8 +1397,8 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                               multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs_via_kd",
-                       n_max_co_processes=n_max_co_processes)
+        qu.batchjob_script(multi_params, "overlap_mapping_sj_to_cs_via_kd",
+                           n_max_co_processes=n_max_co_processes)
     return conn_sd
 
 
@@ -1661,8 +1680,8 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                                    multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "map_objects_to_synssv", log=log,
-                       n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+        qu.batchjob_script(multi_params, "map_objects_to_synssv", log=log,
+                           n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _map_objects_to_synssv_thread(args):
@@ -1821,64 +1840,6 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
     return n_objects, n_vxs
 
 
-def map_objects_from_ssv_OLD(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
-                         max_rep_coord_dist_nm):
-    """
-    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
-    is executed in 'classify_synssv_objects'.
-    Helper function of `objects_to_single_synssv`.
-
-    Parameters
-    ----------
-    synssv_o : SegmentationObject
-        Contact site object of SSV
-    sd_obj : SegmentationObject
-        Dataset of cellular object to map
-    obj_ids : List[int]
-        IDs of cellular objects in question
-    max_vx_dist_nm : float
-    max_rep_coord_dist_nm : float
-
-    Returns
-    -------
-
-    """
-    obj_mask = np.in1d(sd_obj.ids, obj_ids)
-
-    if np.sum(obj_mask) == 0:
-        return 0, 0
-
-    obj_rep_coords = sd_obj.load_cached_data("rep_coord")[obj_mask] * \
-                     sd_obj.scaling
-
-    obj_kdtree = spatial.cKDTree(obj_rep_coords)
-
-    close_obj_ids = sd_obj.ids[obj_mask][obj_kdtree.query_ball_point(
-        synssv_o.rep_coord * synssv_o.scaling, r=max_rep_coord_dist_nm)]
-
-    synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
-
-    # log_extraction.debug(len(close_obj_ids))
-
-    n_obj_vxs = []
-    for close_obj_id in close_obj_ids:
-        obj = sd_obj.get_segmentation_object(close_obj_id)
-        obj_vxs = obj.voxel_list * obj.scaling
-
-        ds, _ = synssv_vx_kdtree.query(obj_vxs,
-                                       distance_upper_bound=max_vx_dist_nm)
-
-        n_obj_vxs.append(np.sum(ds < np.inf))
-
-    n_obj_vxs = np.array(n_obj_vxs)
-
-    # log_extraction.debug(n_obj_vxs)
-    n_objects = np.sum(n_obj_vxs > 0)
-    n_vxs = np.sum(n_obj_vxs)
-
-    return n_objects, n_vxs
-
-
 def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
                             n_max_co_processes=None):
     """
@@ -1906,9 +1867,9 @@ def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
-        _ = qu.QSUB_script(multi_params,  "classify_synssv_objects",
-                           n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(
+            multi_params,  "classify_synssv_objects", log=log,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _classify_synssv_objects_thread(args):
@@ -1978,6 +1939,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_syn_prob = syn_prob[m]
     m_syn_sign = sd_syn_ssv.load_cached_data("syn_sign")[m]
     m_syn_asym_ratio = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
+    m_spineheadvol = sd_syn_ssv.load_cached_data("partner_spineheadvol")[m]
     m_latent_morph = sd_syn_ssv.load_cached_data("latent_morph")[m]  # N, 2, m
     m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
@@ -1988,7 +1950,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_sp = m_sp.squeeze()  # N, 2
     m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,
-                            m_sp, m_syn_prob, m_latent_morph], axis=1)
+                            m_sp, m_syn_prob, m_spineheadvol, m_latent_morph], axis=1)
 
     # do not overwrite previous files
     if os.path.isfile(dest_name + '.csv'):
@@ -1997,7 +1959,8 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tcelltype1\t"
-                      "celltype2\tspiness1\tspiness2\tsynprob" +
+                      "celltype2\tspiness1\tspiness2\tsynprob\tspinehead_vol1"
+                      "\tspinehead_vol2" +
                       "".join(["\tlatentmorph1_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])]) +
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(

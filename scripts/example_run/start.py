@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--log_level', type=str, default='INFO',
                         help='Level of logging (INFO, DEBUG).')
     args = parser.parse_args()
-    example_cube_id = args.example_cube
+    example_cube_id = int(args.example_cube)
     log_level = args.log_level
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
@@ -55,7 +55,12 @@ if __name__ == '__main__':
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
         # ('cell_objects', {'asym_label': 1, 'sym_label': 2})
     ]
-    chunk_size = (256, 256, 256)
+    if example_cube_id == 1:
+        chunk_size = (256, 256, 128)
+    elif example_cube_id == 2:
+        chunk_size = (256, 256, 256)
+    else:
+        chunk_size = (512, 512, 256)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
@@ -79,8 +84,9 @@ if __name__ == '__main__':
     if global_params.wd is not None:
         log.critical('Example run started. Working directory was overwritten and set'
                      ' to "{}".'.format(example_wd))
+
+    os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
-    os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
@@ -113,7 +119,7 @@ if __name__ == '__main__':
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
-    tmp = load_from_h5py(h5_dir + 'raw.h5', hdf5_names=['raw'])[0]
+    tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
     offset = np.array([0, 0, 0])
     bd = np.array(tmp.shape)
     del tmp
@@ -128,33 +134,34 @@ if __name__ == '__main__':
 
         seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
         kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
-                                fast_downsampling=True, as_raw=False)
-
+                                fast_downsampling=False, as_raw=False)
+        del kd, seg_d
         kd_sym = knossosdataset.KnossosDataset()
         kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
                                       offset=offset, boundary=bd, fast_downsampling=True,
                                       data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
-
+        del kd_sym
         kd_asym = knossosdataset.KnossosDataset()
         kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
                                        experiment_name, offset=offset, boundary=bd,
                                        fast_downsampling=True, data_path=h5_dir + 'asym.h5',
                                        mags=[1, 2], hdf5_names=['asym'])
-
+        del kd_asym
         kd_mi = knossosdataset.KnossosDataset()
         kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
                                      offset=offset, boundary=bd, fast_downsampling=True,
                                      data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
-
+        del kd_mi
         kd_vc = knossosdataset.KnossosDataset()
         kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
                                      offset=offset, boundary=bd, fast_downsampling=True,
                                      data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
-
+        del kd_vc
         kd_sj = knossosdataset.KnossosDataset()
         kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
                                      offset=offset, boundary=bd, fast_downsampling=True,
                                      data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+        del kd_sj
         time_stamps.append(time.time())
         step_idents.append('Preparation')
 
@@ -165,7 +172,7 @@ if __name__ == '__main__':
     # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+    exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
@@ -215,6 +222,7 @@ if __name__ == '__main__':
 
     log.info('Step 6/8 - Spine prediction')
     exec_multiview.run_spiness_prediction()
+    exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
@@ -250,7 +258,4 @@ if __name__ == '__main__':
     log.info('Setting up flask server for inspection. Annotated cell reconst'
              'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
              ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-                   '/../kplugin/server.py'
-    os.system('python {} --working_dir={} --port=10001'.format(
-        fname_server, example_wd))
+    os.system(f'syconn.server --working_dir={example_wd} --port=10001')

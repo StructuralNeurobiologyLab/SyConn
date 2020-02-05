@@ -979,19 +979,23 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal
     if key_value_pairs is not None:
-        for k, v in key_value_pairs:
-            if k not in entries:
-                raise KeyError(f'Key in provided key-value {k}:{v} pair '
-                               f'does not exist in default config.')
-            if type(v) is dict:
-                entries[k].update(v)
-            else:
-                entries[k] = v
+        _update_key_value_pair_rec(key_value_pairs, entries)
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
         raise ValueError(f'Overwrite attempt of existing config file at '
                          f'{default_conf.path_config}.')
     default_conf.write_config(working_dir)
+
+
+def _update_key_value_pair_rec(key_value_pairs, entries):
+    for k, v in key_value_pairs:
+        if k not in entries:
+            raise KeyError(f'Key in provided key-value {k}:{v} pair '
+                           f'does not exist in default config.')
+        if type(v) is dict:
+            _update_key_value_pair_rec(list(v.items()), entries[k])
+        else:
+            entries[k] = v
 
 
 def initialize_logging(log_name: str, log_dir: Optional[str] = None,

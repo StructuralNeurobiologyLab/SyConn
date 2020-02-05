@@ -920,7 +920,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')
-        pbar = tqdm.tqdm(total=len(inds))
+        pbar = tqdm.tqdm(total=len(inds), leave=False)
     write_out_ply_fnames = []
     for i in range(len(inds)):
         vert = verts[i]

@@ -343,7 +343,7 @@ class InputDialog(QtGui.QDialog):
         self.synapse_tresh = QtGui.QLabel()
         self.synapse_tresh.setText("Syn. prob. thresh.")
         layout.addWidget(self.synapse_tresh)
-        self.text_synthresh = QtGui.QLineEdit("0.6")
+        self.text_synthresh = QtGui.QLineEdit("0.5")
         layout.addWidget(self.text_synthresh)
 
         self.axodend_button = QtGui.QPushButton("Axo-dendr. syn. only")
@@ -698,7 +698,7 @@ class main_class(QtGui.QDialog):
         #self.exploration_mode_chk_box.stateChanged.connect(self.exploration_mode_changed)
 
         # self.setGeometry(300, 300, 450, 300)
-        self.setWindowTitle('SyConn Viewer v2')
+        self.setWindowTitle('SyConn Viewer v2 ({}:{})'.format(self.host, self.port))
         self.show()
         #self.merge_button = QtGui.QPushButton('Merge')
         #self.split_button = QtGui.QPushButton('Split')
@@ -1100,5 +1100,5 @@ def int2str_label_converter(label, gt_type):
         raise ValueError("Given ground truth type is not valid.")
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     A = main_class()

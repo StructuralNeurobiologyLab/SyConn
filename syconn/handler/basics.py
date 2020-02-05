@@ -45,6 +45,7 @@ def kd_factory(kd_path: str, channel: str = 'jpg'):
 
     Notes:
         * Prioritizes pyk.conf files.
+
     Todo:
         * Requires additional adjustment of the data type,
           i.e. setting the channel explicitly currently leads to uint32 <->
@@ -447,7 +448,7 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
-        pbar = tqdm.tqdm(total=nb_files)
+        pbar = tqdm.tqdm(total=nb_files, leave=False)
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:

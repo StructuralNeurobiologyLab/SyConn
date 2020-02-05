@@ -414,7 +414,7 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
     if debug:
-        raw = (raw * 255).astype(np.uint8)
+        raw = (raw * 255).astype(np.uint8, copy=False)
         label = label.astype(np.uint8) * 255
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 
@@ -680,9 +680,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         ", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
         'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
-    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
-                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
-                   additional_flags="--gres=gpu:1")
+    qu.batchjob_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
+                       n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
+                       additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 

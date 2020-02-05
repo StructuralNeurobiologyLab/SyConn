@@ -667,14 +667,16 @@ class SuperSegmentationObject(object):
         """
         Creates a Euclidean distance (in nanometers) weighted graph representation of the
         skeleton of this SSV object. The node IDs represent the index in
-        the ``'node'`` array part of :py:attr:`~skeleton`.
+        the ``'node'`` array part of :py:attr:`~skeleton`. Weights are stored
+        as 'weight' in the graph, this allows to use e.g.
+        ``nx.single_source_dijkstra_path(..)``.
 
         Args:
             add_node_attr: To-be-added node attributes. Must exist in
             :py:attr`~skeleton`.
 
         Returns:
-            The skeleton of this SSV object as a graph.
+            The skeleton of this SSV object as a networkx graph.
         """
         if self._weighted_graph is None or np.any([len(nx.get_node_attributes(
                 self._weighted_graph, k)) == 0 for k in add_node_attr]):
@@ -909,6 +911,8 @@ class SuperSegmentationObject(object):
             The :class:`~syconn.reps.segmentation.SegmentationObject`s of type `obj_type`
             sharing the same working directory as this SSV object.
         """
+        # TODO: initialize basic attributes such as rep. coord. from cache arrays of the
+        #  SegmentationDataset (via `get_seg_dataset`).
         if obj_type not in self._objects:
             objs = []
 
@@ -1012,6 +1016,8 @@ class SuperSegmentationObject(object):
 
     def load_edgelist(self) -> List[Tuple[int, int]]:
         """
+        # TODO: rename
+
         Load the edges within the supervoxel graph.
 
         Returns:
@@ -1542,6 +1548,7 @@ class SuperSegmentationObject(object):
                                sizethreshold: Optional[float] = None,
                                save: bool = True):
         """
+        # TODO: duplicate of ssd_proc._apply_mapping_decisions_thread
         Applies mapping decision of cellular organelles to this SSV object. A
         :class:`~syconn.reps.segmentation.SegmentationObject` in question is
         assigned to this :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
@@ -1850,7 +1857,7 @@ class SuperSegmentationObject(object):
     def render_views(self, add_cellobjects: bool = False, verbose: bool = False,
                      overwrite: bool = True, cellobjects_only: bool =False,
                      woglia: bool = True, skip_indexviews: bool = False,
-                     qsub_co_jobs: int = 300, resume_job: bool = False):
+                     qsub_co_jobs: int = 300):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -1871,7 +1878,6 @@ class SuperSegmentationObject(object):
             skip_indexviews: Index views will not be generated, used for initial SSV
                 glia-removal rendering.
             qsub_co_jobs: Number of parallel jobs if batchjob is used.
-            resume_job: Batchjob parameter. Resumes a interrupted batchjob.
         """
         # TODO: partial rendering currently does not support index view generation (-> vertex
         #  indices will be different for each partial mesh)
@@ -1896,11 +1902,11 @@ class SuperSegmentationObject(object):
                              "cellobjects_only": cellobjects_only,
                              'skip_indexviews': skip_indexviews}
             params = [[par, so_kwargs, render_kwargs] for par in params]
-            qu.QSUB_script(
+            qu.batchjob_script(
                 params, "render_views_partial", suffix="_SSV{}".format(self.id),
                 n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True, allow_resubm_all_fail=True,
-                resume_job=resume_job, additional_flags="--gres=gpu:1")
+                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True,
+                additional_flags="--gres=gpu:1")
         else:
             # render raw data
             rot_mat = render_sampled_sso(
@@ -2013,7 +2019,6 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-
     def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
                        raw_view_key=None, save=False, ws=None, comp_window=None):
         """
@@ -2029,24 +2034,22 @@ class SuperSegmentationObject(object):
             This method then has to be called like:
                 'self.predict_semseg(m, 'spiness4', nb_views=4)'
 
-        Args:
-            m: int
-            semseg_key: str
-            nb_views: Optional[int]
-            verbose: bool
-            raw_view_key: str
-                key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
-                If key does not exist, views will be re-rendered with properties defined
-                in global_params.py or as given in the kwargs `ws`, `nb_views` and `comp_window`.
-            save: bool
-                If True, views will be saved.
-            ws: Tuple[int]
-                Window size in pixels [y, x]
-            comp_window: float
-                Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
-
-        Returns:
-
+        Parameters
+        ----------
+        semseg_key : str
+        nb_views : Optional[int]
+        k : int
+        verbose : bool
+        raw_view_key : str
+            key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
+            If key does not exist, views will be re-rendered with properties defined
+            in global_params.py or as given in the kwargs `ws`, `nb_views` and `comp_window`.
+        save : bool
+            If True, views will be saved.
+        ws : Tuple[int]
+            Window size in pixels [y, x]
+        comp_window : float
+            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
         """
         if (nb_views is not None) or (raw_view_key is not None):
             # treat as special view rendering
@@ -2091,7 +2094,6 @@ class SuperSegmentationObject(object):
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
                                 nb_cpus=self.nb_cpus, verbose=verbose,
                                 return_pred=self.version == 'tmp')  # do not write to disk
-
 
     def semseg2mesh(self, semseg_key: str, dest_path: Optional[str] = None,
                     nb_views: Optional[int] = None, k: int = 1,
@@ -2151,7 +2153,6 @@ class SuperSegmentationObject(object):
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
 
-
     def semseg_for_coords(self, coords: np.ndarray, semseg_key: str, k: int = 5,
                           ds_vertices: int = 20,
                           ignore_labels: Optional[Iterable[int]] = None):
@@ -2198,7 +2199,6 @@ class SuperSegmentationObject(object):
         maj_vote = colorcode_vertices(coords, vertices, vertex_labels, k=k,
                                       return_color=False, nb_cpus=self.nb_cpus)
         return maj_vote
-
 
     def get_spine_compartments(self, semseg_key: str = 'spiness', k: int = 1,
                                min_spine_cc_size: Optional[int] = None,
@@ -2270,7 +2270,6 @@ class SuperSegmentationObject(object):
             np.save("{}/head_coords_ssv{}_k{}_{}_ccsize{}.npy".format(
                 dest_folder, self.id, k, semseg_key, min_spine_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
-
 
     def sample_locations(self, force=False, cache=True, verbose=False,
                          ds_factor=None):
@@ -2842,19 +2841,20 @@ class SuperSegmentationObject(object):
         """
         Predicting class c
 
-        Args:
-            sc: SkelClassifier
-                Classifier to predict "axoness" or "spiness" for every node on
-                self.skeleton["nodes"]. Target type is defined in SkelClassifier
-            clf_name: str
-            feature_context_nm: int
-            max_dist: int
-                Defines the maximum path length from a source node for collecting
-                neighboring nodes to calculate an average prediction for
-                the source node.
-            leave_out_classes:
+        Parameters
+        ----------
+        sc : SkelClassifier
+            Classifier to predict "axoness" or "spiness" for every node on
+            self.skeleton["nodes"]. Target type is defined in SkelClassifier
+        clf_name : str
+        feature_context_nm : int
+        max_dist : int
+            Defines the maximum path length from a source node for collecting
+            neighboring nodes to calculate an average prediction for
+            the source node.
 
-        Returns:
+        Returns
+        -------
 
         """
         if feature_context_nm is None:
@@ -2897,40 +2897,49 @@ class SuperSegmentationObject(object):
         """
         return np.array(self.attr_for_coords(coords, [pred_type], radius_nm))
 
-    def attr_for_coords(self, coords, attr_keys, radius_nm=None):
+    def attr_for_coords(self, coords, attr_keys, radius_nm=None, k=1):
         """
         TODO: move to super_segmentation_helper.py
-            Query skeleton node attributes at given coordinates. Supports any
-            attribute stored in self.skeleton. If radius_nm is given, will
-            assign majority attribute value.
+        Query skeleton node attributes at given coordinates. Supports any
+        attribute stored in self.skeleton. If radius_nm is given, will
+        assign majority attribute value.
 
-        Args:
-            coords: np.array
-                Voxel coordinates, unscaled! [N, 3]
-            attr_keys: List[str]
-                Attribute identifier
-            radius_nm: Optional[float]
-                If None, will only use attribute of nearest node, otherwise
-                majority attribute value is used.
+        Parameters
+        ----------
+        coords : np.array
+            Voxel coordinates, unscaled! [N, 3]
+        radius_nm : Optional[float]
+            If None, will only use attribute of nearest node, otherwise
+            majority attribute value is used.
+        attr_keys : List[str]
+            Attribute identifier
+        k : int
+            Number of nearest neighbors, only if `radius_nm` is None.
 
-        Returns: List
+        Returns
+        -------
+        List
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm or [-1] if Key does not exist.
-
         """
         if type(attr_keys) is str:
             attr_keys = [attr_keys]
         coords = np.array(coords)
-        self.load_skeleton()
+        if self.skeleton is None:
+            self.load_skeleton()
         if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
             log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
                           "{}).".format(self.id, self.size, self.rep_coord))
             return -1 * np.ones((len(coords), len(attr_keys)))
 
         # get close locations
+        if k > 1 and len(self.skeleton["nodes"]) < k:
+            log_reps.warn(f'Number of skeleton nodes ({len(self.skeleton["nodes"])}) '
+                          f'is smaller than k={k} in SSO {self.id}. Lowering k.')
+            k = len(self.skeleton["nodes"])
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
         if radius_nm is None:
-            _, close_node_ids = kdtree.query(coords * self.scaling, k=1,
+            _, close_node_ids = kdtree.query(coords * self.scaling, k=k,
                                              n_jobs=self.nb_cpus)
         else:
             close_node_ids = kdtree.query_ball_point(coords * self.scaling,
@@ -2939,15 +2948,13 @@ class SuperSegmentationObject(object):
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
             for attr_key in attr_keys:
-                if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
-                    attr_dc[attr_key].append(-1)
-                    # # this is commented because there a legitimate cases for missing keys.
-                    # # TODO: think of a better warning / error raise
-                    # log_reps.warning(
-                    #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
-                    #     "".format(attr_key, self.id))
+                # e.g. for glia SSV axoness does not exist.
+                if attr_key not in self.skeleton:
+                    el = -1 if k == 1 else [-1] * k
+                    attr_dc[attr_key].append(el)
                     continue
-                if radius_nm is not None:  # use nodes within radius_nm, there might be multiple node ids
+                # use nodes within radius_nm, there might be multiple node ids
+                if radius_nm is not None:
                     if len(curr_close_node_ids) == 0:
                         dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
                         log_reps.info(
@@ -2966,7 +2973,7 @@ class SuperSegmentationObject(object):
                         attr_dc[attr_key].append(-1)
                 else:  # only nearest node ID
                     attr_dc[attr_key].append(self.skeleton[attr_key][curr_close_node_ids])
-        # safety in case latent morphology was not predicted / needed
+        # in case latent morphology was not predicted / needed
         # TODO: refine mechanism for this scenario, i.e. for exporting matrix
         if "latent_morph" in attr_keys:
             latent_morph = attr_dc["latent_morph"]

@@ -595,6 +595,7 @@ class SegmentationObject(object):
         Returns:
             Three flat arrays: indices, vertices, normals.
         """
+        # TODO: use self.load_mesh
         if self._mesh is None:
             if self.mesh_caching:
                 self._mesh = load_mesh(self)
