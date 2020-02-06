@@ -7,8 +7,9 @@ include:
   - template: Code-Quality.gitlab-ci.yml
 
 code_quality:
+  image: gitlab-registry.mpcdf.mpg.de/mpcdf/module-image
   variables:
-    CODE_QUALITY_IMAGE: "registry.example.com/codequality-fork:12-7-stable"
+    CODE_QUALITY_IMAGE: "registry.example.com/codequality-fork:12-5-stable"
   artifacts:
     paths: [gl-code-quality-report.json]
   tags:
