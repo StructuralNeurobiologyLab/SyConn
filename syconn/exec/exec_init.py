@@ -155,12 +155,12 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    # oew.generate_subcell_kd_from_proba(
-    #     global_params.config['existing_cell_organelles'],
-    #     chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
-    #     load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-    #     cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
-    #     n_cores=n_cores, overwrite=overwrite)
+    oew.generate_subcell_kd_from_proba(
+        global_params.config['existing_cell_organelles'],
+        chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
+        load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
+        cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
+        n_cores=n_cores, overwrite=overwrite)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -213,8 +213,7 @@ def run_create_rag():
 
     # add single SV connected components to initial graph
     sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
-    sv_ids = sd.ids
-    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
+    diff = np.array(list(set(sd.ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single-element connected component SVs which were missing'
              ' in initial RAG.'.format(len(diff)))
 

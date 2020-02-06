@@ -20,9 +20,9 @@ __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 class Config(object):
     """
-    Basic config object based on yaml. If file ``config.yml`` does not exist
-    at `working_dir` :py:attr:`~initialized` will be False, but no error is
-    raised.
+    Basic config object based on yaml. If no ``config.yml`` file exists
+    in `working_dir` :py:attr:`~initialized` will be False without raising an
+    error.
     """
     def __init__(self, working_dir):
         self._config = None
@@ -116,6 +116,10 @@ class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
     interface to all working directory dependent parameters.
+
+    Notes:
+        * Due to sync. checks it is favorable to not use :func:`~__getitem__`
+          inside loops.
 
     Todo:
         * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
@@ -238,7 +242,7 @@ class DynConfig(Config):
                            colored("'{}'".format(new_wd), 'red'))
         if self.initialized is False:
             from syconn import handler
-            default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+            default_conf_p = f'{os.path.dirname(handler.__file__)}/config.yml'
             self.log_main.warning(f'Initialized working directory without '
                                   f'existing config file at'
                                   f' {self.path_config}. Using default '
