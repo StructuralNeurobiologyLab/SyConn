@@ -63,5 +63,4 @@ pylint:
       - ./pylint/
   tags:
     - default
-    - master
   allow_failure: true
