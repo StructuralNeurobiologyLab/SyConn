@@ -3,6 +3,14 @@ stages:
   - test
   - cleanup
 
+include:
+  - template: Code-Quality.gitlab-ci.yml
+
+code_quality:
+  artifacts:
+    paths: [gl-code-quality-report.json]
+
+
 test:
   stage: test
   script:
