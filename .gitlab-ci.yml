@@ -9,7 +9,7 @@ include:
 code_quality:
   artifacts:
     paths: [gl-code-quality-report.json]
-  only:
+  tags:
     - docker
 
 
@@ -22,7 +22,8 @@ test:
     - pytest --ignore=tests/test_run.py
   except:
     - master
-    - docker
+  tags:
+    - default
 
 test-full:
   stage: test
