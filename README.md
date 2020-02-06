@@ -1,8 +1,10 @@
 [![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
 [![pipeline status](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/badges/master/pipeline.svg)](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/commits/master)
 [![coverage report](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/badges/master/coverage.svg)](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/commits/master)
+[![pylint status](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/-/jobs/artifacts/dev/raw/pylint/pylint.log?job=pylint)](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/commits/master)
 
-<img align="right" width="300" src="./docs/_static/logo_SyConn.png"><br/>
+<img align="right" width="300"
+src="./docs/_static/logo_SyConn.png"><br/>
 
 
 SyConn
