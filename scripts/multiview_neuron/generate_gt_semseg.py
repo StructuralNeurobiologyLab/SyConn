@@ -58,6 +58,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     palette = generate_palette(n_labels)
     sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=ssd_version)
+
     if initial_run:  # use default SSD version
         orig_sso = SuperSegmentationObject(sso_id)
         orig_sso.copy2dir(dest_dir=sso.ssv_dir, safe=False)

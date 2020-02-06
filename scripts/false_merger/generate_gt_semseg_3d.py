@@ -116,17 +116,18 @@ def gt_generation(kzip_paths, dest_dir=None):
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
 
-    dest_p_results = "{}/gt_results/".format(dest_dir)
+    dest_p_results = "{}/gt_convpoint/".format(dest_dir)
     if not os.path.isdir(dest_p_results):
         os.makedirs(dest_p_results)
 
     params = [(p, dest_p_results) for p in kzip_paths]
 
-    # start mapping for each kzip in kzip_paths
-    # start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
+    #start mapping for each kzip in kzip_paths
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
-    for kzip_path in kzip_paths:
-        labels2mesh((kzip_path, dest_p_results))
+    # Debug
+    # for kzip_path in kzip_paths:
+    #     labels2mesh((kzip_path, dest_p_results))
 
 
 if __name__ == "__main__":
@@ -135,7 +136,7 @@ if __name__ == "__main__":
     # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_CSfilter_kzip_v10_02/"
 
-    file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)[:10]
+    file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
 
     # generate ground truth
     gt_generation(file_paths, dest_dir=dest_gt_dir)

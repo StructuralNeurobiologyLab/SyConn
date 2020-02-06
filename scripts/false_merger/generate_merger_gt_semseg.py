@@ -8,10 +8,10 @@
 import numpy as np
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
-from syconn.proc.meshes import MeshObject, write_mesh2kzip, merge_meshes
+from syconn.proc.meshes import MeshObject, write_mesh2kzip
 from syconn.handler.multiviews import generate_rendering_locs
 from syconn.proc.graphs import bfs_smoothing
-from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
+from syconn.proc.rendering import render_sso_coords, load_rendering_func, \
     render_sso_coords_index_views
 from syconn.proc.ssd_assembly import init_sso_from_kzip
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
@@ -99,10 +99,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     n_labels = 2
     palette = generate_palette(n_labels)
 
-    # @debug
-    # sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
-    # sso_id1 = int(re.findall(r"(\d+)", kzip_path)[1])
-    # sso_id2 = int(re.findall(r"(\d+)", kzip_path)[2])
+    _render_mesh_coords = load_rendering_func('_render_mesh_coords')
+
     merged_sso_id = re.findall(r"(\d+)", kzip_path)[-2:]
     sso = init_sso_from_kzip(kzip_path, sso_id=1)
 
@@ -231,7 +229,7 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
 
     if dest_dir is None:
         # dest_dir = os.path.expanduser("~/{}_semseg_v10_2/".format(gt_type))
-        dest_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_v10_5views_200_6000/'
+        dest_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_mesh/merger_(256_128)_15360_(2e3_20e3)_10000/'
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
     dest_p_cache = "{}/cache_{}votes/".format(dest_dir, n_voting)
@@ -369,19 +367,18 @@ def gt_generation_helper(args):
 if __name__ == "__main__":
 
     if 1:
-        # comp_window = 10240 * 1.5
+        comp_window = 10240 * 1.5
         # ws = (256, 128)
-        comp_window = 20480
+        # comp_window = 20480
         ws = (512, 256)
-        dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
-        # dest_gt_dir = "/home/kloping/wholebrain/scratch/yliu/false_merger/{}".format(ws[0])  # local test: output directory
+        dest_gt_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_mesh/merger_(512_256)_15360_(2e3_20e3)_10000/' #output directory
         os.makedirs(dest_gt_dir, exist_ok=True)
         # global_params.wd = "/wholebrain/scratch/areaxfs3/"
         # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         initial_run = False
         # n_views = 3
         n_views = 5
-        label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_CSfilter_kzip_v10/"
+        label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_CSfilter_kzip_v10_02/"
         # label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
         # file_names = ["/merged438_cells252804_1149416.k.zip"]
         #               "/syn669316_cells31272448_26034194.k.zip",
@@ -391,9 +388,9 @@ if __name__ == "__main__":
         file_names = check_kzip_completeness(label_file_folder, all_file_names)
 
         start_index = 0
-        split_size = 50
+        split_size = 100  # how many cell that we process at a time.
         h5_idx = 0
-        h5_split_size = 20
+        h5_split_size = 10  # how many h5 files we output for <split_size> many cells.
         while start_index < len(file_names):
             # file_names = file_names[:200]
             # file_names = file_names[200:400]
@@ -405,7 +402,7 @@ if __name__ == "__main__":
             print("File_names from: {} ~ {}".format(start_index, start_index+split_size))
             print("Output h5 files: {} ~ {}".format(h5_idx, h5_idx+h5_split_size))
             file_paths = [label_file_folder + "/" + fname for fname in current_file_names][::-1]
-            GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views,
+            GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, dest_dir=dest_gt_dir,
                                     ws=ws, comp_window=comp_window,
                                     h5_idx=h5_idx, h5_split_size=h5_split_size, n_voting=0)
             h5_idx += h5_split_size

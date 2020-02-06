@@ -15,21 +15,21 @@ from syconn.handler.basics import data2kzip, write_obj2pkl, load_pkl2obj
 # Parameters
 
 ### Path to load dataset
-# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
+global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
 # cs_version = 'agg_0'
 
-global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
+# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
 cs_version = 0
 # global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/'  # local test
 
 # Path to store output kzip files
-folder_name = "/merger_CSfilter_kzip_"
+folder_name = "/merger_(256_128)_30720_(2e3_20e3)_10000/"
 data_folder = global_params.wd.split('/')[-2]
 suffix_list = data_folder.split('_')[1:]
 pkl_version = suffix_list[0]
 suffix_str = '_'.join(suffix_list) + '/'
 dest_folder = os.path.expanduser("~") + folder_name + suffix_str
-dest_folder = '/wholebrain/scratch/yliu/false_merger_generation/' + folder_name + 'v10'
+dest_folder = '/wholebrain/scratch/yliu/false_merger_generation/' + folder_name
 
 # Path to pickle file which stores the dictionary: cell_pair2cs_ids
 path_pkl_file = os.getcwd() + '/cell_pairs2cs_ids_' + pkl_version + '.pkl'
@@ -42,14 +42,16 @@ create_new_cs_ids = False
 # number of generated cells
 if num_cs_id == None:
     num_generated_cells = 10000
+    # num_generated_cells = 6000
+
 else:
     # if num_cs_id is not None, then use all the cell_pairs for the merger combination
     num_generated_cells = None
 
 # radius for kd-tree
 true_merger_radius = 2e3
-no_merger_radius = 30e3
-
+# no_merger_radius = 30e3
+no_merger_radius = 20e3
 
 # helper function for testing
 def write_dict_to_txt(dict, fname):
@@ -75,6 +77,7 @@ def cs_partner(id) -> Optional[List[int]]:
 def merge_superseg_objects(cell_obj1, cell_obj2):
 
     # TODO: test why working_dir='/tmp/' raise some errors
+    # TODO: add the edge. General  two closest nodes, add an edge between, add to SperSeghelper
     # merge meshes
     merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
     for mesh_type in ['sv', 'sj', 'syn_ssv', 'vc', 'mi']:
@@ -82,6 +85,7 @@ def merge_superseg_objects(cell_obj1, cell_obj2):
         mesh2 = cell_obj2.load_mesh(mesh_type)
         ind_lst = [mesh1[0], mesh2[0]]
         vert_lst = [mesh1[1], mesh2[1]]
+
         merged_cell._meshes[mesh_type] = merge_meshes(ind_lst, vert_lst)
         merged_cell._meshes[mesh_type] += ([None, None], ) # add normals
     
