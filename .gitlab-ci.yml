@@ -11,7 +11,7 @@ code_quality:
   artifacts:
     paths: [gl-code-quality-report.json]
   tags:
-    - docker
+    - docker-runner-02
 
 
 test:
