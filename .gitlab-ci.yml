@@ -5,10 +5,14 @@ stages:
 
 include:
   - template: Code-Quality.gitlab-ci.yml
+  only:
+    - docker
 
 code_quality:
   artifacts:
     paths: [gl-code-quality-report.json]
+  only:
+    - docker
 
 
 test:
@@ -20,6 +24,7 @@ test:
     - pytest --ignore=tests/test_run.py
   except:
     - master
+    - docker
 
 test-full:
   stage: test
