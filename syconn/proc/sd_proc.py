@@ -502,7 +502,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            n_max_co_processes=global_params.config.ncore_total,
-                           remove_jobfolder=True, n_cores=2)  # TODO: change n_cores=2 to 1!
+                           remove_jobfolder=True, n_cores=1)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=k,
