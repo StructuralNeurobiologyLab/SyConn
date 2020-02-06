@@ -8,11 +8,11 @@ include:
 
 code_quality:
   variables:
-    CODE_QUALITY_IMAGE: "registry.example.com/codequality-fork:latest"
+    CODE_QUALITY_IMAGE: "registry.example.com/codequality-fork:12-7-stable"
   artifacts:
     paths: [gl-code-quality-report.json]
   tags:
-    - code_quality
+    - docker
 
 
 test:
