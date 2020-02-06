@@ -5,8 +5,6 @@ stages:
 
 include:
   - template: Code-Quality.gitlab-ci.yml
-  only:
-    - docker
 
 code_quality:
   artifacts:
