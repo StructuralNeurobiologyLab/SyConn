@@ -29,7 +29,6 @@ test-full:
 
 build:
   stage: build
-  # TODO: use conda environment for test stage
   script:
     - conda env create -f environment.yml -n pysyintegration_m python --force
     - source ~/.bashrc
@@ -48,7 +47,7 @@ cleanup:
     - master
   tags:
     - master
-    
+
 pylint:
   stage: test
   before_script:
@@ -62,3 +61,7 @@ pylint:
   artifacts:
     paths:
       - ./pylint/
+  tags:
+    - default
+    - master
+  allow_failure: true
