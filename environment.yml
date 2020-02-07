@@ -38,7 +38,7 @@ dependencies:
   - scikit-image
   - pyopengl
   - opencv
-  - numba
+  - numba =0.45.1
   - openmesh-python
   - prompt_toolkit
   - vtki
