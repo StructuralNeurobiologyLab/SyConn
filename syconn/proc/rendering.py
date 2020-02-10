@@ -81,10 +81,13 @@ def render_mesh(mo, **kwargs):
     Render super voxel raw views located at randomly chosen center of masses in
     vertice cloud.
 
-    Parameters
-    ----------
-    mo : MeshObject
-        Mesh
+    Args:
+        mo: MeshObject
+            Mesh
+        **kwargs:
+
+    Returns:
+
     """
     multi_view_mesh = load_rendering_func('multi_view_mesh')
     if "physical_scale" in kwargs.keys():
@@ -100,16 +103,15 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
     Returns ViewContainer list if dest_dir is None, else writes
     views to dest_path.
 
-    Parameters
-    ----------
-    coords : np.array
-    ind : np.array [N, 1]
-    vert : np.array [N, 1]
+    Args:
+        coords: np.array
+        ind: np.array [N, 1]
+        vert: np.array [N, 1]
+        **kwargs:
 
-    Returns
-    -------
-    numpy.array
+    Returns: numpy.array
         views at each coordinate
+
     """
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     mesh = MeshObject("views", ind, vert)
@@ -125,26 +127,25 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_ro
                        return_views=False, cellobjects_only=False, rot_mat=None,
                        view_key=None):
     """
-
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    ws : tuple
-    verbose : bool
-    add_cellobjects : bool
-    cellobjects_only : bool
-    woglia : bool
-        without glia
-    index_views : bool
-    overwrite : bool
-    return_views : bool
-    cellobjects_only : bool
-    view_key : str
-    return_rot_mat : bool
-    rot_mat : np.ndarray
+    Args:
+        sso: SuperSegmentationObject
+        ws: tuple
+        verbose: bool
+        woglia: bool
+            without glia
+        return_rot_mat:
+        add_cellobjects: bool
+        overwrite: bool
+        index_views: bool
+        return_views: bool
+        cellobjects_only: bool
+        rot_mat: np.ndarray
+        view_key: str
+
+    Returns:
 
     """
     # get coordinates for N SV's in SSO
@@ -204,30 +205,28 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     """
     Render views of SuperSegmentationObject at given coordinates.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    coords : np.array
-        N, 3
-    add_cellobjects : bool
-    verbose : bool
-    clahe : bool
-    ws : Optional[Tuple[int]]
-        Window size in pixels (y, x). Default: (256, 128)
-    cellobjects_only : bool
-    wire_frame : bool
-    nb_views : int
-    comp_window : Optional[float]
-        window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
-    rot_mat : np.array
-    return_rot_mat : bool
+    Args:
+        sso: SuperSegmentationObject
+        coords: np.array
+            N, 3
+        add_cellobjects: bool
+        verbose: bool
+        clahe: bool
+        ws: Optional[Tuple[int]]
+            Window size in pixels (y, x). Default: (256, 128)
+        cellobjects_only: bool
+        wire_frame: bool
+        nb_views: int
+        comp_window: Optional[float]
+            window size in nm. the clipping box during rendering will have an extent
+            of [comp_window, comp_window / 2, comp_window]. Default: 8 um
+        rot_mat: np.array
+        return_rot_mat: bool
 
-    Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
         Resulting views rendered at each location.
         Output shape: len(coords), 4 [cell outline + number of cell objects], nb_views, y, x
+
     """
     if comp_window is None:
         comp_window = 8e3
@@ -312,32 +311,25 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     Uses per-face color via flattened vertices (i.e. vert[ind] -> slow!). This was added to be able
     to calculate the surface coverage captured by the views.
     TODO: Add fast GL_POINT rendering to omit slow per-face coloring (redundant vertices) and
-     expensive remapping from face IDs to vertex IDs.
+    expensive remapping from face IDs to vertex IDs.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    coords : np.array
-        N, 3
-    rot_mat :
-    comp_window : float
-        window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]
-    return_rot_matrices : bool
-    verbose : bool
-    ws : Optional[Tuple[int]]
-        Window size in pixels (y, x). Default: (256, 128)
-    rot_mat : np.array
-    nb_views : int
-    comp_window : Optional[float]
-        window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
+    Args:
+        sso: SuperSegmentationObject
+        coords: np.array
+            N, 3
+        verbose: bool
+        ws:  Optional[Tuple[int]]
+            Window size in pixels (y, x). Default: (256, 128)
+        rot_mat: np.array
+        nb_views: int
+        comp_window: float
+            window size in nm. the clipping box during rendering will have an extent
+            of [comp_window, comp_window / 2, comp_window]
+        return_rot_matrices:
 
-    Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
         array of views after rendering of locations.
-    -------
+
     """
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     if comp_window is None:
@@ -426,22 +418,20 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     """
     Render views with vertex colors corresponding to vertex labels.
 
-    Parameters
-    ----------
-    sso :
-    vertex_labels : np.array
-        vertex labels [N, 1]. Ordering and length have to be the same as
-        vertex array of SuperSegmentationObject (len(sso.mesh[1]) // 3).
-    coords :
-    verbose :
-    ws :
-    rot_mat :
-    nb_views :
-    comp_window :
-    return_rot_matrices :
+    Args:
+        sso:
+        vertex_labels: np.array
+            vertex labels [N, 1]. Ordering and length have to be the same as
+            vertex array of SuperSegmentationObject (len(sso.mesh[1]) // 3).
+        coords:
+        verbose:
+        ws:
+        rot_mat:
+        nb_views:
+        comp_window:
+        return_rot_matrices:
 
-    Returns
-    -------
+    Returns:
 
     """
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
@@ -472,14 +462,13 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
 def get_sso_view_dc(sso, verbose=False):
     """
     Extracts views from sampled positions in SSO for each SV.
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    verbose : bool
 
-    Returns
-    -------
-    dict
+    Args:
+        sso: SuperSegmentationObject
+        verbose: bool
+
+    Returns: dict
+
     """
     views = render_sampled_sso(sso, verbose=verbose, return_views=True)
     view_dc = {sso.id: arrtolz4string(views)}
@@ -490,13 +479,11 @@ def render_sso_ortho_views(sso):
     """
     Renders three views of SSO mesh.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
+    Args:
+        sso: SuperSegmentationObject
 
-    Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
+
     """
     multi_view_sso = load_rendering_func('multi_view_sso')
     views = np.zeros((3, 4, 1024, 1024))
@@ -518,33 +505,29 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                                       disable_batchjob=True):
     """
 
-    Parameters
-    ----------
-    ssv : SuperSegmentationObject
-    wd : string
-        working directory for accessing data
-    rendering_locations: array of locations to be rendered
-        if not given, rendering locations are retrieved from the SSV's SVs.
-        Results will be stored at SV locations.
-    n_jobs : int
-        number of parallel jobs running on same node of cluster
-    n_cores : int
-        Cores per job
-    verbose : bool
-        flag to show th progress of rendering.
-    return_views : bool
-        if False and rendering_locations is None, views will be saved at
-        SSV SVs
-    render_kwargs : dict
-    view_key : str
-    render_indexviews : bool
-    disable_batchjob : bool
+    Args:
+        ssv: SuperSegmentationObject
+        wd: string
+            working directory for accessing data
+        n_jobs: int
+            number of parallel jobs running on same node of cluster
+        n_cores: int
+            Cores per job
+        rendering_locations: array of locations to be rendered
+            if not given, rendering locations are retrieved from the SSV's SVs.
+            Results will be stored at SV locations.
+        verbose: bool
+            flag to show the progress of rendering.
+        render_kwargs: dict
+        view_key: str
+        render_indexviews: bool
+        return_views: bool
+            if False and rendering_locations is None, views will be saved at
+            SSV SVs
+        disable_batchjob: bool
 
-    Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
         array of views after rendering of locations.
-    -------
 
     """
     if rendering_locations is not None and return_views is False:
@@ -627,13 +610,15 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
 def write_sv_views_chunked(svs, views, part_views, view_kwargs):
     """
 
-    Parameters
-    ----------
-    svs : List[SegmentationObject]
-    views : np.ndarray
-    part_views : np.ndarray[int]
-        Cumulated number of views -> indices of start and end of SV views in `views` array
-    view_kwargs : dict
+    Args:
+        svs: List[SegmentationObject]
+        views: np.ndarray
+        part_views: np.ndarray[int]
+            Cumulated number of views -> indices of start and end of SV views in `views` array
+        view_kwargs: dict
+
+    Returns:
+
     """
     view_dc = {}
     for sv_ix, sv in enumerate(svs):
@@ -661,18 +646,15 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
             working directory for accessing data
         rendering_locations: array of locations to be rendered
             if not given, rendering locations are retrieved from the SSV's SVs. Results will be stored at SV locations.
-        n_jobs : int
+        n_jobs: int
             number of parallel jobs running on same node of cluster
-        verbose : bool
+        verbose: bool
             flag to show th progress of rendering.
         render_indexviews: Bool
             Flag to choose between render_index_view and render_sso_coords
 
-     Returns
-    -------
-    np.ndarray
+    Returns: np.ndarray
         array of views after rendering of locations.
-    -------
 
     """
     if n_jobs is None:

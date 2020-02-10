@@ -1389,20 +1389,18 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       return_proba=False):
     """
 
-    Parameters
-    ----------
-    model :
-    sos :
-    pred_key :
-    nb_cpus :
-    woglia :
-    verbose :
-    raw_only :
-    single_cc_only :
-    return_proba :
+    Args:
+        model:
+        sos:
+        pred_key:
+        nb_cpus:
+        woglia:
+        verbose:
+        raw_only:
+        single_cc_only:
+        return_proba:
 
-    Returns
-    -------
+    Returns:
 
     """
     nb_chunks = np.max([1, len(sos) // 200])
@@ -1432,19 +1430,17 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
     """
     Will not be written to disk if return_proba is True.
 
-    Parameters
-    ----------
-    model : nn.Model
-    views : np.array
-    ch : List[SegmentationObject]
-    pred_key : str
-    single_cc_only : bool
-    verbose : bool
-    return_proba : bool
-    nb_cpus : int
+    Args:
+        model: nn.Model
+        views: np.array
+        ch: List[SegmentationObject]
+        pred_key: str
+        single_cc_only: bool
+        verbose: bool
+        return_proba: bool
+        nb_cpus: int
 
-    Returns
-    -------
+    Returns:
 
     """
     for kk in range(len(views)):
@@ -1567,16 +1563,18 @@ def _export_sd_to_knossosdataset_thread(args):
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=None):
     """
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
-     with object type 'obj_type'.
+    with object type 'obj_type'.
 
-    Parameters
-    ----------
-    working_dir : str
-        Path to working directory
-    obj_type : str
-        Object type identifier, like 'sj', 'vc' or 'mi'
-    nb_cpus : int
-        Default is 20.
+    Args:
+        working_dir: str
+            Path to working directory
+        obj_type: str
+            Object type identifier, like 'sj', 'vc' or 'mi'
+        nb_cpus: int
+            Default is 20.
+
+    Returns:
+
     """
     if nb_cpus is None:
         nb_cpus = global_params.config['ncores_per_node']
