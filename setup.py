@@ -5,10 +5,11 @@ import glob
 
 # catch ImportError during the readthedocs build.
 # TODO: pytest stuff can probably be removed from `setup_requires`
+setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'lz4',
+                  'termcolor', 'fasteners', 'pyaml']
 try:
     from Cython.Build import cythonize
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner",
-                      "cython>=0.23"]
+    setup_requires.append("cython>=0.23")
     ext_modules = [Extension("*", [fname],
                              extra_compile_args=["-std=c++11"], language='c++')
                    for fname in glob.glob('syconn/*/*.pyx', recursive=True)]
@@ -18,8 +19,6 @@ try:
                            'cdivision': False, 'overflowcheck': True})
 except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'lz4',
-                      'termcolor', 'fasteners', 'pyaml']
     cython_out = None
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 with open(readme_file) as f:
