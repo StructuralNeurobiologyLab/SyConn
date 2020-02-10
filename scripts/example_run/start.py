@@ -63,17 +63,18 @@ if __name__ == '__main__':
         chunk_size = (512, 512, 256)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
-    curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
-    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-    if not os.path.isdir(h5_dir):
-        curr_dir = os.path.abspath(os.path.curdir) + '/'
+    for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
+                     os.path.abspath(os.path.curdir) + '/',
+                     os.path.expanduser('~/SyConn/')]:
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-        if not os.path.isdir(h5_dir):
-            raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
+        if os.path.isdir(h5_dir):
+            break
+    if not os.path.isdir(h5_dir):
+        raise FileNotFoundError(f'Example data folder could not be found'
+                                f' at "{curr_dir}".')
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
-        raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
-
+        raise FileNotFoundError(f'Incomplete example data in folder "{h5_dir}".')
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 

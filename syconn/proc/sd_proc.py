@@ -329,8 +329,8 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         shutil.rmtree(dir_props)
     if os.path.isdir(dir_meshes):
         shutil.rmtree(dir_meshes)
-    os.makedirs(dir_props)
-    os.makedirs(dir_meshes)
+    os.makedirs(dir_props, exist_ok=True)
+    os.makedirs(dir_meshes, exist_ok=True)
 
     all_times = []
     step_names = []
@@ -502,7 +502,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            n_max_co_processes=global_params.config.ncore_total,
-                           remove_jobfolder=True, n_cores=2)  # TODO: change n_cores=2 to 1!
+                           remove_jobfolder=True, n_cores=1)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=k,
@@ -612,7 +612,8 @@ def _map_subcell_extract_props_thread(args):
             obj_bdry = np.unique(obj_bdry)
             obj_ids_bdry[organelle] = obj_bdry
             dt_times_dc['data_io'] += time.time() - start
-            subcell_d.append(subc_d[None,])  # add auxiliary axis
+            # add auxiliary axis
+            subcell_d.append(subc_d[None, ])
         subcell_d = np.concatenate(subcell_d)
         start = time.time()
         cell_d = kd_cell.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
@@ -675,7 +676,6 @@ def _map_subcell_extract_props_thread(args):
                         log_proc.error(f'Exception raised when loading '
                                        f'mesh cache {p}:\n{e}')
                     else:
-                        print('USING CACHE')
                         if min_obj_vx[organelle] > 1:
                             for ix in small_obj_ids_inside[organelle]:
                                 # the cache was pruned in an early version
@@ -717,7 +717,6 @@ def _map_subcell_extract_props_thread(args):
                     log_proc.error(f'Exception raised when loading mesh cache {p}:'
                                    f'\n{e}')
                 else:
-                    print('USING CACHE')
                     if min_obj_vx['sv'] > 1:
                         for ix in small_obj_ids_inside['sv']:
                             # the cache was pruned in an early version
@@ -853,26 +852,6 @@ def _write_props_to_sc_thread(args):
                 for k in obj_keys:
                     # prop_dict contains [rc, bb, size] of the objects
                     s = prop_dict[2][k]
-
-                    # TODO: remove
-                    try:
-                        s = prop_dict[2][k]
-                    except KeyError:
-                        tmp_vertex_cnt = 0
-                        # make sure the corresponding mesh is small.
-                        # using min. number of voxels as a lower bound for number of vertices.
-                        for worker_nr, chunk_ids in sc_mesh_worker_dc[k].items():
-                            for ch_id in chunk_ids:
-                                p = f"{global_tmp_path}/tmp_meshes/meshes_{worker_nr}/" \
-                                    f"{organelle}_{worker_nr}_ch{ch_id}.pkl"
-                                with open(p, "rb") as pkl_file:
-                                    partial_mesh_dc = pkl.load(pkl_file)
-                                    tmp_vertex_cnt += len(partial_mesh_dc[k][1])
-                                del partial_mesh_dc
-                        log_proc.warning(f'Could not find properties of '
-                                         f'{organelle} {k} - contains '
-                                         f'{tmp_vertex_cnt} mesh vertices!')
-                        continue
 
                     if (s < mesh_min_obj_vx) or (s < min_obj_vx):
                         # do not load mesh-cache of small objects

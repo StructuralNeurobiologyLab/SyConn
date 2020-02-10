@@ -893,9 +893,9 @@ def _combine_and_split_cs_agg_thread(args):
 
         if n_items_for_path > n_per_voxel_path:
             voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                              "/voxel.pkl")
+                          "/voxel.pkl")
             attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                             "/attr_dict.pkl")
+                         "/attr_dict.pkl")
 
             cur_path_id += 1
             n_items_for_path = 0
@@ -910,16 +910,16 @@ def _combine_and_split_cs_agg_thread(args):
                 pass
 
             voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                                 "voxel.pkl", read_only=False)
+                                    "voxel.pkl", read_only=False)
             attr_dc = AttributeDict(cs.so_storage_path +
                                     voxel_rel_paths[cur_path_id] + "attr_dict.pkl",
                                     read_only=False)
 
     if n_items_for_path > 0:
         voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                          "/voxel.pkl")
+                      "/voxel.pkl")
         attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/attr_dict.pkl")
+                     "/attr_dict.pkl")
 
 
 def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,

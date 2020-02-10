@@ -213,8 +213,7 @@ def run_create_rag():
 
     # add single SV connected components to initial graph
     sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
-    sv_ids = sd.ids
-    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
+    diff = np.array(list(set(sd.ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single-element connected component SVs which were missing'
              ' in initial RAG.'.format(len(diff)))
 
