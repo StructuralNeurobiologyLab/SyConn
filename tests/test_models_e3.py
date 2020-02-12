@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
-
 from syconn.handler.prediction import *
 
 

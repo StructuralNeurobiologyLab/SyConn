@@ -4,6 +4,9 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+# import here, otherwise it might fail if it is imported after importing torch
+# see https://github.com/pytorch/pytorch/issues/19739
+import open3d
 from ..handler.config import initialize_logging
 from ..reps import log_reps
 from ..mp import batchjob_utils as qu
