@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
+import open3d as o3d
 import matplotlib
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
@@ -19,7 +20,6 @@ from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
-import open3d as o3d
 try:
     from vigra.filters import boundaryVectorDistanceTransform
     import vigra
