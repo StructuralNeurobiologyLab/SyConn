@@ -231,7 +231,8 @@ class SuperSegmentationObject(object):
 
         # init mesh dicts
         self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
-                        "vc": None, "mi": None, "conn": None}
+                        "vc": None, "mi": None, "conn": None,
+                        "syn_ssv_sym": None, "syn_ssv_asym": None}
 
         self._views = None
         self._dataset = None

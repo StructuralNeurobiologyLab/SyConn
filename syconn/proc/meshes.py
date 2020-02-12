@@ -978,6 +978,7 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
         set to -1.
 
     """
+    # TODO: requires update to include the bouton labels as axon
     preds = np.array(start_multiprocess_obj("axoness_preds",
                                              [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                 for sv in ssv.svs],

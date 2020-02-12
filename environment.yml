@@ -9,7 +9,7 @@ channels:
   - menpo
 dependencies:
   # From -c pytorch
-  - pytorch =1.1  # (version depends on elektronn3 revision)
+  - pytorch =1.2  # (version depends on elektronn3 revision)
   - torchvision
 
   # From conda-forge and defaults
@@ -17,7 +17,7 @@ dependencies:
   - pip
   - vigra
   - freeglut
-  - pyopengl =3.1.3b2  # other versions seem to not work for osmesa backend
+  - pyopengl
   - pyopengl-accelerate
   - python-snappy
   - ipython
@@ -68,6 +68,7 @@ dependencies:
   - pip:
     - zmesh
     - plyfile
+    - open3d
     # For importing the latest cell type model. TODO: transition to .pts models
     - adabound
 

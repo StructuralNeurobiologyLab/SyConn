@@ -1182,14 +1182,14 @@ def get_myelin_cnn():
         The trained Inference model.
     """
     try:
-        from elektronn3.models.base import InferenceModel
+        from elektronn3.inference.inference import Predictor
     except ImportError as e:
         msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
     m_path = global_params.config.mpath_myelin
-    m = InferenceModel(m_path)
+    m = Predictor(m_path)
     return m
 
 

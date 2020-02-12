@@ -51,7 +51,7 @@ def collect_glia_sv():
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
     # get SSV glia splits
-    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'])
+    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node']*10)
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
                                                  nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")

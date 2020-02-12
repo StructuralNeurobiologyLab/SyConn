@@ -57,8 +57,8 @@ def load_rendering_func(func_name):
                         del sys.modules[k]
                 import OpenGL.osmesa
             from ..proc import rendering_osmesa as rendering_module
-            log_proc.warn('EGL requirements could not be imported ({}). '
-                          'Switched to OSMESA platform.'.format(e))
+            log_proc.error('EGL requirements could not be imported ({}). '
+                           'Switched to OSMESA platform.'.format(e))
     elif global_params.config['pyopengl_platform'] == 'osmesa':
         try:
             import OpenGL.osmesa
