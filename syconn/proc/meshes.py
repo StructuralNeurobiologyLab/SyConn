@@ -1107,15 +1107,12 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     Returns:
 
     """
-    # # Commented lines belonged to self-compiled openmesh version
-    # options = openmesh.Options()
-    # options += openmesh.Options.Binary
     mesh_obj = openmesh.TriMesh()
     ind, vert, norm = mesh
     if vert.ndim == 1:
-        vert = vert.reshape(-1 ,3)
+        vert = vert.reshape(-1, 3)
     if ind.ndim == 1:
-        ind = ind.reshape(-1 ,3)
+        ind = ind.reshape(-1, 3)
     if center is not None:
         vert -= center
     if scale is not None:
@@ -1123,27 +1120,20 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     vert_openmesh = []
     if color is not None:
         mesh_obj.request_vertex_colors()
-        # options += openmesh.Options.VertexColor
         if color.ndim == 1:
             color = np.array([color] * len(vert))
         color = color.astype(np.float64)  # required by openmesh
     for ii, v in enumerate(vert):
         v = v.astype(np.float64)  # Point requires double
-        # v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
         v_openmesh = mesh_obj.add_vertex(v)
         if color is not None:
-            # mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
             mesh_obj.set_color(v_openmesh, color[ii])
         vert_openmesh.append(v_openmesh)
     for f in ind:
         f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
                       vert_openmesh[f[2]]]
         mesh_obj.add_face(f_openmesh)
-    # result = openmesh.write_mesh(mesh_obj, dest_path, options)
-    # result = openmesh.write_mesh(mesh_obj, dest_path)
-    result = openmesh.write_mesh(dest_path, mesh_obj)
-    # if not result:
-    #     log_proc.error("Error occured when writing mesh to .obj file.")
+    openmesh.write_mesh(dest_path, mesh_obj)
 
 
 def mesh_area_calc(mesh):

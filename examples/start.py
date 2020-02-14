@@ -50,7 +50,7 @@ if __name__ == '__main__':
         ('nnodes_total', 1),
         ('log_level', log_level),
         # # these will be created during synapse type prediction (
-        # # exec_dense_prediction.predict_synapsetype())
+        # # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
         # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
         # ('cell_objects', {'asym_label': 1, 'sym_label': 2})

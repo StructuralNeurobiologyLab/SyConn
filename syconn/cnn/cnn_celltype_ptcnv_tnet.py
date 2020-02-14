@@ -16,10 +16,11 @@ elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention
-from elektronn3.training import Trainer3d, Backup
+from elektronn3.training import Trainer3dTriplet, Backup
 from elektronn3.training import SWA
 import torch.nn.functional as F
 import numpy as np
+from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # Dimension of latent space
 Z_DIM = 25
@@ -60,7 +61,7 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
     parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
+    parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
     parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
     parser.add_argument('--cl', type=int, default=5, help='Number of classes')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -100,12 +101,13 @@ if __name__ == '__main__':
     margin = 0.2
 
     # celltype specific
-    cval = 0
+    cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
 
     if name is None:
-        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_cv{cval}'
+        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \
+               f'cv{cval}_nDim{Z_DIM}'
         if cellshape_only:
             name += '_cellshapeOnly'
         if not use_syntype:
@@ -126,12 +128,12 @@ if __name__ == '__main__':
     input_channels = 1
 
     # # Model selection
-    model = ModelNet40(input_channels, Z_DIM)
+    # model = ModelNet40(input_channels, Z_DIM)
 
-    # model = ModelNetBig(input_channels, Z_DIM)
-    # name += '_big'
+    model = ModelNetBig(input_channels, Z_DIM)
+    name += '_big'
 
-    # model = ModelNetAttention(input_channels, Z_DIM)
+    # model = ModelNetAttention(input_channels, Z_DIM, npoints=npoints)
     # name += '_attention'
 
     model = TripletNet(model)
@@ -170,16 +172,17 @@ if __name__ == '__main__':
     # PREPARE AND START TRAINING #
 
     # set up optimization
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    # optimizer = torch.optim.SGD(
-    #     model.parameters(),
-    #     lr=0,  # Learning rate is set by the lr_sched below
-    #     momentum=0.9,
-    #     weight_decay=0.5e-4,
-    # )
+    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=lr,  # Learning rate is set by the lr_sched below
+        momentum=0.9,
+        weight_decay=0.5e-4,
+    )
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9999)
+    # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
+    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=1.5)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,
@@ -194,14 +197,14 @@ if __name__ == '__main__':
         criterion.cuda()
 
     # Create trainer
-    trainer = Trainer3d(
+    trainer = Trainer3dTriplet(
         model=model,
         criterion=criterion,
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
         batchsize=batch_size,
-        num_workers=5,
+        num_workers=10,
         save_root=save_root,
         enable_save_trace=enable_save_trace,
         exp_name=name,

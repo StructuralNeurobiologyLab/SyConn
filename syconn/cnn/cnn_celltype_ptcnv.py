@@ -16,8 +16,9 @@ elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention
-from elektronn3.training import Trainer3d, Backup
+from elektronn3.training import Trainer3d, Backup, metrics
 from elektronn3.training import SWA
+from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 
@@ -26,7 +27,7 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--cl', type=int, default=5, help='Number of classes')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -63,12 +64,13 @@ num_classes = 8
 lr = 1e-3
 lr_stepsize = 1000
 lr_dec = 0.995
-max_steps = 150000
+max_steps = 500000
 
 # celltype specific
 cval = 0
 cellshape_only = False
 use_syntype = True
+dr = 0.1
 
 if name is None:
     name = f'celltype_pts_scale{scale_norm}_nb{npoints}_cv{cval}'
@@ -77,7 +79,7 @@ if name is None:
     if not use_syntype:
         name += '_noSyntype'
 if use_cuda:
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 
@@ -88,17 +90,17 @@ if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
 
-# CREATE NETWORK AND PREPARE DATA SET #
+# CREATE NETWORK AND PREPARE DATA SET
 input_channels = 1
 
 # # Model selection
-# model = ModelNet40(input_channels, num_classes)
+model = ModelNet40(input_channels, num_classes, dropout=dr)
 
-# model = ModelNetBig(input_channels, num_classes)
+# model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
-model = ModelNetAttention(input_channels, num_classes)
-name += '_attention'
+# model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
+# name += '_attention'
 
 if use_cuda:
     model.to(device)
@@ -133,16 +135,19 @@ valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False
 # PREPARE AND START TRAINING #
 
 # set up optimization
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-# optimizer = torch.optim.SGD(
-#     model.parameters(),
-#     lr=0,  # Learning rate is set by the lr_sched below
-#     momentum=0.9,
-#     weight_decay=0.5e-4,
-# )
+# optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+optimizer = torch.optim.SGD(
+    model.parameters(),
+    lr=lr,  # Learning rate is set by the lr_sched below
+    momentum=0.9,
+    weight_decay=0.5e-4,
+)
+
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9999)
+# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
+lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=1.5)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,
@@ -156,6 +161,14 @@ criterion = torch.nn.CrossEntropyLoss()
 if use_cuda:
     criterion.cuda()
 
+valid_metrics = {  # mean metrics
+    'val_accuracy_mean': metrics.Accuracy(),
+    'val_precision_mean': metrics.Precision(),
+    'val_recall_mean': metrics.Recall(),
+    'val_DSC_mean': metrics.DSC(),
+    'val_IoU_mean': metrics.IoU(),
+}
+
 # Create trainer
 trainer = Trainer3d(
     model=model,
@@ -163,8 +176,10 @@ trainer = Trainer3d(
     optimizer=optimizer,
     device=device,
     train_dataset=train_ds,
+    valid_dataset=valid_ds,
     batchsize=batch_size,
-    num_workers=5,
+    num_workers=10,
+    valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
     exp_name=name,

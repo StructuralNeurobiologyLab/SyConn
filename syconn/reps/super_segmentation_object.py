@@ -2348,7 +2348,7 @@ class SuperSegmentationObject(object):
             dest_path = self.skeleton_kzip_path
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def mesh2kzip(self, dest_path=None, obj_type="sv", ext_color=None):
+    def mesh2kzip(self, dest_path=None, obj_type="sv", ext_color=None, **kwargs):
         """
         Writes mesh of SSV to kzip as .ply file.
 
@@ -2409,9 +2409,10 @@ class SuperSegmentationObject(object):
                     ext_color = np.concatenate([ext_color, alpha_arr], axis=1)
                 color = ext_color.flatten()
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
-                        ply_fname=obj_type + ".ply")
+                        ply_fname=obj_type + ".ply", **kwargs)
 
-    def meshes2kzip(self, dest_path=None, sv_color=None, synssv_instead_sj=False):
+    def meshes2kzip(self, dest_path=None, sv_color=None,
+                    synssv_instead_sj=False, object_types=None, **kwargs):
         """
         Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip.
 
@@ -2421,19 +2422,24 @@ class SuperSegmentationObject(object):
                 array with RGBA values or None to use default values
                 (see :func:`~mesh2kzip`).
             synssv_instead_sj: bool
+            object_types: List[str]
+                Objects to export.
 
         Returns:
 
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        for ot in ["sj", "vc", "mi", "sv"]:  # determines rendering order in KNOSSOS
+        if object_types is None:
+            object_types = ["sj", "vc", "mi", "sv"]
+        for ot in object_types:  # determines rendering order in KNOSSOS
             if ot == "sj" and synssv_instead_sj:
                 ot = 'syn_ssv'
-            self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
-            ot == "sv" else None)
+            self.mesh2kzip(obj_type=ot, dest_path=dest_path,
+                           ext_color=sv_color if ot == "sv" else None, **kwargs)
 
-    def mesh2file(self, dest_path=None, center=None, color=None, scale=None):
+    def mesh2file(self, dest_path=None, center=None, color=None, scale=None,
+                  obj_type='sv'):
         """
         Writes mesh to file (e.g. .ply, .stl, .obj) via the 'openmesh' library.
         If possible, writes it as binary.
@@ -2441,17 +2447,17 @@ class SuperSegmentationObject(object):
         Args:
             dest_path: str
             center: np.array
-                scaled center coordinates (in nm)
+                scaled center coordinates (in nm).
             color: np.array
-                Either single color (will be applied to all vertices) or
-                per-vertex color array
+                Either single color (1D; will be applied to all vertices) or
+                per-vertex color array (2D).
             scale: float
-                Multiplies vertex locations after centering
-
-        Returns:
-
+                Multiplies vertex locations after centering.
+            obj_type: str
+                Defines the object type which is used for loading the mesh
+                via :func:`~load_mesh`.
         """
-        mesh2obj_file(dest_path, self.mesh, center=center, color=color,
+        mesh2obj_file(dest_path, self.load_mesh(obj_type), center=center, color=color,
                       scale=scale)
 
     def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton', ),

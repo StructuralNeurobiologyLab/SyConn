@@ -58,8 +58,7 @@ if elektronn3_avail:
         Loader for cell vertices.
         """
         def __init__(self, base_dir=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, cv_val=0, cellshape_only=False, cellobject_weight=None,
-                     use_syntype=True):
+                     train=True, cv_val=0, cellshape_only=False, use_syntype=True):
             """
             Notes:
                 Cache re-usage is set to 10.
@@ -113,10 +112,6 @@ if elektronn3_avail:
                 train :  True, or False (-> validation data will be used with key 'valid')
                 transform : transformations which are applied in `__getitem__`.
                 cv_val : Cross validation value.
-                cellobject_weight : Factor which is multiplied with the object weight (which is
-                    based on the fraction) to favor cell surface vertices (depending on how
-                    they were created, there might be densitiy differences which need to be
-                    compensated).
                 use_syntype: If True, uses different features for symmetric and asymmetric
                     synapses,
             """
@@ -137,20 +132,19 @@ if elektronn3_avail:
             else:
                 split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv{cv_val}_10fold.pkl'
                 split_dc = load_pkl2obj(split_dc_path)
+                # Do not use validation split during training. Use training samples for validation
+                # error instead (should still be informative due to missing augmentations)
+                split_dc['valid'] = split_dc['train']
             label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
+            self.train = train
             self._cache_cnt = 0
             self.num_pts = npoints
             self._cached_pts = None
             self._cached_pts_feats = None
-            self._cached_pts_weights = None
             self._cached_id = None
-            self._max_cache_cnt = 10
+            self._max_cache_cnt = 10 if self.train else 2
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
-            if cellobject_weight is None:
-                cellobject_weight = dict(sv=1, mi=0.8, vc=0.8, syn_ssv=0.8,
-                                         syn_ssv_sym=0.8, syn_ssv_asym=0.8)
-            self.cellobject_weight = cellobject_weight
 
             self.label_dc = label_dc
             self.splitting_dict = split_dc
@@ -165,7 +159,6 @@ if elektronn3_avail:
             print('Using {} .npy GT files for {}.'.format(
                 len(self.fnames), "training" if train else "validation"))
             self.transform = transform
-            self.train = train
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
@@ -175,9 +168,7 @@ if elektronn3_avail:
             """
             Samples random points (with features) from the cell vertices.
             Features are set to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending
-            on the vertex type. The subset of vertices is drawn randomly with weights.
-            Weights are calculated per object type (sv, mi, ..) as fraction of
-            the total vertices.
+            on the vertex type. The subset of vertices is drawn randomly (uniformly).
 
             Args:
                 item : If ``self.train=True``, `item` will be overwritten by
@@ -192,28 +183,43 @@ if elektronn3_avail:
                 if self.train:
                     item = np.random.randint(0, len(self.fnames))
                 self._cached_id = self.sso_ids[item]
-                self._cached_pts, self._cached_pts_feats, self._cached_pts_weights = \
-                    self.load_ssv_sample(item)
+                self._cached_pts, self._cached_pts_feats = self.load_ssv_sample(item)
+                if np.any(np.isnan(self._cached_pts)):
+                    log_cnn.error(f'Cell {self._cached_id} contains NaN vertices.')
+                    raise()
 
             # TODO: reseed deterministically
-            idx_arr = np.random.choice(np.arange(len(self._cached_pts)), self.num_pts,
-                                       p=self._cached_pts_weights)
-            self._cache_cnt += 1
+            idx_arr = np.random.choice(np.arange(len(self._cached_pts)),
+                                       self.num_pts)
             pc = PointCloud(vertices=self._cached_pts[idx_arr])
             self.transform(pc)
 
-            pts = torch.from_numpy(pc.vertices).float()
+            if np.any(np.isnan(pc.vertices)):
+                log_cnn.error(f'PointCloud of {self._cached_id} contains'
+                              f' NaN vertices.')
+                raise ()
+            pts = torch.from_numpy(np.asarray(pc.vertices)).float()
+            if np.any(np.isnan(pc.vertices)):
+                log_cnn.error(f'PointCloud after transformations of cell'
+                              f' {self._cached_id} contains NaN vertices.')
+                raise ()
             lbs = torch.from_numpy(self.label_dc[self._cached_id][None].astype(np.int)).long()
             feats = torch.from_numpy(self._cached_pts_feats[idx_arr][..., None]).float()
+            self._cache_cnt += 1
             return {'pts': pts, 'features': feats, 'target': lbs}
 
         def __len__(self):
             if self.train:
-                return len(self.fnames) * 10
+                return len(self.fnames) * 50
             else:
-                return 0  # Do not use validation data during training.
+                return 40  # Do not use validation data during training.
 
         def load_ssv_sample(self, item):
+            """
+            Internal parameters:
+                * `feat_dc`: Labels for the different point types:
+                  ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
+            """
             feat_dc = dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)
             pts = np.load(self.fnames[item])
             ks = pts.files
@@ -225,6 +231,7 @@ if elektronn3_avail:
             sample_pts = {k: None for k in ks}
             pcd = o3d.geometry.PointCloud()
             for k in ks:
+                pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(pts[k])
                 pcd = pcd.voxel_down_sample(voxel_size=50)
                 sample_pts[k] = np.asarray(pcd.points)
@@ -232,20 +239,12 @@ if elektronn3_avail:
             if self.cellshape_only is True:
                 sample_pts = sample_pts['sv']
                 sample_feats = np.ones(len(sample_pts)) * feat_dc['sv']
-                sample_weights = np.ones(len(sample_pts))
             else:
                 sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
-                                                         for k in ks])
+                                               for k in ks])
                 # len(sample_feats) is the equal to the total number of vertices
-                ratios = {k: len(sample_pts[k]) * self.cellobject_weight[k] for k in ks}
-
-                sample_weights = np.concatenate(
-                    [[ratios[k]] * len(sample_pts[k]) for k in ks])
-
-                sample_pts = np.concatenate(
-                    [sample_pts[k] for k in ks])
-            sample_weights /= np.sum(sample_weights)
-            return sample_pts, sample_feats, sample_weights
+                sample_pts = np.concatenate([sample_pts[k] for k in ks])
+            return sample_pts, sample_feats
 
 
     class CellCloudDataTriplet(CellCloudData):
@@ -258,7 +257,6 @@ if elektronn3_avail:
             self._cached_pts_altern = None
             self._cached_id_altern = None
             self._cached_pts_feats_altern = None
-            self._cached_pts_weights_altern = None
             self._cache_cnt_altern = 0
             # alternative data should have different permutation pattern
             self._max_cache_cnt_altern = max(int(self._max_cache_cnt // 3 + 1), 1)
@@ -270,13 +268,12 @@ if elektronn3_avail:
                 if self.train:
                     item = np.random.randint(0, len(self.fnames))
                 self._cached_id_altern = self.sso_ids[item]
-                self._cached_pts_altern, self._cached_pts_feats_altern, \
-                    self._cached_pts_weights_altern = self.load_ssv_sample(item)
+                self._cached_pts_altern, self._cached_pts_feats_altern \
+                    = self.load_ssv_sample(item)
 
             # TODO: reseed deterministically
-            idx_arr = np.random.choice(np.arange(len(self._cached_pts_altern)), self.num_pts,
-                                       p=self._cached_pts_weights_altern)
-            self._cache_cnt_altern += 1
+            idx_arr = np.random.choice(np.arange(len(self._cached_pts_altern)),
+                                       self.num_pts)
             pc = PointCloud(vertices=self._cached_pts_altern[idx_arr])
             self.transform(pc)
 
@@ -294,6 +291,7 @@ if elektronn3_avail:
                 res[k] = torch.cat([x0[k].unsqueeze(0), x1[k].unsqueeze(0),
                                     x2[k].unsqueeze(0)], dim=0)
             del x0, x1, x2
+            self._cache_cnt_altern += 1
             return res
 
 
