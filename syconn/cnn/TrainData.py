@@ -212,7 +212,7 @@ if elektronn3_avail:
             if self.train:
                 return len(self.fnames) * 50
             else:
-                return 40  # Do not use validation data during training.
+                return 100
 
         def load_ssv_sample(self, item):
             """

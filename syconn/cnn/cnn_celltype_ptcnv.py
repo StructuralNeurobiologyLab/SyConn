@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention
+from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, ModelNetSelection
 from elektronn3.training import Trainer3d, Backup, metrics
 from elektronn3.training import SWA
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
@@ -26,8 +26,8 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--bs', type=int, default=8, help='Batch size')
+parser.add_argument('--sp', type=int, default=10000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--cl', type=int, default=5, help='Number of classes')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -79,7 +79,7 @@ if name is None:
     if not use_syntype:
         name += '_noSyntype'
 if use_cuda:
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
@@ -94,13 +94,16 @@ save_root = os.path.expanduser(save_root)
 input_channels = 1
 
 # # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr)
+# model = ModelNet40(input_channels, num_classes, dropout=dr)
 
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
 # model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
 # name += '_attention'
+
+model = ModelNetSelection(input_channels, num_classes, npoints=npoints, dropout=dr)
+name += '_selection'
 
 if use_cuda:
     model.to(device)
