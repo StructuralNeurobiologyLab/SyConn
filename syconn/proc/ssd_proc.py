@@ -395,10 +395,11 @@ def merge_ssv(cell_obj1, cell_obj2, merge_location=None):
         for j, node2 in enumerate(skeleton2):
             dist = np.linalg.norm(node1 - node2)
             if dist < min_distance:
-                node_pair = np.array([i, j])
+                node_pair = np.array([i, j+len(skeleton1)], dtype=np.uint64)
+                min_distance = dist
+    node_pair = np.resize(node_pair, (1, 2))
 
     merged_cell.skeleton['edges'] = np.concatenate([merged_cell.skeleton['edges'], node_pair])
-
     merged_cell.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
                                                     cell_obj2.skeleton['nodes']])
     merged_cell.skeleton['diameters'] = np.concatenate([cell_obj1.skeleton['diameters'],
