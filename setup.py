@@ -6,7 +6,7 @@ import glob
 # catch ImportError during the readthedocs build.
 # TODO: pytest stuff can probably be removed from `setup_requires`
 setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'lz4',
-                  'termcolor', 'fasteners', 'pyaml']
+                  'termcolor', 'fasteners', 'pyaml', 'dill']
 try:
     from Cython.Build import cythonize
     setup_requires.append("cython>=0.23")

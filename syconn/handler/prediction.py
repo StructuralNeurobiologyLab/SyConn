@@ -82,12 +82,14 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
             raw_data_offset = np.array(raw_data_offset)
         raw = kd.load_raw(size=(size // mag + 2 * raw_data_offset) * mag,
                           offset=(offset // mag - raw_data_offset) * mag,
-                          nb_threads=2, mag=mag).swapaxes(0, 2)
+                          mag=mag).swapaxes(0, 2)
         raw_data.append(raw[None, ])
-        label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
-                                       verbose=False, show_progress=False)
+        # TODO: use load_kzip_seg
+        label = kd._load_kzip_seg(zip_fname, offset, size, mag=mag,
+                                  apply_mergelist=False).swapaxes(0, 2)
         label = label
         label_data.append(label[None, ])
+
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
     label = np.concatenate(label_data, axis=0)
     try:
