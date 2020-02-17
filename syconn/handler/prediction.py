@@ -95,7 +95,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
     try:
         _ = parse_cc_dict_from_kzip(zip_fname)
     except:  # mergelist.txt does not exist
-        label = np.zeros(size)
+        label = np.zeros(size, dtype=np.uint)
         return raw.astype(np.float32) / 255., label
     return raw.astype(np.float32) / 255., label
 
@@ -138,7 +138,7 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
                       override_mfp_to_active=mfp_active, imposed_batch_size=1)
         original_do_rates = m.dropout_rates
         m.dropout_rates = ([0.0, ] * len(original_do_rates))
-        pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
+        pred = m.predict_dense(raw, pad_raw=True)[1]
         # remove area without sufficient FOV
         pred = zxy2xyz(pred)
         raw = zxy2xyz(raw)
@@ -380,8 +380,9 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
             foreground_ids = []
         print("Foreground IDs not assigned. Inferring from "
               "'mergelist.txt' in k.zip.:", foreground_ids)
-    create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug,
-                      target_labels=target_labels)
+    return create_h5_gt_file(fname_dest, raw, label, foreground_ids,
+                             debug=debug, target_labels=target_labels)
+
 
 
 def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
@@ -412,12 +413,13 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     """
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
-    print(os.path.split(fname)[1])
+    print(f'Processing output for file: {os.path.split(fname)[1]}')
     print("Label (before):", label.shape, label.dtype, label.min(), label.max())
+    print("Raw (before):", raw.shape, raw.dtype, raw.min(), raw.max())
     label = binarize_labels(label, foreground_ids, target_labels=target_labels)
     label = xyz2zxy(label)
     raw = xyz2zxy(raw)
-    print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
+    print("Raw (after):", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label (after mapping):", label.shape, label.dtype, label.min(), label.max())
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
@@ -426,6 +428,7 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
         raw = (raw * 255).astype(np.uint8, copy=False)
         label = label.astype(np.uint8) * 255
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
+    return np.unique(label)
 
 
 def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
@@ -447,6 +450,8 @@ def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
     np.array
     """
     new_labels = np.zeros_like(labels)
+    if len(foreground_ids) == 0:
+        return new_labels.astype(np.uint16)
     if foreground_ids is None:
         target_labels = [1]
         if len(np.unique(labels)) > 2:
