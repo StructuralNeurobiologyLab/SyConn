@@ -54,14 +54,14 @@ class TripletNet(nn.Module):
 
 
 if __name__ == '__main__':
-    # PARSE PARAMETERS #
+    # PARSE PARAMETERS
 
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--na', type=str, help='Experiment name',
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
     parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+    parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
     parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
     parser.add_argument('--cl', type=int, default=5, help='Number of classes')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     lr = 1e-3
     lr_stepsize = 1000
     lr_dec = 0.995
-    max_steps = 150000
+    max_steps = 1000000
     margin = 0.2
 
     # celltype specific
@@ -128,10 +128,10 @@ if __name__ == '__main__':
     input_channels = 1
 
     # # Model selection
-    # model = ModelNet40(input_channels, Z_DIM)
+    model = ModelNet40(input_channels, Z_DIM)
 
-    model = ModelNetBig(input_channels, Z_DIM)
-    name += '_big'
+    # model = ModelNetBig(input_channels, Z_DIM)
+    # name += '_big'
 
     # model = ModelNetAttention(input_channels, Z_DIM, npoints=npoints)
     # name += '_attention'
