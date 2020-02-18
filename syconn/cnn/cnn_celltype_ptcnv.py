@@ -16,7 +16,7 @@ elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, \
-    ModelNetSelection, ModelNetSelectionBig
+    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig
 from elektronn3.training import Trainer3d, Backup, metrics
 from elektronn3.training import SWA
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
@@ -28,7 +28,7 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--cl', type=int, default=5, help='Number of classes')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -61,7 +61,7 @@ scale_norm = args.scale_norm
 size = args.ana
 save_root = args.sr
 
-num_classes = 8
+
 lr = 1e-3
 lr_stepsize = 1000
 lr_dec = 0.995
@@ -72,6 +72,8 @@ cval = 0
 cellshape_only = False
 use_syntype = True
 dr = 0.1
+num_classes = 8
+input_channels = 5 if use_syntype else 4
 
 if name is None:
     name = f'celltype_pts_scale{scale_norm}_nb{npoints}_cv{cval}'
@@ -80,7 +82,7 @@ if name is None:
     if not use_syntype:
         name += '_noSyntype'
 if use_cuda:
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
@@ -92,22 +94,25 @@ if save_root is None:
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
-input_channels = 1
 
-# # Model selection
-# model = ModelNet40(input_channels, num_classes, dropout=dr)
-
+# Model selection
+model = ModelNet40(input_channels, num_classes, dropout=dr)
+#
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
 # model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
 # name += '_attention'
 
+# model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints, dropout=dr)
+# name += '_attention_big'
+
+
 # model = ModelNetSelection(input_channels, num_classes, npoints=npoints, dropout=dr)
 # name += '_selection'
 
-model = ModelNetSelectionBig(input_channels, num_classes, dropout=dr)
-name += '_selection_big'
+# model = ModelNetSelectionBig(input_channels, num_classes, dropout=dr)
+# name += '_selection_big'
 
 if use_cuda:
     model.to(device)
@@ -185,7 +190,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=batch_size,
-    num_workers=10,
+    num_workers=5,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

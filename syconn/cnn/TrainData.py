@@ -28,7 +28,9 @@ except ImportError as e:
 import os
 import threading
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import label_binarize
 from sklearn.decomposition import PCA
+from functools import lru_cache
 try:
     from torch.utils.data import Dataset
     import torch
@@ -145,7 +147,11 @@ if elektronn3_avail:
             self._max_cache_cnt = 10 if self.train else 2
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
-
+            self._feat_dc = dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)
+            if use_syntype:
+                self._num_obj_types = 5
+            else:
+                self._num_obj_types = 4
             self.label_dc = label_dc
             self.splitting_dict = split_dc
             id_key = "train" if train else "valid"
@@ -189,11 +195,10 @@ if elektronn3_avail:
                     raise()
 
             # TODO: reseed deterministically
-            idx_arr = np.random.choice(np.arange(len(self._cached_pts)),
-                                       self.num_pts)
+            idx_arr = np.random.choice(np.arange(len(self._cached_pts)), self.num_pts,
+                                       replace=len(self._cached_pts) < self.num_pts)
             pc = PointCloud(vertices=self._cached_pts[idx_arr])
             self.transform(pc)
-
             if np.any(np.isnan(pc.vertices)):
                 log_cnn.error(f'PointCloud of {self._cached_id} contains'
                               f' NaN vertices.')
@@ -204,7 +209,7 @@ if elektronn3_avail:
                               f' {self._cached_id} contains NaN vertices.')
                 raise ()
             lbs = torch.from_numpy(self.label_dc[self._cached_id][None].astype(np.int)).long()
-            feats = torch.from_numpy(self._cached_pts_feats[idx_arr][..., None]).float()
+            feats = torch.from_numpy(self._cached_pts_feats[idx_arr]).float()
             self._cache_cnt += 1
             return {'pts': pts, 'features': feats, 'target': lbs}
 
@@ -214,20 +219,22 @@ if elektronn3_avail:
             else:
                 return 100
 
-        def load_ssv_sample(self, item):
+        def load_ssv_sample(self, item, npoints=None):
             """
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
             """
-            feat_dc = dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)
-            pts = np.load(self.fnames[item])
+            pts = _load_npz(self.fnames[item])
             ks = pts.files
             if self.use_syntype:
-                ks.remove('syn_ssv')
+                if 'syn_ssv' in ks:
+                    ks.remove('syn_ssv')
             else:
-                ks.remove('syn_ssv_sym')
-                ks.remove('syn_ssv_asym')
+                if 'syn_ssv_sym' in ks:
+                    ks.remove('syn_ssv_sym')
+                if 'syn_ssv_asym' in ks:
+                    ks.remove('syn_ssv_asym')
             sample_pts = {k: None for k in ks}
             pcd = o3d.geometry.PointCloud()
             for k in ks:
@@ -238,13 +245,24 @@ if elektronn3_avail:
             del pts, pcd
             if self.cellshape_only is True:
                 sample_pts = sample_pts['sv']
-                sample_feats = np.ones(len(sample_pts)) * feat_dc['sv']
+                sample_feats = np.ones(len(sample_pts)) * self._feat_dc['sv']
             else:
-                sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
+                sample_feats = np.concatenate([[self._feat_dc[k]] * len(sample_pts[k])
                                                for k in ks])
+                sample_feats = label_binarize(sample_feats, classes=np.arange(self._num_obj_types))
                 # len(sample_feats) is the equal to the total number of vertices
                 sample_pts = np.concatenate([sample_pts[k] for k in ks])
+            if npoints is not None:
+                idx_arr = np.random.choice(np.arange(len(sample_pts)),
+                                           npoints, replace=len(sample_pts) < npoints)
+                sample_pts = sample_pts[idx_arr]
+                sample_feats = sample_feats[idx_arr]
             return sample_pts, sample_feats
+
+
+    @lru_cache(maxsize=256)
+    def _load_npz(fname):
+        return np.load(fname)
 
 
     class CellCloudDataTriplet(CellCloudData):
@@ -278,14 +296,20 @@ if elektronn3_avail:
             self.transform(pc)
 
             pts = torch.from_numpy(pc.vertices).float()
-            lbs = torch.from_numpy(self.label_dc[self._cached_id_altern][None].astype(np.int)).long()
-            feats = torch.from_numpy(self._cached_pts_feats_altern[idx_arr][..., None]).float()
+            feats = torch.from_numpy(self._cached_pts_feats_altern[idx_arr]).float()
 
-            # draw two times from the same cell
-            x0 = super().__getitem__(0)  # base sample
-            self._cache_cnt -= 1
-            x1 = super().__getitem__(0)  # similar sample to base
-            x2 = {'pts': pts, 'features': feats, 'target': lbs}  # alternative sample
+            # draw two times from a different cell
+            while True:
+                ix = np.random.randint(0, len(self.fnames))
+                if self.sso_ids[ix] != self._cached_id_altern:
+                    break
+            x0 = self.load_ssv_sample(ix, self.num_pts)  # base sample
+            x0 = {'pts': torch.from_numpy(x0[0]).float(), 'features':
+                  torch.from_numpy(x0[1]).float()}
+            x1 = self.load_ssv_sample(ix, self.num_pts)  # similar sample to base
+            x1 = {'pts': torch.from_numpy(x1[0]).float(), 'features':
+                  torch.from_numpy(x1[1]).float()}
+            x2 = {'pts': pts, 'features': feats}  # alternative sample
             res = {}
             for k in x0:
                 res[k] = torch.cat([x0[k].unsqueeze(0), x1[k].unsqueeze(0),

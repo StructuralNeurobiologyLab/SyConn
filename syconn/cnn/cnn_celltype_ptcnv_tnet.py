@@ -23,7 +23,7 @@ import numpy as np
 from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # Dimension of latent space
-Z_DIM = 25
+Z_DIM = 10
 
 
 class TripletNet(nn.Module):
@@ -104,6 +104,7 @@ if __name__ == '__main__':
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
+    input_channels = 5 if use_syntype else 4
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \
@@ -125,7 +126,6 @@ if __name__ == '__main__':
     save_root = os.path.expanduser(save_root)
 
     # CREATE NETWORK AND PREPARE DATA SET #
-    input_channels = 1
 
     # # Model selection
     model = ModelNet40(input_channels, Z_DIM)
