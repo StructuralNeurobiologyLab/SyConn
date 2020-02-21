@@ -73,7 +73,7 @@ cellshape_only = False
 use_syntype = True
 dr = 0.1
 num_classes = 8
-input_channels = 5 if use_syntype else 4
+onehot = True
 
 if name is None:
     name = f'celltype_pts_scale{scale_norm}_nb{npoints}_cv{cval}'
@@ -81,8 +81,14 @@ if name is None:
         name += '_cellshapeOnly'
     if not use_syntype:
         name += '_noSyntype'
+if onehot:
+    input_channels = 5 if use_syntype else 4
+else:
+    input_channels = 1
+    name += '_flatinp'
+
 if use_cuda:
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 
@@ -96,16 +102,17 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr)
-#
+# model = ModelNet40(input_channels, num_classes, dropout=dr)
+# name += '_2'
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
 # model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
 # name += '_attention'
 
-# model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints, dropout=dr)
-# name += '_attention_big'
+model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints,
+                             dropout=dr)
+name += '_attention_big_2'
 
 
 # model = ModelNetSelection(input_channels, num_classes, npoints=npoints, dropout=dr)
@@ -140,9 +147,11 @@ valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
 train_ds = CellCloudData(npoints=npoints, transform=train_transform, cv_val=cval,
-                         cellshape_only=cellshape_only, use_syntype=use_syntype)
+                         cellshape_only=cellshape_only, use_syntype=use_syntype,
+                         onehot=onehot)
 valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False,
-                         cv_val=cval, cellshape_only=cellshape_only, use_syntype=use_syntype)
+                         cv_val=cval, cellshape_only=cellshape_only,
+                         use_syntype=use_syntype, onehot=onehot)
 
 # PREPARE AND START TRAINING #
 

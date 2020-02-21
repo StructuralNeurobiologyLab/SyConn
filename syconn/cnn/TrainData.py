@@ -60,7 +60,8 @@ if elektronn3_avail:
         Loader for cell vertices.
         """
         def __init__(self, base_dir=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, cv_val=0, cellshape_only=False, use_syntype=True):
+                     train=True, cv_val=0, cellshape_only=False, use_syntype=True,
+                     onehot=True):
             """
             Notes:
                 Cache re-usage is set to 10.
@@ -147,6 +148,7 @@ if elektronn3_avail:
             self._max_cache_cnt = 10 if self.train else 2
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
+            self.onehot = onehot
             self._feat_dc = dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)
             if use_syntype:
                 self._num_obj_types = 5
@@ -225,8 +227,10 @@ if elektronn3_avail:
                 * `feat_dc`: Labels for the different point types:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
             """
-            pts = _load_npz(self.fnames[item])
-            ks = pts.files
+            sample_pts = _load_npz(self.fnames[item])
+            ks = list(sample_pts.keys())  # copy explicitly
+            # TODO: utilize that sample_pts is now a dict -> work with values() and keys()
+            #  instead of the numpy io pseudo-dict key iterations
             if self.use_syntype:
                 if 'syn_ssv' in ks:
                     ks.remove('syn_ssv')
@@ -235,21 +239,16 @@ if elektronn3_avail:
                     ks.remove('syn_ssv_sym')
                 if 'syn_ssv_asym' in ks:
                     ks.remove('syn_ssv_asym')
-            sample_pts = {k: None for k in ks}
-            pcd = o3d.geometry.PointCloud()
-            for k in ks:
-                pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(pts[k])
-                pcd = pcd.voxel_down_sample(voxel_size=50)
-                sample_pts[k] = np.asarray(pcd.points)
-            del pts, pcd
             if self.cellshape_only is True:
                 sample_pts = sample_pts['sv']
                 sample_feats = np.ones(len(sample_pts)) * self._feat_dc['sv']
             else:
                 sample_feats = np.concatenate([[self._feat_dc[k]] * len(sample_pts[k])
                                                for k in ks])
-                sample_feats = label_binarize(sample_feats, classes=np.arange(self._num_obj_types))
+                if self.onehot:
+                    sample_feats = label_binarize(sample_feats, classes=np.arange(self._num_obj_types))
+                else:
+                    sample_feats = sample_feats[..., None]
                 # len(sample_feats) is the equal to the total number of vertices
                 sample_pts = np.concatenate([sample_pts[k] for k in ks])
             if npoints is not None:
@@ -262,7 +261,14 @@ if elektronn3_avail:
 
     @lru_cache(maxsize=256)
     def _load_npz(fname):
-        return np.load(fname)
+        pts = np.load(fname)
+        sample_pts = {k: None for k in pts.files}
+        for k in pts.files:
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(pts[k])
+            pcd = pcd.voxel_down_sample(voxel_size=50)
+            sample_pts[k] = np.asarray(pcd.points)
+        return sample_pts
 
 
     class CellCloudDataTriplet(CellCloudData):

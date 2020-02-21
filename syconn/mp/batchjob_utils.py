@@ -66,17 +66,18 @@ python_path_global = sys.executable
 
 
 def batchjob_script(params: list, name: str,
-                           batchjob_folder: Optional[str] = None,
-                           n_cores: int = 1, additional_flags: str = '',
-                           suffix: str = "", job_name: str = "default",
-                           script_folder: Optional[str] = None,
-                           n_max_co_processes: Optional[int] = None,
-                           max_iterations: int = 5,
-                           python_path: Optional[str] = None,
-                           disable_batchjob: bool = False,
-                           use_dill: bool = False,
-                           remove_jobfolder: bool = False,
-                           log: Logger = None, sleep_time: int = 5):
+                    batchjob_folder: Optional[str] = None,
+                    n_cores: int = 1, additional_flags: str = '',
+                    suffix: str = "", job_name: str = "default",
+                    script_folder: Optional[str] = None,
+                    n_max_co_processes: Optional[int] = None,
+                    max_iterations: int = 5,
+                    python_path: Optional[str] = None,
+                    disable_batchjob: bool = False,
+                    use_dill: bool = False,
+                    remove_jobfolder: bool = False,
+                    log: Logger = None, sleep_time: int = 5,
+                    show_progress=True):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -112,6 +113,7 @@ def batchjob_script(params: list, name: str,
         remove_jobfolder: Remove `batchjob_folder` after successful termination.
         log: Logger.
         sleep_time: Sleep duration before checking batch job states again.
+        show_progress: Only used if ``disabled_batchjob=True``.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -141,7 +143,7 @@ def batchjob_script(params: list, name: str,
     # Check if any fallback is required
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path,
+                                 script_folder, python_path, show_progress=show_progress,
                                  remove_jobfolder=remove_jobfolder, log=log)
     if global_params.config['batch_proc_system'] != 'SLURM':
         log_mp.warn('"batchjob_script" currently does not support any other '

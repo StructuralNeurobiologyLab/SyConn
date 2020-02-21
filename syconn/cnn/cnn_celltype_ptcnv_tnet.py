@@ -104,7 +104,7 @@ if __name__ == '__main__':
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
-    input_channels = 5 if use_syntype else 4
+    onehot = False
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \
@@ -113,6 +113,12 @@ if __name__ == '__main__':
             name += '_cellshapeOnly'
         if not use_syntype:
             name += '_noSyntype'
+    if onehot:
+        input_channels = 5 if use_syntype else 4
+    else:
+        input_channels = 1
+        name += '_flatinp'
+
     if use_cuda:
         device = torch.device('cuda')
     else:
@@ -164,10 +170,11 @@ if __name__ == '__main__':
                                       clouds.Center()])
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
-                                    cellshape_only=cellshape_only, use_syntype=use_syntype)
+                                    cellshape_only=cellshape_only, use_syntype=use_syntype,
+                                    onehot=onehot)
     valid_ds = CellCloudDataTriplet(npoints=npoints, transform=valid_transform, train=False,
                                     cv_val=cval, cellshape_only=cellshape_only,
-                                    use_syntype=use_syntype)
+                                    use_syntype=use_syntype, onehot=onehot)
 
     # PREPARE AND START TRAINING #
 
