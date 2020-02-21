@@ -94,17 +94,17 @@ if __name__ == '__main__':
     size = args.ana
     save_root = args.sr
 
-    lr = 1e-3
+    lr = 1e-2
     lr_stepsize = 1000
     lr_dec = 0.995
     max_steps = 1000000
-    margin = 0.2
+    margin = 0.4
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
-    input_channels = 5 if use_syntype else 4
+    onehot = False
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \
@@ -113,6 +113,12 @@ if __name__ == '__main__':
             name += '_cellshapeOnly'
         if not use_syntype:
             name += '_noSyntype'
+    if onehot:
+        input_channels = 5 if use_syntype else 4
+    else:
+        input_channels = 1
+        name += '_flatinp'
+
     if use_cuda:
         device = torch.device('cuda')
     else:
@@ -164,10 +170,11 @@ if __name__ == '__main__':
                                       clouds.Center()])
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
-                                    cellshape_only=cellshape_only, use_syntype=use_syntype)
+                                    cellshape_only=cellshape_only, use_syntype=use_syntype,
+                                    onehot=onehot)
     valid_ds = CellCloudDataTriplet(npoints=npoints, transform=valid_transform, train=False,
                                     cv_val=cval, cellshape_only=cellshape_only,
-                                    use_syntype=use_syntype)
+                                    use_syntype=use_syntype, onehot=onehot)
 
     # PREPARE AND START TRAINING #
 
@@ -182,7 +189,7 @@ if __name__ == '__main__':
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=1.5)
+    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=1.5)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,
