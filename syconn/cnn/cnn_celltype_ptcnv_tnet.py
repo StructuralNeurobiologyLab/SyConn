@@ -104,7 +104,7 @@ if __name__ == '__main__':
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
-    onehot = False
+    onehot = True
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \

@@ -61,7 +61,6 @@ for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
                                       render_indexviews=True, return_views=False,
                                       render_kwargs=render_kwargs)
-
 # render small SSVs in parallel, one job per SSV
 if len(ssvs_small) != 0:
     multi_params = [ssv.id for ssv in ssvs_small]
