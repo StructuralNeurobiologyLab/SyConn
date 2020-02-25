@@ -5,20 +5,21 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Jonathan Klimesch
 
-import numpy as np
 import os
 import glob
 import re
-import pickle as pkl
-from syconn.proc.meshes import mesh_area_calc
-from knossos_utils.skeleton_utils import load_skeleton
+import ipdb
+import numpy as np
+import networkx as nx
+from collections import deque
 from sklearn.neighbors import KDTree
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from knossos_utils.skeleton_utils import load_skeleton
 from syconn import global_params
 from syconn.mp.mp_utils import start_multiprocess_imap
 from multiprocessing import cpu_count
-from morphx.classes.hybridmesh import HybridMesh
 from morphx.classes.cloudensemble import CloudEnsemble
+from morphx.classes.hybridmesh import HybridMesh
+from syconn.reps.super_segmentation import SuperSegmentationObject
 
 
 def comment2int(comment: str):
@@ -86,21 +87,26 @@ def labels2mesh(args):
     a_node_coords = a_node_coords[(a_node_labels != -1)]
     a_node_labels = a_node_labels[(a_node_labels != -1)]
 
-    # create KD tree from skeleton node coordinates
-    tree = KDTree(a_node_coords)
-
-    # transfer labels from skeleton to mesh
-    vertices = hms[0].vertices
-    dist, ind = tree.query(vertices, k=1)  # k-nearest neighbour
-    vertex_labels = a_node_labels[ind]  # retrieving labels of vertices
-
     # load skeleton (skeletons were already generated before)
-    # sso = create_sso_skeleton_fast(sso, max_dist_thresh_iter2=10000)
-
     sso.load_skeleton()
     skel = sso.skeleton
-    nodes = skel['nodes']*sso.scaling
+    nodes = skel['nodes'] * sso.scaling
     edges = skel['edges']
+    node_labels = np.ones((len(nodes), 1)) * -1
+
+    # create KD tree for mapping existing labels from annotation skeleton to real skeleton
+    tree = KDTree(nodes)
+    dist, ind = tree.query(a_node_coords, k=1)
+    node_labels[ind.reshape(len(ind))] = a_node_labels.reshape(-1, 1)
+
+    g = nx.Graph()
+    g.add_nodes_from([(i, dict(label=node_labels[i])) for i in range(len(nodes))])
+    g.add_edges_from([(edges[i][0], edges[i][1]) for i in range(len(edges))])
+
+    for node in g.nodes:
+        if g.nodes[node]['label'] == -1:
+            ix = label_search(g, node)
+            node_labels[node] = node_labels[ix]
 
     encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
 
@@ -111,14 +117,31 @@ def labels2mesh(args):
     clouds = {}
     for ix, cloud in enumerate(hms):
         if ix == 0:
-            hm = HybridMesh(vertices=vertices, labels=vertex_labels, faces=hms[0].faces, nodes=nodes,
-                            edges=edges, encoding=encoding)
+            vertices = hms[0].vertices
+            hm = HybridMesh(vertices=vertices, labels=np.ones(len(vertices))*-1, faces=hms[0].faces, nodes=nodes,
+                            edges=edges, encoding=encoding, node_labels=node_labels)
+            hm.nodel2vertl()
         else:
             hms[ix].set_encoding({obj_names[ix]: label_map[ix]})
             clouds[obj_names[ix]] = hms[ix]
 
     ce = CloudEnsemble(clouds, hm, no_pred=['mi', 'vc', 'sy'])
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
+
+
+def label_search(g: nx.Graph, source: int) -> int:
+    visited = [source]
+    neighbors = g.neighbors(source)
+    de = deque([i for i in neighbors])
+    while de:
+        curr = de.pop()
+        if g.nodes[curr]['label'] != -1:
+            return curr
+        if curr not in visited:
+            visited.append(curr)
+            neighbors = g.neighbors(curr)
+            de.extendleft([i for i in neighbors if i not in visited])
+    return 0
 
 
 def gt_generation(kzip_paths, out_path):
@@ -135,7 +158,7 @@ if __name__ == "__main__":
     # set paths
     destination = "/wholebrain/u/jklimesch/thesis/gt/gt_meshsets/"
     global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/gt_julian/"
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/gt_julian/sparse_gt/old_encoding/"
 
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
 
