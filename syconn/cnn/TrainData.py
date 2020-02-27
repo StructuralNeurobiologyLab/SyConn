@@ -149,7 +149,7 @@ if elektronn3_avail:
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
-            self._feat_dc = dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)
+            self._feat_dc = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
             if use_syntype:
                 self._num_obj_types = 5
             else:
