@@ -19,14 +19,16 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
 from .. import global_params
 
 import re
+from sklearn.preprocessing import label_binarize
 import numpy as np
 import os
 import sys
+from multiprocessing import Process, Queue
 import time
 import tqdm
 from logging import Logger
 import shutil
-from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple
+from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple, Generator
 from scipy.ndimage import zoom
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -1358,3 +1360,40 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     entr_norm = entropy(proba) / entr_max
     # convert to certainty estimate
     return 1 - entr_norm
+
+
+pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
+
+
+def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
+                        num_obj_types: int, onehot: bool = True,
+                        npoints: Optional[int] = None, use_syntype: bool = True,
+                        downsample: Optional[float] = None):
+    # TODO: add optional downsampling here
+    feat_dc = dict(feat_dc)
+    if use_syntype:
+        if 'syn_ssv' in feat_dc:
+            del feat_dc['syn_ssv']
+    else:
+        if 'syn_ssv_sym' in feat_dc:
+            del feat_dc['syn_ssv_sym']
+        if 'syn_ssv_asym' in feat_dc:
+            del feat_dc['syn_ssv_asym']
+    if cellshape_only is True:
+        sample_pts = sample_pts['sv']
+        sample_feats = np.ones((len(sample_pts), 1)) * feat_dc['sv']
+    else:
+        sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
+                                       for k in feat_dc.keys()])
+        if onehot:
+            sample_feats = label_binarize(sample_feats, classes=np.arange(num_obj_types))
+        else:
+            sample_feats = sample_feats[..., None]
+        # len(sample_feats) is the equal to the total number of vertices
+        sample_pts = np.concatenate([sample_pts[k] for k in feat_dc.keys()])
+    if npoints is not None:
+        idx_arr = np.random.choice(np.arange(len(sample_pts)),
+                                   npoints, replace=len(sample_pts) < npoints)
+        sample_pts = sample_pts[idx_arr]
+        sample_feats = sample_feats[idx_arr]
+    return sample_pts, sample_feats

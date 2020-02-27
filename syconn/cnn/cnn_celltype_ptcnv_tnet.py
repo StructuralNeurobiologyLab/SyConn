@@ -41,22 +41,11 @@ class TripletNet(nn.Module):
             return self.rep_net(feat, inp)
         assert feat.dim() == 4, 'Expecting feature shape (B, 3, N, C) and ' \
                                 'input shape (B, 3, N, 3) during training.'
-        # less memory intensive but probably slower  - contiguous might slow it down even further
-        z_0 = self.rep_net(feat[:, 0].contiguous(), inp[:, 0].contiguous())
-        z_1 = self.rep_net(feat[:, 1].contiguous(), inp[:, 1].contiguous())
-        z_2 = self.rep_net(feat[:, 2].contiguous(), inp[:, 2].contiguous())
-        # # merge axis B and 3-sample (base, similar, different)
-        # orig_size = feat.size()
-        # # shape:  B*3 x NPOINTS x NFEATS
-        # feat = feat.view(-1, feat.size(2), feat.size(3))
-        # # shape:  B*3 x NPOINTS x 3
-        # inp = inp.view(-1, inp.size(2), inp.size(3))
-        # # restore batch and 3-sample axes
-        # z = self.rep_net(feat, inp).view(orig_size[0], orig_size[1], -1)
-        # z_0, z_1, z_2 = z[:, 0], z[:, 1], z[:, 2]
+        z_0 = self.rep_net(feat[0], inp[0])
+        z_1 = self.rep_net(feat[1], inp[1])
+        z_2 = self.rep_net(feat[2], inp[2])
         dist_a = F.pairwise_distance(z_0, z_1, 2)
         dist_b = F.pairwise_distance(z_0, z_2, 2)
-
         return dist_a, dist_b, z_0, z_1, z_2
 
 
@@ -101,17 +90,17 @@ if __name__ == '__main__':
     size = args.ana
     save_root = args.sr
 
-    lr = 1e-3
+    lr = 1e-2
     lr_stepsize = 1000
     lr_dec = 0.995
     max_steps = 1000000
-    margin = 0.2
+    margin = 0.4
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
-    onehot = False
+    onehot = True
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \

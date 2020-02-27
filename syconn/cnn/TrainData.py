@@ -14,7 +14,8 @@ from knossos_utils import KnossosDataset
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
-from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, \
+    generate_pts_sample, pts_feat_dict
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -28,7 +29,6 @@ except ImportError as e:
 import os
 import threading
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import label_binarize
 from sklearn.decomposition import PCA
 from functools import lru_cache
 try:
@@ -149,7 +149,7 @@ if elektronn3_avail:
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
-            self._feat_dc = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
+            self._feat_dc = pts_feat_dict
             if use_syntype:
                 self._num_obj_types = 5
             else:
@@ -228,34 +228,13 @@ if elektronn3_avail:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
             """
             sample_pts = _load_npz(self.fnames[item])
-            ks = list(sample_pts.keys())  # copy explicitly
-            # TODO: utilize that sample_pts is now a dict -> work with values() and keys()
-            #  instead of the numpy io pseudo-dict key iterations
-            if self.use_syntype:
-                if 'syn_ssv' in ks:
-                    ks.remove('syn_ssv')
-            else:
-                if 'syn_ssv_sym' in ks:
-                    ks.remove('syn_ssv_sym')
-                if 'syn_ssv_asym' in ks:
-                    ks.remove('syn_ssv_asym')
             if self.cellshape_only is True:
                 sample_pts = sample_pts['sv']
-                sample_feats = np.ones(len(sample_pts)) * self._feat_dc['sv']
+                sample_feats = np.ones((len(sample_pts), 1)) * self._feat_dc['sv']
             else:
-                sample_feats = np.concatenate([[self._feat_dc[k]] * len(sample_pts[k])
-                                               for k in ks])
-                if self.onehot:
-                    sample_feats = label_binarize(sample_feats, classes=np.arange(self._num_obj_types))
-                else:
-                    sample_feats = sample_feats[..., None]
-                # len(sample_feats) is the equal to the total number of vertices
-                sample_pts = np.concatenate([sample_pts[k] for k in ks])
-            if npoints is not None:
-                idx_arr = np.random.choice(np.arange(len(sample_pts)),
-                                           npoints, replace=len(sample_pts) < npoints)
-                sample_pts = sample_pts[idx_arr]
-                sample_feats = sample_feats[idx_arr]
+                sample_pts, sample_feats = generate_pts_sample(
+                    sample_pts, self._feat_dc, self.cellshape_only, self._num_obj_types,
+                    self.onehot, npoints, self.use_syntype)
             return sample_pts, sample_feats
 
 
