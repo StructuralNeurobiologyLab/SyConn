@@ -35,21 +35,17 @@ class TripletNet(nn.Module):
         self.rep_net = rep_net
 
     def forward(self, feat, inp):
-        if not self.train:
+        if not self.training:
             assert feat.dim() == 3, 'Expecting feature shape (B, N, C) and ' \
                                     'input shape (B, N, 3) during inference.'
             return self.rep_net(feat, inp)
         assert feat.dim() == 4, 'Expecting feature shape (B, 3, N, C) and ' \
-                                'input shape (B, 3, N, 3) during inference.'
+                                'input shape (B, 3, N, 3) during training.'
         z_0 = self.rep_net(feat[0], inp[0])
         z_1 = self.rep_net(feat[1], inp[1])
         z_2 = self.rep_net(feat[2], inp[2])
-        if self.train:
-            dist_a = F.pairwise_distance(z_0, z_1, 2)
-            dist_b = F.pairwise_distance(z_0, z_2, 2)
-        else:
-            dist_a = None
-            dist_b = None
+        dist_a = F.pairwise_distance(z_0, z_1, 2)
+        dist_b = F.pairwise_distance(z_0, z_2, 2)
         return dist_a, dist_b, z_0, z_1, z_2
 
 
