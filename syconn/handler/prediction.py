@@ -4,6 +4,9 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+# import here, otherwise it might fail if it is imported after importing torch
+# see https://github.com/pytorch/pytorch/issues/19739
+import open3d
 from ..handler.config import initialize_logging
 from ..reps import log_reps
 from ..mp import batchjob_utils as qu
@@ -16,14 +19,16 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
 from .. import global_params
 
 import re
+from sklearn.preprocessing import label_binarize
 import numpy as np
 import os
 import sys
+from multiprocessing import Process, Queue
 import time
 import tqdm
 from logging import Logger
 import shutil
-from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple
+from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple, Generator
 from scipy.ndimage import zoom
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -43,24 +48,21 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
     Loads ground truth from zip file, generated with Knossos. Corresponding
     dataset config file is locatet at kd_p.
 
-    Parameters
-    ----------
-    zip_fname : str
-    kd_p : str or List[str]
-    raw_data_offset : int or np.array
-        number of voxels used for additional raw offset, i.e. the offset for the
-        raw data will be label_offset - raw_data_offset, while the raw data
-        volume will be label_volume + 2*raw_data_offset. It will
-        use 'kd.scaling' to account for dataset anisotropy if scalar or a
-        list of length 3 hast to be provided for a custom x, y, z offset.
-    verbose : bool
-    mag : int
-        Data mag. level.
-
-    Returns
-    -------
-    np.array, np.array
+    Args:
+        zip_fname: str
+        kd_p: str or List[str]
+        raw_data_offset: int or np.array
+            number of voxels used for additional raw offset, i.e. the offset for the
+            raw data will be label_offset - raw_data_offset, while the raw data
+            volume will be label_volume + 2*raw_data_offset. It will
+            use 'kd.scaling' to account for dataset anisotropy if scalar or a
+            list of length 3 hast to be provided for a custom x, y, z offset.
+        verbose: bool
+        mag: int
+            Data mag. level.
+    Returns: np.array, np.array
         raw data (float32) (multiplied with 1/255.), label data (uint16)
+
     """
     if type(kd_p) is str or type(kd_p) is bytes:
         kd_p = [kd_p]
@@ -82,10 +84,10 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
             raw_data_offset = np.array(raw_data_offset)
         raw = kd.load_raw(size=(size // mag + 2 * raw_data_offset) * mag,
                           offset=(offset // mag - raw_data_offset) * mag,
-                          nb_threads=2, mag=mag).swapaxes(0, 2)
+                          mag=mag).swapaxes(0, 2)
         raw_data.append(raw[None, ])
-        label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
-                                       verbose=False, show_progress=False)
+        # TODO: use load_kzip_seg
+        label = kd._load_kzip_seg(zip_fname, offset, size, mag=mag, apply_mergelist=False).swapaxes(0, 2)
         label = label
         label_data.append(label[None, ])
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
@@ -104,22 +106,24 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
     """
     Predicts data contained in k.zip file (defined by bounding box in knossos)
 
-    Parameters
-    ----------
-    kzip_p : str
-        path to kzip containing the raw data cube information
-    m_path : str
-        path to predictive model
-    kd_path : str
-        path to knossos dataset
-    clf_thresh : float
-        classification threshold
-    overwrite : bool
-    mfp_active : False
-    imposed_patch_size : tuple
-    dest_path : str
-        path to destination folder, if None folder of k.zip is used.
-    gpu_ix : int
+    Args:
+        kzip_p: str
+            path to kzip containing the raw data cube information
+        m_path: str
+            path to predictive model
+        kd_path: str
+            path to knossos dataset
+        clf_thresh: float
+            classification threshold
+        mfp_active: False
+        dest_path: str
+            path to destination folder, if None folder of k.zip is used.
+        overwrite: bool
+        gpu_ix: int
+        imposed_patch_size: tuple
+
+    Returns:
+
     """
     cube_name = os.path.splitext(os.path.basename(kzip_p))[0]
     if dest_path is None:
@@ -158,25 +162,27 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     """
     Predicts data from h5 file. Assumes raw data is already float32.
 
-    Parameters
-    ----------
-    h5_path : str
-        path to h5 containing the raw data
-    m_path : str
-        path to predictive model
-    clf_thresh : float
-        classification threshold, if None, no thresholding
-    mfp_active : False
-    imposed_patch_size : tuple
-    gpu_ix : int
-    hdf5_data_key: str
-        if None, it uses the first entry in the list returned by
-        'load_from_h5py'
-    data_is_zxy : bool
-        if False, it will assumes data is [X, Y, Z]
-    as_uint8: bool
-    dest_p : str
-    dest_hdf5_data_key : str
+    Args:
+        h5_path: str
+            path to h5 containing the raw data
+        m_path: str
+            path to predictive model
+        clf_thresh: float
+            classification threshold, if None, no thresholding
+        mfp_active: False
+        gpu_ix: int
+        imposed_patch_size: tuple
+        hdf5_data_key: str
+            if None, it uses the first entry in the list returned by
+            'load_from_h5py'
+        data_is_zxy: bool
+            if False, it will assumes data is [X, Y, Z]
+        dest_p: str
+        dest_hdf5_data_key: str
+        as_uint8: bool
+
+    Returns:
+
     """
     if hdf5_data_key:
         raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key])[0]
@@ -217,18 +223,16 @@ def overlaycubes2kzip(dest_p: str, vol: np.ndarray, offset: np.ndarray,
     """
     Writes segmentation volume to kzip.
 
-    Parameters
-    ----------
-    dest_p : str
-        path to k.zip
-    vol : np.array
-        Segmentation or prediction (unsigned integer, XYZ).
-    offset : np.array
-    kd_path : str
+    Args:
+        dest_p: str
+            path to k.zip
+        vol: np.array
+            Segmentation or prediction (unsigned integer, XYZ).
+        offset: np.array
+        kd_path: str
 
-    Returns
-    -------
-    np.array [Z, X, Y]
+    Returns: np.array [Z, X, Y]
+
     """
     kd = basics.kd_factory(kd_path)
     kd.from_matrix_to_cubes(offset=offset, kzip_path=dest_p,
@@ -239,13 +243,11 @@ def xyz2zxy(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., X, Y, Z]
+    Args:
+        vol: np.array [M, .., X, Y, Z]
 
-    Returns
-    -------
-    np.array [M, .., Z, X, Y]
+    Returns: np.array [M, .., Z, X, Y]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     # adapt data to ELEKTRONN conventions (speed-up)
@@ -258,13 +260,11 @@ def zxy2xyz(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., Z, X, Y]
+    Args:
+        vol: np.array [M, .., Z, X, Y]
 
-    Returns
-    -------
-    np.array [M, .., X, Y, Z]
+    Returns: np.array [M, .., X, Y, Z]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     vol = vol.swapaxes(-2, -3)  # x z y
@@ -276,13 +276,11 @@ def xyz2zyx(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., X, Y, Z]
+    Args:
+        vol: np.array [M, .., X, Y, Z]
 
-    Returns
-    -------
-    np.array [M, .., Z, X, Y]
+    Returns: np.array [M, .., Z, X, Y]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     # adapt data to ELEKTRONN conventions (speed-up)
@@ -294,13 +292,11 @@ def zyx2xyz(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., Z, X, Y]
+    Args:
+        vol: np.array [M, .., Z, X, Y]
 
-    Returns
-    -------
-    np.array [M, .., X, Y, Z]
+    Returns: np.array [M, .., X, Y, Z]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     vol = vol.swapaxes(-1, -3)  # [..., x, y, z]
@@ -392,21 +388,23 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     true negative cubes set foreground_ids=[] to be an empty list. If set to
     None, everything except 0 is treated as foreground.
 
-    Parameters
-    ----------
-    fname: str
-        Path where h5 file should be saved
-    raw : np.array
-    label : np.array
-    foreground_ids : iterable
-        ids which have to be converted to foreground, i.e. 1. Everything
-        else is considered background (0). If None, everything except 0 is
-        treated as foreground.
-    target_labels: Iterable
-        If set, `foreground_ids` must also be set. Each ID in `foreground_ids` will
-        be mapped to the corresponding label in `target_labels`.
-    debug : bool
-        will store labels and raw as uint8 ranging from 0 to 255
+    Args:
+        fname: str
+            Path where h5 file should be saved
+        raw: np.array
+        label: np.array
+        foreground_ids: iterable
+            ids which have to be converted to foreground, i.e. 1. Everything
+            else is considered background (0). If None, everything except 0 is
+            treated as foreground.
+        target_labels: Iterable
+            If set, `foreground_ids` must also be set. Each ID in `foreground_ids` will
+            be mapped to the corresponding label in `target_labels`.
+        debug: bool
+            will store labels and raw as uint8 ranging from 0 to 255
+
+    Returns:
+
     """
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
@@ -433,16 +431,14 @@ def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
     to the labels provided in `target_labels` by mapping the foreground IDs
     accordingly.
 
-    Parameters
-    ----------
-    labels : np.array
-    foreground_ids : iterable
-    target_labels: Iterable
-        labels used for mapping foreground IDs.
+    Args:
+        labels: np.array
+        foreground_ids: iterable
+        target_labels: Iterable
+            labels used for mapping foreground IDs.
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
+
     """
     new_labels = np.zeros_like(labels)
     if foreground_ids is None:
@@ -474,14 +470,12 @@ def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     Parse MovementArea (e.g. bounding box of labeled volume) from annotation.xml
     in (k.)zip file.
 
-    Parameters
-    ----------
-    zip_fname : str
+    Args:
+        zip_fname: str
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Movement Area [2, 3]
+
     """
     anno_str = read_txt_from_zip(zip_fname, "annotation.xml").decode()
     line = re.findall("MovementArea (.*)/>", anno_str)
@@ -505,24 +499,28 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     Helper function for dataset prediction. Runs prediction on whole or partial
     knossos dataset. Imposed patch size has to be given in Z, X, Y!
 
-    Parameters
-    ----------
-    kd_p : str
-        path to knossos dataset .conf file
-    kd_pred_p : str
-        path to the knossos dataset head folder which will contain the prediction
-    cd_p : str
-        destination folder for chunk dataset containing prediction
-    model_p : str
-        path tho ELEKTRONN2 model
-    imposed_patch_size : tuple or None
-        patch size (Z, X, Y) of the model
-    mfp_active : bool
-        activate max-fragment pooling (might be necessary to change patch_size)
-    gpu_id : int
-        the GPU used
-    overwrite : bool
-        True: fresh predictions ; False: earlier prediction continues
+    Args:
+        kd_p: str
+            path to knossos dataset .conf file
+        kd_pred_p: str
+            path to the knossos dataset head folder which will contain the prediction
+        cd_p: str
+            destination folder for chunk dataset containing prediction
+        model_p:  str
+            path tho ELEKTRONN2 model
+        imposed_patch_size: tuple or None
+            patch size (Z, X, Y) of the model
+        mfp_active: bool
+            activate max-fragment pooling (might be necessary to change patch_size)
+        gpu_id: int
+            the GPU used
+        overwrite: bool
+            True: fresh predictions ; False: earlier prediction continues
+        i:
+        n:
+
+    Returns:
+
     """
     from elektronn2.utils.gpu import initgpu
     initgpu(gpu_id)
@@ -698,21 +696,23 @@ def dense_predictor(args):
     Volumes are transformed by XYZ <-> ZYX before they are passed to the
     model.
 
-    Parameters
-    ----------
-    args : Tuple(
-        chunk_ids: list
-            list of chunks in chunk dataset
-        kd_p : str
-            path to knossos dataset .conf file
-        cd_p : str
-            destination folder for chunk dataset containing prediction
-        model_p : str
-            path to model
-        offset : 
-        chunk_size:
-        ...
-        )
+    Args:
+        args: Tuple(
+            chunk_ids: list
+                list of chunks in chunk dataset
+            kd_p : str
+                path to knossos dataset .conf file
+            cd_p : str
+                destination folder for chunk dataset containing prediction
+            model_p : str
+                path to model
+            offset :
+            chunk_size:
+            ...
+            )
+
+    Returns:
+
     """
     # TODO: remove chunk necessity
     # TODO: clean up (e.g. redundant chunk sizes, ...)
@@ -853,17 +853,15 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
                        imposed_patch_size, mfp_active=False):
     """
 
-    Parameters
-    ----------
-    kd_p : str
-    kd_pred_p : str
-    cd_p : str
-    model_p :
-    imposed_patch_size :
-    mfp_active :
+    Args:
+        kd_p:
+        kd_pred_p:
+        cd_p:
+        model_p:
+        imposed_patch_size:
+        mfp_active:
 
-    Returns
-    -------
+    Returns:
 
     """
     from elektronn2.neuromancer.model import modelload
@@ -895,20 +893,18 @@ def prediction_helper(raw, model, override_mfp=True,
     Will change X, Y, Z to ELEKTRONN format (Z, X, Y) and returns prediction
     in standard format [X, Y, Z]. Imposed patch size has to be given in Z, X, Y!
 
-    Parameters
-    ----------
-    raw : np.array
-        volume [X, Y, Z]
-    model : str or model object
-        path to model (.mdl)
-    override_mfp : bool
-    imposed_patch_size : tuple
-        in Z, X, Y FORMAT!
+    Args:
+        raw: np.array
+            volume [X, Y, Z]
+        model: str or model object
+            path to model (.mdl)
+        override_mfp: bool
+        imposed_patch_size: tuple
+            in Z, X, Y FORMAT!
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         prediction data [X, Y, Z]
+
     """
     if type(model) == str:
         from elektronn2.neuromancer.model import modelload
@@ -936,11 +932,13 @@ def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
     """
     Helper function to write chunks.
 
-    Parameters
-    ----------
-    ch : Chunk
-    model : str or model object
-    debug: bool
+    Args:
+        ch: Chunk
+        model: str or model object
+        debug: bool
+
+    Returns:
+
     """
     raw = ch.raw_data()
     pred = prediction_helper(raw, model) * 255
@@ -1189,14 +1187,14 @@ def get_myelin_cnn():
         The trained Inference model.
     """
     try:
-        from elektronn3.models.base import InferenceModel
+        from elektronn3.inference.inference import Predictor
     except ImportError as e:
         msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
     m_path = global_params.config.mpath_myelin
-    m = InferenceModel(m_path)
+    m = Predictor(m_path)
     return m
 
 
@@ -1237,13 +1235,11 @@ def knn_clf_tnet_embedding(fold, fit_all=False):
     Currently it assumes embedding for GT views has been created already in 'fold'
     and put into l_train_%d.npy / l_valid_%d.npy files.
 
-    Parameters
-    ----------
-    fold : str
-    fit_all : bool
+    Args:
+        fold: str
+        fit_all: bool
 
-    Returns
-    -------
+    Returns:
 
     """
     train_fnames = get_filepaths_from_dir(
@@ -1284,14 +1280,12 @@ def pca_tnet_embedding(fold, n_components=3, fit_all=False):
     Currently it assumes embedding for GT views has been created already in 'fold'
     and put into l_train_%d.npy / l_valid_%d.npy files.
 
-    Parameters
-    ----------
-    fold : str
-    n_components : int
-    fit_all : bool
+    Args:
+        fold: str
+        n_components: int
+        fit_all: bool
 
-    Returns
-    -------
+    Returns:
 
     """
     train_fnames = get_filepaths_from_dir(
@@ -1366,3 +1360,40 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     entr_norm = entropy(proba) / entr_max
     # convert to certainty estimate
     return 1 - entr_norm
+
+
+pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
+
+
+def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
+                        num_obj_types: int, onehot: bool = True,
+                        npoints: Optional[int] = None, use_syntype: bool = True,
+                        downsample: Optional[float] = None):
+    # TODO: add optional downsampling here
+    feat_dc = dict(feat_dc)
+    if use_syntype:
+        if 'syn_ssv' in feat_dc:
+            del feat_dc['syn_ssv']
+    else:
+        if 'syn_ssv_sym' in feat_dc:
+            del feat_dc['syn_ssv_sym']
+        if 'syn_ssv_asym' in feat_dc:
+            del feat_dc['syn_ssv_asym']
+    if cellshape_only is True:
+        sample_pts = sample_pts['sv']
+        sample_feats = np.ones((len(sample_pts), 1)) * feat_dc['sv']
+    else:
+        sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
+                                       for k in feat_dc.keys()])
+        if onehot:
+            sample_feats = label_binarize(sample_feats, classes=np.arange(num_obj_types))
+        else:
+            sample_feats = sample_feats[..., None]
+        # len(sample_feats) is the equal to the total number of vertices
+        sample_pts = np.concatenate([sample_pts[k] for k in feat_dc.keys()])
+    if npoints is not None:
+        idx_arr = np.random.choice(np.arange(len(sample_pts)),
+                                   npoints, replace=len(sample_pts) < npoints)
+        sample_pts = sample_pts[idx_arr]
+        sample_feats = sample_feats[idx_arr]
+    return sample_pts, sample_feats

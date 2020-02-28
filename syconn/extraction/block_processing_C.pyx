@@ -19,7 +19,6 @@ ctypedef fused n_type:
 
 
 def kernel(n_type[:, :, :] chunk, n_type center_id):
-
     cdef map[uint64_t, int] unique_ids
 
     for i in range(chunk.shape[0]):
@@ -50,6 +49,7 @@ def kernel(n_type[:, :, :] chunk, n_type center_id):
 
 def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
     cdef int stencil[3]
+    cdef int x, y, z
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
     cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1],
@@ -76,6 +76,7 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
 
 def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
     cdef int stencil[3]
+    cdef int x, y, z
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
 
@@ -117,6 +118,7 @@ def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
     cdef unordered_map[uint64_t, int_vec_vec] bounding_box_syn
     cdef unordered_map[uint64_t, int] sizes_syn
     cdef int_vec_vec *local_bb
+    cdef int x, y, z
 
     sh = cs_seg.shape
 

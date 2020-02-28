@@ -16,6 +16,17 @@ knossosdataset._set_noprint(True)
 
 
 def kernel(chunk, center_id):
+    """
+    Notes: If there are more than on cell_ids corresponding to maximum count,
+        minimum of those cell_id is selected. Resulting in irregular ids corresponding to edge
+
+    Args:
+        chunk: Takes array of stencil shape around a point corresponding to center cell_id
+        center_id: Cell_id corresponding to center of stencil
+
+    Returns: 64-bit cell id which is made up of cell_id corresponding to
+            maximum count in stencil and center cell_id
+    """
     unique_ids, counts = np.unique(chunk, return_counts=True)
 
     counts[unique_ids == 0] = -1
@@ -53,13 +64,23 @@ def process_block(edges, arr, stencil=(7, 7, 3)):
 
 
 def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
+    """
+
+    Args:
+        edges: Convolution array for edge detection, standard scipy convolver
+        arr: Takes a 3-d array of cell_ids(32-bit)
+        stencil: Size of stencil for voxel processing
+
+    Returns: Output 3-d array of 64-bit cell ids where edge is detected.
+            64-bit ids has a 32-bit cell-id corresponding to maximum cell
+            count and corresponding to center cent_id
+    """
     stencil = np.array(stencil, dtype=np.int)
     assert np.sum(stencil % 2) == 3
 
     arr_shape = np.array(arr.shape)
     out = np.zeros(arr_shape - stencil + 1, dtype=np.uint64)
     offset = stencil // 2  # int division!
-    print (offset)
     nze = np.nonzero(edges[offset[0]: -offset[0], offset[1]: -offset[1], offset[2]: -offset[2]])
     for x, y, z in zip(nze[0], nze[1], nze[2]):
         center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
