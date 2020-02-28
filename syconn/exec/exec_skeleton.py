@@ -170,7 +170,7 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
 
     # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
-    zipname = ("%s/excube1_kimimaro_skels_ads2c100/" % curr_dir)
+    zipname = ("%s/excube1_kimimaro_skels_binaryfillingc100dps4/" % curr_dir)
     if not os.path.exists(zipname):
         os.mkdir(zipname)
     multi_params = [(pathdict_filepath, ssv_id, zipname) for ssv_id in multi_params]

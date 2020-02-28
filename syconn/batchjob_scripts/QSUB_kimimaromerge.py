@@ -8,6 +8,7 @@ from syconn.proc.skeleton import kimimaro_mergeskels, kimimaro_skels_tokzip
 from syconn import global_params
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 import numpy as np
+import os as os
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -31,6 +32,7 @@ for ssv_id in ssv_ids:
     if combined_skel.vertices.size > 0:
         sso.skeleton["nodes"] = combined_skel.vertices/global_params.config["scaling"] #to fit voxel coordinates
         sso.skeleton["diameters"] = (combined_skel.radii / np.mean(global_params.config["scaling"])) * 2
+        #kimimaro_skels_tokzip(combined_skel, ssv_id, zipname)
     else:
         sso.skeleton["nodes"] = combined_skel.vertices
         sso.skeleton["diameters"] = combined_skel.radii

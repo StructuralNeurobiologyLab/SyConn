@@ -14,6 +14,9 @@ import kimimaro
 import tqdm
 import time
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
+from syconn.proc.image import multi_mop_backgroundonly
+from scipy import ndimage
+
 
 from syconn import global_params
 
@@ -47,6 +50,8 @@ def kimimaro_skelgen(cube_size, cube_offset):
                     seg_cell[x, y, z] = ssd.mapping_dict_reversed[seg[x, y, z]]
                 except KeyError:
                     seg_cell[x, y, z] = 0
+
+    seg_cell = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg_cell, iterations=None)
     #kimimaro code
 
     skels = kimimaro.skeletonize(
@@ -119,7 +124,7 @@ def kimimaro_mergeskels(path_list, cell_id):
     # Fuse all remaining components into a single skeleton.
     skel = kimimaro.join_close_components(skel_list, radius=None)  # no threshold
     #cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-    skel = skel.downsample(2) #better suited in function above with part of skels. Doesn't work there.
+    skel = skel.downsample(4) #better suited in function above with part of skels. Doesn't work there.
     degree_dict = {i: 0 for i, iv in enumerate(skel.vertices)}
     neighbour_dict = {i: [] for i in list(degree_dict.keys())}
 
@@ -127,7 +132,7 @@ def kimimaro_mergeskels(path_list, cell_id):
 
 
 
-
+import pdb
 def kimimaro_skels_tokzip(cell_skel, cell_id, zipname):
     #write to zip file
     skel = Skeleton()
@@ -136,11 +141,11 @@ def kimimaro_skels_tokzip(cell_skel, cell_id, zipname):
     node_mapping = {}
     cv = cell_skel.vertices
     pbar = tqdm.tqdm(total=len(cv) + len(cell_skel.edges))
-    for i,v in enumerate(cv):
-        c = cv[i]
-        #n = SkeletonNode().from_scratch(anno, int(c[0]/10)+5400, int(c[1]/10)+ 5900, int(c[2]/20)+3000)
+    for i, v in enumerate(cv):
+        n = SkeletonNode().from_scratch(anno, int((v[0])+54000), int((v[1])+ 59000), int((v[2])+3000*20))
         #above only for example_cube with certain offset
-        n = SkeletonNode().from_scratch(anno, int(c[0] / 10), int(c[1] / 10), int(c[2] / 20) )
+        #n = SkeletonNode().from_scratch(anno, int(c[0] / 10), int(c[1] / 10), int(c[2] / 20) )
+        #pdb.set_trace()
         node_mapping[i] = n
         anno.addNode(n)
         pbar.update(1)
@@ -148,4 +153,4 @@ def kimimaro_skels_tokzip(cell_skel, cell_id, zipname):
         anno.addEdge(node_mapping[e[0]], node_mapping[e[1]])
         pbar.update(1)
     skel.add_annotation(anno)
-    skel.to_kzip('%s/kzip_%.i.k.zip' % (zipname, cell_id))
+    skel.to_kzip('%s/kzip_%.i.k.zip' % (zipname, cell_id), force_overwrite=True)
