@@ -6,38 +6,44 @@ import collections
 from multiprocessing import Process, Queue
 from syconn.handler import basics
 from syconn.handler.prediction import generate_pts_sample, \
-    pts_feat_dict, certainty_estimate
+    pts_feat_dict, certainty_estimate, pts_loader_ssvs
 from syconn.handler.basics import chunkify
 import numpy as np
 import time
 import tqdm
 from sklearn.metrics.classification import classification_report
-import open3d as o3d
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
 def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader):
     import torch
     m = model_loader()
-    ixs = []
-    res = []
+    stop_received = False
     while True:
         if not q_in.empty():
             inp = q_in.get()
             if inp == 'STOP':
-                print('Predictor finished.', end="")
+                if stop_received:
+                    # already got STOP signal, put back in queue for other worker.
+                    q_in.put('STOP')
+                    # wait for the other worker to get the signal
+                    time.sleep(2)
+                    continue
+                stop_received = True
+                if not q_in.empty():
+                    continue
                 break
         else:
-            time.sleep(1)
-            print('Idle predictor.', end="")
+            if stop_received:
+                break
+            time.sleep(0.5)
             continue
         ssv_ids, inp = inp
         with torch.no_grad():
             inp = (torch.from_numpy(i).cuda().float() for i in inp)
-            res.append(m(*inp).cpu().numpy())
-        ixs.append(ssv_ids)
+            res = m(*inp).cpu().numpy()
         q_cnt.put(len(ssv_ids))
-    q_out.put((np.concatenate(ixs), np.concatenate(res)))
+        q_out.put((ssv_ids, res))
     q_out.put('END')
 
 
@@ -49,44 +55,8 @@ def worker_load(q: Queue, q_loader_sync: Queue, gen, kwargs: dict):
             else:
                 break
         q.put(el)
+    time.sleep(1)
     q_loader_sync.put('DONE')
-
-
-def _pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints, scale_fact, redundancy=5):
-    np.random.shuffle(ssv_ids)
-    ssd = SuperSegmentationDataset(**ssd_kwargs)
-    nbatches = int(np.ceil(len(ssv_ids) / batchsize)) * redundancy
-    nsamples = nbatches * batchsize
-    ndiff = int(nsamples / redundancy - len(ssv_ids))
-    ssv_ids = np.concatenate([ssv_ids, ssv_ids[:ndiff]])
-    # TODO: add `use_syntype kwarg and cellshape only
-    feat_dc = dict(pts_feat_dict)
-    if 'syn_ssv' in feat_dc:
-        del feat_dc['syn_ssv']
-    for curr_ssvids in chunkify(ssv_ids, nbatches):
-        ssvs = ssd.get_super_segmentation_object(curr_ssvids)
-        batch = np.zeros((batchsize, npoints, 3))
-        batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
-        ixs = np.zeros((batchsize, ), dtype=np.uint)
-        cnt = 0
-        for ssv in ssvs:
-            vert_dc = dict()
-            for k in feat_dc:
-                pcd = o3d.geometry.PointCloud()
-                verts = ssv.load_mesh(k)[1].reshape(-1, 3)
-                pcd.points = o3d.utility.Vector3dVector(verts)
-                pcd = pcd.voxel_down_sample(voxel_size=50)
-                vert_dc[k] = np.asarray(pcd.points)
-            for _ in range(redundancy):
-                v_s, f_s = generate_pts_sample(vert_dc, pts_feat_dict, False, len(feat_dc),
-                                               True, npoints, True)
-                v_s -= v_s.mean(axis=0)
-                batch[cnt] = v_s / scale_fact
-                batch_f[cnt] = f_s
-                ixs[cnt] = ssv.id
-                cnt += 1
-        assert cnt == batchsize
-        yield (ixs, (batch_f, batch))
 
 
 def load_model():
@@ -107,6 +77,8 @@ def listener(q_cnt: Queue, q_in, q_loader_sync, npredictor, nloader, total):
         else:
             res = q_cnt.get()
             if res is None:  # final stop
+                assert cnt_loder_done == nloader
+                pbar.close()
                 break
             pbar.update(res)
         if q_loader_sync.empty() or cnt_loder_done == nloader:
@@ -114,37 +86,51 @@ def listener(q_cnt: Queue, q_in, q_loader_sync, npredictor, nloader, total):
         else:
             _ = q_loader_sync.get()
             cnt_loder_done += 1
-            print('Loader finished.', end="")
+            print('Loader finished.')
             if cnt_loder_done == nloader:
                 for _ in range(npredictor):
+                    time.sleep(1)
                     q_in.put('STOP')
 
 
 def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npredictor=2,
                    ssv_ids=None):
     bs = 80
-    redundancy = 10
-    assert bs % redundancy == 0  # divisible by redundancy
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
-    kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, scale_fact=scale_fact, redundancy=redundancy)
+    # minimum redundancy is 5
+    min_redundancy = 5
+    ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints, min_redundancy) for ssv in
+                      ssd.get_super_segmentation_object(ssv_ids)]
+    kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, scale_fact=scale_fact)
+    # created shuffled ssv ID array -> lower loader speed due to increased IO, but enables nicely
+    # mixed batches -> important for batchnorm
+    ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
+                              for ii in range(len(ssv_ids))])
+    np.random.shuffle(ssv_ids)
     params_in = [{**kwargs, **dict(ssv_ids=ch)} for ch in chunkify(ssv_ids, nloader)]
+
+    # total samples:
+    nsamples_tot = 0
+    for ch in chunkify(ssv_ids, nloader):
+        nsamples_tot += int(np.ceil(len(ch) / bs)) * bs
+
     q_in = Queue(maxsize=20*npredictor)
     q_cnt = Queue()
     q_out = Queue()
     q_loader_sync = Queue()
-    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, _pts_loader_ssvs, el)) for el in params_in]
+    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, pts_loader_ssvs, el)) for el in params_in]
     for p in producers:
         p.start()
     consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader)) for _ in
                  range(npredictor)]
     for c in consumers:
         c.start()
-    res_dc = dict()
+    res_dc = collections.defaultdict(list)
     cnt_end = 0
     lsnr = Process(target=listener, args=(q_cnt, q_in, q_loader_sync, npredictor,
-                                          nloader, len(ssv_ids) * redundancy))
+                                          nloader, nsamples_tot))
     lsnr.start()
     while True:
         if q_out.empty():
@@ -156,28 +142,40 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
         if res == 'END':
             cnt_end += 1
             continue
-        ids, logits = res
-        for ssv_id in np.unique(ids):
-            logit = logits[ids == ssv_id]
-            cls = np.argmax(logit, axis=1).squeeze()
-            cls_maj = collections.Counter(cls).most_common(1)[0][0]
-            res_dc[ssv_id] = (cls_maj, certainty_estimate(logit, is_logit=True))
-    print('Finished collection of results.', end="")
+        for ssv_id, logit in zip(*res):
+            res_dc[ssv_id].append(logit[None, ])
+
+    res_dc = dict(res_dc)
+    for ssv_id in res_dc:
+        logit = np.concatenate(res_dc[ssv_id])
+        if da_equals_tan:
+            # accumulate evidence for DA and TAN
+            logit[:, 1] += logit[:, 6]
+            # remove TAN in proba array
+            logit = np.delete(logit, [6], axis=1)
+            # INT is now at index 6 -> label 6 is INT
+        cls = np.argmax(logit, axis=1).squeeze()
+        cls_maj = collections.Counter(cls).most_common(1)[0][0]
+        res_dc[ssv_id] = (cls_maj, certainty_estimate(logit, is_logit=True))
+    print('Finished collection of results.')
     q_cnt.put(None)
     lsnr.join()
-    print('Joined listener.', end="")
+    print('Joined listener.')
     for p in producers:
         p.join()
         p.close()
-    print('Joined producers.', end="")
+    print('Joined producers.')
     for c in consumers:
         c.join()
         c.close()
-    print('Joined consumers.', end="")
+    print('Joined consumers.')
     return res_dc
 
 
 if __name__ == '__main__':
+    da_equals_tan = True
+    split_dc = basics.load_pkl2obj('/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
+                                   '/ctgt_v4_splitting_cv0_10fold.pkl')
     model_dir = '/wholebrain/u/pschuber/e3_training_convpoint/'
     # mpath = f'{model_dir}/celltype_pts_tnet_scale30000_nb75000_cv
     # -1_nDim10_SNAPSHOT/state_dict.pth'
@@ -186,15 +184,17 @@ if __name__ == '__main__':
     # wd = '/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
     # version = None
 
-    # wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    # gt_version = "ctgt_v4"
-    # ssd_kwargs = dict(working_dir=wd, version=gt_version)
-    # res_dc = predict_pts_wd(ssd_kwargs, load_model, 75000, 30000)
-    # basics.write_obj2pkl('/wholebrain/scratch/pschuber/test_celltype_pred.pkl',
-    #                      res_dc)
+    wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    gt_version = "ctgt_v4"
+    ssd_kwargs = dict(working_dir=wd, version=gt_version)
+    res_dc = predict_pts_wd(ssd_kwargs, load_model, 75000, 30000, ssv_ids=split_dc['valid'],
+                            nloader=2, npredictor=1)
+    basics.write_obj2pkl('/wholebrain/scratch/pschuber/test_celltype_pred.pkl',
+                         res_dc)
 
     # compare to GT
     res_dc = basics.load_pkl2obj('/wholebrain/scratch/pschuber/test_celltype_pred.pkl')
+
     import pandas
     str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5, INT=7, FS=8, GLIA=9)
     del str2int_label['GLIA']
@@ -207,6 +207,24 @@ if __name__ == '__main__':
         raise ValueError('Multi-usage of IDs!')
     str_labels = df[:, 1]
     ssv_labels = np.array([str2int_label[el] for el in str_labels], dtype=np.uint16)
-    print(classification_report(ssv_labels, [res_dc[ix][0] for ix in ssv_ids],
-                                labels=list(str2int_label.values()), target_names=list(str2int_label.keys())))
+    valid_ids, valid_ls, valid_preds = [], [], []
+    for ix, curr_id in enumerate(ssv_ids):
+        if curr_id not in split_dc['valid']:
+            continue
+        curr_l = ssv_labels[ix]
+        if da_equals_tan:
+            # adapt GT labels
+            if curr_l == 6: curr_l = 1  # TAN and DA are the same now
+            if curr_l == 7: curr_l = 6  # INT now has label 6
+        valid_ls.append(curr_l)
+        valid_preds.append(res_dc[curr_id][0])
+        valid_ids.append(curr_id)
+    int2str_label = {v: k for k, v in str2int_label.items()}
+    target_names = [int2str_label[kk] for kk in range(8)]
+    if da_equals_tan:
+        target_names[1] = 'Modulatory'
+        target_names.remove('TAN')
+
+    print(classification_report(valid_ls, valid_preds, labels=np.arange(7),
+                                target_names=target_names))
     raise()
