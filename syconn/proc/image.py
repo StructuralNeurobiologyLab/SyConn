@@ -17,6 +17,7 @@ except ImportError as e:
 from sklearn.decomposition import PCA
 from scipy import spatial, sparse, ndimage
 import tqdm
+from typing import List
 from ..proc import log_proc
 
 
@@ -403,6 +404,9 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
           ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
+    Todo:
+        * Does not increase subvolume when dilation is applied.
+
     Args:
         mop_func:
         overlay:
@@ -508,3 +512,24 @@ def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
     """
     return _multi_mop_findobjects(mop_func, overlay, iterations,
                                   mop_kwargs=mop_kwargs)
+
+
+def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str])\
+        -> np.ndarray:
+    """
+    Applies morphological operations on the input volume. String identifier in
+    the `morph_ops` list must match scipy.ndimage functions.
+
+    Args:
+        vol: Input array (3D).
+        morph_ops: List with string identifier.
+
+    Returns:
+        Processed volume.
+    """
+    if len(morph_ops) == 0:
+        return vol
+    for mop in morph_ops:
+        func = getattr(ndimage, mop)
+        vol = func(vol)
+    return vol

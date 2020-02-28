@@ -54,7 +54,7 @@ def test_raw_and_index_rendering_osmesa():
     fname = os.path.dirname(__file__) + '/renderexample.k.zip'
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
-    rendering_locations = np.concatenate(ssv.sample_locations())
+    rendering_locations = np.concatenate(ssv.sample_locations())[:10]
     index_views = render_sso_coords_index_views(ssv, rendering_locations,
                                                 verbose=True)
     raw_views = render_sso_coords(ssv, rendering_locations, verbose=True)
@@ -74,7 +74,7 @@ def test_raw_and_index_rendering_egl():
     fname = os.path.dirname(__file__) + '/renderexample.k.zip'
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
-    rendering_locations = np.concatenate(ssv.sample_locations())
+    rendering_locations = np.concatenate(ssv.sample_locations())[:10]
     index_views = render_sso_coords_index_views(ssv, rendering_locations,
                                                 verbose=True)
     raw_views = render_sso_coords(ssv, rendering_locations, verbose=True)

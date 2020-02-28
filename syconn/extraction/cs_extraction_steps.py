@@ -55,7 +55,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                           log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None,
                           cube_of_interest_bb: Optional[np.ndarray] = None,
-                          n_folders_fs: int = 1000):
+                          n_folders_fs: int = 1000,
+                          cube_shape: Optional[Tuple[int]] = None):
     """
     Extracts contact sites and their overlap with `sj` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
@@ -75,6 +76,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         cube_of_interest_bb: Sub-volume of the data set which is processed.
             Default: Entire data set.
         n_folders_fs: Number of folders used for organizing supervoxel data.
+        cube_shape: Cube shape used within contact site KnossosDataset.
 
     """
     if extract_cs_syntype is None:
@@ -88,6 +90,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     if chunk_size is None:
         chunk_size = (512, 512, 512)
+    if cube_shape is None:
+        cube_shape = (256, 256, 256)
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
 
@@ -143,8 +147,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         merge_prop_dicts([syn_props, curr_syn_props])
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
-    log.info('Finished contact site (#objects: {}) and synapse (#objects: {})'
-             ' extraction.'.format(len(cs_props[0]), len(syn_props[0])))
+    log.info('Finished extraction of contact sites (#objects: {}) and synapses'
+             ' (#objects: {}).'.format(len(cs_props[0]), len(syn_props[0])))
     if len(syn_props[0]) == 0:
         log.critical('WARNING: Did not find any synapses during extraction step.')
     # TODO: extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
@@ -158,26 +162,26 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     # TODO: size filter here or during write-out? TODO: use config parameter
     dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(cs_props, f)
+        pkl.dump(cs_props, f, protocol=4)
     del cs_props
     dict_paths.append(dict_p)
 
     dict_p = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(syn_props, f)
+        pkl.dump(syn_props, f, protocol=4)
     del syn_props
     dict_paths.append(dict_p)
 
     # convert counting dicts to store ratio of syn. type voxels
     dict_p = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(tot_sym_cnt, f)
+        pkl.dump(tot_sym_cnt, f, protocol=4)
     del tot_sym_cnt
     dict_paths.append(dict_p)
 
     dict_p = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
     with open(dict_p, "wb") as f:
-        pkl.dump(tot_asym_cnt, f)
+        pkl.dump(tot_asym_cnt, f, protocol=4)
     del tot_asym_cnt
     dict_paths.append(dict_p)
 
@@ -193,13 +197,14 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
         target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape
         scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
                                           mags=[1, ])
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
-        export_cset_to_kd_batchjob(
-            cset, target_kd, obj_type, [obj_type],
+        target_kd = kd_factory(path)
+        export_cset_to_kd_batchjob({obj_type: path},
+            cset, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
             orig_dtype=np.uint64, unified_labels=False,
             n_max_co_processes=n_max_co_processes, log=log)
@@ -258,6 +263,13 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     chunks = args[0]
     knossos_path = args[1]
 
+    if global_params.config.syntype_available and \
+       (global_params.config.sym_label == global_params.config.asym_label) and \
+       (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
+        raise ValueError('Both KnossosDatasets and labels for symmetric and '
+                         'asymmetric synapses are identical. Either one '
+                         'must differ.')
+
     kd = kd_factory(knossos_path)
     # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
     #  see below.
@@ -288,7 +300,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         data = kd.load_seg(size=size + 2 * stencil_offset,
                            offset=offset - stencil_offset,
-                           mag=1, datatype=np.uint64).astype(np.uint32).swapaxes(0, 2)
+                           mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
         cum_dt_data += time.time() - start
         start = time.time()
         # contacts has size as given with `size`, because it performs valid conv.
@@ -296,28 +308,44 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         contacts = np.asarray(detect_cs(data))
         cum_dt_proc += time.time() - start
 
-        # store syn information as: synaptic voxel (1), symmetric type (2)
-        # and asymmetric type (3)
         start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
         syn_d = (kd_syn.load_seg(size=size, offset=offset, mag=1,
-                                 datatype=np.uint64) > 0).astype(np.uint8).swapaxes(0, 2)
+                                 datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
-        # TODO: add thresholds to global_params
         if global_params.config.syntype_available:
-            sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                     >= 123).astype(np.uint8)
-            asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                      >= 123).astype(np.uint8)
+            if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
+                # TODO: add thresholds to global_params
+                if global_params.config.sym_label is None:
+                    sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                             >= 123).astype(np.uint8, copy=False)
+                else:
+                    sym_d = (kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                             == global_params.config.sym_label).astype(np.uint8, copy=False)
+
+                if global_params.config.asym_label is None:
+                    asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                              >= 123).astype(np.uint8, copy=False)
+                else:
+                    asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                              == global_params.config.asym_label).astype(np.uint8, copy=False)
+            else:
+                assert global_params.config.asym_label is not None,\
+                    'Label of asymmetric synapses is not set.'
+                assert global_params.config.sym_label is not None,\
+                    'Label of symmetric synapses is not set.'
+                # load synapse type classification results stored in the same KD
+                sym_d = kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+                # create copy
+                asym_d = np.array(sym_d == global_params.config.asym_label, dtype=np.uint8)
+                sym_d = np.array(sym_d == global_params.config.sym_label, dtype=np.uint8)
         else:
             sym_d = np.zeros_like(syn_d)
             asym_d = np.zeros_like(syn_d)
         cum_dt_data += time.time() - start
 
-        # TODO: refactor such that CS are not dilated / closed? This would require an independent
-        #  property analysis.
         # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
         start = time.time()
         # returns rep. coords, bounding box and size for every ID in contacts
@@ -333,10 +361,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
-            binary_mask = (sub_vol == ix).astype(np.int)
+            binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
-            # TODO: add to parameters
+            # TODO: add to parameters to config
             res = scipy.ndimage.binary_dilation(
                 res, iterations=2)
             # only update background or the objects itself
@@ -811,8 +839,9 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
         _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
                                     debug=False, nb_cpus=n_max_co_processes)
     else:
-        _ = qu.QSUB_script(multi_params, "contact_site_detection",
-                           n_max_co_processes=n_max_co_processes)
+        _ = qu.batchjob_script(
+            multi_params, "contact_site_detection",
+            n_max_co_processes=n_max_co_processes)
     chunky.save_dataset(cset)
 
 
@@ -827,7 +856,7 @@ def _contact_site_detection_thread(args):
     offset = np.array(chunk.coordinates - overlap)
     size = 2 * overlap + np.array(chunk.size)
     data = kd.load_seg(size=size, offset=offset, mag=1,
-                       datatype=np.uint64).astype(np.uint32).swapaxes(0, 2)
+                       datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
     compression.save_to_h5py([contacts],
@@ -853,8 +882,8 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     jac[2, 1, 1] = 1
     jac[0, 1, 1] = 1
     edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
-    edges = edges.astype(np.uint32)
-    arr = arr.astype(np.uint32)
+    edges = edges.astype(np.uint32, copy=False)
+    arr = arr.astype(np.uint32, copy=False)
     cs_seg = process_block_nonzero(
         edges, arr, global_params.config['cell_objects']['cs_filtersize'])
     return cs_seg
@@ -863,7 +892,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                               n_folders_fs=10000, suffix="",
                               n_max_co_processes=None, n_chunk_jobs=2000, size=None,
-                              offset=None, log=None):
+                              offset=None, log=None, cube_shape=None):
     """
 
     Parameters
@@ -878,6 +907,7 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     n_chunk_jobs :
     size :
     offset :
+    cube_shape :
 
     Returns
     -------
@@ -885,6 +915,8 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     """
     if log is None:
         log = log_extraction
+    if cube_shape is None:
+        cube_shape = (256, 256, 256)
     chunky.save_dataset(cset)
     # init CS segmentation KD
     kd = kd_factory(global_params.config.kd_seg_path)
@@ -893,14 +925,15 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
     target_kd = knossosdataset.KnossosDataset()
+    target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
-    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
-    target_kd = knossosdataset.KnossosDataset()
-    target_kd.initialize_from_knossos_path(path)
+    target_kd.scales = [scale, ]
+    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
+                                      create_pyk_conf=True, create_knossos_conf=False)
 
     # convert Chunkdataset to KD
-    export_cset_to_kd_batchjob(
-        cset, target_kd, '{}'.format(filename), [hdf5name],
+    export_cset_to_kd_batchjob({hdf5name: path},
+        cset, '{}'.format(filename), [hdf5name],
         offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
         orig_dtype=np.uint64, unified_labels=False,
         n_max_co_processes=n_max_co_processes)

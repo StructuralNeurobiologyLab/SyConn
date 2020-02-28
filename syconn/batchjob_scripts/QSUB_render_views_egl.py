@@ -18,7 +18,7 @@ except ImportError:
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.rendering import render_sso_coords_multiprocessing
 from syconn.handler.basics import chunkify
-from syconn.mp.batchjob_utils import QSUB_script
+from syconn.mp.batchjob_utils import batchjob_script
 from syconn import global_params
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -68,7 +68,7 @@ if len(ssvs_small) != 0:
     multi_params = chunkify(multi_params, n_parallel_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, wd, render_kwargs) for ixs in multi_params]
-    path_out = QSUB_script(
+    path_out = batchjob_script(
         multi_params, "render_views", suffix="_SSV{}".format(ssvs_small[0].id),
         n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_parallel_jobs)

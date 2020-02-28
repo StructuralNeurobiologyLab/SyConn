@@ -1,6 +1,7 @@
 [![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
 [![pipeline status](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/badges/master/pipeline.svg)](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/commits/master)
 [![coverage report](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/badges/master/coverage.svg)](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/commits/master)
+[![pylint status](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/-/jobs/artifacts/master/raw/pylint/pylint.svg?job=pylint)](https://gitlab.mpcdf.mpg.de/pschuber/SyConn/-/jobs/artifacts/master/raw/pylint/pylint.log?job=pylint)
 
 <img align="right" width="300" src="./docs/_static/logo_SyConn.png"><br/>
 
@@ -13,7 +14,8 @@ Refactored version of SyConn for automated synaptic connectivity inference based
 Current features:
 - introduction of classes for handling of supervoxels (e.g. cell fragments, predicted cellular
 organelles like mitochondria, vesicle clouds etc.) and agglomerated supervoxels
-- prediction of subcellular structures, supervoxel extraction and mesh generation
+- prediction of sub-cellular structures, supervoxel extraction and mesh
+  generation
 - (sub-) cellular compartment (spines, bouton and axon/dendrite/soma) and cell type classification with multiview- [\[2\]](https://www.nature.com/articles/s41467-019-10836-3) and with skeleton-based approaches [\[1\]](https://www.nature.com/articles/nmeth.4206)
 - glia identification and separation [\[2\]](https://www.nature.com/articles/s41467-019-10836-3)
 - connectivity matrix export
@@ -37,12 +39,17 @@ The Synaptic connectivity inference toolkit is currently developed at the Max-Pl
 
 Acknowledgements
 ----------------
-We are especially grateful for the support by Winfried Denk who enabled this work in his department. We also want to thank Christian Guggenberger
-and his group at the MPCDF for cluster support and deepmind for providing egl extension code to handle multi-gpu rendering on the same machine.
-The original code snippet (under the Apache License 2.0) used for our project can be found
+We are especially grateful for the support by Winfried Denk who enabled
+this work in his department. We also want to thank Christian
+Guggenberger and his group at the MPCDF for cluster support and deepmind
+for providing egl extension code to handle multi-gpu rendering on the
+same machine. The original code snippet (under the Apache License 2.0)
+used for our project can be found
 [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
-Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful work) for designing and creating the logo and to
- Rangoli Saxena, Mariana Shumliakivska and Josef Mark for code contributions.
+Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful
+work) for designing and creating the logo and to Rangoli Saxena, Mariana
+Shumliakivska, Josef Mark, Maria Kawula, Atul Mohite, Alexandra Rother
+and Martin Drawitsch and for code contributions.
 
 
 Publications

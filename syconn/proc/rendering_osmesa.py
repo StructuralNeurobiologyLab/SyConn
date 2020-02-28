@@ -63,33 +63,38 @@ def init_object(indices, vertices, normals, colors, ws):
     global ind_cnt, vertex_cnt
     indices = indices.astype(np.uint32)
     # create individual vertices for each triangle
-    vertices = vertices.astype(np.float32).reshape(-1, 3)
+    vertices = vertices.reshape(-1, 3)
     # adapt color array
     colors = colors.reshape(-1, 4)
     ind_cnt = len(indices)
     vertex_cnt = len(vertices)
-    normals = normals.astype(np.float32).reshape(-1, 3)
+    normals = normals.reshape(-1, 3)
     data = np.concatenate((vertices, normals, colors),
-                          axis=1).reshape(-1)
+                          axis=1).astype(np.float32).reshape(-1)
+    del vertices, normals, colors
     # enabling arrays
     glEnableClientState(GL_VERTEX_ARRAY)
     glEnableClientState(GL_NORMAL_ARRAY)
     glEnableClientState(GL_COLOR_ARRAY)
     # model data
-    indices_buffer = (c_uint * len(indices))(*indices)
-    data_buffer = (c_float * len(data))(*data)
+    indices_buffer = indices.ctypes.data_as(ctypes.POINTER(c_uint))
+    data_buffer = data.ctypes.data_as(ctypes.POINTER(c_uint))
 
     el_arr_buffer = glGenBuffers(1)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, el_arr_buffer)
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_buffer, GL_STATIC_DRAW)
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices_buffer, GL_STATIC_DRAW)
+    # del indices_buffer
 
     el_arr_buffer2 = glGenBuffers(1)
     glBindBuffer(GL_ARRAY_BUFFER, el_arr_buffer2)
-    glBufferData(GL_ARRAY_BUFFER, data_buffer, GL_STATIC_DRAW)
+    glBufferData(GL_ARRAY_BUFFER, data.nbytes, data_buffer, GL_STATIC_DRAW)
+    # del data_buffer
 
     # rbo fbo for storing projections
     fbo = glGenFramebuffers(1)
     glBindFramebuffer(GL_FRAMEBUFFER, fbo)
+    del fbo
+
     rbo = glGenRenderbuffers(1)
     glBindRenderbuffer(GL_RENDERBUFFER, rbo)
     glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, ws[0],
@@ -97,10 +102,6 @@ def init_object(indices, vertices, normals, colors, ws):
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                               GL_RENDERBUFFER, rbo)
     del rbo
-    del fbo
-    del indices_buffer
-    del data_buffer
-    # return [el_arr_buffer, el_arr_buffer2]
 
 
 def draw_object(triangulation=True):
@@ -467,7 +468,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     init_object(indices, vertices, normals, colors, ws)
     n_empty_views = 0
     if verbose:
-        pbar = tqdm.tqdm(total=len(res), mininterval=0.5)
+        pbar = tqdm.tqdm(total=len(res), mininterval=0.5, leave=False)
     for ii, c in enumerate(coords):
         c_views = np.ones(view_sh, dtype=np.float32)
         rot_mat = rot_matrices[ii]

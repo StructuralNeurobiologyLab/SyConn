@@ -18,14 +18,15 @@ dependencies:
   - vigra
   - freeglut
   - pyopengl
+  - pyopengl-accelerate
   - python-snappy
-  - m2r
   - ipython
   - h5py
   - matplotlib
   - tqdm
   - scipy
-  - networkx
+  # AttributeError: module 'networkx' has no attribute 'connected_component_subgraphs'
+  - networkx <= 2.3
   - m2r
   - lz4
   - flask
@@ -33,11 +34,11 @@ dependencies:
   - numpy
   - coloredlogs
   - termcolor
-  - scikit-learn
+  - scikit-learn =0.21
   - scikit-image
   - pyopengl
   - opencv
-  - numba
+  - numba <=0.46  # =0.48 lead to freeze when importing elektronn3.data
   - openmesh-python
   - prompt_toolkit
   - vtki
@@ -47,6 +48,8 @@ dependencies:
   - pyyaml
   - cython
   - colorlog
+   # >= 7 raises "cannot import name 'PILLOW_VERSION' from 'PIL'" with torchvision=0.3.0
+  - pillow <7
 
   # From -c menpo
   - osmesa
@@ -55,7 +58,7 @@ dependencies:
   - pytest
   - pytest-runner
   - pytest-cov
-  - pytest-xdist
+  - pytest-forked
 
   # For docs (optional):
   - sphinx

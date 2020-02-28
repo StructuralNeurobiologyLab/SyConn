@@ -15,7 +15,7 @@ def in_bounding_box(coords, bounding_box):
     Returns
     -------
     np.array of bool
-        inlying coordinates are indicated as true
+        Coordinates are indicated as True if they are inside the bounding box.
     """
     edge_sizes = bounding_box[1] / 2
     coords = np.array(coords) - bounding_box[0]

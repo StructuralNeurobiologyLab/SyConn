@@ -19,5 +19,5 @@ params = np.arange(6000).reshape((-1, 10))
 # Create a list of arguments; each element is input for an executed script.
 # We have created 300 jobs, each with 2 arrays
 params = chunkify(params, 300)
-mu.QSUB_script(params, "print", pe="openmp", queue=None,
-               script_folder=script_folder, n_max_co_processes=40)
+mu.batchjob_script(params, "print", script_folder=script_folder,
+                   n_max_co_processes=40)

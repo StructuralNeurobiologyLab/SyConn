@@ -43,13 +43,14 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
 
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
             global_params.config.allow_mesh_gen_cells)):
-        _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
-                           n_max_co_processes=global_params.config.ncore_total, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
+            n_max_co_processes=global_params.config.ncore_total, log=log)
 
     if co == "sv":
-        _ = qu.QSUB_script(multi_params, "sample_location_caching",
-                           n_max_co_processes=global_params.config.ncore_total,
-                           suffix=co, remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True,
+            n_max_co_processes=global_params.config.ncore_total, log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
     if not global_params.config.use_new_meshing:
@@ -61,6 +62,8 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
             cube_of_interest_bb: Tuple[np.ndarray],
             log: Logger):
     """
+    Replaced by a single call of :func:`~generate_subcell_kd_from_proba`.
+
     Initializes a per-object segmentation KnossosDataset for the given supervoxel type
     `co` based on an initial prediction which location has to be defined in the config.yml file
     for the `co` object, e.g. `kd_mi` for `co='mi'`
@@ -69,6 +72,22 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
     Appropriate parameters have to be set inside the config.yml file, see
     :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
     or :func:`~syconn.handler.config.generate_default_conf` for more details.
+
+    Examples:
+        Was used to process sub-cellular structures independently:
+
+                ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
+                      load_cellorganelles_from_kd_overlaycubes,
+                      cube_of_interest_bb, log])
+                    for co in global_params.config['existing_cell_organelles']]
+                for p in ps:
+                    p.start()
+                    time.sleep(5)
+                for p in ps:
+                    p.join()
+                    if p.exitcode != 0:
+                        raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                                        f'code {p.exitcode}.')
 
     Args:
         co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
@@ -92,7 +111,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           max_n_jobs: Optional[int] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
-                          cube_of_interest_bb: Optional[np.ndarray] = None):
+                          cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
+                          n_cores: int = 1, overwrite=False):
     """
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
@@ -112,33 +132,35 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
             which is processed (minimum and maximum coordinates in mag1 voxels,
             XYZ).
+        n_cores: Cores used within :func:`~map_subcell_extract_props`.
+        overwrite: If True, will overwrite existing data.
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
         transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
     if chunk_size is None:
+        chunk_size_kdinit = [1024, 1024, 512]
         chunk_size = [512, 512, 512]
+    else:
+        chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
+        max_n_jobs = global_params.config.ncore_total * 4
         # loading cached data or adapt number of jobs/cache size dynamically,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
-             'type available: {}.'.format(global_params.config['existing_cell_organelles']))
+    log.info('Converting the predictions of the following cellular organelles to'
+             ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
-                                        load_cellorganelles_from_kd_overlaycubes,
-                                        cube_of_interest_bb, log])
-          for co in global_params.config['existing_cell_organelles']]
-    for p in ps:
-        p.start()
-        time.sleep(5)
-    for p in ps:
-        p.join()
+    oew.generate_subcell_kd_from_proba(
+        global_params.config['existing_cell_organelles'],
+        chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
+        load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
+        cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
+        n_cores=n_cores, overwrite=overwrite)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -147,7 +169,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
-        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log)
+        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log,
+        n_cores=n_cores, overwrite=overwrite)
     log.info('Finished extraction and mapping after {:.2f}s.'
              ''.format(time.time() - start))
 
@@ -161,6 +184,9 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         time.sleep(5)
     for p in ps:
         p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
     log.info('Finished SD caching after {:.2f}s.'
              ''.format(time.time() - start))
 
@@ -187,8 +213,7 @@ def run_create_rag():
 
     # add single SV connected components to initial graph
     sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
-    sv_ids = sd.ids
-    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
+    diff = np.array(list(set(sd.ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single-element connected component SVs which were missing'
              ' in initial RAG.'.format(len(diff)))
 

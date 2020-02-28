@@ -34,9 +34,9 @@ def qsub_glia_splitting():
             len(huge_ssvs), global_params.config['glia']['rendering_max_nb_sv']))
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
                    global_params.config.ncore_total * 2)
-    qu.QSUB_script(chs, "split_glia", n_cores=1,
-                   n_max_co_processes=global_params.config.ncore_total * 2,
-                   remove_jobfolder=True)
+    qu.batchjob_script(chs, "split_glia", n_cores=1,
+                       n_max_co_processes=global_params.config.ncore_total * 2,
+                       remove_jobfolder=True)
 
 
 def collect_glia_sv():
@@ -116,7 +116,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(g, sv_size_dict)
     log_proc.info("Finished preparation of SSV size dictionary based "
-                  "on bounding box diagional of corresponding SVs.")
+                  "on bounding box diagonal of corresponding SVs.")
 
     # add CCs with single neuron SV manually
     neuron_ids = list(neuron_g.nodes())

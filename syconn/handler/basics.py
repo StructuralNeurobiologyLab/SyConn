@@ -24,8 +24,9 @@ import gc
 import signal
 import networkx as nx
 import contextlib
+import glob
 import tqdm
-import warnings
+from typing import List, Union
 from plyfile import PlyData
 from . import log_handler
 from .. import global_params
@@ -40,6 +41,11 @@ __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):
     """
+    Initializes a KnossosDataset at the given `kd_path`.
+
+    Notes:
+        * Prioritizes pyk.conf files.
+
     Todo:
         * Requires additional adjustment of the data type,
           i.e. setting the channel explicitly currently leads to uint32 <->
@@ -52,15 +58,22 @@ def kd_factory(kd_path: str, channel: str = 'jpg'):
     Returns:
 
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        # knossos_utils expects a path to the knossos.conf file
-        if not kd_path.endswith('knossos.conf'):
-            kd_path += "/mag1/knossos.conf"
-        kd = KnossosDataset()  # Sets initial values of object
-        # kd.set_channel(channel)  #
+    kd = KnossosDataset()
+    # TODO: set appropriate channel
+    # # kd.set_channel(channel)
+
+    if os.path.isfile(kd_path):
+        kd.initialize_from_conf(kd_path)
+    elif len(glob.glob(f'{kd_path}/*.pyk.conf')) == 1:
+        pyk_confs = glob.glob(f'{kd_path}/*.pyk.conf')
+        kd.initialize_from_pyknossos_path(pyk_confs[0])
+    elif os.path.isfile(kd_path + "/mag1/knossos.conf"):
         # Initializes the dataset by parsing the knossos.conf in path + "mag1"
+        kd_path += "/mag1/knossos.conf"
         kd.initialize_from_knossos_path(kd_path)
+    else:
+        raise ValueError(f'Could not find KnossosDataset config at {kd_path}.')
+
     return kd
 
 
@@ -440,7 +453,7 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
-        pbar = tqdm.tqdm(total=nb_files)
+        pbar = tqdm.tqdm(total=nb_files, leave=False)
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -571,18 +584,19 @@ def convert_keys_byte2str(dc):
     return dc
 
 
-def chunkify(lst, n):
+def chunkify(lst: Union[list, np.ndarray], n: int) -> List[list]:
     """
-    Splits list into n sub-lists.
+    Splits list into ``np.min([n, len(lst)])`` sub-lists.
 
-    Parameters
-    ----------
-    lst : List
-    n : int
+    Args:
+        lst:
+        n:
+    Examples:
+        >>> chunkify(np.arange(10), 2)
+        >>> chunkify(np.arange(10), 100)
 
-    Returns
-    -------
-
+    Returns:
+        List of chunks. Length is ``np.min([n, len(lst)])``.
     """
     if len(lst) < n:
         n = len(lst)
@@ -792,6 +806,7 @@ def parse_cc_dict_from_kzip(k_path):
 def temp_seed(seed):
     """
     From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+
     Parameters
     ----------
     seed :

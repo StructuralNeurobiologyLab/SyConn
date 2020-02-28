@@ -20,9 +20,9 @@ __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 class Config(object):
     """
-    Basic config object based on yaml. If file ``config.yml`` does not exist
-    at `working_dir` :py:attr:`~initialized` will be False, but no error is
-    raised.
+    Basic config object based on yaml. If no ``config.yml`` file exists
+    in `working_dir` :py:attr:`~initialized` will be False without raising an
+    error.
     """
     def __init__(self, working_dir):
         self._config = None
@@ -116,6 +116,10 @@ class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
     interface to all working directory dependent parameters.
+
+    Notes:
+        * Due to sync. checks it is favorable to not use :func:`~__getitem__`
+          inside loops.
 
     Todo:
         * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
@@ -238,7 +242,7 @@ class DynConfig(Config):
                            colored("'{}'".format(new_wd), 'red'))
         if self.initialized is False:
             from syconn import handler
-            default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+            default_conf_p = f'{os.path.dirname(handler.__file__)}/config.yml'
             self.log_main.warning(f'Initialized working directory without '
                                   f'existing config file at'
                                   f' {self.path_config}. Using default '
@@ -333,7 +337,7 @@ class DynConfig(Config):
         return path_dict
 
     @property
-    def kd_organelle_seg_paths(self)-> Dict[str, str]:
+    def kd_organelle_seg_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle segmentations.
 
@@ -646,6 +650,20 @@ class DynConfig(Config):
     def ngpu_total(self) -> int:
         return self['nnodes_total'] * self['ngpus_per_node']
 
+    @property
+    def asym_label(self) -> Optional[int]:
+        try:
+            return self.entries['cell_objects']['asym_label']
+        except KeyError:
+            return None
+
+    @property
+    def sym_label(self) -> Optional[int]:
+        try:
+            return self.entries['cell_objects']['sym_label']
+        except KeyError:
+            return None
+
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
@@ -787,6 +805,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
               # above will be assigned synaptic sign (-1, inhibitory) and <= will be
               # (1, excitatory)
               sym_thresh: 0.225
+              # labels are None by default
+              asym_label:
+              sym_label:
 
             meshes:
               allow_mesh_gen_cells:
@@ -962,13 +983,23 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal
     if key_value_pairs is not None:
-        for k, v in key_value_pairs:
-            entries[k] = v
+        _update_key_value_pair_rec(key_value_pairs, entries)
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
-        raise ValueError(f'Attempting to overwrite existing config file at '
+        raise ValueError(f'Overwrite attempt of existing config file at '
                          f'{default_conf.path_config}.')
     default_conf.write_config(working_dir)
+
+
+def _update_key_value_pair_rec(key_value_pairs, entries):
+    for k, v in key_value_pairs:
+        if k not in entries:
+            raise KeyError(f'Key in provided key-value {k}:{v} pair '
+                           f'does not exist in default config.')
+        if type(v) is dict:
+            _update_key_value_pair_rec(list(v.items()), entries[k])
+        else:
+            entries[k] = v
 
 
 def initialize_logging(log_name: str, log_dir: Optional[str] = None,

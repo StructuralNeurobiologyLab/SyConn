@@ -8,6 +8,7 @@
 from knossos_utils import knossosdataset
 import numpy as np
 from typing import Tuple, Optional
+from syconn.mp.batchjob_utils import batchjob_script
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
@@ -16,7 +17,7 @@ from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.config import initialize_logging
-from syconn.handler.basics import kd_factory
+from syconn.handler.basics import kd_factory, chunkify
 knossosdataset._set_noprint(True)
 
 
@@ -27,11 +28,12 @@ def run_matrix_export():
     Also collects the following synapse properties from prior analysis
     steps:
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
-            en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
-        * 'partner_spiness': Spine compartment predictions of both neurons.
+          en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
+        * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
+          1: spine head, 2: spine neck, 3: other) of both neurons.
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
-            synaptic partners.
+          synaptic partners.
 
     Examples:
         See :class:`~syconn.reps.segmentation.SegmentationDataset` for examples.
@@ -72,7 +74,7 @@ def run_matrix_export():
     log.info('Connectivity matrix was exported to "{}".'.format(dest_folder))
 
 
-def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
+def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512),
                        n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
                        cube_of_interest_bb: Optional[np.ndarray] = None):
@@ -114,17 +116,18 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
 
     # # TODO: add check for SSD existence, which is required at this point
     # # This creates an SD of type 'syn_ssv'
-    cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
+    cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
-    log.info('Synapse objects were created.')
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
+    syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
-             f'objects.')
+             f'objects, {np.sum(syn_sign == -1)} symmetric and '
+             f'{np.sum(syn_sign == 1)} asymmetric.')
 
     cps.map_objects_to_synssv(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
@@ -132,7 +135,7 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
     log.info('Synapse prediction finished.')
 
-    log.info('Collecting and writing syn-ssv objects to SSV attribute '
+    log.info('Collecting and writing syn_ssv objects to SSV attribute '
              'dictionary.')
     # This needs to be run after `classify_synssv_objects` and before
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
@@ -141,3 +144,31 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
     # TODO: decide whether this should happen after prob thresholding or not
     map_synssv_objects(log=log)
     log.info('Finished.')
+
+
+def run_spinehead_volume_calc():
+    """
+
+    """
+    log = initialize_logging('spinehead_calc', global_params.config.working_dir+ '/logs/',
+                             overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    # shuffle SV IDs
+    np.random.seed(0)
+
+    log.info('Starting spine head volume calculation.')
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    multi_params = ssd.ssv_ids
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
+    # job parameter will be read sequentially, i.e. in order to provide only
+    # one list as parameter one needs an additonal axis
+    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
+    multi_params = [(ixs, ) for ixs in multi_params]
+
+    batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
+                    n_max_co_processes=global_params.config.ncore_total,
+                    remove_jobfolder=True)
+    log.info('Finished processing of {} SSVs.'
+             ''.format(len(ordering)))

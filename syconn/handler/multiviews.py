@@ -145,8 +145,8 @@ def str2intconverter(comment: str, gt_type: str):
 
 def int2str_converter(label: int, gt_type: str):
     """
-    Converts integer label into semantic string. TODO: remove redundant definitions ->
-    single source of truth!
+    TODO: remove redundant definitions.
+    Converts integer label into semantic string.
 
     Parameters
     ----------

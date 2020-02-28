@@ -585,8 +585,8 @@ class SuperSegmentationDataset(object):
                                   multi_params, nb_cpus=nb_cpus)
 
         else:
-            qu.QSUB_script(multi_params, "predict_cell_type_skelbased",
-                           n_cores=nb_cpus, remove_jobfolder=True)
+            qu.batchjob_script(multi_params, "predict_cell_type_skelbased",
+                               n_cores=nb_cpus, remove_jobfolder=True)
 
     def save_version_dict(self):
         """
@@ -687,10 +687,10 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "write_super_segmentation_dataset",
-                                     n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+        path_to_out = qu.batchjob_script(multi_params,
+                                         "write_super_segmentation_dataset",
+                                         n_cores=nb_cpus,
+                                         n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
         results = []
@@ -812,8 +812,8 @@ def export_to_knossosdataset(ssd, kd, stride=1000, nb_cpus=10):
                               multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "export_ssv_to_knossosdataset",
-                       remove_jobfolder=True)
+        qu.batchjob_script(
+            multi_params, "export_ssv_to_knossosdataset", remove_jobfolder=True)
 
 
 def _export_ssv_to_knossosdataset_thread(args):
@@ -824,7 +824,7 @@ def _export_ssv_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
@@ -877,7 +877,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                               multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.QSUB_script(multi_params, "convert_knossosdataset")
+        qu.batchjob_script(multi_params, "convert_knossosdataset")
 
 
 def _convert_knossosdataset_thread(args):
@@ -1061,7 +1061,7 @@ def export_to_knossosdataset_thread(args):
     kd_path = args[4]
     nb_threads = args[5]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    kd = kd_factory(kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_mapping_dict()
@@ -1088,10 +1088,8 @@ def convert_knossosdataset_thread(args):
     offsets = args[6]
     size = args[7]
 
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
+    ssv_kd = kd_factory(ssv_kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_id_changer()

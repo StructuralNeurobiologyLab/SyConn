@@ -7,7 +7,7 @@ import glob
 # TODO: pytest stuff can probably be removed from `setup_requires`
 try:
     from Cython.Build import cythonize
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'pytest-xdist',
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner",
                       "cython>=0.23"]
     ext_modules = [Extension("*", [fname],
                              extra_compile_args=["-std=c++11"], language='c++')
@@ -18,7 +18,7 @@ try:
                            'cdivision': False, 'overflowcheck': True})
 except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'pytest-xdist']
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner"]
     cython_out = None
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 with open(readme_file) as f:
@@ -50,10 +50,11 @@ setup(
     setup_requires=setup_requires,
     package_data={'syconn': ['handler/config.yml']},
     include_package_data=True,
-    tests_require=['pytest', 'pytest-cov', 'pytest-xdist'],
+    tests_require=['pytest', 'pytest-cov',],
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [
+            'syconn.server=syconn.kplugin.server:main'
         ],
     },
 )
