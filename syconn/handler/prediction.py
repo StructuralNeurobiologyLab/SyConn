@@ -6,7 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 # import here, otherwise it might fail if it is imported after importing torch
 # see https://github.com/pytorch/pytorch/issues/19739
-import open3d
+import open3d as o3d
 from ..handler.config import initialize_logging
 from ..reps import log_reps
 from ..mp import batchjob_utils as qu
@@ -19,22 +19,23 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
 from .. import global_params
 
 import re
-from sklearn.preprocessing import label_binarize
 import numpy as np
 import os
 import sys
-from multiprocessing import Process, Queue
 import time
 import tqdm
 from logging import Logger
+import functools
+from morphx.classes.hybridcloud import HybridCloud
 import shutil
-from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple, Generator
-from scipy.ndimage import zoom
+from sklearn.preprocessing import label_binarize
+from morphx.processing.graphs import local_bfs_vertices
+from morphx.processing.hybrids import extract_subset
+from typing import Iterable, Union, Optional, Any, Tuple
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
 from knossos_utils.knossosdataset import KnossosDataset
-from sklearn.metrics import log_loss
 from scipy.stats import entropy
 from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
@@ -1363,6 +1364,8 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
 
 
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
+# in nm, should be replaced by Poisson disk sampling
+pts_feat_ds_dict = dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100)
 
 
 def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
@@ -1397,3 +1400,106 @@ def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
         sample_pts = sample_pts[idx_arr]
         sample_feats = sample_feats[idx_arr]
     return sample_pts, sample_feats
+
+
+@functools.lru_cache(256)
+def _load_ssv_hc(args):
+    ssv, feats, feat_labels = args
+    vert_dc = dict()
+    # TODO: replace by poisson disk sampling
+    for k in feats:
+        pcd = o3d.geometry.PointCloud()
+        verts = ssv.load_mesh(k)[1].reshape(-1, 3)
+        pcd.points = o3d.utility.Vector3dVector(verts)
+        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[k])
+        vert_dc[k] = np.asarray(pcd.points)
+    sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
+                                   for ii, k in enumerate(feats)])
+    sample_pts = np.concatenate([vert_dc[k] for k in feats])
+    if not ssv.load_skeleton():
+        raise ValueError(f'Couldnt find skeleton of {ssv}')
+    nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
+    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
+    return hc
+
+
+def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints, scale_fact=None,
+                    apply_transforms=True):
+    from ..reps.super_segmentation import SuperSegmentationDataset
+    np.random.shuffle(ssv_ids)
+    ssd = SuperSegmentationDataset(**ssd_kwargs)
+    nbatches = int(np.ceil(len(ssv_ids) / batchsize))
+    nsamples = nbatches * batchsize
+    ndiff = int(nsamples - len(ssv_ids))
+    ssv_ids = np.concatenate([ssv_ids, ssv_ids[:ndiff]])
+    # TODO: add `use_syntype kwarg and cellshape only
+    feat_dc = dict(pts_feat_dict)
+    if 'syn_ssv' in feat_dc:
+        del feat_dc['syn_ssv']
+    for curr_ssvids in chunkify(ssv_ids, nbatches):
+        batch = np.zeros((batchsize, npoints, 3))
+        batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
+        ixs = np.zeros((batchsize, ), dtype=np.uint)
+        cnt = 0
+        for ssv_id, occ in zip(*np.unique(curr_ssvids, return_counts=True)):
+            ssv = ssd.get_super_segmentation_object(ssv_id)
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+                feat_dc.values())))
+            for _ in range(occ):
+                source_node = np.random.randint(0, len(hc.nodes))
+                local_bfs = local_bfs_vertices(hc, source_node, npoints)
+                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                if scale_fact is not None:
+                    pc.scale(-scale_fact)  # - signals a division
+                if apply_transforms:
+                    pc.move(-pc.vertices.mean(axis=0))
+                    pc.rotate_randomly()
+                sample_feats = label_binarize(pc.features, classes=np.arange(len(feat_dc)))
+                sample_pts = pc.vertices
+                if len(sample_pts) < npoints:
+                    idx = np.random.choice(np.arange(len(sample_pts)), npoints - len(sample_pts))
+                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                else:
+                    sample_pts = sample_pts[:npoints]
+                    sample_feats = sample_feats[:npoints]
+                batch[cnt] = sample_pts
+                batch_f[cnt] = sample_feats
+                ixs[cnt] = ssv.id
+                cnt += 1
+        assert cnt == batchsize
+        yield (ixs, (batch_f, batch))
+
+
+# TODO: move to handler.basics
+def write_ply(fn, verts, colors):
+    ply_header = '''ply
+    format ascii 1.0
+    element vertex %(vert_num)d
+    property float x
+    property float y
+    property float z
+    property uchar red
+    property uchar green
+    property uchar blue
+    end_header
+
+    '''
+    verts = np.hstack([verts, colors])
+    with open(fn, 'wb') as f:
+        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
+        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
+
+
+def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
+
+
+
+
+    col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
+              4: [[250, 100, 100]], 2: [[100, 200, 100]]}
+    cols = np.zeros(pts.shape, dtype=np.uint8)
+    for k in pts_feat_dict.values():
+        mask = feats[:, k] == 1
+        cols[mask] = col_dc[k]
+    write_ply(fname, pts, cols)

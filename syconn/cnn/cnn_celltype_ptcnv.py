@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=32, help='Batch size')
+parser.add_argument('--bs', type=int, default=48, help='Batch size')
 parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--cl', type=int, default=5, help='Number of classes')
@@ -124,21 +124,24 @@ model = ModelNet40(input_channels, num_classes, dropout=dr)
 # model = ModelNetSelectionBig(input_channels, num_classes, dropout=dr)
 # name += '_selection_big'
 
+model = nn.DataParallel(model)
+
 if use_cuda:
     model.to(device)
 
-example_input = torch.ones(1, 1, 32, 64, 64)
+example_input = (torch.ones(batch_size, npoints, input_channels).to(device),
+                 torch.ones(batch_size, npoints, 3).to(device))
 enable_save_trace = False if args.jit == 'disabled' else True
 if args.jit == 'onsave':
     # Make sure that tracing works
-    tracedmodel = torch.jit.trace(model, example_input.to(device))
+    tracedmodel = torch.jit.trace(model, example_input)
 elif args.jit == 'train':
     if getattr(model, 'checkpointing', False):
         raise NotImplementedError(
             'Traced models with checkpointing currently don\'t '
             'work, so either run with --disable-trace or disable '
             'checkpointing.')
-    tracedmodel = torch.jit.trace(model, example_input.to(device))
+    tracedmodel = torch.jit.trace(model, example_input)
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
@@ -202,13 +205,14 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=batch_size,
-    num_workers=5,
+    num_workers=10,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
-    num_classes=num_classes
+    num_classes=num_classes,
+    example_input=example_input
 )
 
 # Archiving training script, src folder, env info
