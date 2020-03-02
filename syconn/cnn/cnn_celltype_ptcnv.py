@@ -16,10 +16,13 @@ elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, \
-    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig
+    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig, ModelNet40xConv
 from elektronn3.training import Trainer3d, Backup, metrics
-from elektronn3.training import SWA
-from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
+try:
+    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
+except ModuleNotFoundError as e:
+    print(e)
+    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 
@@ -27,7 +30,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=16, help='Batch size')
+parser.add_argument('--bs', type=int, default=32, help='Batch size')
 parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--cl', type=int, default=5, help='Number of classes')
@@ -88,7 +91,7 @@ else:
     name += '_flatinp'
 
 if use_cuda:
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
@@ -102,17 +105,17 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-# model = ModelNet40(input_channels, num_classes, dropout=dr)
-# name += '_2'
+model = ModelNet40(input_channels, num_classes, dropout=dr)
+# name += '_xconv'
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
 # model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
 # name += '_attention'
-
-model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints,
-                             dropout=dr)
-name += '_attention_big_2'
+#
+# model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints,
+#                              dropout=dr)
+# name += '_attention_big_2'
 
 
 # model = ModelNetSelection(input_channels, num_classes, npoints=npoints, dropout=dr)
@@ -168,7 +171,7 @@ optimizer = torch.optim.SGD(
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=1.5)
+lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,
