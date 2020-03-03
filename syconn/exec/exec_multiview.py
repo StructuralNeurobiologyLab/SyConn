@@ -640,7 +640,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    exec_skeleton.run_skeleton_generation()
+    exec_skeleton.run_skeleton_kimimaro()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')

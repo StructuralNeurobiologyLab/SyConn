@@ -27,7 +27,7 @@ except ImportError:
     import pickle as pkl
 
 #
-def kimimaro_skelgen(cube_size, cube_offset):
+def kimimaro_skelgen(cube_size, cube_offset, overlap):
     """
     code from https://pypi.org/project/kimimaro/
     Args:
@@ -37,10 +37,12 @@ def kimimaro_skelgen(cube_size, cube_offset):
     Returns: skeleton with nodes, edges in physical parameters
 
     """
+    overlap = np.array(overlap)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
-
-    seg = kd.from_overlaycubes_to_matrix(cube_size, cube_offset, mag=2)
+    cube_size_ov = cube_size + 2*overlap
+    cube_offset_ov = cube_offset - overlap
+    seg = kd.from_overlaycubes_to_matrix(cube_size_ov, cube_offset_ov, mag=2)
 
     seg_cell = np.zeros_like(seg)
     for x in range(seg.shape[0]):
@@ -52,6 +54,8 @@ def kimimaro_skelgen(cube_size, cube_offset):
                     seg_cell[x, y, z] = 0
 
     seg_cell = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg_cell, iterations=None)
+
+    seg_cell = seg_cell[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
     #kimimaro code
 
     skels = kimimaro.skeletonize(

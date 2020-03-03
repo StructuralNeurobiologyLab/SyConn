@@ -115,7 +115,7 @@ def run_skeleton_axoness():
 
 
 
-def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
+def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None , map_myelin: bool = True):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
 
@@ -136,14 +136,15 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     from knossos_utils import knossosdataset
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
-    cube_size = np.array([512, 512, 256])
+    cube_size = np.array([1024, 1024, 512])
     cd = ChunkDataset()
+    overlap = np.array([100, 100, 50])
     boundary = (kd.boundary/2).astype(int) #if later working on mag=2
     cd.initialize(kd, boundary, cube_size, '~/cd_tmp/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True)
-    multi_params = [(cube_size, offset) for offset in cd.coord_dict]
-    out_dir = qu.QSUB_script(multi_params, "kimimaroskelgen", log=log,
+    multi_params = [(cube_size, offset, overlap) for offset in cd.coord_dict]
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log,
                    n_max_co_processes=global_params.config.ncore_total, remove_jobfolder=False)
 
     import os
@@ -152,6 +153,7 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     except ImportError:
         import pickle as pkl
     from syconn.handler.basics import load_pkl2obj, write_obj2pkl
+    import shutil
     from syconn.reps.super_segmentation_object import SuperSegmentationObject
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -177,9 +179,14 @@ def run_kimimaro_skelgen(curr_dir, max_n_jobs: Optional[int] = None):
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
-    outfile2 = qu.QSUB_script(multi_params, "kimimaromerge", log=log,
+    qu.batchjob_script(multi_params, "kimimaromerge", log=log,
                    n_max_co_processes=global_params.config.ncore_total,
-                   remove_jobfolder=False, n_cores=2)
+                   remove_jobfolder=True, n_cores=2)
+    shutil.rmtree(out_dir + "/../")
 
+    if map_myelin:
+        map_myelin_global()
     log.info('Finished skeleton generation.')
+
+
 
