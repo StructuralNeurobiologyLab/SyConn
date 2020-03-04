@@ -76,7 +76,7 @@ def test_raw_and_index_rendering_egl():
 
 
 @pytest.mark.filterwarnings("ignore:Modifying DynConfig items via")
-def test_egl_and_osmesa_sawp_and_equivalence():
+def test_egl_and_osmesa_swap_and_equivalence():
     from syconn import global_params
     global_params.config['pyopengl_platform'] = 'egl'
     from syconn.proc.ssd_assembly import init_sso_from_kzip
@@ -105,6 +105,6 @@ def test_egl_and_osmesa_sawp_and_equivalence():
 if __name__ == '__main__':
     test_raw_and_index_rendering_osmesa()
     test_raw_and_index_rendering_egl()
-    test_egl_and_osmesa_sawp_and_equivalence()
+    test_egl_and_osmesa_swap_and_equivalence()
 
 

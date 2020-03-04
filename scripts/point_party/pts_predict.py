@@ -95,13 +95,33 @@ def listener(q_cnt: Queue, q_in, q_loader_sync, npredictor, nloader, total):
 
 def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npredictor=2,
                    ssv_ids=None):
+    """
+    Perform cell type predictions of cell reconstructions on sampled point sets from the
+    cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
+    fraction of the total number of vertices over ``npoints`` times two, but at least 5.
+    Every point set is constructed by collecting the vertices associated with skeleton within a
+    breadth-first search up to a maximum of ``npoints``.
+
+
+    Args:
+        ssd_kwargs:
+        model_loader:
+        npoints:
+        scale_fact:
+        nloader:
+        npredictor:
+        ssv_ids:
+
+    Returns:
+
+    """
     bs = 80
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     # minimum redundancy is 5
     min_redundancy = 5
-    ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints, min_redundancy) for ssv in
+    ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints * 2, min_redundancy) for ssv in
                       ssd.get_super_segmentation_object(ssv_ids)]
     kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, scale_fact=scale_fact)
     # created shuffled ssv ID array -> lower loader speed due to increased IO, but enables nicely
@@ -227,4 +247,3 @@ if __name__ == '__main__':
 
     print(classification_report(valid_ls, valid_preds, labels=np.arange(7),
                                 target_names=target_names))
-    raise()
