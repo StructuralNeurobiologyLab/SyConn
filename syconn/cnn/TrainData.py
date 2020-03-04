@@ -61,7 +61,7 @@ if elektronn3_avail:
         """
         def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
                      train=True, cv_val=0, cellshape_only=False, use_syntype=True,
-                     onehot=True):
+                     onehot=True, batch_size=1):
             """
             Notes:
                 Cache re-usage is set to 10.
@@ -148,11 +148,9 @@ if elektronn3_avail:
                 split_dc['valid'] = split_dc['train']
             label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
             self.train = train
-            self._cache_cnt = 0
             self.num_pts = npoints
-            self._cached_pts = None
-            self._cached_pts_feats = None
-            self._cached_id = None
+            self._batch_size = batch_size
+            self._curr_ssv_id = None
             self._max_cache_cnt = 8 if train else 2
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
@@ -188,37 +186,21 @@ if elektronn3_avail:
                 Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
-            if self._cache_cnt >= self._max_cache_cnt or self._cached_pts is None:
-                self._cache_cnt = 0
-                if self.train:
-                    item = np.random.randint(0, len(self.sso_ids))
-                self._cached_id = self.sso_ids[item]
-                self._cached_pts, self._cached_pts_feats = self.load_ssv_sample(item)
-                if np.any(np.isnan(self._cached_pts)):
-                    log_cnn.error(f'Cell {self._cached_id} contains NaN vertices.')
-                    raise()
-
-            pc = PointCloud(vertices=self._cached_pts)
-            self.transform(pc)
-            if np.any(np.isnan(pc.vertices)):
-                log_cnn.error(f'PointCloud of {self._cached_id} contains'
-                              f' NaN vertices.')
-                raise ()
-            pts = torch.from_numpy(np.asarray(pc.vertices)).float()
-            if np.any(np.isnan(pc.vertices)):
-                log_cnn.error(f'PointCloud after transformations of cell'
-                              f' {self._cached_id} contains NaN vertices.')
-                raise ()
-            lbs = torch.from_numpy(self.label_dc[self._cached_id][None].astype(np.int)).long()
-            feats = torch.from_numpy(self._cached_pts_feats).float()
-            self._cache_cnt += 1
+            item = np.random.randint(0, len(self.sso_ids))
+            self._curr_ssv_id = self.sso_ids[item]
+            pts, feats = self.load_ssv_sample(item)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size,
+                           dtype=np.int)
+            pts = torch.from_numpy(pts).float()
+            lbs = torch.from_numpy(lbs[..., None]).long()
+            feats = torch.from_numpy(feats).float()
             return {'pts': pts, 'features': feats, 'target': lbs}
 
         def __len__(self):
             if self.train:
-                return len(self.sso_ids) * 50
+                return len(self.sso_ids) * 5
             else:
-                return 100
+                return max(len(self.sso_ids) // 10, 1)
 
         def load_ssv_sample(self, item):
             """
@@ -227,10 +209,13 @@ if elektronn3_avail:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
             """
             sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
-                self.ssd_kwargs, [self.sso_ids[item], ], 1, self.num_pts,
-                scale_fact=None, apply_transforms=False)][0]
-            assert sso_id == self.sso_ids[item]
-            return sample_pts[0], sample_feats[0]
+                self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
+                self.num_pts, transform=self.transform, train=True)][0]
+            assert np.unique(sso_id) == self.sso_ids[item]
+            if self._batch_size == 1:
+                return sample_pts[0], sample_feats[0]
+            else:
+                return sample_pts, sample_feats
 
 
     class CellCloudDataTriplet(CellCloudData):
@@ -240,54 +225,31 @@ if elektronn3_avail:
 
         def __init__(self, **kwargs):
             super().__init__(**kwargs)
-            self._cached_pts_altern = None
-            self._cached_id_altern = None
-            self._cached_pts_feats_altern = None
-            self._cache_cnt_altern = 0
-            # alternative data should have different permutation pattern
-            self._max_cache_cnt_altern = max(int(self._max_cache_cnt // 3 + 1), 1)
+            self._curr_ssv_id_altern = None
 
         def __getitem__(self, item):
-            if self._cache_cnt_altern >= self._max_cache_cnt_altern \
-                    or self._cached_pts_altern is None:
-                self._cache_cnt_altern = 0
-                if self.train:
-                    item = np.random.randint(0, len(self.sso_ids))
-                self._cached_id_altern = self.sso_ids[item]
-                self._cached_pts_altern, self._cached_pts_feats_altern \
-                    = self.load_ssv_sample(item)
+            item = np.random.randint(0, len(self.sso_ids))
+            self._curr_ssv_id_altern = self.sso_ids[item]
+            pts_altern, feats_altern = self.load_ssv_sample(item)
 
-            pc = PointCloud(vertices=self._cached_pts_altern)
-            self.transform(pc)
-
-            pts = torch.from_numpy(pc.vertices).float()
-            feats = torch.from_numpy(self._cached_pts_feats_altern).float()
+            pts_altern = torch.from_numpy(pts_altern).float()
+            feats_altern = torch.from_numpy(feats_altern).float()
 
             # draw base and similar sample from a different cell
             while True:
                 ix = np.random.randint(0, len(self.sso_ids))
-                if self.sso_ids[ix] != self._cached_id_altern:
-                    self._cached_id = self.sso_ids[ix]
+                if self.sso_ids[ix] != self._curr_ssv_id_altern:
+                    self._curr_ssv_id = self.sso_ids[ix]
                     break
-            x0 = self.load_ssv_sample(ix)  # base sample
-            pc = PointCloud(vertices=x0[0])
-            self.transform(pc)
-            x0 = {'pts': torch.from_numpy(pc.vertices).float(), 'features':
-                  torch.from_numpy(x0[1]).float()}
+            pts0, feats0 = self.load_ssv_sample(ix)  # base sample
+            x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
+                  torch.from_numpy(feats0).float()}
 
-            x1 = self.load_ssv_sample(ix)  # similar sample to base
-            pc = PointCloud(vertices=x1[0])
-            self.transform(pc)
-            x1 = {'pts': torch.from_numpy(pc.vertices).float(), 'features':
-                  torch.from_numpy(x1[1]).float()}
-            x2 = {'pts': pts, 'features': feats}  # alternative sample
-            res = {}
-            for k in x0:
-                res[k] = torch.cat([x0[k].unsqueeze(0), x1[k].unsqueeze(0),
-                                    x2[k].unsqueeze(0)], dim=0)
-            del x0, x1, x2
-            self._cache_cnt_altern += 1
-            return res
+            pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
+            x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
+                  torch.from_numpy(feats1).float()}
+            x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+            return x0, x1, x2
 
 
     class MultiviewDataCached(Dataset):

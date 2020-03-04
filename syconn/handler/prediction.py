@@ -31,7 +31,7 @@ import shutil
 from sklearn.preprocessing import label_binarize
 from morphx.processing.graphs import local_bfs_vertices
 from morphx.processing.hybrids import extract_subset
-from typing import Iterable, Union, Optional, Any, Tuple
+from typing import Iterable, Union, Optional, Any, Tuple, Callable
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -1423,52 +1423,83 @@ def _load_ssv_hc(args):
     return hc
 
 
-def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints, scale_fact=None,
-                    apply_transforms=True):
+def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
+                    transform: Optional[Callable] = None, train=False):
     from ..reps.super_segmentation import SuperSegmentationDataset
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    nbatches = int(np.ceil(len(ssv_ids) / batchsize))
-    nsamples = nbatches * batchsize
-    ndiff = int(nsamples - len(ssv_ids))
-    ssv_ids = np.concatenate([ssv_ids, ssv_ids[:ndiff]])
     # TODO: add `use_syntype kwarg and cellshape only
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
-    for curr_ssvids in chunkify(ssv_ids, nbatches):
-        batch = np.zeros((batchsize, npoints, 3))
-        batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
-        ixs = np.zeros((batchsize, ), dtype=np.uint)
-        cnt = 0
-        for ssv_id, occ in zip(*np.unique(curr_ssvids, return_counts=True)):
-            ssv = ssd.get_super_segmentation_object(ssv_id)
+    if not train:
+        raise NotImplementedError('Implement size dependent number of points.')
+        nbatches = int(np.ceil(len(ssv_ids) / batchsize))
+        nsamples = nbatches * batchsize
+        ndiff = int(nsamples - len(ssv_ids))
+        ssv_ids = np.concatenate([ssv_ids, ssv_ids[:ndiff]])
+
+        for curr_ssvids in chunkify(ssv_ids, nbatches):
+            batch = np.zeros((batchsize, npoints, 3))
+            batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
+            ixs = np.zeros((batchsize,), dtype=np.uint)
+            cnt = 0
+            for ssv_id, occ in zip(*np.unique(curr_ssvids, return_counts=True)):
+                ssv = ssd.get_super_segmentation_object(ssv_id)
+                hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+                    feat_dc.values())))
+                for _ in range(occ):
+                    source_node = np.random.randint(0, len(hc.nodes))
+                    local_bfs = local_bfs_vertices(hc, source_node, npoints)
+                    pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                    if transform is not None:
+                        transform(pc)
+                    sample_feats = label_binarize(pc.features, classes=np.arange(len(feat_dc)))
+                    sample_pts = pc.vertices
+                    if len(sample_pts) < npoints:
+                        idx = np.random.choice(np.arange(len(sample_pts)),
+                                               npoints - len(sample_pts))
+                        sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                        sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                    else:
+                        sample_pts = sample_pts[:npoints]
+                        sample_feats = sample_feats[:npoints]
+                    batch[cnt] = sample_pts
+                    batch_f[cnt] = sample_feats
+                    ixs[cnt] = ssv.id
+                    cnt += 1
+            assert cnt == batchsize
+            yield (ixs, (batch_f, batch))
+    else:
+        ssv_ids = np.unique(ssv_ids)
+
+        for curr_ssvids in ssv_ids:
+            ssv = ssd.get_super_segmentation_object(curr_ssvids)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values())))
-            for _ in range(occ):
+            npoints_ssv = min(len(hc.vertices), npoints)
+            batch = np.zeros((batchsize, npoints_ssv, 3))
+            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+            cnt = 0
+            for _ in range(batchsize):
                 source_node = np.random.randint(0, len(hc.nodes))
                 local_bfs = local_bfs_vertices(hc, source_node, npoints)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                if scale_fact is not None:
-                    pc.scale(-scale_fact)  # - signals a division
-                if apply_transforms:
-                    pc.move(-pc.vertices.mean(axis=0))
-                    pc.rotate_randomly()
-                sample_feats = label_binarize(pc.features, classes=np.arange(len(feat_dc)))
-                sample_pts = pc.vertices
-                if len(sample_pts) < npoints:
-                    idx = np.random.choice(np.arange(len(sample_pts)), npoints - len(sample_pts))
+                if transform is not None:
+                    transform(pc)
+                sample_feats = label_binarize(pc.features, classes=np.arange(len(feat_dc)))[:npoints_ssv]
+                sample_pts = pc.vertices[:npoints]
+                if len(sample_pts) < npoints_ssv:
+                    idx = np.random.choice(np.arange(len(sample_pts)),
+                                           npoints_ssv - len(sample_pts))
                     sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                     sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                else:
-                    sample_pts = sample_pts[:npoints]
-                    sample_feats = sample_feats[:npoints]
                 batch[cnt] = sample_pts
                 batch_f[cnt] = sample_feats
-                ixs[cnt] = ssv.id
                 cnt += 1
-        assert cnt == batchsize
-        yield (ixs, (batch_f, batch))
+            assert cnt == batchsize
+            yield (ixs, (batch_f, batch))
 
 
 # TODO: move to handler.basics
@@ -1492,10 +1523,6 @@ def write_ply(fn, verts, colors):
 
 
 def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
-
-
-
-
     col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
               4: [[250, 100, 100]], 2: [[100, 200, 100]]}
     cols = np.zeros(pts.shape, dtype=np.uint8)

@@ -18,7 +18,9 @@ from . import log_proc
 from .. import global_params
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
 
-os.environ['PYOPENGL_PLATFORM'] = 'egl'
+if os.environ['PYOPENGL_PLATFORM'] != 'egl':
+    raise EnvironmentError(f'PyOpenGL backened should be "egl". '
+                           f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
 OpenGL.USE_ACCELERATE = True  # unclear behavior
 from OpenGL.GL import *

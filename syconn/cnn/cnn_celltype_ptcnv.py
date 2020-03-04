@@ -154,10 +154,10 @@ valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
 
 train_ds = CellCloudData(npoints=npoints, transform=train_transform, cv_val=cval,
                          cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot)
+                         onehot=onehot, batch_size=batch_size)
 valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False,
                          cv_val=cval, cellshape_only=cellshape_only,
-                         use_syntype=use_syntype, onehot=onehot)
+                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size)
 
 # PREPARE AND START TRAINING #
 
@@ -197,6 +197,8 @@ valid_metrics = {  # mean metrics
 }
 
 # Create trainer
+# it seems pytorch 1.1 does not support batch_size=None to enable batched dataloader, instead
+# using batch size 1 with custom callte_fn
 trainer = Trainer3d(
     model=model,
     criterion=criterion,
@@ -204,7 +206,7 @@ trainer = Trainer3d(
     device=device,
     train_dataset=train_ds,
     valid_dataset=valid_ds,
-    batchsize=batch_size,
+    batchsize=1,
     num_workers=10,
     valid_metrics=valid_metrics,
     save_root=save_root,
@@ -212,7 +214,8 @@ trainer = Trainer3d(
     exp_name=name,
     schedulers={"lr": lr_sched},
     num_classes=num_classes,
-    example_input=example_input
+    example_input=example_input,
+    dataloader_kwargs=dict(collate_fn=lambda x: x[0])
 )
 
 # Archiving training script, src folder, env info

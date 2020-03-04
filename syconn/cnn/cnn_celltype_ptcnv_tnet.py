@@ -34,16 +34,14 @@ class TripletNet(nn.Module):
         super().__init__()
         self.rep_net = rep_net
 
-    def forward(self, feat, inp):
+    def forward(self, x0, x1, x2):
         if not self.training:
-            assert feat.dim() == 3, 'Expecting feature shape (B, N, C) and ' \
-                                    'input shape (B, N, 3) during inference.'
-            return self.rep_net(feat, inp)
-        assert feat.dim() == 4, 'Expecting feature shape (B, 3, N, C) and ' \
-                                'input shape (B, 3, N, 3) during training.'
-        z_0 = self.rep_net(feat[0], inp[0])
-        z_1 = self.rep_net(feat[1], inp[1])
-        z_2 = self.rep_net(feat[2], inp[2])
+            assert x1 is None and x2 is None
+            return self.rep_net(x0[0], x0[1])
+        assert x1 is not None, x2 is not None
+        z_0 = self.rep_net(x0[0], x0[1])
+        z_1 = self.rep_net(x1[0], x1[1])
+        z_2 = self.rep_net(x2[0], x2[1])
         dist_a = F.pairwise_distance(z_0, z_1, 2)
         dist_b = F.pairwise_distance(z_0, z_2, 2)
         return dist_a, dist_b, z_0, z_1, z_2
@@ -90,11 +88,11 @@ if __name__ == '__main__':
     size = args.ana
     save_root = args.sr
 
-    lr = 1e-2
+    lr = 1e-3
     lr_stepsize = 1000
     lr_dec = 0.995
     max_steps = 1000000
-    margin = 0.4
+    margin = 0.2
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!
@@ -139,6 +137,7 @@ if __name__ == '__main__':
     # name += '_attention'
 
     model = TripletNet(model)
+    model = nn.DataParallel(model)
 
     if use_cuda:
         model.to(device)
@@ -167,10 +166,7 @@ if __name__ == '__main__':
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype,
-                                    onehot=onehot)
-    valid_ds = CellCloudDataTriplet(npoints=npoints, transform=valid_transform, train=False,
-                                    cv_val=cval, cellshape_only=cellshape_only,
-                                    use_syntype=use_syntype, onehot=onehot)
+                                    onehot=onehot, batch_size=batch_size)
 
     # PREPARE AND START TRAINING #
 
@@ -185,7 +181,7 @@ if __name__ == '__main__':
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=1.5)
+    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,
@@ -206,12 +202,13 @@ if __name__ == '__main__':
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
-        batchsize=batch_size,
+        batchsize=1,
         num_workers=10,
         save_root=save_root,
         enable_save_trace=enable_save_trace,
         exp_name=name,
         schedulers={"lr": lr_sched},
+        dataloader_kwargs=dict(collate_fn=lambda x: x[0])
     )
 
     # Archiving training script, src folder, env info
