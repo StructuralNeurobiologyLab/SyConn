@@ -125,7 +125,8 @@ if elektronn3_avail:
             if ssd_kwargs is not None:
                 self.ssd_kwargs = ssd_kwargs
             elif 'wb' not in socket.gethostname():
-                raise NotImplementedError
+                wd_path = os.path.expanduser('~/mnt/wb//wholebrain/songbird/j0126/areaxfs_v6/')
+                self.ssd_kwargs = dict(working_dir=wd_path, version='ctgt_v4')
             else:
                 self.ssd_kwargs = dict(working_dir='/wholebrain/songbird/j0126/areaxfs_v6/',
                                        version='ctgt_v4')

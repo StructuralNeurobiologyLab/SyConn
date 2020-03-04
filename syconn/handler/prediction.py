@@ -29,8 +29,7 @@ import functools
 from morphx.classes.hybridcloud import HybridCloud
 import shutil
 from sklearn.preprocessing import label_binarize
-from morphx.processing.graphs import local_bfs_vertices
-from morphx.processing.hybrids import extract_subset
+from morphx.processing.hybrids import extract_subset, bfs_vertices
 from typing import Iterable, Union, Optional, Any, Tuple, Callable
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -1420,6 +1419,8 @@ def _load_ssv_hc(args):
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
     hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
+    # cache verts2node
+    _ = hc.verts2node
     return hc
 
 
@@ -1450,7 +1451,7 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
                     feat_dc.values())))
                 for _ in range(occ):
                     source_node = np.random.randint(0, len(hc.nodes))
-                    local_bfs = local_bfs_vertices(hc, source_node, npoints)
+                    local_bfs = bfs_vertices(hc, source_node, npoints)
                     pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                     if transform is not None:
                         transform(pc)
@@ -1484,7 +1485,7 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
             cnt = 0
             for _ in range(batchsize):
                 source_node = np.random.randint(0, len(hc.nodes))
-                local_bfs = local_bfs_vertices(hc, source_node, npoints)
+                local_bfs = bfs_vertices(hc, source_node, npoints)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                 if transform is not None:
                     transform(pc)

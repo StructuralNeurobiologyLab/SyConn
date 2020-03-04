@@ -214,7 +214,7 @@ trainer = Trainer3d(
     exp_name=name,
     schedulers={"lr": lr_sched},
     num_classes=num_classes,
-    example_input=example_input,
+    # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0])
 )
 
