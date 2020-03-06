@@ -128,7 +128,8 @@ if __name__ == '__main__':
     # CREATE NETWORK AND PREPARE DATA SET #
 
     # # Model selection
-    model = ModelNet40(input_channels, Z_DIM)
+    model = ModelNet40(input_channels, Z_DIM, dropout=0.25)
+    name += '_moreAug'
 
     # model = ModelNetBig(input_channels, Z_DIM)
     # name += '_big'
@@ -157,7 +158,7 @@ if __name__ == '__main__':
         model = tracedmodel
 
     # Transformations to be applied to samples before feeding them to the network
-    train_transform = clouds.Compose([clouds.RandomVariation((-20, 20)),  # in nm
+    train_transform = clouds.Compose([clouds.RandomVariation((-100, 100)),  # in nm
                                       clouds.Normalization(scale_norm),
                                       clouds.Center(),
                                       clouds.RandomRotate()])

@@ -3,14 +3,16 @@
 # All rights reserved
 
 import collections
+import os
 from multiprocessing import Process, Queue
 from syconn.handler import basics
 from syconn.handler.prediction import generate_pts_sample, \
     pts_feat_dict, certainty_estimate, pts_loader_ssvs
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, chunkify_successive
 import numpy as np
 import time
 import tqdm
+import morphx.processing.clouds as clouds
 from sklearn.metrics.classification import classification_report
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
@@ -94,7 +96,7 @@ def listener(q_cnt: Queue, q_in, q_loader_sync, npredictor, nloader, total):
 
 
 def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npredictor=2,
-                   ssv_ids=None):
+                   ssv_ids=None, use_test_aug=False):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -115,32 +117,34 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
     Returns:
 
     """
+    transform =[clouds.Normalization(scale_fact), clouds.Center()]
+    if use_test_aug:
+        transform = [clouds.RandomVariation((-20, 20))] + transform + [clouds.RandomRotate()]
+    transform = clouds.Compose(transform)
     bs = 80
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     # minimum redundancy is 5
     min_redundancy = 5
+    # twice as many predictions as npoints fit into the ssv vertices
     ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints * 2, min_redundancy) for ssv in
                       ssd.get_super_segmentation_object(ssv_ids)]
-    kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, scale_fact=scale_fact)
-    # created shuffled ssv ID array -> lower loader speed due to increased IO, but enables nicely
-    # mixed batches -> important for batchnorm
+    kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, transform=transform)
     ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
                               for ii in range(len(ssv_ids))])
-    np.random.shuffle(ssv_ids)
-    params_in = [{**kwargs, **dict(ssv_ids=ch)} for ch in chunkify(ssv_ids, nloader)]
+    params_in = [{**kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
+        ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
 
     # total samples:
-    nsamples_tot = 0
-    for ch in chunkify(ssv_ids, nloader):
-        nsamples_tot += int(np.ceil(len(ch) / bs)) * bs
+    nsamples_tot = len(ssv_ids)
 
     q_in = Queue(maxsize=20*npredictor)
     q_cnt = Queue()
     q_out = Queue()
     q_loader_sync = Queue()
-    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, pts_loader_ssvs, el)) for el in params_in]
+    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, pts_loader_ssvs, el))
+                 for el in params_in]
     for p in producers:
         p.start()
     consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader)) for _ in
@@ -199,8 +203,9 @@ if __name__ == '__main__':
     model_dir = '/wholebrain/u/pschuber/e3_training_convpoint/'
     # mpath = f'{model_dir}/celltype_pts_tnet_scale30000_nb75000_cv
     # -1_nDim10_SNAPSHOT/state_dict.pth'
-    mpath = f'{model_dir}/celltype_pts_scale30000_nb75000_cv0_SNAPSHOT' \
-            f'/state_dict_final.pth'
+    mpath = f'{model_dir}/celltype_pts_scale30000_nb75000_cv0' \
+            f'/state_dict_minlr_step15000.pth'
+    assert os.path.isfile(mpath)
     # wd = '/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
     # version = None
 
@@ -216,7 +221,8 @@ if __name__ == '__main__':
     res_dc = basics.load_pkl2obj('/wholebrain/scratch/pschuber/test_celltype_pred.pkl')
 
     import pandas
-    str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5, INT=7, FS=8, GLIA=9)
+    str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5,
+                         INT=7, FS=8, GLIA=9)
     del str2int_label['GLIA']
     del str2int_label['FS']
     str2int_label["GP "] = 5  # typo
@@ -247,3 +253,4 @@ if __name__ == '__main__':
 
     print(classification_report(valid_ls, valid_preds, labels=np.arange(7),
                                 target_names=target_names))
+    raise()

@@ -30,7 +30,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=48, help='Batch size')
+parser.add_argument('--bs', type=int, default=16, help='Batch size')
 parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--cl', type=int, default=5, help='Number of classes')
@@ -74,7 +74,7 @@ max_steps = 500000
 cval = 0
 cellshape_only = False
 use_syntype = True
-dr = 0.1
+dr = 0.25
 num_classes = 8
 onehot = True
 
@@ -105,8 +105,8 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr)
-# name += '_xconv'
+model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=True)
+name += '_moreAug'
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
@@ -145,7 +145,7 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-20, 20)),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-100, 100)),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate()])
