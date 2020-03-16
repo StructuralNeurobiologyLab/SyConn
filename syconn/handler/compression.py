@@ -8,6 +8,7 @@ try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
+from lz4.block import LZ4BlockError
 try:
     import fasteners
     LOCKING = True
@@ -91,7 +92,7 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     try:
         str_lst = [compress(arr.tobytes())]
     # catch Value error which is thrown in py3 lz4 version
-    except (OverflowError, ValueError):
+    except (OverflowError, ValueError, LZ4BlockError):
         half_ix = len(arr) // 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
                   arrtolz4string_list(arr[half_ix:])

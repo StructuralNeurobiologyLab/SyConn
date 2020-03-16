@@ -33,6 +33,7 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
+from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.exec import exec_skeleton
 
 
@@ -420,7 +421,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     """
 
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ngpu_total * 4 if \
+        max_n_jobs = global_params.config.ngpu_total * 10 if \
             global_params.config['pyopengl_platform'] == 'egl' \
             else global_params.config.ncore_total * 4
     log = initialize_logging('neuron_view_rendering_small',
@@ -451,7 +452,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     if global_params.config['pyopengl_platform'] == 'osmesa':  # utilize all CPUs
         qu.batchjob_script(multi_params, "render_views", log=log, suffix='_small',
                            n_max_co_processes=global_params.config.ncore_total,
-                           remove_jobfolder=False)
+                           remove_jobfolder=False, )  # additional_flags='--qos=ssdscratch')
     elif global_params.config['pyopengl_platform'] == 'egl':  # utilize 1 GPU per task
         # run EGL on single node: 20 parallel jobs
         if not qu.batchjob_enabled():
@@ -467,7 +468,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
             n_parallel_jobs = global_params.config.ngpu_total
             qu.batchjob_script(multi_params, "render_views_egl", suffix='_small',
                                n_max_co_processes=n_parallel_jobs, log=log,
-                               additional_flags="--gres=gpu:1",
+                               additional_flags="--gres=gpu:1",  # --qos=ssdscratch",
                                n_cores=n_cores, remove_jobfolder=True)
     else:
         raise RuntimeError('Specified OpenGL platform "{}" not supported.'
@@ -570,7 +571,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.config['ncores_per_node'])
     if len(res) != 0:
-        msg = "Not all SSVs were rendered! {}/{} missing:\n" \
+        msg = "Not all SSVs were rendered! {}/{} missing. Example IDs:\n" \
               "{}".format(len(res), len(ssd.ssv_ids),
                           res[:10])
         log.error(msg)
@@ -592,6 +593,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
+
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
 
     # if rag was not created by glia splitting procedure this filtering is required
@@ -634,20 +636,10 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     ssd.save_dataset_deep(n_max_co_processes=global_params.config.ncore_total)
 
     # Write SSV RAGs
-    pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5, leave=False)
-    for ssv in ssd.ssvs:
-        # get all nodes in CC of this SSV
-        if len(cc_dict[ssv.id]) > 1:  # CCs with 1 node do not exist in the global RAG
-            n_list = nx.node_connected_component(rag_g, ssv.id)
-            # get SSV RAG as subgraph
-            ssv_rag = nx.subgraph(rag_g, n_list)
-        else:
-            ssv_rag = nx.Graph()
-            # ssv.id is the minimal SV ID, and therefore the only SV in this case
-            ssv_rag.add_edge(ssv.id, ssv.id)
-        nx.write_edgelist(ssv_rag, ssv.edgelist_path)
-        pbar.update(1)
-    pbar.close()
+    params = [(g_p, ssv_ids) for ssv_ids in chunkify(
+        ssd.ssv_ids, global_params.config['ncores_per_node'] * 2)]
+    start_multiprocess_imap(_ssv_rag_writer, params,
+                            nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
     exec_skeleton.run_skeleton_generation()
@@ -663,6 +655,30 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         ssd, global_params.config['existing_cell_organelles'])
     log.info('Finished mapping of cellular organelles to SSVs. '
              'Writing individual SSV graphs.')
+
+
+def _ssv_rag_writer(args):
+    g_p, ssv_ids = args
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir,
+                                   version='0', ssd_type="ssv")
+    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+    ccs = nx.connected_components(rag_g)
+    cc_dict = {}
+    for cc in ccs:
+        cc_arr = np.array(list(cc))
+        cc_dict[np.min(cc_arr)] = cc_arr
+    print(f'finished init, writing RAGs of {len(ssv_ids)} cells.')
+    for ssv in ssd.get_super_segmentation_object(ssv_ids):
+        # get all nodes in CC of this SSV
+        if len(cc_dict[ssv.id]) > 1:  # CCs with 1 node do not exist in the global RAG
+            n_list = nx.node_connected_component(rag_g, ssv.id)
+            # get SSV RAG as subgraph
+            ssv_rag = nx.subgraph(rag_g, n_list)
+        else:
+            ssv_rag = nx.Graph()
+            # ssv.id is the minimal SV ID, and therefore the only SV in this case
+            ssv_rag.add_edge(ssv.id, ssv.id)
+        nx.write_edgelist(ssv_rag, ssv.edgelist_path)
 
 
 def run_glia_prediction(e3: bool = False):
@@ -735,13 +751,8 @@ def run_glia_prediction(e3: bool = False):
                                remove_jobfolder=True)
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.config['ncores_per_node'])
-    missing_not_contained_in_rag = []
-    missing_contained_in_rag = []
-    for el in res:
-        if el not in all_sv_ids_in_rag:
-            missing_not_contained_in_rag.append(el)  # TODO: decide whether to use or not
-        else:
-            missing_contained_in_rag.append(el)
+    missing_not_contained_in_rag = np.setdiff1d(res, all_sv_ids_in_rag)  # TODO: report at least.
+    missing_contained_in_rag = np.intersect1d(res, all_sv_ids_in_rag)
     if len(missing_contained_in_rag) != 0:
         msg = "Not all SVs were predicted! {}/{} missing:\n" \
               "{}".format(len(missing_contained_in_rag), len(all_sv_ids_in_rag),
@@ -915,13 +926,8 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     log.info('Finished view rendering for glia separation. Checking completeness.')
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.config['ncores_per_node'])
-    missing_not_contained_in_rag = []
-    missing_contained_in_rag = []
-    for el in res:
-        if el not in all_sv_ids_in_rag:
-            missing_not_contained_in_rag.append(el)  # TODO: decide whether to use or not
-        else:
-            missing_contained_in_rag.append(el)
+    missing_not_contained_in_rag = np.setdiff1d(res, all_sv_ids_in_rag)  # TODO: report at least.
+    missing_contained_in_rag = np.intersect1d(res, all_sv_ids_in_rag)
     if len(missing_contained_in_rag) != 0:
         msg = "Not all SVs were rendered completely! {}/{} missing:\n" \
               "{}".format(len(missing_contained_in_rag), len(all_sv_ids_in_rag),

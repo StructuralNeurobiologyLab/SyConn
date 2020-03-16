@@ -76,7 +76,7 @@ def batchjob_script(params: list, name: str,
                            disable_batchjob: bool = False,
                            use_dill: bool = False,
                            remove_jobfolder: bool = False,
-                           log: Logger = None, sleep_time: int = 5):
+                           log: Logger = None, sleep_time: int = 20):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -227,7 +227,8 @@ def batchjob_script(params: list, name: str,
         os.chmod(this_sh_path, 0o744)
         cmd_exec = "{0} --output={1} --error={2} --job-name={3} {4}".format(
             additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
-
+        if job_id == 0:
+            log_batchjob.info(f'Starting jobs with command "{cmd_exec}".')
         job_exec_dc[job_id] = cmd_exec
         start = time.time()
         process = subprocess.Popen(f'sbatch --cpus-per-task={n_cores} {cmd_exec}',
@@ -306,7 +307,8 @@ def batchjob_script(params: list, name: str,
     return path_to_out
 
 
-def jobstates_slurm(job_name: str, start_time: str) -> Dict[int, str]:
+def jobstates_slurm(job_name: str, start_time: str,
+                    max_retry: int = 10) -> Dict[int, str]:
     """
     Generates a dictionary which stores the state of every job belonging to
     `job_name`.
@@ -315,19 +317,36 @@ def jobstates_slurm(job_name: str, start_time: str) -> Dict[int, str]:
         job_name:
         start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
             or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
+        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
+            sleep in-between).
 
     Returns:
         Dictionary with the job states. (key: job ID, value: state)
     """
+    # TODO: test!
     cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
-    process = subprocess.Popen(cmd_stat, shell=True,
-                               stdout=subprocess.PIPE)
     job_states = dict()
-    for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-        str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
-        if len(str_parsed) == 1:
-            str_parsed = str_parsed[0]
-            job_states[int(str_parsed[0])] = str_parsed[1]
+    cnt_retry = 0
+    while True:
+        process = subprocess.Popen(cmd_stat, shell=True,
+                                   stdout=subprocess.PIPE)
+        out, err = process.communicate()
+        if process.returncode != 0:
+            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
+                           f'Attempting again in 5s. {err}')
+            time.sleep(5)
+            cnt_retry += 1
+            if cnt_retry == max_retry:
+                log_mp.error(f'Could not query job states from SLURM: {err}\n'
+                             f'Aborting due to maximum number of retries.')
+                break
+            continue
+        for line in out.decode().split('\n'):
+            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
+            if len(str_parsed) == 1:
+                str_parsed = str_parsed[0]
+                job_states[int(str_parsed[0])] = str_parsed[1]
+        break
     return job_states
 
 
@@ -445,12 +464,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                           name, suffix)
 
     # TODO: replace QSUB_script by batchjob_script package-wide
-    return batchjob_script(params, name, job_folder, n_cores, additional_flags,
-                    suffix, job_name, script_folder,
-                    n_max_co_processes, max_iterations,
-                    python_path, disable_mem_flag,
-                    disable_batchjob, use_dill,
-                    remove_jobfolder, log, show_progress)
+    return batchjob_script(
+        params, name, job_folder, n_cores, additional_flags, suffix, job_name,
+        script_folder, n_max_co_processes, max_iterations, python_path,
+        disable_batchjob, use_dill, remove_jobfolder, log, 20)
 
     if iteration == 1 and os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)

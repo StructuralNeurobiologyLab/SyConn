@@ -367,14 +367,14 @@ def sv_view_exists(args):
         obj_ixs = ad.keys()
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
         view_dc = CompressedStorage(view_dc_p, disable_locking=True)
-        for ix in obj_ixs:
-            if ix not in view_dc:
-                missing_ids.append(ix)
+        missing_ids = np.setdiff1d(list(obj_ixs), list(view_dc.keys()))
     return missing_ids
 
 
 def find_missing_sv_views(sd, woglia, n_cores=20):
-    multi_params = chunkify(sd.so_dir_paths, 100)
+    folders = sd.so_dir_paths
+    np.random.shuffle(folders)
+    multi_params = chunkify(folders, 1000)
     params = [(ps, woglia) for ps in multi_params]
     res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
                                   debug=False)
