@@ -27,6 +27,7 @@ import tqdm
 from logging import Logger
 import functools
 from morphx.classes.hybridcloud import HybridCloud
+from morphx.processing.graphs import bfs_base_points
 import shutil
 from sklearn.preprocessing import label_binarize
 from morphx.processing.hybrids import extract_subset, bfs_vertices
@@ -1441,23 +1442,35 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
             npoints_ssv = min(len(hc.vertices), npoints)
             batch = np.zeros((occ, npoints_ssv, 3))
             batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((occ,), dtype=np.uint) * ssv.id
+            ixs = np.ones((occ,), dtype=np.uint) * ssv_id
             cnt = 0
-            for _ in range(occ):
-                source_node = np.random.randint(0, len(hc.nodes))
-                local_bfs = bfs_vertices(hc, source_node, npoints)
+            # TODO: this should be deterministic during inference
+            nodes = hc.base_points(min_dist=5000, source=len(hc.nodes)//2)
+            source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
+            for source_node in source_nodes:
+                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                sample_feats = pc.features
+                sample_pts = pc.vertices
+                # shuffling
+                sample_ixs = np.arange(len(sample_pts))
+                np.random.shuffle(sample_ixs)
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                # add up to 10% of duplicated points before applying the transform if sample_pts
+                # has less points than npoints_ssv
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                # one hot encoding
+                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                pc._vertices = sample_pts
+                pc._features = sample_feats
                 if transform is not None:
                     transform(pc)
-                sample_feats = label_binarize(pc.features, classes=np.arange(len(feat_dc)))[:npoints_ssv]
-                sample_pts = pc.vertices[:npoints]
-                if len(sample_pts) < npoints_ssv:
-                    idx = np.random.choice(np.arange(len(sample_pts)),
-                                           npoints_ssv - len(sample_pts))
-                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                batch[cnt] = sample_pts
-                batch_f[cnt] = sample_feats
+                batch[cnt] = pc.vertices
+                batch_f[cnt] = pc.features
                 cnt += 1
             assert cnt == occ
             yield (ixs, (batch_f, batch))
@@ -1469,25 +1482,39 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values())))
             npoints_ssv = min(len(hc.vertices), npoints)
+            # add a +-10% fluctuation in the number of input points
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
             cnt = 0
-            for _ in range(batchsize):
-                source_node = np.random.randint(0, len(hc.nodes))
-                local_bfs = bfs_vertices(hc, source_node, npoints)
+            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
+                                            replace=len(hc.nodes) < batchsize)
+            for source_node in source_nodes:
+                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                sample_feats = pc.features
+                sample_pts = pc.vertices
+                # shuffling
+                sample_ixs = np.arange(len(sample_pts))
+                np.random.shuffle(sample_ixs)
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                # add up to 10% of duplicated points before applying the transform if sample_pts
+                # has less points than npoints_ssv
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                # one hot encoding
+                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                pc._vertices = sample_pts
+                pc._features = sample_feats
                 if transform is not None:
                     transform(pc)
-                sample_feats = label_binarize(pc.features, classes=np.arange(len(feat_dc)))[:npoints_ssv]
-                sample_pts = pc.vertices[:npoints]
-                if len(sample_pts) < npoints_ssv:
-                    idx = np.random.choice(np.arange(len(sample_pts)),
-                                           npoints_ssv - len(sample_pts))
-                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                batch[cnt] = sample_pts
-                batch_f[cnt] = sample_feats
+                batch[cnt] = pc.vertices
+                batch_f[cnt] = pc.features
                 cnt += 1
             assert cnt == batchsize
             yield (ixs, (batch_f, batch))

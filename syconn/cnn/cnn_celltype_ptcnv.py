@@ -25,18 +25,15 @@ except ModuleNotFoundError as e:
     from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
-
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
-parser.add_argument('--cl', type=int, default=5, help='Number of classes')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed')
-parser.add_argument('--ana', default=0, help='Cloudset size of previous analysis')
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -45,6 +42,8 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
+parser.add_argument('--cval', default=0, help='Cross-validation split indicator.')
+
 
 args = parser.parse_args()
 
@@ -61,25 +60,25 @@ name = args.na
 batch_size = args.bs
 npoints = args.sp
 scale_norm = args.scale_norm
-size = args.ana
 save_root = args.sr
+cval = args.cval
 
 
 lr = 1e-3
 lr_stepsize = 1000
 lr_dec = 0.995
-max_steps = 500000
+max_steps = 100000
 
 # celltype specific
-cval = 0
+eval_nr = 0  # number of repetition per cval
 cellshape_only = False
 use_syntype = True
-dr = 0.25
+dr = 0.3
 num_classes = 8
 onehot = True
 
 if name is None:
-    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_cv{cval}'
+    name = f'celltype_pts_scale{scale_norm}_nb{npoints}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -105,8 +104,9 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=True)
-name += '_moreAug'
+model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=True,
+                   track_running_stats=False)
+name += '_moreAug3'
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
 
@@ -124,6 +124,7 @@ name += '_moreAug'
 # model = ModelNetSelectionBig(input_channels, num_classes, dropout=dr)
 # name += '_selection_big'
 
+name += f'_CV{cval}_eval{eval_nr}'
 model = nn.DataParallel(model)
 
 if use_cuda:
@@ -145,7 +146,7 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-100, 100)),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-120, 120)),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate()])
@@ -168,7 +169,7 @@ optimizer = torch.optim.SGD(
     model.parameters(),
     lr=lr,  # Learning rate is set by the lr_sched below
     momentum=0.9,
-    weight_decay=0.5e-4,
+    weight_decay=0.5e-5,
 )
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging

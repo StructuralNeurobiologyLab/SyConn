@@ -128,7 +128,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
             _contact_site_extraction_thread, multi_params, debug=False,
             nb_cpus=n_max_co_processes)
     else:
-        path_to_out = qu.QSUB_script(multi_params, "contact_site_extraction",
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction",
                                      n_max_co_processes=n_max_co_processes,
                                      log=log)
         out_files = glob.glob(path_to_out + "/*")
@@ -223,10 +223,10 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         start_multiprocess_imap(_write_props_to_syn_singlenode_thread,
                                 multi_params, nb_cpus=1, debug=False)
     else:
-        qu.QSUB_script(multi_params, "write_props_to_syn_singlenode", log=log,
-                       n_cores=global_params.config['ncores_per_node'],
-                       n_max_co_processes=global_params.config['nnodes_total'],
-                       remove_jobfolder=True)
+        qu.batchjob_script(multi_params, "write_props_to_syn_singlenode", log=log,
+                           n_cores=global_params.config['ncores_per_node'],
+                           n_max_co_processes=global_params.config['nnodes_total'],
+                           remove_jobfolder=True)
 
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                           obj_type='syn', version=0)

@@ -55,7 +55,7 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
     parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
+    parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
     parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
     parser.add_argument('--cl', type=int, default=5, help='Number of classes')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -128,8 +128,9 @@ if __name__ == '__main__':
     # CREATE NETWORK AND PREPARE DATA SET #
 
     # # Model selection
-    model = ModelNet40(input_channels, Z_DIM, dropout=0.25)
-    name += '_moreAug'
+    model = ModelNet40(input_channels, Z_DIM, dropout=0.3,
+                       track_running_stats=False)
+    name += '_moreAug3'
 
     # model = ModelNetBig(input_channels, Z_DIM)
     # name += '_big'
@@ -158,7 +159,7 @@ if __name__ == '__main__':
         model = tracedmodel
 
     # Transformations to be applied to samples before feeding them to the network
-    train_transform = clouds.Compose([clouds.RandomVariation((-100, 100)),  # in nm
+    train_transform = clouds.Compose([clouds.RandomVariation((-120, 120)),  # in nm
                                       clouds.Normalization(scale_norm),
                                       clouds.Center(),
                                       clouds.RandomRotate()])

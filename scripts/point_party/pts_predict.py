@@ -113,22 +113,23 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
         nloader:
         npredictor:
         ssv_ids:
+        use_test_aug:
 
     Returns:
 
     """
-    transform =[clouds.Normalization(scale_fact), clouds.Center()]
+    transform = [clouds.Normalization(scale_fact), clouds.Center()]
     if use_test_aug:
-        transform = [clouds.RandomVariation((-20, 20))] + transform + [clouds.RandomRotate()]
+        transform = [clouds.RandomVariation((-10, 10))] + transform + [clouds.RandomRotate()]
     transform = clouds.Compose(transform)
-    bs = 80
+    bs = 40  # ignored during inference
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
-    # minimum redundancy is 5
-    min_redundancy = 5
-    # twice as many predictions as npoints fit into the ssv vertices
-    ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints * 2, min_redundancy) for ssv in
+    # minimum redundanc
+    min_redundancy = 25
+    # three times as many predictions as npoints fit into the ssv vertices
+    ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints * 3, min_redundancy) for ssv in
                       ssd.get_super_segmentation_object(ssv_ids)]
     kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, transform=transform)
     ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
@@ -203,8 +204,8 @@ if __name__ == '__main__':
     model_dir = '/wholebrain/u/pschuber/e3_training_convpoint/'
     # mpath = f'{model_dir}/celltype_pts_tnet_scale30000_nb75000_cv
     # -1_nDim10_SNAPSHOT/state_dict.pth'
-    mpath = f'{model_dir}/celltype_pts_scale30000_nb75000_cv0' \
-            f'/state_dict_minlr_step15000.pth'
+    mpath = f'{model_dir}/celltype_pts_scale30000_nb50000_moreAug3_CV0_eval0' \
+            f'/state_dict_minlr_step35000.pth'
     assert os.path.isfile(mpath)
     # wd = '/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
     # version = None
@@ -212,8 +213,8 @@ if __name__ == '__main__':
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
     ssd_kwargs = dict(working_dir=wd, version=gt_version)
-    res_dc = predict_pts_wd(ssd_kwargs, load_model, 75000, 30000, ssv_ids=split_dc['valid'],
-                            nloader=2, npredictor=1)
+    res_dc = predict_pts_wd(ssd_kwargs, load_model, 50000, 30000, ssv_ids=split_dc['valid'],
+                            nloader=2, npredictor=1, use_test_aug=True)
     basics.write_obj2pkl('/wholebrain/scratch/pschuber/test_celltype_pred.pkl',
                          res_dc)
 

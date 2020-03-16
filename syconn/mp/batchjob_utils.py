@@ -76,7 +76,7 @@ def batchjob_script(params: list, name: str,
                     disable_batchjob: bool = False,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
-                    log: Logger = None, sleep_time: int = 5,
+                    log: Logger = None, sleep_time: int = 20,
                     show_progress=True):
     """
     Submits batch jobs to process a list of parameters `params` with a python
@@ -450,9 +450,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     return batchjob_script(params, name, job_folder, n_cores, additional_flags,
                     suffix, job_name, script_folder,
                     n_max_co_processes, max_iterations,
-                    python_path, disable_mem_flag,
-                    disable_batchjob, use_dill,
-                    remove_jobfolder, log, show_progress)
+                    python_path, disable_batchjob, use_dill,
+                    remove_jobfolder, log, 20, show_progress)
 
     if iteration == 1 and os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)

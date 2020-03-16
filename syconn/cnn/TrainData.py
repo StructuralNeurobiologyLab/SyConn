@@ -168,6 +168,7 @@ if elektronn3_avail:
                 if ix not in ssd.ssv_ids:
                     raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
             self.transform = transform
+            print(f'Using splitting dict at "{split_dc_path}".')
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
@@ -242,6 +243,7 @@ if elektronn3_avail:
                 if self.sso_ids[ix] != self._curr_ssv_id_altern:
                     self._curr_ssv_id = self.sso_ids[ix]
                     break
+
             pts0, feats0 = self.load_ssv_sample(ix)  # base sample
             x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
                   torch.from_numpy(feats0).float()}
@@ -249,6 +251,7 @@ if elektronn3_avail:
             pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
             x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
                   torch.from_numpy(feats1).float()}
+
             x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
             return x0, x1, x2
 
