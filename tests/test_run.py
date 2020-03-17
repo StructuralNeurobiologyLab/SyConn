@@ -22,6 +22,8 @@ def test_full_run():
     example_cube_id = 1
     working_dir = "~/SyConn/tests/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(working_dir) + "/"
+    if os.path.isdir(example_wd):
+        shutil.rmtree(example_wd)
 
     # set up basic parameter, log, working directory and config file
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
@@ -45,8 +47,6 @@ def test_full_run():
 
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
-    if os.path.isdir(example_wd):
-        shutil.rmtree(example_wd)
 
     generate_default_conf(example_wd, scale,
                           key_value_pairs=key_val_pairs_conf,
