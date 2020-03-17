@@ -155,9 +155,9 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_ro
             woglia=woglia, index_views=index_views, view_key=view_key), dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
-        log_proc.debug("Rendering {}/{} missing SVs of SSV {}. {}".format(
-            len(missing_svs), len(sso.sv_ids), sso.id,
-            "(index views)" if index_views else ""))
+        # log_proc.debug("Rendering {}/{} missing SVs of SSV {}. {}".format(
+        #     len(missing_svs), len(sso.sv_ids), sso.id,
+        #     "(index views)" if index_views else ""))
     else:
         missing_svs = np.array(sso.svs)
     if len(missing_svs) == 0:

@@ -138,6 +138,7 @@ class SegmentationObject(object):
                     os.path.normpath(working_dir):
                 raise ValueError('Inconsistent working directories in `config` and'
                                  '`working_dir` kwargs.')
+            assert self._config.working_dir == working_dir
             self._config = config
             self._working_dir = working_dir
         else:

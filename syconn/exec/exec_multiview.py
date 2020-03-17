@@ -421,7 +421,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     """
 
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ngpu_total * 4 if \
+        max_n_jobs = global_params.config.ngpu_total * 10 if \
             global_params.config['pyopengl_platform'] == 'egl' \
             else global_params.config.ncore_total * 4
     log = initialize_logging('neuron_view_rendering_small',
@@ -452,7 +452,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     if global_params.config['pyopengl_platform'] == 'osmesa':  # utilize all CPUs
         qu.batchjob_script(multi_params, "render_views", log=log, suffix='_small',
                            n_max_co_processes=global_params.config.ncore_total,
-                           remove_jobfolder=False)
+                           remove_jobfolder=False, )
     elif global_params.config['pyopengl_platform'] == 'egl':  # utilize 1 GPU per task
         # run EGL on single node: 20 parallel jobs
         if not qu.batchjob_enabled():
@@ -571,7 +571,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.config['ncores_per_node'])
     if len(res) != 0:
-        msg = "Not all SSVs were rendered! {}/{} missing:\n" \
+        msg = "Not all SSVs were rendered! {}/{} missing. Example IDs:\n" \
               "{}".format(len(res), len(ssd.ssv_ids),
                           res[:10])
         log.error(msg)

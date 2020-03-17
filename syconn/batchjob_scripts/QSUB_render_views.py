@@ -11,7 +11,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -33,6 +33,11 @@ if len(args) == 3:
     render_kwargs = args[2]
 else:
     render_kwargs = dict(add_cellobjects=True, woglia=True, overwrite=True)
+
+# init. ssd just to get the config Object
+ssd = SuperSegmentationDataset(working_dir=sso_kwargs['working_dir'])
+sso_kwargs['config'] = ssd.config
+
 for ssv_ix in ch:
     if not np.isscalar(ssv_ix):
         sv_ids = ssv_ix[1]

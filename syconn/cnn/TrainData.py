@@ -284,7 +284,7 @@ if elektronn3_avail:
             if self.train:
                 self.num_read_limit = num_read_limit
             else:
-                self.num_read_limit = 1  #no need to repeat sample points in validation
+                self.num_read_limit = 1  # no need to repeat sample points in validation
             self.secondary = self.secondary_t = None
             self.read(0)
             self.primary, self.primary_t = self.secondary, self.secondary_t

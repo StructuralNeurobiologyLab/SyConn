@@ -256,7 +256,10 @@ class SuperSegmentationObject(object):
                 raise ValueError(msg)
         else:
             self._working_dir = working_dir
-            self._config = DynConfig(working_dir)
+            if self._config is None:
+                self._config = DynConfig(working_dir)
+            else:
+                assert self._config.working_dir == self._working_dir
 
         if global_params.wd is None:
             global_params.wd = self._working_dir

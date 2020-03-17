@@ -97,7 +97,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
             By default this is set to (np.zoers(3); kd.boundary).
     """
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
+        max_n_jobs = global_params.config.ncore_total * 4
 
     log = initialize_logging('synapse_generation',
                              global_params.config.working_dir + '/logs/',

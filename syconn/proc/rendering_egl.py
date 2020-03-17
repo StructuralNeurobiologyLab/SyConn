@@ -516,14 +516,10 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         view_sh = (nb_views, ws[1], ws[0])
     else:
         view_sh = (nb_views, ws[1], ws[0], 4)
-    log_proc.debug('Initializing result array.')
     res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
-    log_proc.debug('Initializing OpenGL.')
     init_opengl(ws, depth_map=depth_map, clear_value=1.0,
                 smooth_shade=smooth_shade, wire_frame=wire_frame)
-    log_proc.debug('Initializing OpenGL object.')
     init_object(indices, vertices, normals, colors, ws)
-    log_proc.debug('Starting rendering.')
     n_empty_views = 0
     if verbose:
         pbar = tqdm.tqdm(total=len(res), mininterval=0.5, leave=False)

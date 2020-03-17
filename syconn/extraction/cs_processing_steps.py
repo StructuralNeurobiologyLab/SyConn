@@ -1670,7 +1670,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     # chunk params
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total * 2)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total * 4)
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version,
                      ssd_version, max_vx_dist_nm, max_rep_coord_dist_nm) for
                     so_dir_paths in multi_params]
