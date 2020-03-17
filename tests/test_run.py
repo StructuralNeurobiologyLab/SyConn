@@ -45,6 +45,8 @@ def test_full_run():
 
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
+    if os.path.isdir(example_wd):
+        shutil.rmtree(example_wd)
 
     generate_default_conf(example_wd, scale,
                           key_value_pairs=key_val_pairs_conf,
