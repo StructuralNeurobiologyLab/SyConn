@@ -26,7 +26,7 @@ pytest-runner
 pytest-cov
 pytest-xdist
 prompt-toolkit
-vtki
+# vtki  # not available on pip (anymore?)
 dill
 pyyaml
 git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
