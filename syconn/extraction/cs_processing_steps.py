@@ -484,7 +484,7 @@ def _combine_and_split_syn_thread(args):
             this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
                                                        return_counts=True)
             this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
-            if np.sum(this_syn_ids_cnt) < global_params.config['cell_objects']['thresh_synssv_size']:
+            if np.sum(this_syn_ids_cnt) < global_params.config['cell_objects']['min_obj_vx']['syn_ssv']:
                 continue
             this_attr = syn_attr_list[this_syn_ixs]
             this_vx = voxel_list[this_cc_mask]
@@ -648,7 +648,7 @@ def _combine_and_split_syn_thread_old(args):
             this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
                                                        return_counts=True)
             this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
-            if np.sum(this_syn_ids_cnt) < global_params.config['cell_objects']['thresh_synssv_size']:
+            if np.sum(this_syn_ids_cnt) < global_params.config['cell_objects']['min_obj_vx']['syn_ssv']:
                 continue
             this_attr = syn_attr_list[this_syn_ixs]
             this_vx = voxel_list[this_cc_mask]
@@ -994,7 +994,6 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
 
 # TODO: SegmentationDataset version of below, probably not necessary anymore
 def _overlap_mapping_sj_to_cs_thread(args):
-    # TODO: REMOVE
     wd, block_start, block_end, conn_sd_version, sj_sd_version, cs_sd_version, \
         rep_coord_dist_nm = args
 

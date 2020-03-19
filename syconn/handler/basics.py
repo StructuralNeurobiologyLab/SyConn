@@ -35,7 +35,7 @@ __all__ = ['crop_bool_array', 'get_filepaths_from_dir', 'write_obj2pkl', 'load_p
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
            'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g']
+           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g', 'chunkify_successive']
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):

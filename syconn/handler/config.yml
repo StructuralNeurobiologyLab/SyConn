@@ -70,6 +70,7 @@ cell_objects:
     sv: 1  # all cell supervoxels are extracted
     cs: 10  # contact sites tend to be small
     syn: 10  # these are overlayed with contact sites and therefore tend to be small
+    syn_ssv: 100 # minimum number of voxel for synapses in SSVs
 
   lower_mapping_ratios:
     mi: 0.5
@@ -119,9 +120,6 @@ cell_objects:
   max_rep_coord_dist_nm: 4000
   # RFC probability used for classifying whether syn or not
   thresh_synssv_proba: 0.5
-  # minimum number of voxel for synapses in SSVs
-  # TODO: tweak, increase, move to entry 'min_obj_vx'
-  thresh_synssv_size: 10
   # > sym_thresh will be assigned synaptic sign -1 (inhibitory) and <= will be
   # (1, excitatory)
   sym_thresh: 0.225
