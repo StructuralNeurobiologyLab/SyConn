@@ -125,9 +125,11 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
 
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
     syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    n_sym = np.sum(syn_sign == -1)
+    n_asym = np.sum(syn_sign == 1)
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
-             f'objects, {np.sum(syn_sign == -1)} symmetric and '
-             f'{np.sum(syn_sign == 1)} asymmetric.')
+             f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
+    assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
     cps.map_objects_to_synssv(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')

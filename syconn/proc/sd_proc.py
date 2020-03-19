@@ -85,9 +85,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         attr_dict = {}
         for this_attr_dict in results:
             for attribute in this_attr_dict:
-                if not attribute in attr_dict:
+                if attribute not in attr_dict:  # TODO: Fail if any attribute does not exist in 'this_attr_dict'
                     attr_dict[attribute] = []
-
                 attr_dict[attribute] += this_attr_dict[attribute]
 
         for attribute in attr_dict:
@@ -109,10 +108,17 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                          n_max_co_processes=n_max_co_processes,
                                          suffix=sd.type)
         out_files = glob.glob(path_to_out + "/*")
-        with open(out_files[0], 'rb') as f:
-            res_keys = list(pkl.load(f).keys())
-        log_proc.info(f'Caching {len(res_keys)} attributes during '
-                      f'dataset_analysis:\n{res_keys}')
+        ii = 0
+        while ii < len(out_files):
+            with open(out_files[ii], 'rb') as f:
+                res_dc = pkl.load(f)
+                if len(res_dc['id']) > 0:
+                    res_keys = list(res_dc.keys())
+                    break
+                ii += 1
+
+        log_proc.debug(f'Caching {len(res_keys)} attributes during '
+                       f'dataset_analysis:\n{res_keys}')
         # TODO: spawn this as QSUB job!
         for attribute in tqdm.tqdm(res_keys, leave=False):
             attr_res = []
@@ -146,7 +152,10 @@ def load_attr_helper(args):
     for arg in args:
         fname, attr = arg
         with open(fname, 'rb') as f:
-            res += pkl.load(f)[attr]
+            dc = pkl.load(f)
+            if len(dc['id']) == 0:
+                continue
+            res += dc[attr]
     return res
 
 
@@ -1114,10 +1123,12 @@ def _write_props_to_sv_thread(args):
             for k in processsed_organelles:
                 if sv_id not in mapping_dicts[k]:
                     # no object of this type mapped to current cell SV
+                    this_attr_dc[sv_id][f"mapping_{k}_ids"] = []
+                    this_attr_dc[sv_id][f"mapping_{k}_ratios"] = []
                     continue
-                this_attr_dc[sv_id]["mapping_%s_ids" % k] = \
+                this_attr_dc[sv_id][f"mapping_{k}_ids"] = \
                     list(mapping_dicts[k][sv_id].keys())
-                this_attr_dc[sv_id]["mapping_%s_ratios" % k] = \
+                this_attr_dc[sv_id][f"mapping_{k}_ratios"] = \
                     list(mapping_dicts[k][sv_id].values())
             rp = prop_dict[0][sv_id]
             bbs = np.concatenate(prop_dict[1][sv_id])

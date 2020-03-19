@@ -166,15 +166,15 @@ def batchjob_script(params: list, name: str,
     additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
 
     # Start SLURM job
-    log_batchjob.info(
-        'Started BatchJob script "{}" with {} tasks using {} parallel jobs, each'
-        ' using {} core(s).'.format(name, len(params), n_max_co_processes, n_cores))
     if job_name == "default":
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
                                 np.random.randint(0, len(letters), 8)])
-            log_batchjob.info("Random job_name created: %s" % job_name)
+    log_batchjob.info(
+        'Started BatchJob script "{}" ({}) with {} tasks using {} parallel jobs, each'
+        ' using {} core(s).'.format(name, job_name, len(params),
+                                    n_max_co_processes, n_cores))
     if len(job_name) > 8:
         msg = "job_name is longer than 8 characters. This is untested."
         log_batchjob.error(msg)
@@ -199,7 +199,7 @@ def batchjob_script(params: list, name: str,
         os.makedirs(path_to_out)
 
     # Submit jobs
-    log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
+    log_batchjob.debug("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
     dtime_sub = 0
     start_all = time.time()
@@ -230,7 +230,7 @@ def batchjob_script(params: list, name: str,
         cmd_exec = "{0} --output={1} --error={2} --job-name={3} {4}".format(
             additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
         if job_id == 0:
-            log_batchjob.info(f'Starting jobs with command "{cmd_exec}".')
+            log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
         job_exec_dc[job_id] = cmd_exec
         start = time.time()
         process = subprocess.Popen(f'sbatch --cpus-per-task={n_cores} {cmd_exec}',
@@ -559,7 +559,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags = additional_flags.replace('--cpus-per-task=' + m.group(0), '')
             additional_flags += f" --cpus-per-task={n_cores}"
 
-    log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
+    log_batchjob.debug("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1)
 
     dtime_sub = 0

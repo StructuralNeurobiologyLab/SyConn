@@ -276,7 +276,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                     basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_singlenode_thread,
-                                multi_params, nb_cpus=1, debug=True)
+                                multi_params, nb_cpus=1, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn_singlenode", log=log,
                            n_cores=global_params.config['ncores_per_node'],
@@ -293,6 +293,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     for p in dict_paths_tmp:
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
+    if qu.batchjob_enabled():
+        shutil.rmtree(path_to_out, ignore_errors=True)
 
 
 def _contact_site_extraction_thread(args: Union[tuple, list]) \
@@ -634,9 +636,8 @@ def _write_props_helper_func(args):
         this_attr_dc[cs_id]["asym_prop"] = asym_prop
 
         # syn and cs have the same ID
-        # TODO: these should be refactored at some point, currently its not the same
-        #  as before because the bounding box of the overlap object is used instead of
-        #  the SJ bounding box. ALso the background ratio was adapted
+        # TODO: should be refactored at some point, changed to bounding box of
+        #  the overlap object instead of the SJ bounding box. Also the background ratio was adapted
         n_vxs_in_sjbb = np.prod(bb[1] - bb[0]) # number of CS voxels in syn BB
         id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
         cs_ratio = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size

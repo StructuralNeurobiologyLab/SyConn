@@ -452,7 +452,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     if global_params.config['pyopengl_platform'] == 'osmesa':  # utilize all CPUs
         qu.batchjob_script(multi_params, "render_views", log=log, suffix='_small',
                            n_max_co_processes=global_params.config.ncore_total,
-                           remove_jobfolder=False, )
+                           remove_jobfolder=True)
     elif global_params.config['pyopengl_platform'] == 'egl':  # utilize 1 GPU per task
         # run EGL on single node: 20 parallel jobs
         if not qu.batchjob_enabled():
