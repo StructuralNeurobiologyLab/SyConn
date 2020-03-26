@@ -27,10 +27,10 @@ import tqdm
 from logging import Logger
 import functools
 from morphx.classes.hybridcloud import HybridCloud
-from morphx.processing.graphs import bfs_base_points
 import shutil
 from sklearn.preprocessing import label_binarize
-from morphx.processing.hybrids import extract_subset, bfs_vertices
+from morphx.processing.hybrids import extract_subset
+from morphx.processing.objects import bfs_vertices
 from typing import Iterable, Union, Optional, Any, Tuple, Callable
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -1452,13 +1452,11 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                 sample_feats = pc.features
                 sample_pts = pc.vertices
-                # shuffling
+                # make sure there is always the same number of points within a batch
                 sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
+                # np.random.shuffle(sample_ixs)
                 sample_pts = sample_pts[sample_ixs][:npoints_ssv]
                 sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add up to 10% of duplicated points before applying the transform if sample_pts
-                # has less points than npoints_ssv
                 npoints_add = npoints_ssv - len(sample_pts)
                 idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
                 sample_pts = np.concatenate([sample_pts, sample_pts[idx]])

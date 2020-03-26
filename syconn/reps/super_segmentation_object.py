@@ -322,8 +322,8 @@ class SuperSegmentationObject(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.id, self.type, self.version, self.ssv_dir)
+        return (f'{type(self).__name__}(ssv_id={self.id}, ssd_type="{self.type}", '
+                f'version="{self.version}", working_dir="{self.working_dir}")')
 
     #                                                       IMMEDIATE PARAMETERS
     @property

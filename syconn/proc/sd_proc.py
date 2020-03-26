@@ -26,7 +26,7 @@ from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage, CompressedStorage
 from ..reps import segmentation, segmentation_helper
 from ..reps import rep_helper
 from ..handler import basics
@@ -109,6 +109,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                          suffix=sd.type)
         out_files = glob.glob(path_to_out + "/*")
         ii = 0
+        res_keys = []
         while ii < len(out_files):
             with open(out_files[ii], 'rb') as f:
                 res_dc = pkl.load(f)
@@ -116,7 +117,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                     res_keys = list(res_dc.keys())
                     break
                 ii += 1
-
+        if len(res_keys) == 0:
+            raise ValueError(f'No objects found during dataset_analysis of {sd}.')
         log_proc.debug(f'Caching {len(res_keys)} attributes during '
                        f'dataset_analysis:\n{res_keys}')
         # TODO: spawn this as QSUB job!
@@ -179,7 +181,6 @@ def _dataset_analysis_thread(args):
             if recompute:
                 this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
                                           disable_locking=True)
-                # e.g. isinstance(np.array([100, ], dtype=np.uint)[0], int) fails
                 so_ids = list(this_vx_dc.keys())
             else:
                 so_ids = list(this_attr_dc.keys())
@@ -238,12 +239,13 @@ def _write_mapping_to_sv_thread(args):
 def _cache_storage_paths(args):
     target_p, all_ids, n_folders_fs = args
     # start = time.time()
-    # outputs target folder hierarchy for object storages
+    # outputs target folder hierarchy for object storage
     if global_params.config.use_new_subfold:
         target_dir_func = rep_helper.subfold_from_ix_new
     else:
         target_dir_func = rep_helper.subfold_from_ix_OLD
     dest_dc_tmp = defaultdict(list)
+    # for obj_id in tqdm.tqdm(all_ids, total=len(all_ids)):
     for obj_id in all_ids:
         dest_dc_tmp[target_dir_func(
             obj_id, n_folders_fs)].append(obj_id)
@@ -252,7 +254,10 @@ def _cache_storage_paths(args):
     # log_proc.debug(f'Generated target directories for all objects after '
     #                f'{dt:.2f} min.')
     # start = time.time()
-    basics.write_obj2pkl(target_p, dest_dc_tmp)
+    cd = CompressedStorage(target_p, disable_locking=True)
+    for k, v in dest_dc_tmp.items():
+        cd[k] = np.array(v, dtype=np.uint64)  # TODO: dtype needs to be configurable
+    cd.push()
     # dt = (time.time() - start) / 60
     # log_proc.debug(f'Wrote all targets to pkl in {dt:.2f} min.')
 
@@ -796,15 +801,18 @@ def _write_props_to_sc_thread(args):
             subcell_prop_workers_tmp = pkl.load(f)
 
         # load target storage folders for all objects in this chunk
-        dest_dc = defaultdict(list)
-        dest_dc_tmp = basics.load_pkl2obj(f'{global_tmp_path}/storage_targets_'
-                                          f'{organelle}.pkl')
+        dest_dc = dict()
+        dest_dc_tmp = CompressedStorage(f'{global_tmp_path}/storage_targets_'
+                                        f'{organelle}.pkl', disable_locking=True)
         all_obj_keys = set()
         for obj_id_mod in obj_id_chs:
-            all_obj_keys.update(set(dest_dc_tmp[target_dir_func(
-                obj_id_mod, n_folders_fs)]))
-            dest_dc[target_dir_func(
-                obj_id_mod, n_folders_fs)] = dest_dc_tmp[target_dir_func(obj_id_mod, n_folders_fs)]
+            k = target_dir_func(obj_id_mod, n_folders_fs)
+            if k not in dest_dc_tmp:
+                value = np.array([], dtype=np.uint64)  # TODO: dtype needs to be configurable
+            else:
+                value = dest_dc_tmp[k]
+            all_obj_keys.update(set(value))
+            dest_dc[k] = value
         del dest_dc_tmp
         if len(all_obj_keys) == 0:
             continue
@@ -813,14 +821,21 @@ def _write_props_to_sc_thread(args):
         prop_dict = [{}, defaultdict(list), {}]
         mapping_dict = dict()
         for worker_id, obj_ids in subcell_prop_workers_tmp.items():
-            if len(set(obj_ids).intersection(all_obj_keys)) > 0:
+            intersec = set(obj_ids).intersection(all_obj_keys)
+            if len(intersec) > 0:
                 worker_dir_props = f"{global_tmp_path}/tmp_props/props_{worker_id}/"
                 fname = f'{worker_dir_props}/scp_{organelle}_{worker_id}.pkl'
                 dc = basics.load_pkl2obj(fname)
-                for k in list(dc[0].keys()):
-                    if k not in all_obj_keys:
-                        del dc[0][k], dc[1][k], dc[2][k]
-                merge_prop_dicts([prop_dict, dc])
+
+                tmp_dcs = [dict(), defaultdict(list), dict()]
+                for k in intersec:
+                    tmp_dcs[0][k] = dc[0][k]
+                    tmp_dcs[1][k] = dc[1][k]
+                    tmp_dcs[2][k] = dc[2][k]
+                del dc
+                merge_prop_dicts([prop_dict, tmp_dcs])
+                del tmp_dcs
+                # TODO: optimize as above - by creating a temporary dictionary with the intersecting IDs only
                 fname = f'{worker_dir_props}/scm_{organelle}_{worker_id}.pkl'
                 dc = basics.load_pkl2obj(fname)
                 for k in list(dc.keys()):
@@ -981,13 +996,19 @@ def _write_props_to_sv_thread(args):
         cell_prop_workers_tmp = pkl.load(f)
 
     # load target storage folders for all objects in this chunk
-    dest_dc = defaultdict(list)
-    dest_dc_tmp = basics.load_pkl2obj(f'{global_tmp_path}/storage_targets_sv.pkl')
+    dest_dc = dict()
+    dest_dc_tmp = CompressedStorage(f'{global_tmp_path}/storage_targets_sv.pkl',
+                                    disable_locking=True)
 
     all_obj_keys = set()
     for obj_id_mod in obj_id_chs:
-        all_obj_keys.update(set(dest_dc_tmp[target_dir_func(obj_id_mod, n_folders_fs)]))
-        dest_dc[target_dir_func(obj_id_mod, n_folders_fs)] = dest_dc_tmp[target_dir_func(obj_id_mod, n_folders_fs)]
+        k = target_dir_func(obj_id_mod, n_folders_fs)
+        if k not in dest_dc_tmp:
+            value = np.array([], dtype=np.uint64)  # TODO: dtype needs to be configurable
+        else:
+            value = dest_dc_tmp[k]
+        all_obj_keys.update(set(value))
+        dest_dc[k] = value
     if len(all_obj_keys) == 0:
         return
     del dest_dc_tmp
@@ -999,16 +1020,21 @@ def _write_props_to_sv_thread(args):
     # dictionaries -> when mapping decision is made on cell level non-existing organelles are
     # assumed to be below the size threshold.
     for worker_id, obj_ids in cell_prop_workers_tmp.items():
-        if len(set(obj_ids).intersection(all_obj_keys)) > 0:
+        intersec = set(obj_ids).intersection(all_obj_keys)
+        if len(intersec) > 0:
             worker_dir_props = f"{global_tmp_path}/tmp_props/props_{worker_id}/"
             fname = f'{worker_dir_props}/cp_{worker_id}.pkl'
             dc = basics.load_pkl2obj(fname)
-            for k in list(dc[0].keys()):
-                if k not in all_obj_keys:
-                    del dc[0][k], dc[1][k], dc[2][k]
-            merge_prop_dicts([prop_dict, dc])
+            tmp_dcs = [dict(), defaultdict(list), dict()]
+            for k in intersec:
+                tmp_dcs[0][k] = dc[0][k]
+                tmp_dcs[1][k] = dc[1][k]
+                tmp_dcs[2][k] = dc[2][k]
             del dc
+            merge_prop_dicts([prop_dict, tmp_dcs])
+            del tmp_dcs
 
+            # TODO: optimize as above - by creating a temporary dictionary with the intersecting IDs only
             for organelle in processsed_organelles:
                 fname = f'{worker_dir_props}/scm_{organelle}_{worker_id}.pkl'
                 dc = basics.load_pkl2obj(fname)
@@ -1250,7 +1276,7 @@ def merge_meshes_single(m_storage, obj_id, tmp_dict):
         m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[2]))
 
 
-def merge_prop_dicts(prop_dicts: List[dict],
+def merge_prop_dicts(prop_dicts: List[List[dict]],
                      offset: Optional[np.ndarray] = None):
     """Merge property dicts in-place. All values will be stored in the first dict."""
     tot_rc = prop_dicts[0][0]

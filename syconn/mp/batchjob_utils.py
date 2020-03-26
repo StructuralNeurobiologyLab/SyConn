@@ -157,9 +157,9 @@ def batchjob_script(params: list, name: str,
                            python_path=python_path,
                            disable_batchjob=disable_batchjob, use_dill=use_dill,
                            remove_jobfolder=remove_jobfolder, log=log)
-
+    cpus_per_node = global_params.config['ncores_per_node']
     mem_lim = int(global_params.config['mem_per_node'] /
-                  global_params.config['ncores_per_node'])
+                  cpus_per_node)
     if '--mem' in additional_flags:
         raise ValueError('"--mem" must not be set via the "additional_flags"'
                          ' kwarg.')
@@ -232,11 +232,25 @@ def batchjob_script(params: list, name: str,
         if job_id == 0:
             log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
         job_exec_dc[job_id] = cmd_exec
+        job_cmd = f'sbatch --cpus-per-task={n_cores} {cmd_exec}'
         start = time.time()
-        process = subprocess.Popen(f'sbatch --cpus-per-task={n_cores} {cmd_exec}',
-                                   shell=True, stdout=subprocess.PIPE)
-        out_str = io.TextIOWrapper(process.stdout, encoding="utf-8").read()
-        slurm_id = int(re.findall(r'(\d+)', out_str)[0])
+        max_relaunch_cnt = 0
+        while True:
+            process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
+            out_str, err = process.communicate()
+            if process.returncode != 0:
+                if max_relaunch_cnt == 5:
+                    raise RuntimeError(f'Could not launch job with ID {job_id} and command '
+                                       f'"{job_cmd}".')
+                log_mp.warning(f'Could not raunch job with ID {job_id} '
+                               f'for the {max_relaunch_cnt}. time.'
+                               f'Attempting again in 5s. Error raised: {err}')
+                max_relaunch_cnt += 1
+                time.sleep(5)
+            else:
+                break
+
+        slurm_id = int(re.findall(r'(\d+)', out_str.decode())[0])
         job2slurm_dc[job_id] = slurm_id
         slurm2job_dc[slurm_id] = job_id
         dtime_sub += time.time() - start
@@ -269,13 +283,29 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            requeue_dc[j] += 1
+            if requeue_dc[j] == 20:
+                log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
+                                     f'which already was assigned the maximum number '
+                                     f'of available CPUs.')
+            requeue_dc[j] = min(requeue_dc[j] + 1, cpus_per_node)
             # increment number of cores by one.
             job_cmd = f'sbatch --cpus-per-task={requeue_dc[j] + n_cores} {job_exec_dc[j]}'
-            process = subprocess.Popen(job_cmd, shell=True,
-                                       stdout=subprocess.PIPE)
-            out_str = io.TextIOWrapper(process.stdout, encoding="utf-8").read()
-            slurm_id = int(re.findall(r'(\d+)', out_str)[0])
+            max_relaunch_cnt = 0
+            while True:
+                process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
+                out_str, err = process.communicate()
+                if process.returncode != 0:
+                    if max_relaunch_cnt == 5:
+                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) and '
+                                           f'command "{job_cmd}".')
+                    log_mp.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
+                                   f'for the {max_relaunch_cnt}. time.'
+                                   f'Attempting again in 5s. Error raised: {err}')
+                    max_relaunch_cnt += 1
+                    time.sleep(5)
+                else:
+                    break
+            slurm_id = int(re.findall(r'(\d+)', out_str.decode())[0])
             slurm_id_orig = job2slurm_dc[j]
             del slurm2job_dc[slurm_id_orig]
             job2slurm_dc[j] = slurm_id

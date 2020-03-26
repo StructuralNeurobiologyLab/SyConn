@@ -180,8 +180,8 @@ class SegmentationObject(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.id, self.type, self.version, self.segobj_dir)
+        return (f'{type(self).__name__}(obj_id={self.id}, obj_type="{self.type}", '
+                f'version="{self.version}", working_dir="{self.working_dir}")')
 
     def __reduce__(self):
         """
@@ -1576,8 +1576,8 @@ class SegmentationDataset(object):
             os.makedirs(self.so_storage_path)
 
     def __repr__(self):
-        return '{} of type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.type, self.version, self.path)
+        return (f'{type(self).__name__}(obj_type="{self.type}", version="{self.version}", '
+                f'working_dir="{self.working_dir}")')
 
     @property
     def type(self) -> str:

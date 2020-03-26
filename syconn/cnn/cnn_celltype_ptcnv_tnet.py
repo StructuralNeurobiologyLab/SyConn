@@ -159,10 +159,11 @@ if __name__ == '__main__':
         model = tracedmodel
 
     # Transformations to be applied to samples before feeding them to the network
-    train_transform = clouds.Compose([clouds.RandomVariation((-120, 120)),  # in nm
+    train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
                                       clouds.Normalization(scale_norm),
                                       clouds.Center(),
-                                      clouds.RandomRotate()])
+                                      clouds.RandomRotate(apply_flip=True),
+                                      clouds.RandomScale(distr_scale=0.05, distr='normal')])
     valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                       clouds.Center()])
 

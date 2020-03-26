@@ -80,11 +80,12 @@ if __name__ == '__main__':
 
     generate_default_conf(example_wd, scale,
                           key_value_pairs=key_val_pairs_conf,
-                          force_overwrite=True)
+                          force_overwrite=False)
 
-    if global_params.wd is not None:
-        log.critical('Example run started. Working directory was overwritten and set'
-                     ' to "{}".'.format(example_wd))
+    if global_params.config.working_dir is not None and global_params.config.working_dir != example_wd:
+        msg = f'Active working directory is already set to "{example_wd}". Aborting.'
+        log.critical(msg)
+        raise RuntimeError(msg)
 
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd

@@ -212,8 +212,8 @@ class SuperSegmentationDataset(object):
             self.apply_mergelist(sv_mapping)
 
     def __repr__(self):
-        return '{} of type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.type, self.version, self.path)
+        return (f'{type(self).__name__}(ssd_type="{self.type}", '
+                f'version="{self.version}", working_dir="{self.working_dir}")')
 
     @property
     def type(self) -> str:

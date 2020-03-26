@@ -562,9 +562,9 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                   'sv_ids': [sv.id for sv in ssv.svs]}
     # TODO: refactor kwargs!
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
-                      'ws': None, 'cellobjects_only': False, 'wire_frame': False,
-                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'woglia': True,
-                     'return_rot_mat': False, 'render_indexviews': render_indexviews}
+                         'ws': None, 'cellobjects_only': False, 'wire_frame': False,
+                         'nb_views': None, 'comp_window': None, 'rot_mat': None, 'woglia': True,
+                         'return_rot_mat': False, 'render_indexviews': render_indexviews}
     if render_kwargs is not None:
         render_kwargs_def.update(render_kwargs)
 
