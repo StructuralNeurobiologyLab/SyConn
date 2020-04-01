@@ -4,6 +4,7 @@
 
 import collections
 import os
+import gc
 from multiprocessing import Process, Queue
 from syconn.handler import basics
 from syconn.handler.prediction import generate_pts_sample, \
@@ -18,9 +19,9 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 DEVICE = 'cuda:0'
 
 
-def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader):
+def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader, mkwargs: dict):
     import torch
-    m = model_loader()
+    m = model_loader(mkwargs)
     stop_received = False
     while True:
         if not q_in.empty():
@@ -48,6 +49,10 @@ def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader):
                 res = m(*inp).cpu().numpy()
             except RuntimeError as e:
                 print(f'Splitting model input due to RuntimeError "{e}".')
+                # memory seemed not to be freed by applying the model on half the data
+                del m
+                gc.collect()
+                m = model_loader(mkwargs)
                 # TODO: hacky - apply recursively, make it work with arbitrary output
                 n_half = len(inp) // 2
                 res1 = m(*(i[:n_half] for i in inp)).cpu().numpy()
@@ -70,10 +75,10 @@ def worker_load(q: Queue, q_loader_sync: Queue, gen, kwargs: dict):
     q_loader_sync.put('DONE')
 
 
-def load_model():
+def load_model(mkwargs):
     from elektronn3.models.convpoint import ModelNet40
     import torch
-    m = ModelNet40(5, 8).to(DEVICE)
+    m = ModelNet40(5, 8, **mkwargs).to(DEVICE)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.eval()
     return m
@@ -104,7 +109,7 @@ def listener(q_cnt: Queue, q_in, q_loader_sync, npredictor, nloader, total):
                     q_in.put('STOP')
 
 
-def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npredictor=2,
+def predict_pts_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, nloader=4, npredictor=2,
                    ssv_ids=None, use_test_aug=False):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
@@ -117,6 +122,7 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
     Args:
         ssd_kwargs:
         model_loader:
+        mkwargs:
         npoints:
         scale_fact:
         nloader:
@@ -129,7 +135,7 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
     """
     transform = [clouds.Normalization(scale_fact), clouds.Center()]
     if use_test_aug:
-        transform = [clouds.RandomVariation((-20, 20))] + transform + [clouds.RandomRotate()]
+        transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
     transform = clouds.Compose(transform)
     bs = 40  # ignored during inference
     ssd = SuperSegmentationDataset(**ssd_kwargs)
@@ -157,7 +163,7 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
                  for el in params_in]
     for p in producers:
         p.start()
-    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader)) for _ in
+    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, mkwargs)) for _ in
                  range(npredictor)]
     for c in consumers:
         c.start()
@@ -207,38 +213,49 @@ def predict_pts_wd(ssd_kwargs, model_loader, npoints, scale_fact, nloader=4, npr
 
 
 if __name__ == '__main__':
+    ncv_min = 0
+    n_cv = 2
     da_equals_tan = True
-    model_dir = '/wholebrain/u/pschuber/e3_training_convpoint_CV10/'
+    model_dir = '/wholebrain/u/pschuber/e3_training_convpoint/'
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
     ssd_kwargs = dict(working_dir=wd, version=gt_version)
-
-    for CV in range(10):
-        split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
-                                       f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-        mpath = f'{model_dir}/celltype_pts_scale30000_nb50000_moreAug3_CV{CV}_eval0' \
-                f'/state_dict_minlr_step75000.pth'
-        # assert os.path.isfile(mpath)
-        if not os.path.isfile(mpath):
-            mpath = f'{model_dir}/celltype_pts_scale30000_nb50000_moreAug3_CV{CV}_eval0' \
-                    f'/state_dict.pth'
-            print(f'Using model "{mpath}" for cross-validation splot {CV}.')
-        fname_pred = f'{model_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
-
-        # if os .path.isfile(fname_pred):
-        #     continue
-        res_dc = predict_pts_wd(ssd_kwargs, load_model, 50000, 30000, ssv_ids=split_dc['valid'],
-                                nloader=2, npredictor=1, use_test_aug=True)
-        basics.write_obj2pkl(fname_pred, res_dc)
+    mdir = model_dir + '/celltype_pts_scale30000_nb50000_noBN_moreAug4_CV{}_eval0/'
+    use_bn = True
+    track_running_stats = False
+    if 'noBN' in mdir:
+        use_bn = False
+    if 'trackRunStats' in mdir:
+        track_running_stats = True
+    mkwargs = dict(use_bn=use_bn, track_running_stats=track_running_stats)
+    # for CV in range(ncv_min, n_cv):
+    #     split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
+    #                                    f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
+    #     mpath = f'{mdir.format(CV)}/state_dict.pth'
+    #     if not os.path.isfile(mpath):
+    #         raise ValueError
+    #         mpath = f'{mdir}/state_dict.pth'
+    #     print(f'Using model "{mpath}" for cross-validation split {CV}.')
+    #     fname_pred = f'{model_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
+    #
+    #     # if os .path.isfile(fname_pred):
+    #     #     continue
+    #     res_dc = predict_pts_wd(ssd_kwargs, load_model, mkwargs, 50000, 30000, ssv_ids=split_dc['valid'],
+    #                             nloader=2, npredictor=1, use_test_aug=True)
+    #     basics.write_obj2pkl(fname_pred, res_dc)
 
     # compare to GT
-    valid_ids, valid_ls, valid_preds = [], [], []
     import pandas
     str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5,
                          INT=7, FS=8, GLIA=9)
     del str2int_label['GLIA']
     del str2int_label['FS']
     str2int_label["GP "] = 5  # typo
+    int2str_label = {v: k for k, v in str2int_label.items()}
+    target_names = [int2str_label[kk] for kk in range(8)]
+    if da_equals_tan:
+        target_names[1] = 'Modulatory'
+        target_names.remove('TAN')
     csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
     df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
     ssv_ids = df[:, 0].astype(np.uint)
@@ -246,11 +263,13 @@ if __name__ == '__main__':
         raise ValueError('Multi-usage of IDs!')
     str_labels = df[:, 1]
     ssv_labels = np.array([str2int_label[el] for el in str_labels], dtype=np.uint16)
+    valid_ids, valid_ls, valid_preds, valid_certainty = [], [], [], []
 
-    for CV in range(10):
+    for CV in range(ncv_min, n_cv):
         res_dc = basics.load_pkl2obj(f'{model_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl')
         split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                        f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
+        valid_ids_local, valid_ls_local, valid_preds_local, valid_certainty_local = [], [], [], []
         for ix, curr_id in enumerate(ssv_ids):
             if curr_id not in split_dc['valid']:
                 continue
@@ -259,15 +278,20 @@ if __name__ == '__main__':
                 # adapt GT labels
                 if curr_l == 6: curr_l = 1  # TAN and DA are the same now
                 if curr_l == 7: curr_l = 6  # INT now has label 6
-            valid_ls.append(curr_l)
-            valid_preds.append(res_dc[curr_id][0])
-            valid_ids.append(curr_id)
+            valid_ls_local.append(curr_l)
+            curr_pred, curr_cert = res_dc[curr_id]
+            valid_preds_local.append(curr_pred)
+            valid_certainty.append(curr_cert)
+            valid_ids_local.append(curr_id)
+            if curr_pred != curr_l:
+                print(f'id: {curr_id}  targtet: {curr_l}  pred: {curr_pred}  ce: {curr_cert}')
+        print(f'CV split: {CV}')
+        print(classification_report(valid_ls_local, valid_preds_local, labels=np.arange(7),
+                                    target_names=target_names))
+        valid_ls.extend(valid_ls_local)
+        valid_preds.extend(valid_preds_local)
+        valid_ids.extend(valid_ids_local)
 
-    int2str_label = {v: k for k, v in str2int_label.items()}
-    target_names = [int2str_label[kk] for kk in range(8)]
-    if da_equals_tan:
-        target_names[1] = 'Modulatory'
-        target_names.remove('TAN')
     print(f'Predicted {len(np.unique(valid_ids))} cells.')
     print(classification_report(valid_ls, valid_preds, labels=np.arange(7),
                                 target_names=target_names))

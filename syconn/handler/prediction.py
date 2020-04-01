@@ -1445,7 +1445,7 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
             ixs = np.ones((occ,), dtype=np.uint) * ssv_id
             cnt = 0
             # TODO: this should be deterministic during inference
-            nodes = hc.base_points(min_dist=5000, source=len(hc.nodes)//2)
+            nodes = hc.base_points(density_mode=False, threshold=5000, source=len(hc.nodes)//2)
             source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
             for source_node in source_nodes:
                 local_bfs = bfs_vertices(hc, source_node, npoints_ssv)

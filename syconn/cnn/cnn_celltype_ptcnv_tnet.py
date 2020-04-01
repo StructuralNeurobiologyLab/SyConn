@@ -93,12 +93,15 @@ if __name__ == '__main__':
     lr_dec = 0.995
     max_steps = 1000000
     margin = 0.2
+    dr = 0.3
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
     onehot = True
+    track_running_stats = False
+    use_bn = False
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \
@@ -118,6 +121,11 @@ if __name__ == '__main__':
     else:
         device = torch.device('cpu')
 
+    if not use_bn:
+        name += '_noBN'
+    if track_running_stats:
+        name += '_trackRunStats'
+
     print(f'Running on device: {device}')
 
     # set paths
@@ -128,9 +136,9 @@ if __name__ == '__main__':
     # CREATE NETWORK AND PREPARE DATA SET #
 
     # # Model selection
-    model = ModelNet40(input_channels, Z_DIM, dropout=0.3,
-                       track_running_stats=False)
-    name += '_moreAug3'
+    model = ModelNet40(input_channels, Z_DIM, dropout=dr, use_bn=use_bn,
+                       track_running_stats=track_running_stats)
+    name += '_moreAug4'
 
     # model = ModelNetBig(input_channels, Z_DIM)
     # name += '_big'
@@ -174,16 +182,16 @@ if __name__ == '__main__':
     # PREPARE AND START TRAINING #
 
     # set up optimization
-    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=lr,  # Learning rate is set by the lr_sched below
-        momentum=0.9,
-        weight_decay=0.5e-4,
-    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # optimizer = torch.optim.SGD(
+    #     model.parameters(),
+    #     lr=lr,  # Learning rate is set by the lr_sched below
+    #     momentum=0.9,
+    #     weight_decay=0.5e-4,
+    # )
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
+    lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
     lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,

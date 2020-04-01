@@ -30,7 +30,7 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=40000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed')
@@ -42,7 +42,7 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
-parser.add_argument('--cval', default=0, help='Cross-validation split indicator.')
+parser.add_argument('--cval', default=None, help='Cross-validation split indicator.')
 
 
 args = parser.parse_args()
@@ -63,6 +63,8 @@ scale_norm = args.scale_norm
 save_root = args.sr
 cval = args.cval
 
+if cval is None:
+    cval = 0
 
 lr = 1e-3
 lr_stepsize = 1000
@@ -74,6 +76,8 @@ eval_nr = 0  # number of repetition per cval
 cellshape_only = False
 use_syntype = True
 dr = 0.3
+track_running_stats = False
+use_bn = False
 num_classes = 8
 onehot = True
 
@@ -88,6 +92,10 @@ if onehot:
 else:
     input_channels = 1
     name += '_flatinp'
+if not use_bn:
+    name += '_noBN'
+if track_running_stats:
+    name += '_trackRunStats'
 
 if use_cuda:
     device = torch.device('cuda')
@@ -104,8 +112,8 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=True,
-                   track_running_stats=False)
+model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=use_bn,
+                   track_running_stats=track_running_stats)
 name += '_moreAug4'
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
@@ -164,19 +172,19 @@ valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False
 # PREPARE AND START TRAINING #
 
 # set up optimization
-# optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-optimizer = torch.optim.SGD(
-    model.parameters(),
-    lr=lr,  # Learning rate is set by the lr_sched below
-    momentum=0.9,
-    weight_decay=0.5e-5,
-)
+# optimizer = torch.optim.SGD(
+#     model.parameters(),
+#     lr=lr,  # Learning rate is set by the lr_sched below
+#     momentum=0.9,
+#     weight_decay=0.5e-5,
+# )
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2)
+lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
+# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,

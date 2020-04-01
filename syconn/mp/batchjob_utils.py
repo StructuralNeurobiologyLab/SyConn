@@ -77,7 +77,8 @@ def batchjob_script(params: list, name: str,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: int = 20,
-                    show_progress=True):
+                    show_progress=True,
+                    overwrite=False):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -125,6 +126,9 @@ def batchjob_script(params: list, name: str,
         batchjob_folder = "{}/{}_folder{}/".format(
             global_params.config.qsub_work_folder, name, suffix)
     if os.path.exists(batchjob_folder):
+        if not overwrite:
+            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". '
+                                  f'Please make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
     if log is None:
         log_batchjob = initialize_logging("{}".format(name + suffix),
@@ -140,11 +144,12 @@ def batchjob_script(params: list, name: str,
     else:
         path_to_scripts = path_to_scripts_default
 
-    # Check if any fallback is required
+    # Check if fallback is required
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path, show_progress=show_progress,
-                                 remove_jobfolder=remove_jobfolder, log=log)
+                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
+                                 job_folder=batchjob_folder)
     if global_params.config['batch_proc_system'] != 'SLURM':
         log_mp.warn('"batchjob_script" currently does not support any other '
                     'batch processing system than SLURM. Falling back to '
@@ -840,9 +845,9 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     return path_to_out
 
 
-def batchjob_fallback(params, name, n_cores=1, suffix="",
-                      script_folder=None, python_path=None,
-                      remove_jobfolder=False, show_progress=True, log=None):
+def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
+                      python_path=None, remove_jobfolder=False,
+                      show_progress=True, log=None, overwrite=False, job_folder=None):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available. Always uses
@@ -869,9 +874,13 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
     """
     if python_path is None:
         python_path = python_path_global
-    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
-                                          name, suffix)
+    if job_folder is None:
+        job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                              name, suffix)
     if os.path.exists(job_folder):
+        if not overwrite:
+            raise FileExistsError(f'Batchjob folder already exists at "{job_folder}". '
+                                  f'Please make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(job_folder, ignore_errors=True)
     if log is None:
         log_batchjob = initialize_logging("{}".format(name + suffix),
