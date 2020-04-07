@@ -85,9 +85,21 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         attr_dict = {}
         for this_attr_dict in results:
             for attribute in this_attr_dict:
+                if len(this_attr_dict['id']) == 0:
+                    continue
+                value = this_attr_dict[attribute]
                 if attribute not in attr_dict:  # TODO: Fail if any attribute does not exist in 'this_attr_dict'
-                    attr_dict[attribute] = []
-                attr_dict[attribute] += this_attr_dict[attribute]
+                    if type(value) is not list:
+                        sh = list(value.shape)
+                        sh[0] = 0
+                        attr_dict[attribute] = np.empty(sh, dtype=value.dtype)
+                    else:
+                        attr_dict[attribute] = []
+
+                if type(value) is not list:  # assume numpy array
+                    attr_dict[attribute] = np.concatenate([attr_dict[attribute], value])
+                else:
+                    attr_dict[attribute] += value
 
         for attribute in attr_dict:
             try:
@@ -108,6 +120,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                          n_max_co_processes=n_max_co_processes,
                                          suffix=sd.type)
         out_files = glob.glob(path_to_out + "/*")
+
         ii = 0
         res_keys = []
         while ii < len(out_files):
@@ -123,18 +136,16 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                        f'dataset_analysis:\n{res_keys}')
         # TODO: spawn this as QSUB job!
         for attribute in tqdm.tqdm(res_keys, leave=False):
-            attr_res = []
             # start_multiprocess_imap obeys parameter order and therefore the
             # collected attributes will share the same ordering.
             params = list(basics.chunkify([(p, attribute) for p in out_files],
                                           global_params.config['ncores_per_node'] * 2))
             tmp_res = sm.start_multiprocess_imap(
                 load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
-            for ii in range(len(tmp_res)):
-                attr_res += tmp_res[ii]
-                tmp_res[ii] = []
+            # TODO: this loop should be replaceable by np.concatenate
+            tmp_res = np.concatenate(tmp_res)
             try:
-                np.save(sd.path + "/%ss.npy" % attribute, attr_res)
+                np.save(sd.path + "/%ss.npy" % attribute, tmp_res)
             except ValueError as e:
                 log_proc.warn('ValueError {} encountered when writing numpy '
                               'array caches in "dataset_analysis", this is '
@@ -142,10 +153,9 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                               'which is not advised.'.format(e))
                 if 'setting an array element with a sequence' in str(e):
                     np.save(sd.path + "/%ss.npy" % attribute,
-                            np.array(attr_res, dtype=np.object))
+                            np.array(tmp_res, dtype=np.object))
                 else:
                     raise ValueError(e)
-
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
@@ -157,13 +167,22 @@ def load_attr_helper(args):
             dc = pkl.load(f)
             if len(dc['id']) == 0:
                 continue
-            res += dc[attr]
+            value = dc[attr]
+
+            if type(value) is not list:  # assume numpy array
+                if len(res) == 0:
+                    sh = list(value.shape)
+                    sh[0] = 0
+                    res = np.empty(sh, dtype=value.dtype)
+                res = np.concatenate([res, value])
+            else:
+                res += value
     return res
 
 
 def _dataset_analysis_thread(args):
     """ Worker of dataset_analysis """
-
+    # TODO: use arrays to store properties already during collection
     paths = args[0]
     obj_type = args[1]
     version = args[2]
@@ -212,6 +231,14 @@ def _dataset_analysis_thread(args):
                 this_attr_dc[so_id] = so.attr_dict
             if recompute:
                 this_attr_dc.push()
+    if 'bounding_box' in global_attr_dict:
+        global_attr_dict['bounding_box'] = np.array(global_attr_dict['bounding_box'], dtype=np.int32)
+    if 'rep_coord' in global_attr_dict:
+        global_attr_dict['rep_coord'] = np.array(global_attr_dict['rep_coord'], dtype=np.int32)
+    if 'size' in global_attr_dict:
+        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int)
+    if 'mesh_area' in global_attr_dict:
+        global_attr_dict['mesh_area'] = np.array(global_attr_dict['mesh_area'], dtype=np.float32)
     return global_attr_dict
 
 

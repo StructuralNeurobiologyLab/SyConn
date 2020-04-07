@@ -224,8 +224,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     all_times.append(time.time() - start)
     step_names.append("conversion of results")
 
-    log.info('Finished extraction of contact sites (#objects: {}) and synapses'
-             ' (#objects: {}).'.format(n_cs, n_syn))
+    log.info(f'Finished extraction of initial contact sites (#objects: {n_cs}) and synapses'
+             f' (#objects: {n_syn}).')
     if n_syn == 0:
         log.critical('WARNING: Did not find any synapses during extraction step.')
 
@@ -280,20 +280,19 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
                            n_cores=1, n_max_co_processes=max_n_jobs,
                            remove_jobfolder=True)
-
+    # Mesh props are not computed as this is done for the agglomerated versions (currently only syn_ssv exist)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
     dataset_analysis(sd_syn, recompute=True, compute_meshprops=False)
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
+    log.info(f'Identified {n_cs}) contact sites and {n_syn} synapses within size threshold.')
     dataset_analysis(sd_cs, recompute=True, compute_meshprops=False)
-    # if len(sd_syn.ids) != n_syn or len(sd_cs.ids) != n_cs:
-        # raise ValueError(f'Number mismatch between detected contact sites or synapses (SV level).')
-    # for p in dict_paths_tmp:
-    #     os.remove(p)
+    for p in dict_paths_tmp:
+        os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
-    # if qu.batchjob_enabled():
-    #     shutil.rmtree(path_to_out, ignore_errors=True)
+    if qu.batchjob_enabled():
+        shutil.rmtree(path_to_out, ignore_errors=True)
 
 
 def _contact_site_extraction_thread(args: Union[tuple, list]) \

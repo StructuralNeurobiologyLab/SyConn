@@ -43,7 +43,7 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
-        ('pyopengl_platform', 'osmesa'),  # 'osmesa' or 'egl'
+        ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    # exec_dense_prediction.predict_myelin()
+    exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()

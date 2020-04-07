@@ -247,7 +247,7 @@ def batchjob_script(params: list, name: str,
                 if max_relaunch_cnt == 5:
                     raise RuntimeError(f'Could not launch job with ID {job_id} and command '
                                        f'"{job_cmd}".')
-                log_mp.warning(f'Could not raunch job with ID {job_id} '
+                log_mp.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
                                f'for the {max_relaunch_cnt}. time.'
                                f'Attempting again in 5s. Error raised: {err}')
                 max_relaunch_cnt += 1
@@ -292,7 +292,7 @@ def batchjob_script(params: list, name: str,
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
-            requeue_dc[j] = min(requeue_dc[j] + 1, cpus_per_node)
+            requeue_dc[j] = min(requeue_dc[j] + 1, cpus_per_node - n_cores)  # n_cores is the base number of cores
             # increment number of cores by one.
             job_cmd = f'sbatch --cpus-per-task={requeue_dc[j] + n_cores} {job_exec_dc[j]}'
             max_relaunch_cnt = 0
@@ -303,7 +303,7 @@ def batchjob_script(params: list, name: str,
                     if max_relaunch_cnt == 5:
                         raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) and '
                                            f'command "{job_cmd}".')
-                    log_mp.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
+                    log_mp.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) with command "{job_cmd}"'
                                    f'for the {max_relaunch_cnt}. time.'
                                    f'Attempting again in 5s. Error raised: {err}')
                     max_relaunch_cnt += 1

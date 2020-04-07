@@ -33,7 +33,7 @@ parser.add_argument('--bs', type=int, default=16, help='Batch size')
 parser.add_argument('--sp', type=int, default=40000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
-parser.add_argument('--seed', default=0, help='Random seed')
+parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -42,7 +42,8 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
-parser.add_argument('--cval', default=None, help='Cross-validation split indicator.')
+parser.add_argument('--cval', default=None,
+                    help='Cross-validation split indicator.', type=int)
 
 
 args = parser.parse_args()
@@ -66,13 +67,13 @@ cval = args.cval
 if cval is None:
     cval = 0
 
-lr = 1e-3
+lr = 5e-3
 lr_stepsize = 1000
 lr_dec = 0.995
 max_steps = 100000
 
 # celltype specific
-eval_nr = 0  # number of repetition per cval
+eval_nr = random_seed  # number of repetition
 cellshape_only = False
 use_syntype = True
 dr = 0.3

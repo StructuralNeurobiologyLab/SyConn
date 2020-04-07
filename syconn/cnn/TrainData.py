@@ -133,7 +133,7 @@ if elektronn3_avail:
             ssd = SuperSegmentationDataset(**self.ssd_kwargs)
             gt_dir = ssd.path
 
-            log_cnn.info(f'Set "{ssd}" as GT source.')
+            log_cnn.info(f'Set {ssd} as GT source.')
 
             if cv_val is -1:
                 log_cnn.critical(f'"cval_val" was set to -1. training will also '
@@ -204,17 +204,32 @@ if elektronn3_avail:
             else:
                 return max(len(self.sso_ids) // 10, 1)
 
-        def load_ssv_sample(self, item):
+        def load_ssv_sample(self, item: int, draw_local: bool = False):
             """
+            Args:
+                item: Cell ID.
+                draw_local: Sample two similar samples from the same location.
+
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
+
+            Returns:
+                if draw_local:
+                    Two tuples of points and features: [(pts0, feat0), (pts1, feat1)]
+                else:
+                    point and feature array; if batch size is 1, the first axis is removed.
             """
-            sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
-                self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
-                self.num_pts, transform=self.transform, train=True)][0]
+            if draw_local:
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
+                    self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
+                    self.num_pts, transform=self.transform, train=True, draw_local=True)][0]
+            else:
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
+                    self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
+                    self.num_pts, transform=self.transform, train=True)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
-            if self._batch_size == 1:
+            if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
             else:
                 return sample_pts, sample_feats
@@ -225,9 +240,17 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, **kwargs):
+        def __init__(self, draw_local: bool=True, **kwargs):
+            """
+
+            Args:
+                draw_local: Sample two similar samples from the same location. False will learn
+                    similarities of cells, not local morphology.
+                **kwargs:
+            """
             super().__init__(**kwargs)
             self._curr_ssv_id_altern = None
+            self.draw_local = draw_local
 
         def __getitem__(self, item):
             item = np.random.randint(0, len(self.sso_ids))
@@ -243,15 +266,19 @@ if elektronn3_avail:
                 if self.sso_ids[ix] != self._curr_ssv_id_altern:
                     self._curr_ssv_id = self.sso_ids[ix]
                     break
+            if self.draw_local:
+                # consecutive samples belong together
+                pts, feats = self.load_ssv_sample(ix, draw_local=True)
+                pts0, pts1 = pts[0::2], pts[1::2]
+                feats0, feats1 = feats[0::2], feats[1::2]
+            else:
+                pts0, feats0 = self.load_ssv_sample(ix)  # base sample
+                pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
 
-            pts0, feats0 = self.load_ssv_sample(ix)  # base sample
             x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
                   torch.from_numpy(feats0).float()}
-
-            pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
             x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
                   torch.from_numpy(feats1).float()}
-
             x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
             return x0, x1, x2
 

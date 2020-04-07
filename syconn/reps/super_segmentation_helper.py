@@ -889,7 +889,7 @@ def map_myelin2coords(coords: np.ndarray,
     Args:
         coords: Coordinates used to retrieve myelin predictions. In voxel coordinates (``mag=1``).
         cube_edge_avg: Cube size used for averaging myelin predictions for each location.
-            The laoded data cube will always have the extent given by `cube_edge_avg`, regardless
+            The loaded data cube will always have the extent given by `cube_edge_avg`, regardless
             of the value of `mag`.
         thresh_proba: Classification threshold in uint8 values (0..255).
         thresh_majority: Majority ratio for myelin (between 0..1), i.e.
@@ -906,9 +906,11 @@ def map_myelin2coords(coords: np.ndarray,
     kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
+    cube_edge_avg = cube_edge_avg * mag
     for ix, c in enumerate(coords):
-        offset, size = c // mag - cube_edge_avg // 2, cube_edge_avg
-        myelin_proba = kd.load_raw(size=size*mag, offset=offset, mag=mag).swapaxes(0, 2)
+        # switch to mag reference system, afterwards rescale to mag 1 again
+        offset = c - cube_edge_avg // 2
+        myelin_proba = kd.load_raw(size=cube_edge_avg, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
         myelin_preds[ix] = myelin_ratio > thresh_majority
     return myelin_preds

@@ -18,6 +18,7 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
 from .. import global_params
 
+import networkx as nx
 import re
 import numpy as np
 import os
@@ -1426,7 +1427,24 @@ def _load_ssv_hc(args):
 
 
 def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
-                    transform: Optional[Callable] = None, train=False):
+                    transform: Optional[Callable] = None, train=False,
+                    draw_local=False, draw_local_dist=1000):
+    """
+
+    Args:
+        ssd_kwargs:
+        ssv_ids:
+        batchsize:
+        npoints:
+        transform:
+        train:
+        draw_local: Will draw similar contexts from approx.
+            the same location, requires a single unique element in ssv_ids
+        draw_local_dist: Maximum distance to similar source node in nm.
+
+    Returns:
+
+    """
     from ..reps.super_segmentation import SuperSegmentationDataset
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
@@ -1435,7 +1453,11 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
     if not train:
+        if draw_local:
+            raise NotImplementedError()
         for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
+            if draw_local and occ % 2:
+                raise ValueError(f'draw_local is set to True but the number of SSV samples is uneven.')
             ssv = ssd.get_super_segmentation_object(ssv_id)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values())))
@@ -1489,6 +1511,17 @@ def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
             cnt = 0
             source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
                                             replace=len(hc.nodes) < batchsize)
+            if draw_local:
+                # only use half of the nodes and choose a close-by node as root for similar context retrieval
+                source_nodes = source_nodes[::2]
+                sn_new = []
+                g = hc.graph(simple=False)
+                for n in source_nodes:
+                    sn_new.append(n)
+                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                    neighs = np.array(list(paths.keys()), dtype=np.int)
+                    sn_new.append(np.random.choice(neighs, 1)[0])
+                source_nodes = sn_new
             for source_node in source_nodes:
                 local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud

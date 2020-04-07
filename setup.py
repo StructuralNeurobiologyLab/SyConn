@@ -4,11 +4,8 @@ import os
 import glob
 
 # catch ImportError during the readthedocs build.
-# TODO: pytest stuff can probably be removed from `setup_requires`
 try:
     from Cython.Build import cythonize
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner",
-                      "cython>=0.23"]
     ext_modules = [Extension("*", [fname],
                              extra_compile_args=["-std=c++11"], language='c++')
                    for fname in glob.glob('syconn/*/*.pyx', recursive=True)]
@@ -18,11 +15,27 @@ try:
                            'cdivision': False, 'overflowcheck': True})
 except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner"]
     cython_out = None
-readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
-with open(readme_file) as f:
-    readme = f.read()
+
+VERSION = '0.2'
+
+
+def read_readme():
+    readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
+    with open(readme_file) as f:
+        readme = f.read()
+    return readme
+
+
+def write_version_py(filename='syconn/version.py'):
+    content = """
+# THIS FILE IS GENERATED FROM SYCONN SETUP.PY
+#
+version = '%(version)s'
+"""
+    with open(filename, 'w') as f:
+        f.write(content % {'version': VERSION})
+
 
 setup(
     name='SyConn',
@@ -30,27 +43,27 @@ setup(
     description='Analysis pipeline for EM raw data based on deep and '
                 'supervised learning to extract high level biological'
                 'features and connectivity.',
-    long_description=readme,
+    long_description=read_readme(),
     long_description_content_type='text/markdown',
     url='https://structuralneurobiologylab.github.io/SyConn/',
     download_url='https://github.com/StructuralNeurobiologyLab/SyConn.git',
-    author='Philipp Schubert, Joergen Kornfeld',
+    author='Philipp Schubert et al.',
     author_email='pschubert@neuro.mpg.de',
     classifiers=[
         'Development Status :: 4 - Beta',
-        'Intended Audience :: Neuroscientists',
+        'Intended Audience :: Science/Research',
         'Topic :: Connectomics :: Analysis Tools',
-        'License :: OSI Approved :: GPL-2.0 License',
+        'License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
-    keywords='machinelearning imageprocessing connectomics',
+    platforms=["Linux", ],
+    keywords='connectomics machinelearning imageprocessing',
     packages=find_packages(exclude=['scripts']),
     python_requires='>=3.6, <4',
-    setup_requires=setup_requires,
     package_data={'syconn': ['handler/config.yml']},
     include_package_data=True,
-    tests_require=['pytest', 'pytest-cov',],
+    tests_require=['pytest', 'pytest-cov', 'pytest-runner'],
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [

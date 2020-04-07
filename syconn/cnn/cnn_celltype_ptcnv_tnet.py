@@ -55,8 +55,8 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
     parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
-    parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
+    parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
+    parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
     parser.add_argument('--cl', type=int, default=5, help='Number of classes')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
     parser.add_argument('--seed', default=0, help='Random seed')
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     size = args.ana
     save_root = args.sr
 
-    lr = 1e-3
+    lr = 5e-3
     lr_stepsize = 1000
     lr_dec = 0.995
     max_steps = 1000000

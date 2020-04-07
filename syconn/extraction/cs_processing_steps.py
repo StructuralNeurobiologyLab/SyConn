@@ -319,7 +319,8 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd,
                                               version=syn_version)
-
+    # TODO: this procedure creates folders with single and double digits, e.g. '0' and '00'. Single digit folders are not
+    #  used during write-outs, they are probably generated within this method's makedirs
     rel_synssv_to_syn_ids = filter_relevant_syn(syn_sd, ssd)
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
