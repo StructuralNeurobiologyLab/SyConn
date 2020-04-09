@@ -6,14 +6,16 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
+import open3d as o3d
 import matplotlib
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 from knossos_utils import KnossosDataset
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
-from syconn.handler.basics import load_pkl2obj, temp_seed
-from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
+from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, \
+    generate_pts_sample, pts_loader_ssvs, pts_feat_dict
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -28,30 +30,262 @@ import os
 import threading
 from sklearn.model_selection import train_test_split
 from sklearn.decomposition import PCA
+from functools import lru_cache
 try:
     from torch.utils.data import Dataset
+    import torch
     from elektronn3.data.transforms import Identity
     elektronn3_avail = True
 except ImportError as e:
     elektronn3_avail = False
     Dataset = None
     Identity = None
-
+from morphx.classes.pointcloud import PointCloud
 from typing import Callable
 from sklearn.utils.class_weight import compute_class_weight
 import h5py
 import glob
 from scipy import spatial, ndimage
 import time
+import socket
 # fix random seed.
 np.random.seed(0)
 
 
 # -------------------------------------- elektronn3 ----------------------------
 if elektronn3_avail:
+
+    class CellCloudData(Dataset):
+        """
+        Loader for cell vertices.
+        """
+        def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
+                     train=True, cv_val=0, cellshape_only=False, use_syntype=True,
+                     onehot=True, batch_size=1):
+            """
+            Notes:
+                Cache re-usage is set to 10.
+
+            Code used to produce the npz files (OLD):
+
+                ply_header = '''ply
+                format ascii 1.0
+                element vertex %(vert_num)d
+                property float x
+                property float y
+                property float z
+                property uchar red
+                property uchar green
+                property uchar blue
+                end_header
+
+                '''
+                def write_ply(fn, verts, colors):
+                    #verts = verts.reshape(-1, 3)
+                    #colors = colors.reshape(-1, 3)
+                    verts = np.hstack([verts, colors])
+                    with open(fn, 'wb') as f:
+                        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
+                        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
+
+                import os
+                import tqdm
+                col_dc = {'sv': [[200, 200, 200]], 'mi': [[100, 100, 200]], 'syn_ssv_sym': [[200, 100, 200]], 'syn_ssv_asym':[[250, 100, 100]], 'vc': [[100, 200, 100]], 'syn_ssv': [[200, 100, 100]]}
+                base_dir = '/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4/pts_arrays/'
+                os.makedirs(base_dir, exist_ok=True)
+                for ssv in tqdm.tqdm(ssd.ssvs, total=len(ssd.ssv_ids), leave=False):
+                    out_dc = {}
+                    for k in col_dc:
+                        out_dc[k] = ssv.load_mesh(k)[1].reshape(-1, 3)
+                    # ssv.meshes2kzip(f'{base_dir}/{ssv.id}.k.zip')
+                    verts_tot = np.concatenate(list(out_dc.values()))
+                    col_tot = []
+                    for k, v in out_dc.items():
+                        if len(v) > 0:
+                            col_tot.append(np.array(col_dc[k]*len(v), dtype=np.uint8))
+                        else:
+                            col_tot.append(np.zeros((0, 3), dtype=np.uint8))
+                    col_tot = np.concatenate(col_tot, axis=0)
+                    write_ply(f'{base_dir}/{ssv.id}.ply', verts_tot, col_tot)
+                    np.savez(f'{base_dir}/{ssv.id}.npz', **out_dc)
+
+
+            Args:
+                ssd_kwargs : Kwargs to init the SuperSegmentationDataset which contains
+                    the GT
+                train :  True, or False (-> validation data will be used with key 'valid')
+                transform : transformations which are applied in `__getitem__`.
+                cv_val : Cross validation value.
+                use_syntype: If True, uses different features for symmetric and asymmetric
+                    synapses,
+            """
+            if not (onehot and use_syntype and not cellshape_only):
+                raise NotImplementedError
+            super().__init__()
+            if ssd_kwargs is not None:
+                self.ssd_kwargs = ssd_kwargs
+            elif 'wb' not in socket.gethostname():
+                wd_path = os.path.expanduser('~/mnt/wb//wholebrain/songbird/j0126/areaxfs_v6/')
+                self.ssd_kwargs = dict(working_dir=wd_path, version='ctgt_v4')
+            else:
+                self.ssd_kwargs = dict(working_dir='/wholebrain/songbird/j0126/areaxfs_v6/',
+                                       version='ctgt_v4')
+            ssd = SuperSegmentationDataset(**self.ssd_kwargs)
+            gt_dir = ssd.path
+
+            log_cnn.info(f'Set {ssd} as GT source.')
+
+            if cv_val is -1:
+                log_cnn.critical(f'"cval_val" was set to -1. training will also '
+                                 f'include validation data.')
+                split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
+                split_dc = load_pkl2obj(split_dc_path)
+                split_dc['train'].extend(split_dc['valid'])
+            else:
+                split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv{cv_val}_10fold.pkl'
+                split_dc = load_pkl2obj(split_dc_path)
+                # Do not use validation split during training. Use training samples for validation
+                # error instead (should still be informative due to missing augmentations)
+                split_dc['valid'] = split_dc['train']
+            label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
+            self.train = train
+            self.num_pts = npoints
+            self._batch_size = batch_size
+            self._curr_ssv_id = None
+            self._max_cache_cnt = 8 if train else 2
+            self.cellshape_only = cellshape_only
+            self.use_syntype = use_syntype
+            self.onehot = onehot
+            self._feat_dc = pts_feat_dict
+            if use_syntype:
+                self._num_obj_types = 5
+            else:
+                self._num_obj_types = 4
+            self.label_dc = label_dc
+            self.splitting_dict = split_dc
+            self.sso_ids = self.splitting_dict['train'] if train else self.splitting_dict['valid']
+            for ix in self.sso_ids:
+                if ix not in ssd.ssv_ids:
+                    raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
+            self.transform = transform
+            print(f'Using splitting dict at "{split_dc_path}".')
+            for k, v in self.splitting_dict.items():
+                classes, c_cnts = np.unique([self.label_dc[ix] for ix in
+                                             self.splitting_dict[k]], return_counts=True)
+                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+
+        def __getitem__(self, item):
+            """
+            Samples random points (with features) from the cell vertices.
+            Features are set to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending
+            on the vertex type. The subset of vertices is drawn randomly (uniformly).
+
+            Args:
+                item : If ``self.train=True``, `item` will be overwritten by
+                    ``np.random.randint(0, len(self.fnames))``.
+
+            Returns:
+                Point array (N, 3), feature array (N, ), cell label (scalar). N
+                is the number of points set during initialization.
+            """
+            item = np.random.randint(0, len(self.sso_ids))
+            self._curr_ssv_id = self.sso_ids[item]
+            pts, feats = self.load_ssv_sample(item)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size,
+                           dtype=np.int)
+            pts = torch.from_numpy(pts).float()
+            lbs = torch.from_numpy(lbs[..., None]).long()
+            feats = torch.from_numpy(feats).float()
+            return {'pts': pts, 'features': feats, 'target': lbs}
+
+        def __len__(self):
+            if self.train:
+                return len(self.sso_ids) * 5
+            else:
+                return max(len(self.sso_ids) // 10, 1)
+
+        def load_ssv_sample(self, item: int, draw_local: bool = False):
+            """
+            Args:
+                item: Cell ID.
+                draw_local: Sample two similar samples from the same location.
+
+            Internal parameters:
+                * `feat_dc`: Labels for the different point types:
+                  ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
+
+            Returns:
+                if draw_local:
+                    Two tuples of points and features: [(pts0, feat0), (pts1, feat1)]
+                else:
+                    point and feature array; if batch size is 1, the first axis is removed.
+            """
+            if draw_local:
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
+                    self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
+                    self.num_pts, transform=self.transform, train=True, draw_local=True)][0]
+            else:
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
+                    self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
+                    self.num_pts, transform=self.transform, train=True)][0]
+            assert np.unique(sso_id) == self.sso_ids[item]
+            if self._batch_size == 1 and not draw_local:
+                return sample_pts[0], sample_feats[0]
+            else:
+                return sample_pts, sample_feats
+
+
+    class CellCloudDataTriplet(CellCloudData):
+        """
+        Loader for triplets of cell vertices
+        """
+
+        def __init__(self, draw_local: bool=True, **kwargs):
+            """
+
+            Args:
+                draw_local: Sample two similar samples from the same location. False will learn
+                    similarities of cells, not local morphology.
+                **kwargs:
+            """
+            super().__init__(**kwargs)
+            self._curr_ssv_id_altern = None
+            self.draw_local = draw_local
+
+        def __getitem__(self, item):
+            item = np.random.randint(0, len(self.sso_ids))
+            self._curr_ssv_id_altern = self.sso_ids[item]
+            pts_altern, feats_altern = self.load_ssv_sample(item)
+
+            pts_altern = torch.from_numpy(pts_altern).float()
+            feats_altern = torch.from_numpy(feats_altern).float()
+
+            # draw base and similar sample from a different cell
+            while True:
+                ix = np.random.randint(0, len(self.sso_ids))
+                if self.sso_ids[ix] != self._curr_ssv_id_altern:
+                    self._curr_ssv_id = self.sso_ids[ix]
+                    break
+            if self.draw_local:
+                # consecutive samples belong together
+                pts, feats = self.load_ssv_sample(ix, draw_local=True)
+                pts0, pts1 = pts[0::2], pts[1::2]
+                feats0, feats1 = feats[0::2], feats[1::2]
+            else:
+                pts0, feats0 = self.load_ssv_sample(ix)  # base sample
+                pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
+
+            x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
+                  torch.from_numpy(feats0).float()}
+            x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
+                  torch.from_numpy(feats1).float()}
+            x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+            return x0, x1, x2
+
+
     class MultiviewDataCached(Dataset):
         """
-        Multiview spine data loader.
+        Multiview data loader.
         """
         def __init__(self,
                     base_dir,
@@ -77,7 +311,7 @@ if elektronn3_avail:
             if self.train:
                 self.num_read_limit = num_read_limit
             else:
-                self.num_read_limit = 1  #no need to repeat sample points in validation
+                self.num_read_limit = 1  # no need to repeat sample points in validation
             self.secondary = self.secondary_t = None
             self.read(0)
             self.primary, self.primary_t = self.secondary, self.secondary_t
@@ -1470,7 +1704,7 @@ class TripletData_SSV_nviews(Data):
             bb[ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
 
         # sizes as diagonal of bounding box in um (SV size will be size of corresponding SSV)
-        bb_size = np.linalg.norm((bb[:, 1] - bb[: ,0])*self.sds.scaling, axis=1) / 1e3
+        bb_size = np.linalg.norm((bb[:, 1] - bb[:, 0])*self.sds.scaling, axis=1) / 1e3
         ssds_sizes = np.zeros((len(self.ssds.ssv_ids)))
         for i in range(len(self.ssds.ssv_ids)):
             ssds_sizes[i] = bb_size[i]
@@ -1515,7 +1749,7 @@ class TripletData_SSV_nviews(Data):
                 return out_d, None
             except RuntimeError as e:
                 print("RuntimeError occured during 'getbatch'. Trying again.\n"
-                      "%s\n"  % e)
+                      "%s\n" % e)
 
 
 def transform_tripletN_data_SSV(orig_views):
@@ -1733,8 +1967,7 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
                                               iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
-    kd = KnossosDataset()
-    kd.initialize_from_conf(global_params.config.kd_seg_path)
+    kd = kd_factory(global_params.config.kd_seg_path)
     raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
     if syntype_label is None:
         syn_sign = syn_ssv.lookup_in_attribute_dict('syn_sign')
@@ -1796,8 +2029,7 @@ def fetch_single_synssv_typseg_enhanced(
                                               iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
-    kd = KnossosDataset()
-    kd.initialize_from_conf(global_params.config.kd_seg_path)
+    kd = kd_factory(global_params.config.kd_seg_path)
     raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
 
     # get the SSV IDs ordering given the PCA vector (ID1 points towards ID2)

@@ -206,7 +206,6 @@ def test_compression_and_decompression_for_mesh_dict():
 
 
 def test_compression_and_decompression_for_voxel_dict():
-
     try:
         # tests least entropy data
         start = time.time()

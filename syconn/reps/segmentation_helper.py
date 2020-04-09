@@ -83,13 +83,14 @@ def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
     """
     Helper function to save SegmentationObject voxels.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    bin_arr : np.array
-        Binary mask array, 0: background, 1: supervoxel locations.
-    offset : np.array
-    overwrite : bool
+    Args:
+        so: SegmentationObject
+        bin_arr: np.array
+            Binary mask array, 0: background, 1: supervoxel locations.
+        offset: np.array
+        overwrite: bool
+
+    Returns:
 
     """
     assert bin_arr.dtype == bool
@@ -113,15 +114,13 @@ def load_voxels(so: 'segmentation.SegmentationObject',
     Todo:
         * Currently the attribute ``so._bounding_box`` is always resetred.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    voxel_dc : VoxelStorage
+    Args:
+        so: SegmentationObject
+        voxel_dc: VoxelStorage
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         3D binary mask array, 0: background, 1: supervoxel locations.
+
     """
     if voxel_dc is None:
         voxel_dc = VoxelStorage(so.voxel_path, read_only=True,
@@ -173,14 +172,12 @@ def load_voxel_list(so: 'segmentation.SegmentationObject'):
     """
     Helper function to load voxels of a SegmentationObject.
 
-    Parameters
-    ----------
-    so : SegmentationObject
+    Args:
+        so: SegmentationObject
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         2D array of coordinates to all voxels in SegmentationObject.
+
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
@@ -201,13 +198,11 @@ def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
     """
     TODO: refactor, probably more efficient implementation possible.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    downsampling : Tuple[int]
+    Args:
+        so: SegmentationObject
+        downsampling: Tuple[int]
 
-    Returns
-    -------
+    Returns:
 
     """
     downsampling = np.array(downsampling)
@@ -245,15 +240,13 @@ def load_mesh(so: 'segmentation.SegmentationObject',
     Load mesh of SegmentationObject.
     TODO: Currently ignores potential color/label array
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    recompute : bool
+    Args:
+        so: SegmentationObject
+        recompute: bool
 
-    Returns
-    -------
-    Tuple[np.array]
+    Returns: Tuple[np.array]
         indices, vertices, normals; all flattened
+
     """
     if not recompute and so.mesh_exists:
         try:
@@ -294,15 +287,13 @@ def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    recompute : bool
+    Args:
+        so: SegmentationObject
+        recompute: bool
 
-    Returns
-    -------
-    Tuple[np.array]
+    Returns: Tuple[np.array]
         nodes, diameters, edges; all flattened
+
     """
     if not recompute and so.skeleton_exists:
         try:
@@ -367,14 +358,14 @@ def sv_view_exists(args):
         obj_ixs = ad.keys()
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
         view_dc = CompressedStorage(view_dc_p, disable_locking=True)
-        for ix in obj_ixs:
-            if ix not in view_dc:
-                missing_ids.append(ix)
+        missing_ids = np.setdiff1d(list(obj_ixs), list(view_dc.keys()))
     return missing_ids
 
 
 def find_missing_sv_views(sd, woglia, n_cores=20):
-    multi_params = chunkify(sd.so_dir_paths, 100)
+    folders = sd.so_dir_paths
+    np.random.shuffle(folders)
+    multi_params = chunkify(folders, 1000)
     params = [(ps, woglia) for ps in multi_params]
     res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
                                   debug=False)
@@ -407,14 +398,12 @@ def sv_attr_exists(args):
 def find_missing_sv_attributes(sd, attr_key, n_cores=20):
     """
 
-    Parameters
-    ----------
-    sd : SegmentationDataset
-    attr_key : str
-    n_cores : int
+    Args:
+        sd: SegmentationDataset
+        attr_key: str
+        n_cores: int
 
-    Returns
-    -------
+    Returns:
 
     """
     multi_params = chunkify(sd.so_dir_paths, 100)

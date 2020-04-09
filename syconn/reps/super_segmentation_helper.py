@@ -14,11 +14,13 @@ import networkx as nx
 from numba import jit
 import numpy as np
 import scipy
+import time
+import tqdm
 import scipy.ndimage
 from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
-    load_skeleton as load_skeleton_kzip
+    load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
 from collections.abc import Iterable
 try:
     from knossos_utils import mergelist_tools
@@ -30,7 +32,7 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-import time
+from ..handler.basics import kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from . import log_reps
 from .. import global_params
@@ -44,6 +46,9 @@ try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
+from skimage.morphology import watershed
+from skimage.feature import peak_local_max
+from scipy import ndimage
 
 
 def majority_vote(anno, prop, max_dist):
@@ -51,14 +56,15 @@ def majority_vote(anno, prop, max_dist):
     Smoothes (average using sliding window of 2 times max_dist and majority
     vote) property prediction in annotation, whereas for axoness somata are
     untouched.
+    Args:
+        anno:  SkeletonAnnotation
+        prop:str
+            which property to average
+        max_dist: int
+            maximum distance (in nm) for sliding window used in majority voting
 
-    Parameters
-    ----------
-    anno : SkeletonAnnotation
-    prop : str
-        which property to average
-    max_dist : int
-        maximum distance (in nm) for sliding window used in majority voting
+    Returns:
+
     """
     old_anno = copy.deepcopy(anno)
     nearest_nodes_list = nodes_in_pathlength(old_anno, max_dist)
@@ -77,19 +83,17 @@ def majority_vote(anno, prop, max_dist):
 
 
 def nodes_in_pathlength(anno, max_path_len):
-    """Find nodes reachable in max_path_len from source node, calculated for
+    """
+    Find nodes reachable in max_path_len from source node, calculated for
     every node in anno.
+    Args:
+        anno: AnnotationObject
+        max_path_len: float
+            Maximum distance from source node
 
-    Parameters
-    ----------
-    anno : AnnotationObject
-    max_path_len : float
-        Maximum distance from source node
+    Returns: list of lists containing reachable nodes in max_path_len where
+        outer list has length len(anno.getNodes())
 
-    Returns
-    -------
-    list of lists containing reachable nodes in max_path_len where
-    outer list has length len(anno.getNodes())
     """
     skel_graph = annotation_to_nx_graph(anno)
     list_reachable_nodes = []
@@ -120,18 +124,17 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     :func:`~sso_views_to_modelinput` is used to create the random view subsets.
     The final prediction is the majority class of all subset predictions.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    model : nn.Module
-    nb_views : int
-    overwrite : bool
-    use_syntype : bool
-        Use the type of the pre-synapses.
-    pred_key_appendix : str
+    Args:
+        sso: SuperSegmentationObject
+        model: nn.Module
+        nb_views: int
+        use_syntype: bool
+        overwrite:  bool
+             Use the type of the pre-synapses.
+        pred_key_appendix:  str
+        da_equals_tan:
 
-    Returns
-    -------
+    Returns:
 
     """
     sso.load_attr_dict()
@@ -184,9 +187,9 @@ def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
         nb_views: Number of views in each view subset.
         view_key: Key of the stored views.
 
-    Returns:
-        An array of random view subsets of all 2D projections contained in the
+    Returns: An array of random view subsets of all 2D projections contained in the
         cell reconstruction. Shape: (#subsets, 4 channels, nb_views, 128, 256)
+
     """
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
@@ -213,19 +216,16 @@ def radius_correction_found_vertices(sso: 'super_segmentation.SuperSegmentationO
     Algorithm finds two nearest vertices and takes the median of the
     distances for every node.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    plump_factor : int
-        multiplication factor for the radius
-    num_found_vertices : int
-        number of closest vertices queried for the node
+    Args:
+        sso: SuperSegmentationObject
+        plump_factor: int
+            multiplication factor for the radius
+        num_found_vertices: int
+            number of closest vertices queried for the node
 
-    Returns
-    -------
-    skeleton with diameters estimated
+    Returns: skeleton with diameters estimated
+
     """
-
     skel_node = sso.skeleton['nodes']
     diameters = sso.skeleton['diameters']
 
@@ -246,17 +246,15 @@ def get_sso_axoness_from_coord(sso, coord, k=5):
     Finds k nearest neighbor nodes within sso skeleton and returns majority
     class of dendrite (0), axon (1) or soma (2).
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    coord : np.array
-        unscaled coordinate
-    k : int
-        Number of nearest neighbors on which the majority vote is computed.
+    Args:
+        sso: SuperSegmentationObject
+        coord: np.array
+            unscaled coordinate
+        k: int
+            Number of nearest neighbors on which the majority vote is computed.
 
-    Returns
-    -------
-    int
+    Returns: int
+
     """
     coord = np.array(coord) * np.array(sso.scaling)
     sso.load_skeleton()
@@ -395,6 +393,15 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
 
 
 def create_new_skeleton(sv_id, sso):
+    """
+
+    Args:
+        sv_id:
+        sso:
+
+    Returns:
+
+    """
     so = SegmentationObject(sv_id, obj_type="sv",
                             version=sso.version_dict[
                                 "sv"],
@@ -408,6 +415,15 @@ def create_new_skeleton(sv_id, sso):
 
 
 def convert_coord(coord_list, scal):
+    """
+
+    Args:
+        coord_list:
+        scal:
+
+    Returns:
+
+    """
     return np.array([coord_list[1] + 1, coord_list[0] + 1,
                      coord_list[2] + 1]) * np.array(scal)
 
@@ -415,22 +431,20 @@ def convert_coord(coord_list, scal):
 def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                         preserve_annotations=True):
     """
-    Removes short stub branches, that are often added by annotators but
+     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    nx_g : network kx graph
-    scal : array of size 3
-        the scaled up factor
-    len_thres : int
-        threshold of the length below which it will be pruned
-    preserve_annotations : bool
+    Args:
+        sso: SuperSegmentationObject
+        nx_g: network kx graph
+        scal: array of size 3
+            the scaled up factor
+        len_thres: int
+            threshold of the length below which it will be pruned
+        preserve_annotations: bool
 
-    Returns
-    -------
-        pruned MST
+    Returns: pruned MST
+
     """
     if scal is None:
         scal = global_params.config['scaling']
@@ -493,22 +507,21 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
     """
     Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
 
-    Parameters
-    ----------
-    sso : Super Segmentation Object
-    dot_prod_thresh : float
-        the 'straightness' of the edges
-    skel_nx : networkx graph of the sso skel
-    max_dist_thresh : int
-        maximum distance desired between every node
-    min_dist_thresh : int
-        minimum distance desired between every node
+    Args:
+        sso: Super Segmentation Object
+        skel_nx:
+            networkx graph of the sso skel
+        dot_prod_thresh: float
+            the 'straightness' of the edges
+        max_dist_thresh: int
+            maximum distance desired between every node
+        min_dist_thresh: int
+            minimum distance desired between every node
 
-    Returns
-    -------
-    sso containing the sparsed skeleton
+    Returns: sso containing the sparsed skeleton
+
+
     """
-
     sso.load_skeleton()
     scal = sso.scaling
     change = 1
@@ -609,6 +622,15 @@ def skeleton_optimization(nx_g: nx.Graph,
 
 
 def from_netkx_to_sso(sso, skel_nx):
+    """
+
+    Args:
+        sso:
+        skel_nx:
+
+    Returns:
+
+    """
     sso.skeleton = {}
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in
                                       skel_nx.nodes()], dtype=np.uint32)
@@ -618,7 +640,7 @@ def from_netkx_to_sso(sso, skel_nx):
     assert nx.number_connected_components(skel_nx) == 1
 
     # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_nx.edges()).reshape(-1)
+    temp_edges = np.array(list(skel_nx.edges())).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 
@@ -634,6 +656,14 @@ def from_netkx_to_sso(sso, skel_nx):
 
 
 def from_sso_to_netkx(sso):
+    """
+
+    Args:
+        sso:
+
+    Returns:
+
+    """
     skel_nx = nx.Graph()
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
@@ -663,7 +693,14 @@ def from_sso_to_netkx(sso):
 
 
 def stitch_skel_nx(skel_nx):
+    """
 
+    Args:
+        skel_nx:
+
+    Returns:
+
+    """
     no_of_seg = nx.number_connected_components(skel_nx)
 
     skel_nx_nodes = [ii['position'] for ix, ii in skel_nx.node.items()]
@@ -702,17 +739,14 @@ def stitch_skel_nx(skel_nx):
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
     Creates the super-supervoxel skeleton based on existing supervoxel skeletons.
+    Args:
+        sso: Super Segmentation Object
+        pruning_thresh: int
+            threshold for pruning
+        sparsify:  bool
+           will sparsify if True otherwise not
 
-    Parameters
-    ----------
-    sso : Super Segmentation Object
-    pruning_thresh : int
-        threshold for pruning
-    sparsify : bool
-        will sparsify if True otherwise not
-
-    Returns
-    -------
+    Returns:
 
     """
     # Creating network kx graph from sso skel
@@ -854,7 +888,7 @@ def map_myelin2coords(coords: np.ndarray,
     Args:
         coords: Coordinates used to retrieve myelin predictions. In voxel coordinates (``mag=1``).
         cube_edge_avg: Cube size used for averaging myelin predictions for each location.
-            The laoded data cube will always have the extent given by `cube_edge_avg`, regardless
+            The loaded data cube will always have the extent given by `cube_edge_avg`, regardless
             of the value of `mag`.
         thresh_proba: Classification threshold in uint8 values (0..255).
         thresh_majority: Majority ratio for myelin (between 0..1), i.e.
@@ -868,13 +902,14 @@ def map_myelin2coords(coords: np.ndarray,
     myelin_kd_p = "/wholebrain/songbird/j0126/ssdscratch_data/knossosdatasets/myelin/"
     if not os.path.isdir(myelin_kd_p):
         raise ValueError(f'Could not find myelin KnossosDataset at {myelin_kd_p}.')
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(myelin_kd_p)
+    kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
+    cube_edge_avg = cube_edge_avg * mag
     for ix, c in enumerate(coords):
-        offset, size = c // mag - cube_edge_avg // 2, cube_edge_avg
-        myelin_proba = kd.load_raw(size=size*mag, offset=offset, mag=mag).swapaxes(0, 2)
+        # switch to mag reference system, afterwards rescale to mag 1 again
+        offset = c - cube_edge_avg // 2
+        myelin_proba = kd.load_raw(size=cube_edge_avg, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
         myelin_preds[ix] = myelin_ratio > thresh_majority
     return myelin_preds
@@ -912,24 +947,18 @@ def sparsify_skeleton_fast(skel_nx: nx.Graph, scal: Optional[np.ndarray] = None,
     """
     Reduces nodes in the skeleton.
 
-    Todo:
-        Refactor. See :func:`~skeleton_optimization`.
+    Args:
+        skel_nx: networkx graph of the sso skel
+        scal: np.array
+        dot_prod_thresh: float
+            the 'straightness' of the edges
+        max_dist_thresh: int
+            maximum distance desired between every node
+        min_dist_thresh: int
+            minimum distance desired between every node
 
-    Parameters
-    ----------
-    sso : Super Segmentation Object
-    dot_prod_thresh : float
-        the 'straightness' of the edges
-    skel_nx : networkx graph of the sso skel
-    max_dist_thresh : int
-        maximum distance desired between every node
-    min_dist_thresh : int
-        minimum distance desired between every node
-    scal : np.array
+    Returns: sso containing the sparsed skeleton
 
-    Returns
-    -------
-    sso containing the sparsed skeleton
     """
     start = time.time()
     n_nodes_start = skel_nx.number_of_nodes()
@@ -1019,17 +1048,16 @@ def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=1.5e3):
     """
     Stitches the SV skeletons using the supervoxel graph ``sso.rag``.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    sparsify : bool
-        Sparsify SV skeletons before stitching
-    max_edge_length: float
-        Maximum edge length in nanometers.
+    Args:
+        sso: SuperSegmentationObject
+        sparsify: bool
+            Sparsify SV skeletons before stitching
+        max_edge_length: float
+            Maximum edge length in nanometers.
 
-    Returns
-    -------
-    nx.Graph
+    Returns: nx.Graph
+
+
     """
     skel_nx = nx.Graph()
     sso.load_attr_dict()
@@ -1148,30 +1176,30 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True,
     This method will add edges between supervoxels which are connected in the
     supervoxel graph. To use multi-processing set ``ssv.nb_cpus`` > 1.
 
-    Parameters
-    ----------
-    sso : Super Segmentation Object
-    pruning_thresh : int
-        Threshold for pruning step (in NM). Removes branches below this path
-        length, see :func:`prune_stub_branches`.
-    sparsify : bool
-        will sparsify if True otherwise not
-    max_dist_thresh: float
-        Maximum distance in NM of two adjacent edges in order to prune the node
-        in-between. Initial sparsening via :func:`~skeleton_optimization`.
-    dot_prod_thresh: float
-        Dot product value of two adjacent edges. Above this value, the node
-        in-between will be pruned. Used in :func:`~sparsify_skeleton_fast` after
-        first sparsening and pruning.
-    max_dist_thresh_iter2: float
-        Maximum distance in NM of two adjacent edges in order to prune the node
-        in-between. Used in :func:`~sparsify_skeleton_fast` after
-        first sparsening and pruning.
+    Args:
+        sso: Super Segmentation Object
+        pruning_thresh: int
+            Threshold for pruning step (in NM). Removes branches below this path
+            length, see :func:`prune_stub_branches`.
+        sparsify: bool
+            will sparsify if True otherwise not
+        max_dist_thresh: float
+            Maximum distance in NM of two adjacent edges in order to prune the node
+            in-between. Initial sparsening via :func:`~skeleton_optimization`.
+        dot_prod_thresh: float
+            Dot product value of two adjacent edges. Above this value, the node
+            in-between will be pruned. Used in :func:`~sparsify_skeleton_fast` after
+            first sparsening and pruning.
+        max_dist_thresh_iter2: float
+            Maximum distance in NM of two adjacent edges in order to prune the node
+            in-between. Used in :func:`~sparsify_skeleton_fast` after
+            first sparsening and pruning.
 
-    Returns
-    -------
+
+    Returns:
         The cell reconstruction with sparse skeleton (as MST) and radius
-         estimates.
+        estimates.
+
     """
     # Creating network kx graph from sso skel
     # log_reps.debug('Creating skeleton of SSO {}'.format(sso.id))
@@ -1291,17 +1319,15 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
     """
 
-    Parameters
-    ----------
-    ssv
-    feature_context_nm : int
-        effective field for feature statistic 2*feature_context_nm
-    max_diameter
-    obj_types
-    downsample_to
+    Args:
+        ssv:
+        feature_context_nm: int
+            effective field for feature statistic 2*feature_context_nm
+        max_diameter:
+        obj_types:
+        downsample_to:
 
-    Returns
-    -------
+    Returns:
 
     """
     node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
@@ -1424,16 +1450,13 @@ def label_array_for_sso_skel(sso, comment_converter):
     to a label array of length (and same ordering) as sso.skeleton["nodes"].
     If comment was unspecified, it will get label -1
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    comment_converter : dict
-        Key: Comment, Value: integer label
-
-    Returns
-    -------
-    np.array
+    Args:
+        sso: SuperSegmentationObject
+        comment_converter: dict
+            Key: Comment, Value: integer label
+    Returns: np.array
         Label array of len(sso.skeleton["nodes"])
+
     """
     if sso.skeleton is None:
         sso.load_skeleton()
@@ -1483,20 +1506,17 @@ def cnn_axoness2skel(sso: 'super_segmentation.SuperSegmentationObject',
     By default, will create 'axoness_preds_cnn' attribute in SSV attribute dict
     and save new skeleton attributes with keys "axoness" and "axoness_probas".
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    pred_key_appendix : str
-    k : int
-    force_reload : bool
-        Reload SV predictions.
-    save_skel : bool
-        Save SSV skeleton with prediction attirbutes
-    use_cache : bool
-        Write intermediate SV predictions in SSV attribute dict to disk
-
-    Returns
-    -------
+    Args:
+        sso: SuperSegmentationObject
+        pred_key_appendix: str
+        k: int
+        force_reload: bool
+            Reload SV predictions.
+        save_skel: bool
+            Save SSV skeleton with prediction attirbutes
+        use_cache: bool
+            Write intermediate SV predictions in SSV attribute dict to disk
+    Returns:
 
     """
     if k != 1:
@@ -1628,16 +1648,14 @@ def average_node_axoness_views(sso: 'super_segmentation.SuperSegmentationObject'
 def majority_vote_compartments(sso, ax_pred_key='axoness'):
     """
     By default, will save new skeleton attribute with key
-     ax_pred_key + "_comp_maj". Will not call ``sso.save_skeleton()``.
+    ax_pred_key + "_comp_maj". Will not call ``sso.save_skeleton()``.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    ax_pred_key : str
-        Key for the axoness predictions stored in sso.skeleton
+    Args:
+        sso: SuperSegmentationObject
+        ax_pred_key: str
+            Key for the axoness predictions stored in sso.skeleton
 
-    Returns
-    -------
+    Returns:
 
     """
     g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
@@ -1745,16 +1763,14 @@ def predict_views_semseg(views, model, batch_size=10, verbose=False):
     N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
     (e.g. shape of cell, mitochondria, synaptic junctions and vesicle clouds).
 
-    Parameters
-    ----------
-    views : np.array
-        shape of [N_LOCS, N_CH, N_VIEWS, X, Y] as uint8 scaled from 0 to 255
-    model : pytorch model
-    batch_size : int
-    verbose : bool
+    Args:
+        views: np.array
+            shape of [N_LOCS, N_CH, N_VIEWS, X, Y] as uint8 scaled from 0 to 255
+        model: pytorch model
+        batch_size: int
+        verbose: bool
 
-    Returns
-    -------
+    Returns:
 
     """
     # if verbose:
@@ -1790,24 +1806,20 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
     Efficient helper function for chunked predictions,
     therefore requires pre-loaded views.
 
-    Parameters
-    ----------
-    model :
-    views : List[np.array]
-        N_SV each with np.array of shape [N_LOCS, N_CH, N_VIEWS, X, Y]
-         as uint8 scaled from 0 to 255
-    pred_key : str
-    nb_cpus : int
-        number CPUs for saving the SV views
-        svs : list[SegmentationObject]
-    svs : Optional[list[SegmentationObject]]
-    return_pred : Optional[bool]
-    verbose : bool
+    Args:
+        model:
+        views: List[np.array]
+            N_SV each with np.array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] as uint8 scaled from 0 to 255
+        pred_key: str
+        svs: Optional[list[SegmentationObject]]
+        return_pred: Optional[bool]
+        nb_cpus: int
+            number CPUs for saving the SV views
+        verbose: bool
 
-    Returns
-    -------
-    list[np.array]
+    Returns: list[np.array]
         if 'return_pred=True' it returns the label views of input
+
     """
     if not return_pred and (svs is None or pred_key is None):
         raise ValueError('SV objects and "pred_key" have to be given if'
@@ -1834,11 +1846,14 @@ def pred_sv_chunk_semseg(args):
     """
     Helper method to predict the 2D projects of supervoxels.
 
-    Parameters
-    ----------
-    args : Paths to the supervoxel storages which are processed, model,
-        supervoxel and prediction parameters.
+    Args:
+        args: Paths to the supervoxel storages which are processed, model,
+            supervoxel and prediction parameters.
+
+    Returns:
+
     """
+
     from syconn.proc.sd_proc import sos_dict_fact, init_sos
     from elektronn3.models.base import InferenceModel
     from syconn.backend.storage import CompressedStorage
@@ -2036,29 +2051,28 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     resulting predictions and probabilities are stored as 'celltype_cnn_e3'
     and 'celltype_cnn_e3_probas' in the attribute dictionary.
 
-    Parameters
-    ----------
-    sso :
-    model :
-    pred_key_appendix : str
-    ws : Tuple[int]
-        Window size in pixels [y, x]
-    nb_views_render : int
-        Number of views rendered at each rendering location.
-    nb_views_model : int
-        bootstrap sample size of view locations for model prediction
-    comp_window : float
-        Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
-    verbose : bool
-        Adds progress bars for view generation.
-    overwrite : bool
-    use_syntype : bool
-        Use type of presynaptic synapses.
+    Args:
+        sso:
+        model:
+        ws: Tuple[int]
+            Window size in pixels [y, x]
+        nb_views_render: int
+            Number of views rendered at each rendering location.
+        nb_views_model: int
+            bootstrap sample size of view locations for model prediction
+        comp_window: float
+            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        pred_key_appendix: str
+        verbose: bool
+            Adds progress bars for view generation.
+        overwrite: bool
+        use_syntype: bool
+            Use type of presynaptic synapses.
 
-    Returns
-    -------
+    Returns:
 
     """
+    # TODO: add new cell type labels
     sso.load_attr_dict()
     pred_key = "celltype_cnn_e3" + pred_key_appendix  # TODO: add appendix functionality also to `predict_celltype_sso`
     if not overwrite and pred_key in sso.attr_dict:
@@ -2106,9 +2120,9 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
-    for an alternative operating on file-system cachec views.
+    for an alternative which uses file-system cached views.
     By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph_ct`. Note that `latent_morph` is infered locally via `
+    and `latent_morph_ct`. Note that `latent_morph` is inferred locally via `
 
     Args:
         sso:
@@ -2132,16 +2146,17 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
-
-    # overwrite default rendering locations (used later on for the view generation)
-    sso._sample_locations = rendering_locs
     # this cache is only in-memory, and not file system cache
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
+        rendering_locs = generate_rendering_locs(verts,
+                                                 comp_window / 3)  # three views per comp window
+
+        # overwrite default rendering locations (used later on for the view generation)
+        sso._sample_locations = rendering_locs
         views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
     else:
@@ -2394,3 +2409,159 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
     else:
         ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
     return ratio
+
+
+def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObject',
+                                  ctx_vol=(200, 200, 100)):
+    """
+    Calculate the volume of spine heads based on a watershed procedure on the
+    cell segmentation. Connected components of spine head skeleton nodes
+    are used as starting point to collect mesh vertices with spine predictions
+    within at least ``2*ctx_vol``. The watershed seeds are extracted from local maxima of the
+    cell mask's distance transform. Each seed is assigned the majority label of its
+    k-nearest vertices.
+    Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+    .skeleton` with the key ``spinehead_vol``.
+
+    Notes:
+        * Requires a (loaded, ``sso.load_skeleton``) skeleton, i.e. ``sso.skeleton`` must be present.
+        * If the results have to be stored, call ``sso.save_skeleton()``
+
+    Args:
+        sso: Cell object.
+        ctx_vol: Additional volume above and below the bounding box of the extracted
+            connected component spine head skeleton nodes, i.e. the inspected volume is
+            at least ``2*ctx_vol``.
+    """
+    # use bigger skel context to get the correspondence to the voxel as accurate as possible
+    ctx_vol = np.array(ctx_vol)
+    scaling = sso.scaling
+    if 'spiness' not in sso.skeleton:
+        log_reps.warn(f'"spiness" not available in skeleton of SSO {sso.id}. '
+                      f'Skipping.')
+        sso.skeleton['spinehead_vol'] = np.zeros((len(sso.skeleton['nodes']), )).astype(np.float32)
+        return
+    ssv_svids = set(sso.sv_ids)
+    sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness']).astype(np.float32)
+    ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
+    if len(ssv_syncoords) == 0:
+        return
+    verts = sso.mesh[1].reshape(-1, 3) / scaling
+    sp_semseg = sso.label_dict('vertex')['spiness']
+    ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
+    for l in ignore_labels:
+        verts = verts[sp_semseg != l]
+        sp_semseg = sp_semseg[sp_semseg != l]
+    curr_sp = sso.semseg_for_coords(ssv_syncoords, 'spiness',
+                                    **global_params.config['spines']['semseg2coords_spines'])
+    pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                        'view_properties_semsegax']['semseg_key'],
+                                    global_params.config['compartments'][
+                                        'dist_axoness_averaging'])
+    curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
+    ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
+    if len(ssv_syncoords) == 0:  # node spine head synapses
+        return
+    kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
+    _, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
+    # iterate over connected skeleton nodes labeled as spine head
+    for c, node_ix in zip(ssv_syncoords, close_node_ids):
+        # get closest skeleton node
+        bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
+        offset = bb[0] - ctx_vol
+        size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
+        # get cell segmentation mask
+        kd = kd_factory(global_params.config.kd_seg_path)
+        seg = kd.load_seg(offset=offset, size=size, mag=1).swapaxes(2, 0)
+        orig_sh = seg.shape
+        seg = seg.flatten()
+        for ii, el in enumerate(seg):
+            if el not in ssv_svids:
+                seg[ii] = 0
+            else:
+                seg[ii] = 1
+        seg = seg.reshape(orig_sh)
+        seg = ndimage.binary_fill_holes(seg)
+        # set watershed seeds using vertices
+        vert_ixs_bb = in_bounding_box(verts, np.array([offset + size / 2, size]))
+        vert_ixs_bb = np.array(vert_ixs_bb, dtype=np.bool)
+        verts_bb = verts[vert_ixs_bb]
+        semseg_bb = sp_semseg[vert_ixs_bb]
+        # relabelled spine neck as 9, actually not needed here
+        semseg_bb[semseg_bb == 0] = 9
+
+        distance = ndimage.distance_transform_edt(seg)
+        local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3, 3)),
+                                    labels=seg).astype(np.uint)
+        maxima = np.transpose(np.nonzero(local_maxi))
+        # assign labels from nearby vertices
+        maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
+            k=global_params.config['spines']['semseg2coords_spines']['k'],
+            return_color=False, nb_cpus=sso.nb_cpus)
+        local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
+
+        labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
+        labels[labels != 1] = 0
+        labels, nb_obj = ndimage.label(labels)
+        c = c - offset
+        max_id = 1
+        if nb_obj > 1:
+            # query many voxels or use NN approach?
+            ls = labels[(c[0]-10):(c[0]+11), (c[1]-10):(c[1]+11),
+                 (c[2]-10):(c[2]+11)]
+            ids, cnts = np.unique(ls, return_counts=True)
+            cnts = cnts[ids != 0]
+            ids = ids[ids != 0]
+            if len(ids) == 0:
+                coords = []
+                ids = []
+                for ii in range(1, nb_obj + 1):
+                    curr_coords = np.transpose(np.nonzero(labels == ii))
+                    coords.append(curr_coords)
+                    ids.extend(len(curr_coords) * [ii])
+                coords = np.concatenate(coords) + offset
+                nn_kdt = spatial.cKDTree(coords * sso.scaling)
+                _, nn_id = nn_kdt.query([(c + offset) * sso.scaling])
+                max_id = ids[nn_id[0]]
+                log_reps.warn(f'SSO {sso.id} contained erroneous volume'
+                              f' to spine head assignment. Found no spine head '
+                              f'cluster within 10x10x10 voxel subcube at '
+                              f'{c + offset}, expected 1. Fall-back is using '
+                              f'the volume of the closest spine head cluster '
+                              f'via nearest-neighbor.')
+            else:
+                max_id = ids[np.argmax(cnts)]
+
+        n_voxels_spinehead = np.sum(labels == max_id)
+        vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
+        sso.skeleton['spinehead_vol'][node_ix] = vol_sh
+
+
+def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):
+    """
+    Store SV graph in KNOSSOS compatible kzip.
+
+    Args:
+        dest_path: Path to k.zip.
+        sso: Cell object.
+    """
+    sv_edges = sso.load_edgelist()
+    anno = SkeletonAnnotation()
+    anno.scaling = sso.scaling
+    sd = sso.get_seg_dataset('sv')
+    coord_dc = dict()
+    for ii in range(len(sd.ids)):
+        coord_dc[sd.ids[ii]] = sd.rep_coords[ii]
+    for sv1, sv2 in sv_edges:
+        sv1_coord = coord_dc[sv1.id] * sso.scaling
+        sv2_coord = coord_dc[sv2.id] * sso.scaling
+        n1 = SkeletonNode().from_scratch(anno, sv1_coord[0], sv1_coord[1], sv1_coord[2])
+        n1.data['svid'] = sv1.id
+        n2 = SkeletonNode().from_scratch(anno, sv2_coord[0], sv2_coord[1], sv2_coord[2])
+        n2.data['svid'] = sv2.id
+        anno.addNode(n1)
+        anno.addNode(n2)
+        anno.addEdge(n1, n2)
+    dummy_skel = Skeleton()
+    dummy_skel.add_annotation(anno)
+    dummy_skel.to_kzip(dest_path)

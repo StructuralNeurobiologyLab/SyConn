@@ -59,9 +59,9 @@ for p in so_chunk_paths:
                 coords = np.array([so.rep_coord, ], dtype=np.float32)
             else:
                 if global_params.config.use_new_renderings_locs:
-                    coords = generate_rendering_locs(verts, 2000).astype(np.float32)
+                    coords = generate_rendering_locs(verts, 2000).astype(np.float32, copy=False)
                 else:
-                    coords = surface_samples(verts).astype(np.float32)
+                    coords = surface_samples(verts).astype(np.float32, copy=False)
             loc_dc[ix] = coords
         except Exception as e:
             print('ERROR during sample location generation of SV {}: {}'.format(so.id, str(e)))

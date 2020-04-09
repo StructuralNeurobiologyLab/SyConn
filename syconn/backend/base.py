@@ -214,7 +214,7 @@ class FSBase(StorageBase):
         """
         if dest is None:
             dest = self._path
-        if self._path is None:  # support virtual / temporary SSO objects
+        if dest is None:  # support virtual / temporary SSO objects
             log_extraction.warning('"push" called but Storage object was initialized '
                                    'with "None". Content will not be written.')
             return

@@ -34,7 +34,7 @@ log_level: 10  # INFO: 20, DEBUG: 10
 # will be stored at wd + '/logs/'.
 disable_file_logging: True
 
-# File locking - True is untested yet.
+# File locking - deprecated.
 disable_locking: False
 
 # Data paths
@@ -62,6 +62,16 @@ versions:
 
 # Cell object properties
 cell_objects:
+  # threshold applied during object extraction
+  min_obj_vx:
+    mi: 100
+    sj: 100
+    vc: 100
+    sv: 1  # all cell supervoxels are extracted
+    cs: 10  # contact sites tend to be small
+    syn: 10  # these are overlayed with contact sites and therefore tend to be small
+    syn_ssv: 100 # minimum number of voxel for synapses in SSVs
+
   lower_mapping_ratios:
     mi: 0.5
     sj: 0.1
@@ -72,6 +82,7 @@ cell_objects:
     sj: 0.9
     vc: 1.
 
+  # size threshold (in voxels) applied when mapping them to cells
   sizethresholds:
     mi: 2786
     sj: 498
@@ -81,6 +92,14 @@ cell_objects:
     mi: 0.428571429
     sj: 0.19047619
     vc: 0.285714286
+
+  # Hook for morphological operations from scipy.ndimage applied during object extraction.
+  # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
+  extract_morph_op:
+    mi: []
+    sj: []
+    vc: []
+    sv: []  # these are the cell supervoxels
 
   # bounding box criteria for mapping mitochondria objects
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
@@ -99,11 +118,14 @@ cell_objects:
   # organelles to syn_ssv
   max_vx_dist_nm: 2000
   max_rep_coord_dist_nm: 4000
-  thresh_synssv_proba: 0.5  # RFC probability used for classifying whether syn or not
-  thresh_synssv_size: 10  # minimum number of voxel for synapses in SSVs, TODO: tweak, increase
-  # above will be assigned synaptic sign (-1, inhibitory) and <= will be
+  # RFC probability used for classifying whether syn or not
+  thresh_synssv_proba: 0.5
+  # > sym_thresh will be assigned synaptic sign -1 (inhibitory) and <= will be
   # (1, excitatory)
   sym_thresh: 0.225
+  # labels are None by default
+  asym_label:
+  sym_label:
 
 meshes:
   allow_mesh_gen_cells:
@@ -128,13 +150,13 @@ meshes:
   mesh_min_obj_vx: 100  # adapt to size threshold
 
   meshing_props:
-    normals: True
+    normals: False  # True
     simplification_factor: 300
-    max_simplification_error: 40
+    max_simplification_error: 40  # in nm
 
 skeleton:
   allow_skel_gen: True
-  feature_context_rfc: # in NM
+  feature_context_rfc: # in nm
     axoness: 8000
     spiness: 1000
 

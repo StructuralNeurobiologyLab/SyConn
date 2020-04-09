@@ -20,9 +20,9 @@ __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 class Config(object):
     """
-    Basic config object based on yaml. If file ``config.yml`` does not exist
-    at `working_dir` :py:attr:`~initialized` will be False, but no error is
-    raised.
+    Basic config object based on yaml. If no ``config.yml`` file exists
+    in `working_dir` :py:attr:`~initialized` will be False without raising an
+    error.
     """
     def __init__(self, working_dir):
         self._config = None
@@ -116,6 +116,10 @@ class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
     interface to all working directory dependent parameters.
+
+    Notes:
+        * Due to sync. checks it is favorable to not use :func:`~__getitem__`
+          inside loops.
 
     Todo:
         * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
@@ -238,7 +242,7 @@ class DynConfig(Config):
                            colored("'{}'".format(new_wd), 'red'))
         if self.initialized is False:
             from syconn import handler
-            default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+            default_conf_p = f'{os.path.dirname(handler.__file__)}/config.yml'
             self.log_main.warning(f'Initialized working directory without '
                                   f'existing config file at'
                                   f' {self.path_config}. Using default '
@@ -333,7 +337,7 @@ class DynConfig(Config):
         return path_dict
 
     @property
-    def kd_organelle_seg_paths(self)-> Dict[str, str]:
+    def kd_organelle_seg_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle segmentations.
 
@@ -364,8 +368,8 @@ class DynConfig(Config):
         """
         self._check_actuality()
         p = self.entries['paths']['init_rag']
-        if len(p) == 0:
-            p = self.working_dir + "rag.bz2"
+        if p is None or len(p) == 0:
+            p = self.working_dir + "/rag.bz2"
         return p
 
     @property
@@ -646,6 +650,20 @@ class DynConfig(Config):
     def ngpu_total(self) -> int:
         return self['nnodes_total'] * self['ngpus_per_node']
 
+    @property
+    def asym_label(self) -> Optional[int]:
+        try:
+            return self.entries['cell_objects']['asym_label']
+        except KeyError:
+            return None
+
+    @property
+    def sym_label(self) -> Optional[int]:
+        try:
+            return self.entries['cell_objects']['sym_label']
+        except KeyError:
+            return None
+
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
@@ -680,220 +698,241 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     working directory.
 
     Examples:
-        Example content of an initialized `config.yml` file::
+        # General properties of the data set
+        scaling: [1, 1, 1]
 
-            # General properties of the data set
-            scaling: [1, 1, 1]
+        # File system, 'FS' is currently the only supported option
+        backend: "FS"
 
-            # File system, 'FS' is currently the only supported option
-            backend: "FS"
+        # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
+        pyopengl_platform: 'egl'
 
-            # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
-            pyopengl_platform: 'egl'
+        existing_cell_organelles: ['mi', 'sj', 'vc']
+        syntype_avail:
 
-            existing_cell_organelles: ['mi', 'sj', 'vc']
-            syntype_avail:
+        # Compute backend: 'QSUB', 'SLURM', None
+        batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 
-            # Compute backend: 'QSUB', 'SLURM', None
-            batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
+        # the here defined parameters
+        batch_pe: 'default'
+        batch_queue: 'all.q'
 
-            # the here defined parameters
-            batch_pe: 'default'
-            batch_queue: 'all.q'
+        mem_per_node: 128000  # in MB
+        ncores_per_node: 16
+        ngpus_per_node: 1
+        nnodes_total: 1
 
-            mem_per_node: 249500  # in MB
-            ncores_per_node: 20
-            ngpus_per_node: 2
-            nnodes_total: 17
+        # --------- LOGGING
+        # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
+        # Logs of executed scripts (syconn/scripts) will be stored at the
+        # working directory + '/logs/' nonetheless.
+        default_log_dir:
+        log_level: 10  # INFO: 20, DEBUG: 10
+        # file logging for individual modules, and per job. Only use in case of
+        # debugging with single core processing. Logs for scripts are located in 'SyConn/scripts/'
+        # will be stored at wd + '/logs/'.
+        disable_file_logging: True
 
-            # --------- LOGGING
-            # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
-            # Logs of executed scripts (syconn/scripts) will be stored at the
-            # working directory + '/logs/' nonetheless.
-            default_log_dir:
-            log_level: 10  # INFO: 20, DEBUG: 10
-            # file logging for individual modules, and per job. Only use in case of
-            # debugging with single core processing. Logs for scripts are
-            # located in 'SyConn/scripts/' will be stored at wd + '/logs/'.
-            disable_file_logging: True
+        # File locking - deprecated.
+        disable_locking: False
 
-            # File locking - True is untested yet.
-            disable_locking: False
+        # Data paths
+        paths:
+          kd_seg:
+          kd_sym:
+          kd_asym:
+          kd_sj:
+          kd_vc:
+          kd_mi:
+          init_rag:
+          use_new_subfold:
 
-            # Data paths
-            paths:
-              kd_seg:
-              kd_sym:
-              kd_asym:
-              kd_sj:
-              kd_vc:
-              kd_mi:
-              init_rag:
-              use_new_subfold:
+        # (Super-)SegmentationDataset versions
+        versions:
+          sv: 0
+          vc: 0
+          sj: 0
+          syn: 0
+          syn_ssv: 0
+          mi: 0
+          ssv: 0
+          ax_gt: 0
+          cs: 0
 
-            # (Super-)SegmentationDataset versions
-            versions:
-              sv: 0
-              vc: 0
-              sj: 0
-              syn: 0
-              syn_ssv: 0
-              mi: 0
-              ssv: 0
-              ax_gt: 0
-              cs: 0
+        # Cell object properties
+        cell_objects:
+          # threshold applied during object extraction
+          min_obj_vx:
+            mi: 100
+            sj: 100
+            vc: 100
+            sv: 1  # all cell supervoxels are extracted
+            cs: 10  # contact sites tend to be small
+            syn: 10  # these are overlayed with contact sites and therefore tend to be small
+            syn_ssv: 100 # minimum number of voxel for synapses in SSVs
 
-            # Cell object properties
-            cell_objects:
-              lower_mapping_ratios:
-                mi: 0.5
-                sj: 0.1
-                vc: 0.5
+          lower_mapping_ratios:
+            mi: 0.5
+            sj: 0.1
+            vc: 0.5
 
-              upper_mapping_ratios:
-                mi: 1.
-                sj: 0.9
-                vc: 1.
+          upper_mapping_ratios:
+            mi: 1.
+            sj: 0.9
+            vc: 1.
 
-              sizethresholds:
-                mi: 2786
-                sj: 498
-                vc: 1584
+          # size threshold (in voxels) applied when mapping them to cells
+          sizethresholds:
+            mi: 2786
+            sj: 498
+            vc: 1584
 
-              probathresholds:
-                mi: 0.428571429
-                sj: 0.19047619
-                vc: 0.285714286
+          probathresholds:
+            mi: 0.428571429
+            sj: 0.19047619
+            vc: 0.285714286
 
-              # bounding box criteria for mapping mitochondria objects
-              thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
+          # Hook for morphological operations from scipy.ndimage applied during object extraction.
+          # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
+          extract_morph_op:
+            mi: []
+            sj: []
+            vc: []
+            sv: []  # these are the cell supervoxels
 
-              # --------- CONTACT SITE AND SYNAPSE PARAMETERS
-              # Synaptic junction bounding box diagonal threshold in nm; objects above will
-              # not be used during `syn_gen_via_cset`
-              thresh_sj_bbd_syngen: 25000  # bounding box diagonal in NM
-              # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
-              # into 'syn_ssv'
-              cs_gap_nm: 250
-              cs_filtersize: [13, 13, 7]
-              cs_nclosings: 13
-              # Parameters of agglomerated synapses 'syn_ssv'
-              # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
-              # organelles to syn_ssv
-              max_vx_dist_nm: 2000
-              max_rep_coord_dist_nm: 4000
-              thresh_synssv_proba: 0.5  # RFC probability used for classifying whether syn or not
-              thresh_synssv_size: 10  # minimum number of voxel for synapses in SSVs,
-              # above will be assigned synaptic sign (-1, inhibitory) and <= will be
-              # (1, excitatory)
-              sym_thresh: 0.225
+          # bounding box criteria for mapping mitochondria objects
+          thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
 
-            meshes:
-              allow_mesh_gen_cells:
-              use_new_meshing:
+          # --------- CONTACT SITE AND SYNAPSE PARAMETERS
+          # Synaptic junction bounding box diagonal threshold in nm; objects above will
+          # not be used during `syn_gen_via_cset`
+          thresh_sj_bbd_syngen: 25000  # bounding box diagonal in NM
+          # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
+          # into 'syn_ssv'
+          cs_gap_nm: 250
+          cs_filtersize: [13, 13, 7]
+          cs_nclosings: 7
+          # Parameters of agglomerated synapses 'syn_ssv'
+          # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
+          # organelles to syn_ssv
+          max_vx_dist_nm: 2000
+          max_rep_coord_dist_nm: 4000
+          # RFC probability used for classifying whether syn or not
+          thresh_synssv_proba: 0.5
+          # > sym_thresh will be assigned synaptic sign -1 (inhibitory) and <= will be
+          # (1, excitatory)
+          sym_thresh: 0.225
+          # labels are None by default
+          asym_label:
+          sym_label:
 
-              downsampling:
-                sv: [4, 4, 2]
-                sj: [2, 2, 1]
-                vc: [4, 4, 2]
-                mi: [8, 8, 4]
-                cs: [2, 2, 1]
-                syn_ssv: [2, 2, 1]
+        meshes:
+          allow_mesh_gen_cells:
+          use_new_meshing:
 
-              closings:
-                sv: 0
-                s: 0
-                vc: 0
-                mi: 0
-                cs: 0
-                syn_ssv: 0
+          downsampling:
+            sv: [4, 4, 2]
+            sj: [2, 2, 1]
+            vc: [4, 4, 2]
+            mi: [8, 8, 4]
+            cs: [2, 2, 1]
+            syn_ssv: [2, 2, 1]
 
-              mesh_min_obj_vx: 100  # adapt to size threshold
+          closings:
+            sv: 0
+            s: 0
+            vc: 0
+            mi: 0
+            cs: 0
+            syn_ssv: 0
 
-              meshing_props:
-                normals: True
-                simplification_factor: 300
-                max_simplification_error: 40
+          mesh_min_obj_vx: 100  # adapt to size threshold
 
-            skeleton:
-              allow_skel_gen: True
-              feature_context_rfc: # in NM
-                axoness: 8000
-                spiness: 1000
+          meshing_props:
+            normals: False  # True
+            simplification_factor: 300
+            max_simplification_error: 40  # in nm
 
-            views:
-              use_large_fov_views_ct:
-              use_new_renderings_locs:
-              nb_views: 2  # used for default view rendering (glia separation, spine detection)
+        skeleton:
+          allow_skel_gen: True
+          feature_context_rfc: # in nm
+            axoness: 8000
+            spiness: 1000
 
-            glia:
-              prior_glia_removal: True
-              # min. connected component size of glia nodes/SV after thresholding glia proba
-              min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
+        views:
+          use_large_fov_views_ct:
+          use_new_renderings_locs:
+          nb_views: 2  # used for default view rendering (glia separation, spine detection)
 
-              # Threshold for glia classification
-              glia_thresh: 0.161489
-              # number of sv used during local rendering. The total number of SV used are
-              # subcc_size_big_ssv + 2*(subcc_chunk_size_big_ssv-1)
-              subcc_size_big_ssv: 35
-              rendering_max_nb_sv: 5000
-              # number of SV for which views are rendered in one pass
-              subcc_chunk_size_big_ssv: 9
+        glia:
+          prior_glia_removal: True
+          # min. connected component size of glia nodes/SV after thresholding glia proba
+          min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
 
-            # --------- SPINE PARAMETERS
-            spines:
-              min_spine_cc_size: 10
-              min_edge_dist_spine_graph: 110
-              gt_path_spineseg:
+          # Threshold for glia classification
+          glia_thresh: 0.161489
+          # number of sv used during local rendering. The total number of SV used are
+          # subcc_size_big_ssv + 2*(subcc_chunk_size_big_ssv-1)
+          subcc_size_big_ssv: 35
+          rendering_max_nb_sv: 5000
+          # number of SV for which views are rendered in one pass
+          subcc_chunk_size_big_ssv: 9
 
-              # mapping parameters of the semantic segmentation prediction to the cell mesh
-              # Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
-              # via nearest neighbors.
-              semseg2mesh_spines:
-                semseg_key: "spiness"
-                force_recompute: True
-                k: 0
+        # --------- SPINE PARAMETERS
+        spines:
+          min_spine_cc_size: 10
+          min_edge_dist_spine_graph: 110
+          gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
 
-              # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
-              # and 5 (unpredicted), use labels of the k-nearest vertices
-              semseg2coords_spines:
-                k: 50
-                ds_vertices: 1
-                ignore_labels: [4, 5]
+          # mapping parameters of the semantic segmentation prediction to the cell mesh
+          # Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
+          # via nearest neighbors.
+          semseg2mesh_spines:
+            semseg_key: "spiness"
+            force_recompute: True
+            k: 0
 
-
-            compartments:
-              dist_axoness_averaging: 10000  # also used for myelin averaging
-              gt_path_axonseg:
-
-              # `k=0` will not map predictions to unpredicted vertices -> faster
-              # `k` is the parameter used in `semseg2mesh`
-              view_properties_semsegax:
-                verbose: False
-                ws: [1024, 512]
-                nb_views: 3
-                comp_window: 40960  # in NM
-                semseg_key: 'axoness'
-                k: 0
-              # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
-              # and 6 (unpredicted), use labels of the k-nearest vertices
-              map_properties_semsegax:
-                k: 50
-                ds_vertices: 1
-                ignore_labels: [5, 6]
+          # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
+          # and 5 (unpredicted), use labels of the k-nearest vertices
+          semseg2coords_spines:
+            k: 50
+            ds_vertices: 1
+            ignore_labels: [4, 5]
 
 
-            celltype:
-              view_properties_large:
-                verbose: False
-                ws: [512, 512]
-                nb_views_render: 6
-                comp_window: 40960
-                nb_views_model: 4
+        compartments:
+          dist_axoness_averaging: 10000  # also used for myelin averaging
+          gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'
 
-            # --------- MORPHOLOGY EMBEDDING
-            tcmn:
-              ndim_embedding: 10
+          # `k=0` will not map predictions to unpredicted vertices -> faster
+          # `k` is the parameter used in `semseg2mesh`
+          view_properties_semsegax:
+            verbose: False
+            ws: [1024, 512]
+            nb_views: 3
+            comp_window: 40960  # in NM
+            semseg_key: 'axoness'
+            k: 0
+          # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
+          # and 6 (unpredicted), use labels of the k-nearest vertices
+          map_properties_semsegax:
+            k: 50
+            ds_vertices: 1
+            ignore_labels: [5, 6]
+
+
+        celltype:
+          view_properties_large:
+            verbose: False
+            ws: [512, 512]
+            nb_views_render: 6
+            comp_window: 40960
+            nb_views_model: 4
+
+        # --------- MORPHOLOGY EMBEDDING
+        tcmn:
+          ndim_embedding: 10
+
 
     Args:
         working_dir: Folder of the working directory.
@@ -962,13 +1001,23 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal
     if key_value_pairs is not None:
-        for k, v in key_value_pairs:
-            entries[k] = v
+        _update_key_value_pair_rec(key_value_pairs, entries)
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
-        raise ValueError(f'Attempting to overwrite existing config file at '
+        raise ValueError(f'Overwrite attempt of existing config file at '
                          f'{default_conf.path_config}.')
     default_conf.write_config(working_dir)
+
+
+def _update_key_value_pair_rec(key_value_pairs, entries):
+    for k, v in key_value_pairs:
+        if k not in entries:
+            raise KeyError(f'Key in provided key-value {k}:{v} pair '
+                           f'does not exist in default config.')
+        if type(v) is dict:
+            _update_key_value_pair_rec(list(v.items()), entries[k])
+        else:
+            entries[k] = v
 
 
 def initialize_logging(log_name: str, log_dir: Optional[str] = None,

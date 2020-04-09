@@ -4,17 +4,21 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+# import here, otherwise it might fail if it is imported after importing torch
+# see https://github.com/pytorch/pytorch/issues/19739
+import open3d as o3d
 from ..handler.config import initialize_logging
 from ..reps import log_reps
 from ..mp import batchjob_utils as qu
 from ..handler.basics import chunkify
 
-from ..handler import log_handler, log_main
+from ..handler import log_handler, log_main, basics
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
 from .. import global_params
 
+import networkx as nx
 import re
 import numpy as np
 import os
@@ -22,13 +26,17 @@ import sys
 import time
 import tqdm
 from logging import Logger
+import functools
+from morphx.classes.hybridcloud import HybridCloud
 import shutil
-from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple
+from sklearn.preprocessing import label_binarize
+from morphx.processing.hybrids import extract_subset
+from morphx.processing.objects import bfs_vertices
+from typing import Iterable, Union, Optional, Any, Tuple, Callable
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
 from knossos_utils.knossosdataset import KnossosDataset
-from sklearn.metrics import log_loss
 from scipy.stats import entropy
 from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
@@ -42,24 +50,21 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
     Loads ground truth from zip file, generated with Knossos. Corresponding
     dataset config file is locatet at kd_p.
 
-    Parameters
-    ----------
-    zip_fname : str
-    kd_p : str or List[str]
-    raw_data_offset : int or np.array
-        number of voxels used for additional raw offset, i.e. the offset for the
-        raw data will be label_offset - raw_data_offset, while the raw data
-        volume will be label_volume + 2*raw_data_offset. It will
-        use 'kd.scaling' to account for dataset anisotropy if scalar or a
-        list of length 3 hast to be provided for a custom x, y, z offset.
-    verbose : bool
-    mag : int
-        Data mag. level.
-
-    Returns
-    -------
-    np.array, np.array
+    Args:
+        zip_fname: str
+        kd_p: str or List[str]
+        raw_data_offset: int or np.array
+            number of voxels used for additional raw offset, i.e. the offset for the
+            raw data will be label_offset - raw_data_offset, while the raw data
+            volume will be label_volume + 2*raw_data_offset. It will
+            use 'kd.scaling' to account for dataset anisotropy if scalar or a
+            list of length 3 hast to be provided for a custom x, y, z offset.
+        verbose: bool
+        mag: int
+            Data mag. level.
+    Returns: np.array, np.array
         raw data (float32) (multiplied with 1/255.), label data (uint16)
+
     """
     if type(kd_p) is str or type(kd_p) is bytes:
         kd_p = [kd_p]
@@ -68,8 +73,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
     raw_data = []
     label_data = []
     for curr_p in kd_p:
-        kd = KnossosDataset()
-        kd.initialize_from_knossos_path(curr_p)
+        kd = basics.kd_factory(curr_p)
         scaling = np.array(kd.scale, dtype=np.int)
         if np.isscalar(raw_data_offset):
             raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
@@ -82,10 +86,10 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
             raw_data_offset = np.array(raw_data_offset)
         raw = kd.load_raw(size=(size // mag + 2 * raw_data_offset) * mag,
                           offset=(offset // mag - raw_data_offset) * mag,
-                          nb_threads=2, mag=mag).swapaxes(0, 2)
+                          mag=mag).swapaxes(0, 2)
         raw_data.append(raw[None, ])
-        label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
-                                       verbose=False, show_progress=False)
+        # TODO: use load_kzip_seg
+        label = kd._load_kzip_seg(zip_fname, offset, size, mag=mag, apply_mergelist=False).swapaxes(0, 2)
         label = label
         label_data.append(label[None, ])
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
@@ -104,22 +108,24 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
     """
     Predicts data contained in k.zip file (defined by bounding box in knossos)
 
-    Parameters
-    ----------
-    kzip_p : str
-        path to kzip containing the raw data cube information
-    m_path : str
-        path to predictive model
-    kd_path : str
-        path to knossos dataset
-    clf_thresh : float
-        classification threshold
-    overwrite : bool
-    mfp_active : False
-    imposed_patch_size : tuple
-    dest_path : str
-        path to destination folder, if None folder of k.zip is used.
-    gpu_ix : int
+    Args:
+        kzip_p: str
+            path to kzip containing the raw data cube information
+        m_path: str
+            path to predictive model
+        kd_path: str
+            path to knossos dataset
+        clf_thresh: float
+            classification threshold
+        mfp_active: False
+        dest_path: str
+            path to destination folder, if None folder of k.zip is used.
+        overwrite: bool
+        gpu_ix: int
+        imposed_patch_size: tuple
+
+    Returns:
+
     """
     cube_name = os.path.splitext(os.path.basename(kzip_p))[0]
     if dest_path is None:
@@ -158,25 +164,27 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     """
     Predicts data from h5 file. Assumes raw data is already float32.
 
-    Parameters
-    ----------
-    h5_path : str
-        path to h5 containing the raw data
-    m_path : str
-        path to predictive model
-    clf_thresh : float
-        classification threshold, if None, no thresholding
-    mfp_active : False
-    imposed_patch_size : tuple
-    gpu_ix : int
-    hdf5_data_key: str
-        if None, it uses the first entry in the list returned by
-        'load_from_h5py'
-    data_is_zxy : bool
-        if False, it will assumes data is [X, Y, Z]
-    as_uint8: bool
-    dest_p : str
-    dest_hdf5_data_key : str
+    Args:
+        h5_path: str
+            path to h5 containing the raw data
+        m_path: str
+            path to predictive model
+        clf_thresh: float
+            classification threshold, if None, no thresholding
+        mfp_active: False
+        gpu_ix: int
+        imposed_patch_size: tuple
+        hdf5_data_key: str
+            if None, it uses the first entry in the list returned by
+            'load_from_h5py'
+        data_is_zxy: bool
+            if False, it will assumes data is [X, Y, Z]
+        dest_p: str
+        dest_hdf5_data_key: str
+        as_uint8: bool
+
+    Returns:
+
     """
     if hdf5_data_key:
         raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key])[0]
@@ -217,21 +225,18 @@ def overlaycubes2kzip(dest_p: str, vol: np.ndarray, offset: np.ndarray,
     """
     Writes segmentation volume to kzip.
 
-    Parameters
-    ----------
-    dest_p : str
-        path to k.zip
-    vol : np.array
-        Segmentation or prediction (unsigned integer, XYZ).
-    offset : np.array
-    kd_path : str
+    Args:
+        dest_p: str
+            path to k.zip
+        vol: np.array
+            Segmentation or prediction (unsigned integer, XYZ).
+        offset: np.array
+        kd_path: str
 
-    Returns
-    -------
-    np.array [Z, X, Y]
+    Returns: np.array [Z, X, Y]
+
     """
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
+    kd = basics.kd_factory(kd_path)
     kd.from_matrix_to_cubes(offset=offset, kzip_path=dest_p,
                             mags=[1], data=vol)
 
@@ -240,13 +245,11 @@ def xyz2zxy(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., X, Y, Z]
+    Args:
+        vol: np.array [M, .., X, Y, Z]
 
-    Returns
-    -------
-    np.array [M, .., Z, X, Y]
+    Returns: np.array [M, .., Z, X, Y]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     # adapt data to ELEKTRONN conventions (speed-up)
@@ -259,13 +262,11 @@ def zxy2xyz(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., Z, X, Y]
+    Args:
+        vol: np.array [M, .., Z, X, Y]
 
-    Returns
-    -------
-    np.array [M, .., X, Y, Z]
+    Returns: np.array [M, .., X, Y, Z]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     vol = vol.swapaxes(-2, -3)  # x z y
@@ -277,13 +278,11 @@ def xyz2zyx(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., X, Y, Z]
+    Args:
+        vol: np.array [M, .., X, Y, Z]
 
-    Returns
-    -------
-    np.array [M, .., Z, X, Y]
+    Returns: np.array [M, .., Z, X, Y]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     # adapt data to ELEKTRONN conventions (speed-up)
@@ -295,13 +294,11 @@ def zyx2xyz(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
 
-    Parameters
-    ----------
-    vol : np.array [M, .., Z, X, Y]
+    Args:
+        vol: np.array [M, .., Z, X, Y]
 
-    Returns
-    -------
-    np.array [M, .., X, Y, Z]
+    Returns: np.array [M, .., X, Y, Z]
+
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     vol = vol.swapaxes(-1, -3)  # [..., x, y, z]
@@ -393,21 +390,23 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     true negative cubes set foreground_ids=[] to be an empty list. If set to
     None, everything except 0 is treated as foreground.
 
-    Parameters
-    ----------
-    fname: str
-        Path where h5 file should be saved
-    raw : np.array
-    label : np.array
-    foreground_ids : iterable
-        ids which have to be converted to foreground, i.e. 1. Everything
-        else is considered background (0). If None, everything except 0 is
-        treated as foreground.
-    target_labels: Iterable
-        If set, `foreground_ids` must also be set. Each ID in `foreground_ids` will
-        be mapped to the corresponding label in `target_labels`.
-    debug : bool
-        will store labels and raw as uint8 ranging from 0 to 255
+    Args:
+        fname: str
+            Path where h5 file should be saved
+        raw: np.array
+        label: np.array
+        foreground_ids: iterable
+            ids which have to be converted to foreground, i.e. 1. Everything
+            else is considered background (0). If None, everything except 0 is
+            treated as foreground.
+        target_labels: Iterable
+            If set, `foreground_ids` must also be set. Each ID in `foreground_ids` will
+            be mapped to the corresponding label in `target_labels`.
+        debug: bool
+            will store labels and raw as uint8 ranging from 0 to 255
+
+    Returns:
+
     """
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
@@ -422,7 +421,7 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
     if debug:
-        raw = (raw * 255).astype(np.uint8)
+        raw = (raw * 255).astype(np.uint8, copy=False)
         label = label.astype(np.uint8) * 255
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 
@@ -434,16 +433,14 @@ def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
     to the labels provided in `target_labels` by mapping the foreground IDs
     accordingly.
 
-    Parameters
-    ----------
-    labels : np.array
-    foreground_ids : iterable
-    target_labels: Iterable
-        labels used for mapping foreground IDs.
+    Args:
+        labels: np.array
+        foreground_ids: iterable
+        target_labels: Iterable
+            labels used for mapping foreground IDs.
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
+
     """
     new_labels = np.zeros_like(labels)
     if foreground_ids is None:
@@ -475,14 +472,12 @@ def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     Parse MovementArea (e.g. bounding box of labeled volume) from annotation.xml
     in (k.)zip file.
 
-    Parameters
-    ----------
-    zip_fname : str
+    Args:
+        zip_fname: str
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Movement Area [2, 3]
+
     """
     anno_str = read_txt_from_zip(zip_fname, "annotation.xml").decode()
     line = re.findall("MovementArea (.*)/>", anno_str)
@@ -506,24 +501,28 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     Helper function for dataset prediction. Runs prediction on whole or partial
     knossos dataset. Imposed patch size has to be given in Z, X, Y!
 
-    Parameters
-    ----------
-    kd_p : str
-        path to knossos dataset .conf file
-    kd_pred_p : str
-        path to the knossos dataset head folder which will contain the prediction
-    cd_p : str
-        destination folder for chunk dataset containing prediction
-    model_p : str
-        path tho ELEKTRONN2 model
-    imposed_patch_size : tuple or None
-        patch size (Z, X, Y) of the model
-    mfp_active : bool
-        activate max-fragment pooling (might be necessary to change patch_size)
-    gpu_id : int
-        the GPU used
-    overwrite : bool
-        True: fresh predictions ; False: earlier prediction continues
+    Args:
+        kd_p: str
+            path to knossos dataset .conf file
+        kd_pred_p: str
+            path to the knossos dataset head folder which will contain the prediction
+        cd_p: str
+            destination folder for chunk dataset containing prediction
+        model_p:  str
+            path tho ELEKTRONN2 model
+        imposed_patch_size: tuple or None
+            patch size (Z, X, Y) of the model
+        mfp_active: bool
+            activate max-fragment pooling (might be necessary to change patch_size)
+        gpu_id: int
+            the GPU used
+        overwrite: bool
+            True: fresh predictions ; False: earlier prediction continues
+        i:
+        n:
+
+    Returns:
+
     """
     from elektronn2.utils.gpu import initgpu
     initgpu(gpu_id)
@@ -588,13 +587,17 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     knossos dataset located at `kd_path`.
     Prediction results will be written to KnossosDatasets called `target_names`
     at `target_path`. If no threshold and only one channel per `target_names`
-    is given, the resulting KnossosDataset will contain a probability map.
-    Otherwise the classification results will be written (to the raw channel).
+    is given, the resulting KnossosDataset will contain a probability map in the
+    raw channel as uint8 (0..255).
+    Otherwise the classification results will be written to the overlay channel.
+
+    Notes:
+        *  TODO: Currently has a high GPU memory requirement (minimum 12GB).
 
     Args:
-        kd_path: Path to knossos dataset .conf file.
-        target_path: Destination folder for target knossos datasets containing
-            the prediction.
+        kd_path: Path to KnossosDataset .conf file of the raw data.
+        target_path: Destination directory for the output KnossosDataset(s)
+            which contain the prediction(s).
         model_path: Path to elektronn3 model for predictions. Loaded via the
             :class:`~elektronn3.inference.inference.Predictor`.
         n_channel: Number of channels predicted by the model.
@@ -606,7 +609,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             Defaults to ``[[ix for ix in range(n_channel)]]``.
             Length must match with `target_names`.
         channel_thresholds: Thresholds for channels: If None and number of channels
-            for target kd is 1: probabilities are stored else: 0.5 as default
+            for target kd is 1: probabilities are stored. Else: 0.5 as default
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
         log: Logger.
         mag: Data magnification level.
@@ -625,6 +628,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             coordinate in voxels in the respective magnification (see kwarg `mag`).
 
     """
+    # TODO: switch to pyk confs
     if log is None:
         log_name = 'dense_prediction'
         if target_names is not None:
@@ -642,14 +646,17 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if channel_thresholds is None:
         channel_thresholds = [None for _ in range(n_channel)]
 
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
+    kd = basics.kd_factory(kd_path)
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
 
+    # TODO: these should be config parameters
     overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
-    chunk_size = np.array([1024, 1024, 512])
+    if qu.batchjob_enabled():
+        chunk_size = np.array([1024, 1024, 512])
+    else:  # assume small dataset volume
+        chunk_size = np.array([482, 481, 236])
     tile_shape = [271, 181, 138]
 
     cd = ChunkDataset()
@@ -666,23 +673,23 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(6)])
+                                          kd.experiment_name, [2**x for x in range(6)],)
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
-    # init QSUB parameters
+    # init batchjob parameters
     multi_params = chunk_ids
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
                     for ch_ids in multi_params]
-    log.info('Starting dense prediction of {} in {:d} chunk(s).'.format(
+    log.info('Started dense prediction of {} in {:d} chunk(s).'.format(
         ", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
         'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
-    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
-                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
-                   additional_flags="--gres=gpu:1")
+    qu.batchjob_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
+                       n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
+                       additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
@@ -691,20 +698,23 @@ def dense_predictor(args):
     Volumes are transformed by XYZ <-> ZYX before they are passed to the
     model.
 
-    Parameters
-    ----------
-    args : Tuple(
-        chunk_ids: list
-            list of chunks in chunk dataset
-        kd_p : str
-            path to knossos dataset .conf file
-        cd_p : str
-            destination folder for chunk dataset containing prediction
-        model_p : str
-            path to model
-        offset : 
-        chunk_size:
-        )
+    Args:
+        args: Tuple(
+            chunk_ids: list
+                list of chunks in chunk dataset
+            kd_p : str
+                path to knossos dataset .conf file
+            cd_p : str
+                destination folder for chunk dataset containing prediction
+            model_p : str
+                path to model
+            offset :
+            chunk_size:
+            ...
+            )
+
+    Returns:
+
     """
     # TODO: remove chunk necessity
     # TODO: clean up (e.g. redundant chunk sizes, ...)
@@ -732,40 +742,68 @@ def dense_predictor(args):
 
     # init Predictor
     from elektronn3.inference import Predictor
-    out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
-    out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
-    predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
-                          out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
-                          apply_softmax=True)
-    predictor.model.ae = False
+    ix = 0
+    tile_shape = np.array(tile_shape)
+    while True:
+        try:
+            out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
+            out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
+            predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
+                                  out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
+                                  apply_softmax=True)
+            predictor.model.ae = False
+            _ = predictor.predict(np.zeros(out_shape[1:])[None, None])
+            break
+        except RuntimeError:  # cuda MemoryError
+            if np.all(tile_shape % 2):
+                raise ValueError('Cannot reduce tile shape anymore. Please adapt '
+                                 'the tile/overlap/chunk shape in the function '
+                                 'that is calling `dense_predictor`.')
+            while tile_shape[ix] % 2:
+                ix += 1
+            tile_sh_orig = np.array(tile_shape)
+            tile_shape[ix] = tile_shape[ix] // 2
+            log_main.warn(f'Changed tile shape from {tile_sh_orig} to '
+                          f'{tile_shape} to reduce memory requirements.')
+            ix = (ix + 1) % 3  # permute spatial dimension which is reduced
+
     # predict Chunks:
     print(f'Starting prediction of {len(chunk_ids)} Chunks with size {chunk_size}.')
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
+
         size = np.array(np.array(ch.size) + 2 * np.array(ol),
                         dtype=np.int)
+
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
+        start = time.time()
         raw = kd.load_raw(size=size*mag, offset=coords*mag, mag=mag)
-        # start = time.time()
+        print(f'loading took {time.time()-start}. {raw.shape}')
+
+        start = time.time()
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
                                       is_zyx=True, return_zyx=True)
-        # dt = time.time() - start
-        # print(f'Finished prediction after {dt}s, thats'
-        #       f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s')
+
+        dt = time.time() - start
+        print(f'Finished prediction after {dt}s, That is'
+              f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s. {pred.shape}')
+
         # slice out the original input volume along ZYX, i.e. the last three axes
         pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
         # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
-            data = np.zeros_like(pred[0]).astype(np.uint8)
+            data = np.zeros_like(pred[0]).astype(np.uint64)
+            save_as_raw = not (len(ids) > 1)
             for label in ids:
                 t = channel_thresholds[label]
                 # if threshold is given or multiple target labels per dataset
-                # store classification restuls
-                if t is not None or len(ids) > 1:
+                # store classification results
+                # TODO: argmax might be more reasonable
+                if not save_as_raw:
                     if t is None:
                         t = 255 / 2
                     if t < 1.:
@@ -776,9 +814,16 @@ def dense_predictor(args):
                     # no thresholding and only one label in the target KnossosDataset
                     # -> store probability map.
                     data = pred[label]
-            target_kd_dict[path].save_raw(
-                offset=ch.coordinates*mag, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
-                fast_resampling=True, upsample=False)
+            if save_as_raw:
+                target_kd_dict[path].save_raw(
+                    offset=ch.coordinates*mag, data=data.astype(np.uint8),
+                    data_mag=mag, mags=[mag, mag*2, mag*4],
+                    fast_resampling=True, upsample=False)
+            else:
+                target_kd_dict[path].save_seg(
+                    offset=ch.coordinates * mag, data=data, data_mag=mag,
+                    mags=[mag, mag * 2, mag * 4],
+                    fast_resampling=True, upsample=False)
         # dt = time.time() - start
         # print(f'Finished writing data after {dt}s.')
 
@@ -810,17 +855,15 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
                        imposed_patch_size, mfp_active=False):
     """
 
-    Parameters
-    ----------
-    kd_p : str
-    kd_pred_p : str
-    cd_p : str
-    model_p :
-    imposed_patch_size :
-    mfp_active :
+    Args:
+        kd_p:
+        kd_pred_p:
+        cd_p:
+        model_p:
+        imposed_patch_size:
+        mfp_active:
 
-    Returns
-    -------
+    Returns:
 
     """
     from elektronn2.neuromancer.model import modelload
@@ -852,20 +895,18 @@ def prediction_helper(raw, model, override_mfp=True,
     Will change X, Y, Z to ELEKTRONN format (Z, X, Y) and returns prediction
     in standard format [X, Y, Z]. Imposed patch size has to be given in Z, X, Y!
 
-    Parameters
-    ----------
-    raw : np.array
-        volume [X, Y, Z]
-    model : str or model object
-        path to model (.mdl)
-    override_mfp : bool
-    imposed_patch_size : tuple
-        in Z, X, Y FORMAT!
+    Args:
+        raw: np.array
+            volume [X, Y, Z]
+        model: str or model object
+            path to model (.mdl)
+        override_mfp: bool
+        imposed_patch_size: tuple
+            in Z, X, Y FORMAT!
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         prediction data [X, Y, Z]
+
     """
     if type(model) == str:
         from elektronn2.neuromancer.model import modelload
@@ -893,11 +934,13 @@ def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
     """
     Helper function to write chunks.
 
-    Parameters
-    ----------
-    ch : Chunk
-    model : str or model object
-    debug: bool
+    Args:
+        ch: Chunk
+        model: str or model object
+        debug: bool
+
+    Returns:
+
     """
     raw = ch.raw_data()
     pred = prediction_helper(raw, model) * 255
@@ -1146,14 +1189,14 @@ def get_myelin_cnn():
         The trained Inference model.
     """
     try:
-        from elektronn3.models.base import InferenceModel
+        from elektronn3.inference.inference import Predictor
     except ImportError as e:
         msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
     m_path = global_params.config.mpath_myelin
-    m = InferenceModel(m_path)
+    m = Predictor(m_path)
     return m
 
 
@@ -1194,13 +1237,11 @@ def knn_clf_tnet_embedding(fold, fit_all=False):
     Currently it assumes embedding for GT views has been created already in 'fold'
     and put into l_train_%d.npy / l_valid_%d.npy files.
 
-    Parameters
-    ----------
-    fold : str
-    fit_all : bool
+    Args:
+        fold: str
+        fit_all: bool
 
-    Returns
-    -------
+    Returns:
 
     """
     train_fnames = get_filepaths_from_dir(
@@ -1241,14 +1282,12 @@ def pca_tnet_embedding(fold, n_components=3, fit_all=False):
     Currently it assumes embedding for GT views has been created already in 'fold'
     and put into l_train_%d.npy / l_valid_%d.npy files.
 
-    Parameters
-    ----------
-    fold : str
-    n_components : int
-    fit_all : bool
+    Args:
+        fold: str
+        n_components: int
+        fit_all: bool
 
-    Returns
-    -------
+    Returns:
 
     """
     train_fnames = get_filepaths_from_dir(
@@ -1323,3 +1362,220 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     entr_norm = entropy(proba) / entr_max
     # convert to certainty estimate
     return 1 - entr_norm
+
+
+pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
+# in nm, should be replaced by Poisson disk sampling
+pts_feat_ds_dict = dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100)
+
+
+def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
+                        num_obj_types: int, onehot: bool = True,
+                        npoints: Optional[int] = None, use_syntype: bool = True,
+                        downsample: Optional[float] = None):
+    # TODO: add optional downsampling here
+    feat_dc = dict(feat_dc)
+    if use_syntype:
+        if 'syn_ssv' in feat_dc:
+            del feat_dc['syn_ssv']
+    else:
+        if 'syn_ssv_sym' in feat_dc:
+            del feat_dc['syn_ssv_sym']
+        if 'syn_ssv_asym' in feat_dc:
+            del feat_dc['syn_ssv_asym']
+    if cellshape_only is True:
+        sample_pts = sample_pts['sv']
+        sample_feats = np.ones((len(sample_pts), 1)) * feat_dc['sv']
+    else:
+        sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
+                                       for k in feat_dc.keys()])
+        if onehot:
+            sample_feats = label_binarize(sample_feats, classes=np.arange(num_obj_types))
+        else:
+            sample_feats = sample_feats[..., None]
+        # len(sample_feats) is the equal to the total number of vertices
+        sample_pts = np.concatenate([sample_pts[k] for k in feat_dc.keys()])
+    if npoints is not None:
+        idx_arr = np.random.choice(np.arange(len(sample_pts)),
+                                   npoints, replace=len(sample_pts) < npoints)
+        sample_pts = sample_pts[idx_arr]
+        sample_feats = sample_feats[idx_arr]
+    return sample_pts, sample_feats
+
+
+@functools.lru_cache(256)
+def _load_ssv_hc(args):
+    ssv, feats, feat_labels = args
+    vert_dc = dict()
+    # TODO: replace by poisson disk sampling
+    for k in feats:
+        pcd = o3d.geometry.PointCloud()
+        verts = ssv.load_mesh(k)[1].reshape(-1, 3)
+        pcd.points = o3d.utility.Vector3dVector(verts)
+        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[k])
+        vert_dc[k] = np.asarray(pcd.points)
+    sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
+                                   for ii, k in enumerate(feats)])
+    sample_pts = np.concatenate([vert_dc[k] for k in feats])
+    if not ssv.load_skeleton():
+        raise ValueError(f'Couldnt find skeleton of {ssv}')
+    nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
+    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
+    # cache verts2node
+    _ = hc.verts2node
+    return hc
+
+
+def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
+                    transform: Optional[Callable] = None, train=False,
+                    draw_local=False, draw_local_dist=1000):
+    """
+
+    Args:
+        ssd_kwargs:
+        ssv_ids:
+        batchsize:
+        npoints:
+        transform:
+        train:
+        draw_local: Will draw similar contexts from approx.
+            the same location, requires a single unique element in ssv_ids
+        draw_local_dist: Maximum distance to similar source node in nm.
+
+    Returns:
+
+    """
+    from ..reps.super_segmentation import SuperSegmentationDataset
+    np.random.shuffle(ssv_ids)
+    ssd = SuperSegmentationDataset(**ssd_kwargs)
+    # TODO: add `use_syntype kwarg and cellshape only
+    feat_dc = dict(pts_feat_dict)
+    if 'syn_ssv' in feat_dc:
+        del feat_dc['syn_ssv']
+    if not train:
+        if draw_local:
+            raise NotImplementedError()
+        for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
+            if draw_local and occ % 2:
+                raise ValueError(f'draw_local is set to True but the number of SSV samples is uneven.')
+            ssv = ssd.get_super_segmentation_object(ssv_id)
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+                feat_dc.values())))
+            npoints_ssv = min(len(hc.vertices), npoints)
+            batch = np.zeros((occ, npoints_ssv, 3))
+            batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
+            ixs = np.ones((occ,), dtype=np.uint) * ssv_id
+            cnt = 0
+            # TODO: this should be deterministic during inference
+            nodes = hc.base_points(density_mode=False, threshold=5000, source=len(hc.nodes)//2)
+            source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
+            for source_node in source_nodes:
+                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                sample_feats = pc.features
+                sample_pts = pc.vertices
+                # make sure there is always the same number of points within a batch
+                sample_ixs = np.arange(len(sample_pts))
+                # np.random.shuffle(sample_ixs)
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                # one hot encoding
+                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                pc._vertices = sample_pts
+                pc._features = sample_feats
+                if transform is not None:
+                    transform(pc)
+                batch[cnt] = pc.vertices
+                batch_f[cnt] = pc.features
+                cnt += 1
+            assert cnt == occ
+            yield (ixs, (batch_f, batch))
+    else:
+        ssv_ids = np.unique(ssv_ids)
+
+        for curr_ssvids in ssv_ids:
+            ssv = ssd.get_super_segmentation_object(curr_ssvids)
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+                feat_dc.values())))
+            npoints_ssv = min(len(hc.vertices), npoints)
+            # add a +-10% fluctuation in the number of input points
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
+            batch = np.zeros((batchsize, npoints_ssv, 3))
+            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+            cnt = 0
+            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
+                                            replace=len(hc.nodes) < batchsize)
+            if draw_local:
+                # only use half of the nodes and choose a close-by node as root for similar context retrieval
+                source_nodes = source_nodes[::2]
+                sn_new = []
+                g = hc.graph(simple=False)
+                for n in source_nodes:
+                    sn_new.append(n)
+                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                    neighs = np.array(list(paths.keys()), dtype=np.int)
+                    sn_new.append(np.random.choice(neighs, 1)[0])
+                source_nodes = sn_new
+            for source_node in source_nodes:
+                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                sample_feats = pc.features
+                sample_pts = pc.vertices
+                # shuffling
+                sample_ixs = np.arange(len(sample_pts))
+                np.random.shuffle(sample_ixs)
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                # add up to 10% of duplicated points before applying the transform if sample_pts
+                # has less points than npoints_ssv
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                # one hot encoding
+                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                pc._vertices = sample_pts
+                pc._features = sample_feats
+                if transform is not None:
+                    transform(pc)
+                batch[cnt] = pc.vertices
+                batch_f[cnt] = pc.features
+                cnt += 1
+            assert cnt == batchsize
+            yield (ixs, (batch_f, batch))
+
+
+# TODO: move to handler.basics
+def write_ply(fn, verts, colors):
+    ply_header = '''ply
+    format ascii 1.0
+    element vertex %(vert_num)d
+    property float x
+    property float y
+    property float z
+    property uchar red
+    property uchar green
+    property uchar blue
+    end_header
+
+    '''
+    verts = np.hstack([verts, colors])
+    with open(fn, 'wb') as f:
+        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
+        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
+
+
+def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
+    col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
+              4: [[250, 100, 100]], 2: [[100, 200, 100]]}
+    cols = np.zeros(pts.shape, dtype=np.uint8)
+    for k in pts_feat_dict.values():
+        mask = feats[:, k] == 1
+        cols[mask] = col_dc[k]
+    write_ply(fname, pts, cols)

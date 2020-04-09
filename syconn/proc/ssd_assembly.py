@@ -28,20 +28,18 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
         - [Optional] Skeleton representation: 'skeleton.pkl'
         - [Optional] attribute dict: 'attr_dict.pkl'
 
-    Parameters
-    ----------
-    path : str
-        Path to kzip which contains SSV data
-    sso_id : int
-        ID of SSV, if not given looks for the first scalar occurrence in `path`
-    load_as_tmp : bool
-        If True then `working_dir` and `version_dict` in meta.pkl dictionary is
-         not passed to SSO constructor, instead all version will be set to 'tmp'
-         and working directory will be None. Used to process SSO independent on working directory.
+    Args:
+        path: str
+            Path to kzip which contains SSV data
+        load_as_tmp: bool
+            If True then `working_dir` and `version_dict` in meta.pkl dictionary is
+            not passed to SSO constructor, instead all version will be set to 'tmp'
+            and working directory will be None. Used to process SSO independent on working directory.
+        sso_id: int
+            ID of SSV, if not given looks for the first scalar occurrence in `path`
 
-    Returns
-    -------
-    SuperSegmentationObject
+    Returns: SuperSegmentationObject
+
     """
     if sso_id is None:
         sso_id = int(re.findall(r"/(\d+).", path)[0])
@@ -68,7 +66,8 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
         sso_id = meta_dc['sso_id']
         del meta_dc['sso_id']
     sso = SuperSegmentationObject(sso_id, **meta_dc)
-    # Required to enable prediction in 'tmp' SSVs # TODO: change those properties in SSO constructor
+    # TODO: change those properties in SSO constructor
+    # Required to enable prediction in 'tmp' SSVs
     sso._mesh_caching = True
     sso._view_caching = True
 

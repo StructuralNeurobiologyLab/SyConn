@@ -8,6 +8,7 @@ try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
+from lz4.block import LZ4BlockError
 try:
     import fasteners
     LOCKING = True
@@ -91,7 +92,7 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     try:
         str_lst = [compress(arr.tobytes())]
     # catch Value error which is thrown in py3 lz4 version
-    except (OverflowError, ValueError):
+    except (OverflowError, ValueError, LZ4BlockError):
         half_ix = len(arr) // 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
                   arrtolz4string_list(arr[half_ix:])
@@ -165,15 +166,13 @@ def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
     Shape must be known in order to load (multi-dimensional) array from binary
     string. Due to overflow in python2 added recursive loading.
 
-    Parameters
-    ----------
-    p : path to lz4 file
-    shape : tuple
-    dtype : type
+    Args:
+        p: path to lz4 file
+        shape: tuple
+        dtype: type
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
+
     """
     with open(p, "rb") as text_file:
         decomp_arr = lz4stringtoarr(text_file.read(), dtype=dtype, shape=shape)

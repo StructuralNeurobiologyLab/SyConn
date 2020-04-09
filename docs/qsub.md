@@ -21,7 +21,6 @@ if __name__ == "__main__":
     multi_params = ssds.ssv_ids
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 4000)
-    path_to_out = qu.QSUB_script(multi_params, "export_skeletons_new",
-                                 n_max_co_processes=200, pe="openmp", queue=None,
-                                 script_folder=PATH_TO_QSUB_SCRIPT, suffix="")
+    path_to_out = qu.batchjob_script(multi_params, "export_skeletons_new",
+                                     script_folder=PATH_TO_QSUB_SCRIPT)
 ```

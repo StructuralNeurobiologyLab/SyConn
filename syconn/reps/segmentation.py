@@ -134,9 +134,11 @@ class SegmentationObject(object):
                 log_reps.error(msg)
                 raise ValueError(msg)
         elif config is not None:
-            if config.working_dir != working_dir:
+            if os.path.normpath(config.working_dir) != \
+                    os.path.normpath(working_dir):
                 raise ValueError('Inconsistent working directories in `config` and'
                                  '`working_dir` kwargs.')
+            assert self._config.working_dir == working_dir
             self._config = config
             self._working_dir = working_dir
         else:
@@ -178,8 +180,8 @@ class SegmentationObject(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.id, self.type, self.version, self.segobj_dir)
+        return (f'{type(self).__name__}(obj_id={self.id}, obj_type="{self.type}", '
+                f'version="{self.version}", working_dir="{self.working_dir}")')
 
     def __reduce__(self):
         """
@@ -594,6 +596,7 @@ class SegmentationObject(object):
         Returns:
             Three flat arrays: indices, vertices, normals.
         """
+        # TODO: use self.load_mesh
         if self._mesh is None:
             if self.mesh_caching:
                 self._mesh = load_mesh(self)
@@ -1573,8 +1576,8 @@ class SegmentationDataset(object):
             os.makedirs(self.so_storage_path)
 
     def __repr__(self):
-        return '{} of type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.type, self.version, self.path)
+        return (f'{type(self).__name__}(obj_type="{self.type}", version="{self.version}", '
+                f'working_dir="{self.working_dir}")')
 
     @property
     def type(self) -> str:
@@ -1809,17 +1812,23 @@ class SegmentationDataset(object):
 
     def load_cached_data(self, prop_name) -> np.ndarray:
         """
-        Load cached array. The ordering of the returned array will correspond to :py:attr:`~ids`.
+        Load cached array. The ordering of the returned array will correspond
+        to :py:attr:`~ids`.
 
+        Todo:
+            * remove 's' appendix in file names.
 
         Args:
             prop_name: Identifier of the requested cache array.
 
         Returns:
-            Loaded numpy array of property `name`.
+            numpy array of property `prop_name`.
         """
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy")
+        else:
+            log_reps.warning(f'Requested data cache "{prop_name}" '
+                             f'did not exist.')
 
     def get_segmentationdataset(self, obj_type: str):
         """

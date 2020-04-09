@@ -24,22 +24,27 @@ import gc
 import signal
 import networkx as nx
 import contextlib
+import glob
 import tqdm
-import warnings
+from typing import List, Union
 from plyfile import PlyData
 from . import log_handler
 from .. import global_params
 
-__all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
-           'get_filepaths_from_dir', 'write_obj2pkl', 'load_pkl2obj',
+__all__ = ['crop_bool_array', 'get_filepaths_from_dir', 'write_obj2pkl', 'load_pkl2obj',
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
            'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g']
+           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g', 'chunkify_successive']
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):
     """
+    Initializes a KnossosDataset at the given `kd_path`.
+
+    Notes:
+        * Prioritizes pyk.conf files.
+
     Todo:
         * Requires additional adjustment of the data type,
           i.e. setting the channel explicitly currently leads to uint32 <->
@@ -52,87 +57,23 @@ def kd_factory(kd_path: str, channel: str = 'jpg'):
     Returns:
 
     """
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        # knossos_utils expects a path to the knossos.conf file
-        if not kd_path.endswith('knossos.conf'):
-            kd_path += "/mag1/knossos.conf"
-        kd = KnossosDataset()  # Sets initial values of object
-        # kd.set_channel(channel)  #
+    kd = KnossosDataset()
+    # TODO: set appropriate channel
+    # # kd.set_channel(channel)
+
+    if os.path.isfile(kd_path):
+        kd.initialize_from_conf(kd_path)
+    elif len(glob.glob(f'{kd_path}/*.pyk.conf')) == 1:
+        pyk_confs = glob.glob(f'{kd_path}/*.pyk.conf')
+        kd.initialize_from_pyknossos_path(pyk_confs[0])
+    elif os.path.isfile(kd_path + "/mag1/knossos.conf"):
         # Initializes the dataset by parsing the knossos.conf in path + "mag1"
+        kd_path += "/mag1/knossos.conf"
         kd.initialize_from_knossos_path(kd_path)
+    else:
+        raise ValueError(f'Could not find KnossosDataset config at {kd_path}.')
+
     return kd
-
-
-def load_from_h5py(path, hdf5_names=None, as_dict=False):
-    """
-    Loads data from a h5py File
-
-    Parameters
-    ----------
-    path: str
-    hdf5_names: list of str
-        if None, all keys will be loaded
-    as_dict: boolean
-        if False a list is returned
-
-    Returns
-    -------
-    data: dict or np.array
-
-    """
-    if as_dict:
-        data = {}
-    else:
-        data = []
-    try:
-        f = h5py.File(path, 'r')
-        if hdf5_names is None:
-            hdf5_names = f.keys()
-        for hdf5_name in hdf5_names:
-            if as_dict:
-                data[hdf5_name] = f[hdf5_name][()]
-            else:
-                data.append(f[hdf5_name][()])
-    except:
-        raise Exception("Error at Path: %s, with labels:" % path, hdf5_names)
-    f.close()
-    return data
-
-
-def save_to_h5py(data, path, hdf5_names=None):
-    """
-    Saves data to h5py File
-
-    Parameters
-    ----------
-    data: list of np.arrays
-    path: str
-    hdf5_names: list of str
-        has to be the same length as data
-
-    Returns
-    -------
-    nothing
-
-    """
-    if (not type(data) is dict) and hdf5_names is None:
-        raise Exception("hdf5names has to be set, when data is a list")
-    if os.path.isfile(path):
-        os.remove(path)
-    f = h5py.File(path, "w")
-    if type(data) is dict:
-        for key in data.keys():
-            f.create_dataset(key, data=data[key],
-                             compression="gzip")
-    else:
-        if len(hdf5_names) != len(data):
-            f.close()
-            raise Exception("Not enough or to much hdf5-names given!")
-        for nb_data in range(len(data)):
-            f.create_dataset(hdf5_names[nb_data], data=data[nb_data],
-                             compression="gzip")
-    f.close()
 
 
 def switch_array_entries(this_array, entries):
@@ -146,10 +87,13 @@ def crop_bool_array(arr):
     """
     Crops a bool array to its True region
 
-    :param arr: 3d bool array
-        array to crop
-    :return: 3d bool array, list
+    Args:
+        arr: 3d bool array
+            array to crop
+
+    Returns: d bool array, list
         cropped array, offset
+
     """
     in_mask_indices = [np.flatnonzero(arr.sum(axis=(1, 2))),
                        np.flatnonzero(arr.sum(axis=(0, 2))),
@@ -181,32 +125,29 @@ def majority_element_1d(arr):
     """
     Returns most frequent element in 'arr'.
 
-    Parameters
-    ----------
-    arr : np.array
+    Args:
+        arr: np.array
 
-    Returns
-    -------
-    scalar
+    Returns: scalar
+
     """
     uni_el, cnts = np.unique(arr, return_counts=True)
     return uni_el[np.argmax(cnts)]
 
 
 def get_paths_of_skelID(id_list, traced_skel_dir):
-    """Gather paths to kzip of skeletons with ID in id_list
+    """
+    Gather paths to kzip of skeletons with ID in id_list
 
-    Parameters
-    ----------
-    id_list: list of str
-        skeleton ID's
-    traced_skel_dir: str
-        directory of mapped skeletons
+    Args:
+        id_list: list of str
+            skeleton ID's
+        traced_skel_dir: str
+            directory of mapped skeletons
 
-    Returns
-    -------
-    list of str
+    Returns: list of str
         paths of skeletons in id_list
+
     """
     mapped_skel_paths = get_filepaths_from_dir(traced_skel_dir)
     mapped_skel_ids = re.findall(r'iter_\d+_(\d+)', ''.join(mapped_skel_paths))
@@ -225,16 +166,14 @@ def coordpath2anno(coords, scaling=None, add_edges=True):
     Creates skeleton from scaled coordinates, assume coords are in order for
     edge creation.
 
-    Parameters
-    ----------
-    coords : np.array
-        scaled cooridnates
-    scaling : tuple
-    add_edges : bool
+    Args:
+        coords: np.array
+            scaled cooridnates
+        scaling: tuple
+        add_edges: bool
 
-    Returns
-    -------
-    SkeletonAnnotation
+    Returns: SkeletonAnnotation
+
     """
     if scaling is None:
         scaling = global_params.config['scaling']
@@ -260,22 +199,21 @@ def get_filepaths_from_dir(directory, ending=('k.zip',), recursively=False,
     """
     Collect all files with certain ending from directory.
 
-    Parameters
-    ----------
-    directory: str
-        path to lookup directory
-    ending: tuple/list/str
-        ending(s) of files
-    recursively: boolean
-        add files from subdirectories
-    fname_includes : str or list
-        file names with this substring(s) will be added
-    exclude_endings : bool
-        filenames with endings defined in endings will not be added
-    Returns
-    -------
-    list of str
+    Args:
+        directory: str
+            path to lookup directory
+        ending: tuple/list/str
+            ending(s) of files
+        recursively: boolean
+            add files from subdirectories
+        exclude_endings: bool
+            filenames with endings defined in endings will not be added
+        fname_includes: str or list
+            file names with this substring(s) will be added
+
+    Returns: list of str
         paths to files
+
     """
     # make it backwards compatible
     if type(ending) is str:
@@ -316,14 +254,12 @@ def read_txt_from_zip(zip_fname, fname_in_zip):
     """
     Read text file from zip.
 
-    Parameters
-    ----------
-    zip_fname : str
-    fname_in_zip : str
+    Args:
+        zip_fname: str
+        fname_in_zip: str
 
-    Returns
-    -------
-    bytes
+    Returns: bytes
+
     """
     with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
         txt = z.read(fname_in_zip)
@@ -334,14 +270,12 @@ def read_mesh_from_zip(zip_fname, fname_in_zip):
     """
     Read ply file from zip. Currently does not support normals!
 
-    Parameters
-    ----------
-    zip_fname : str
-    fname_in_zip : str
+    Args:
+        zip_fname: str
+        fname_in_zip: str
 
-    Returns
-    -------
-    np.array, np.array, np.array
+    Returns: np.array, np.array, np.array
+
     """
     with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
         txt = z.open(fname_in_zip)
@@ -359,13 +293,15 @@ def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
     """
     Write string to file in k.zip.
 
-    Parameters
-    ----------
-    kzip_path : str
-    text : str or bytes
-    fname_in_zip : str
-        name of file when added to zip
-    force_overwrite : bool
+    Args:
+        kzip_path: str
+        text: str or bytes
+        fname_in_zip: str
+            name of file when added to zip
+        force_overwrite: bool
+
+    Returns:
+
     """
     texts2kzip(kzip_path, [text], [fname_in_zip],
                force_overwrite=force_overwrite)
@@ -375,13 +311,15 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
     """
     Write strings to files in k.zip.
 
-    Parameters
-    ----------
-    kzip_path : str
-    texts : List[str]
-    fnames_in_zip : List[str]
-        name of file when added to zip
-    force_overwrite : bool
+    Args:
+        kzip_path: str
+        texts: List[str]
+        fnames_in_zip: List[str]
+            name of file when added to zip
+        force_overwrite: bool
+
+    Returns:
+
     """
     if os.path.isfile(kzip_path):
         try:
@@ -412,13 +350,15 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
     """
     Write file to k.zip.
 
-    Parameters
-    ----------
-    kzip_path : str
-    fpath : str
-    fname_in_zip : str
-        name of file when added to zip
-    force_overwrite : bool
+    Args:
+        kzip_path: str
+        fpath: str
+        fname_in_zip: str
+            name of file when added to zip
+        force_overwrite: bool
+
+    Returns:
+
     """
     data2kzip(kzip_path, [fpath], [fname_in_zip], force_overwrite)
 
@@ -428,19 +368,21 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     """
     Write files to k.zip. Finally removes files at `fpaths`.
 
-    Parameters
-    ----------
-    kzip_path : str
-    fpaths : List[str]
-    fnames_in_zip : List[str]
-        name of file when added to zip
-    verbose : bool
-    force_overwrite : bool
+    Args:
+        kzip_path: str
+        fpaths: List[str]
+        fnames_in_zip: List[str]
+            name of file when added to zip
+        force_overwrite: bool
+        verbose: bool
+
+    Returns:
+
     """
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
-        pbar = tqdm.tqdm(total=nb_files)
+        pbar = tqdm.tqdm(total=nb_files, leave=False)
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -493,14 +435,17 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
 
 
 def remove_from_zip(zipfname, *filenames):
-    """Removes filenames from zipfile
+    """
+    Removes filenames from zipfile
 
-    Parameters
-    ----------
-    zipfname : str
-        Path to zipfile
-    filenames : list of str
-        files to delete
+    Args:
+        zipfname: str
+            Path to zipfile
+        *filenames: list of str
+            files to delete
+
+    Returns:
+
     """
     tempdir = tempfile.mkdtemp()
     try:
@@ -517,13 +462,16 @@ def remove_from_zip(zipfname, *filenames):
 
 
 def write_obj2pkl(path, objects):
-    """Writes object to pickle file
+    """
+    Writes object to pickle file
 
-    Parameters
-    ----------
-    objects : object
-    path : str
-        Destination.
+    Args:
+        path: str
+            Destination.
+        objects: object
+
+    Returns:
+
     """
     gc.disable()
     if isinstance(path, str):
@@ -538,15 +486,15 @@ def write_obj2pkl(path, objects):
 
 
 def load_pkl2obj(path):
-    """Loads pickle file of object
+    """
+    Loads pickle file of object
 
-    Parameters
-    ----------
-    path: str
-        path of source file
+    Args:
+        path: str
+            path of source file
 
-    Returns
-    -------
+    Returns:
+
     """
     gc.disable()
     try:
@@ -571,21 +519,41 @@ def convert_keys_byte2str(dc):
     return dc
 
 
-def chunkify(lst, n):
+def chunkify(lst: Union[list, np.ndarray], n: int) -> List[list]:
     """
-    Splits list into n sub-lists.
+    Splits list into ``np.min([n, len(lst)])`` sub-lists.
 
-    Parameters
-    ----------
-    lst : List
-    n : int
+    Args:
+        lst:
+        n:
+    Examples:
+        >>> chunkify(np.arange(10), 2)
+        >>> chunkify(np.arange(10), 100)
 
-    Returns
-    -------
+    Returns:
+        List of chunks. Length is ``np.min([n, len(lst)])``.
+    """
+    if len(lst) < n:
+        n = len(lst)
+    return [lst[i::n] for i in range(n)]
+
+
+def chunkify_weighted(lst, n, weights):
+    """
+    splits list into n-subists according to weights
+    Args:
+        lst: list
+        n: int
+        weights: array
+
+    Returns:
 
     """
     if len(lst) < n:
         n = len(lst)
+        return [lst[i::n] for i in range(n)] #no weighting needed
+    ordered = np.argsort(weights)
+    lst = lst[ordered[::-1]]
     return [lst[i::n] for i in range(n)]
 
 
@@ -599,13 +567,11 @@ def flatten_list(lst):
     """
     Flattens list of lists. Same ordering as np.concatenate
 
-    Parameters
-    ----------
-    lst : list of lists
+    Args:
+        lst: list of lists
 
-    Returns
-    -------
-    list
+    Returns: list
+
     """
     res = np.array([el for sub in lst for el in sub])
     return res
@@ -619,11 +585,12 @@ def flatten(x):
     https://stackoverflow.com/questions/16176742/
     python-3-replacement-for-deprecated-compiler-ast-flatten-function
 
-    :param x:
-    :return: flattend x
+    Args:
+        x:
+
+    Returns: flattend x
 
     """
-
     def iselement(e):
         return not(isinstance(e, collections.Iterable) and not isinstance(e, str))
     for el in x:
@@ -640,15 +607,13 @@ def get_skelID_from_path(skel_path):
     """
     Parse skeleton ID from filename.
 
-    Parameters
-    ----------
-    skel_path : str
-        path to skeleton
+    Args:
+        skel_path: str
+            path to skeleton
 
-    Returns
-    -------
-    int
+    Returns: int
         skeleton ID
+
     """
     return int(re.findall(r'iter_0_(\d+)', skel_path)[0])
 
@@ -658,14 +623,16 @@ def safe_copy(src, dest, safe=True):
     Copies file and throws exception if destination exists. Taken from
     Misandrist on Stackoverflow (03/31/17).
 
-    Parameters
-    ----------
-    src : str
-        path to source file
-    dest : str
-        path to destination file
-    safe : bool
-        If False, copies file with replacement
+    Args:
+        src: str
+            path to source file
+        dest: str
+            path to destination file
+        safe: bool
+            If False, copies file with replacement
+
+    Returns:
+
     """
     if safe:
         fd = os.open(dest, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -709,13 +676,11 @@ def prase_cc_dict_from_txt(txt):
     """
     Parse connected components from knossos mergelist text file
 
-    Parameters
-    ----------
-    txt : str or bytes
+    Args:
+        txt: str or bytes
 
-    Returns
-    -------
-    dict
+    Returns: dict
+
     """
     cc_dict = {}
     for line in txt.splitlines()[::4]:
@@ -735,13 +700,11 @@ def parse_cc_dict_from_kml(kml_path):
     """
     Parse connected components from knossos mergelist text file
 
-    Parameters
-    ----------
-    kml_path : str
+    Args:
+        kml_path: str
 
-    Returns
-    -------
-    dict
+    Returns: dict
+
     """
     txt = open(kml_path, "rb").read().decode()
     return prase_cc_dict_from_txt(txt)
@@ -758,13 +721,11 @@ def parse_cc_dict_from_g(g):
 def parse_cc_dict_from_kzip(k_path):
     """
 
-    Parameters
-    ----------
-    k_path : str
+    Args:
+        k_path: str
 
-    Returns
-    -------
-    dict
+    Returns: dict
+
     """
     txt = read_txt_from_zip(k_path, "mergelist.txt").decode()
     return prase_cc_dict_from_txt(txt)
@@ -774,12 +735,11 @@ def parse_cc_dict_from_kzip(k_path):
 def temp_seed(seed):
     """
     From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
-    Parameters
-    ----------
-    seed :
 
-    Returns
-    -------
+    Args:
+        seed:
+
+    Returns:
 
     """
     state = np.random.get_state()

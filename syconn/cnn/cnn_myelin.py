@@ -82,9 +82,6 @@ model = UNet(
     planar_blocks=(0, 2),
     activation='relu',
     batch_norm=False,
-    # conv_mode='valid',
-    # up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
-    adaptive=True  # Experimental. Disable if results look weird.
 ).to(device)
 
 # USER PATHS

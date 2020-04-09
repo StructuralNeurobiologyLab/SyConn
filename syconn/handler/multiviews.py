@@ -19,19 +19,18 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str,
                                    gt_type: str,  n_voting: int = 40):
     """
 
-    Parameters
-    ----------
-    kzip_path : str
-        path to skeleton file with annotated skeleton nodes.
-    sso : SuperSegmentationObject
-        object which corresponds to skeleton in kzip.
-    gt_type : str
-    n_voting : int
-        Number of nodes collected during BFS for majority voting
-        (smoothing of vertex labels).
+    Args:
+        kzip_path: str
+            path to skeleton file with annotated skeleton nodes.
+        sso: SuperSegmentationObject
+            object which corresponds to skeleton in kzip.
+        gt_type: str
+        n_voting: int
+            Number of nodes collected during BFS for majority voting
+            (smoothing of vertex labels).
 
-    Returns
-    -------
+
+    Returns:
 
     """
     # # Load mesh
@@ -64,16 +63,14 @@ def generate_palette(nr_classes: int, return_rgba: bool = True) -> np.ndarray:
     """
     Creates a RGB(A) palette for N classes. Background label will be highest class label + 1.
 
-    Parameters
-    ----------
-    nr_classes : int
-    return_rgba : bool
-        If True returned array has shape (N, 4) instead of (N, 3)
+    Args:
+        nr_classes: int
+        return_rgba: bool
+            If True returned array has shape (N, 4) instead of (N, 3)
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Unique color array for N input classes
+
     """
     classes_ids = np.arange(nr_classes)  # reserve additional class id for background
     classes_rgb = id2rgb_array_contiguous(classes_ids)  # convention: do not use 1, 1, 1; will be background value
@@ -145,18 +142,16 @@ def str2intconverter(comment: str, gt_type: str):
 
 def int2str_converter(label: int, gt_type: str):
     """
-    Converts integer label into semantic string. TODO: remove redundant definitions ->
-    single source of truth!
+    TODO: remove redundant definitions.
+    Converts integer label into semantic string.
 
-    Parameters
-    ----------
-    label : int
-    gt_type : str
-        e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
+    Args:
+        label: int
+        gt_type: str
+            e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
 
-    Returns
-    -------
-    str
+    Returns: str
+
     """
     if type(label) == str:
         label = int(label)
@@ -212,12 +207,10 @@ def int2str_converter(label: int, gt_type: str):
 def img_rand_coloring(img: np.ndarray) -> np.ndarray:
     """
 
-    Parameters
-    ----------
-    img :
+    Args:
+        img:
 
-    Returns
-    -------
+    Returns:
 
     """
     if img.ndim == 3 and img.shape[2] > 1:
@@ -242,15 +235,13 @@ def id2rgb(vertex_id):
     """
     Transforms ID value of single sso vertex into the unique RGD colour.
 
-    Parameters
-    ----------
-    vertex_id : int
-        Vertex ID.
+    Args:
+        vertex_id: int
+            Vertex ID.
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         RGB values [1, 3].
+
     """
     red = vertex_id % 256
     green = (vertex_id / 256) % 256
@@ -264,17 +255,14 @@ def id2rgb_array(id_arr: np.ndarray):
     Transforms ID values into the array of RGBs labels based on :func:`~id2rgb`.
     Note: Linear retrieval time. For small N preferable.
 
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1].
+    Args:
+        id_arr:  np.array
+            ID values [N, 1].
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Unique RGB value for every ID [N, 3].
-    """
 
+    """
     if np.max(id_arr) > 256**3:
         raise ValueError("Overflow in vertex ID array.")
     if id_arr.ndim == 1:
@@ -294,15 +282,13 @@ def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     Same mapping as :func:`~id2rgb_array`.
     Note: Constant retrieval time. For large N preferable.
 
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1].
+    Args:
+        id_arr: np.array
+            ID values [N, 1].
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Unique RGB value for every ID [N, 3].
+
     """
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
@@ -325,15 +311,13 @@ def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     Same mapping as :func:`~id2rgb_array`.
     Note: Constant retrieval time. For large N preferable.
 
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1].
+    Args:
+        id_arr: np.array
+            ID values [N, 1].
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         Unique RGBA value for every ID [N, 4].
+
     """
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
@@ -358,15 +342,13 @@ def rgb2id(rgb: np.ndarray) -> np.ndarray:
     """
     Transforms unique RGB values into soo vertex ID.
 
-    Parameters
-    ----------
-    rgb: np.array
-        RGB values [1, 3].
+    Args:
+        rgb: np.array
+            RGB values [1, 3].
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         ID value [1, 1].
+
     """
     red = rgb[0]
     green = rgb[1]
@@ -380,15 +362,13 @@ def rgb2id_array(rgb_arr: np.ndarray) -> np.ndarray:
     """
     Transforms RGB values into IDs.
 
-    Parameters
-    ----------
-    rgb_arr : np.array
-        RGB values [N, 3].
+    Args:
+        rgb_arr: np.array
+            RGB values [N, 3].
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         ID values [N, ].
+
     """
     if rgb_arr.ndim > 1:
         assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
@@ -415,17 +395,14 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
     """
     Transforms RGBA values into IDs.
 
-    Parameters
-    ----------
-    rgb_arr : np.array
-        RGB values [N, 3].
+    Args:
+        rgb_arr: np.array
+            RGB values [N, 3].
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         ID values [N, ].
-    """
 
+    """
     if rgb_arr.ndim > 1:
         assert rgb_arr.shape[-1] == 4, "ValueError: unsupported shape"
     else:
@@ -449,16 +426,16 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
 
 def generate_rendering_locs(verts: np.ndarray, ds_factor: float) -> np.ndarray:
     """
-    Parameters
-    ----------
-    verts : np.ndarray
-        Vertices [N, 3].
-    ds_factor : float
-        volume (ds_factor^3) for which a rendering location is returned.
-    Returns
-    -------
-    np.ndarray
+
+    Args:
+        verts: np.ndarray
+            Vertices [N, 3].
+        ds_factor: float
+            volume (ds_factor^3) for which a rendering location is returned.
+
+    Returns: np.ndarray
         rendering locations.
+
     """
     # get unique array of downsampled vertex locations (scaled back to nm)
     verts_ixs = np.arange(len(verts))

@@ -28,17 +28,18 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
                                            n_jobs=None, nb_cpus=None):
     """
 
-    Parameters
-    ----------
-    ssd : SuperSegmentationDataset
-    obj_types : List[str]
-    n_jobs : int
-    n_max_co_processes : int
-        Number of parallel jobs
-    nb_cpus : int
-        cpus per job when using BatchJob
-    """
+    Args:
+        ssd: SuperSegmentationDataset
+        obj_types: List[str]
+        n_max_co_processes: int
+            Number of parallel jobs
+        n_jobs: int
+        nb_cpus: int
+            cpus per job when using BatchJob
 
+    Returns:
+
+    """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
@@ -52,12 +53,12 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
-            multi_params, nb_cpus=n_max_co_processes)
+            multi_params, nb_cpus=n_max_co_processes, debug=False)
 
     else:
-        _ = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
-                           n_max_co_processes=n_max_co_processes, n_cores=nb_cpus,
-                           remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "aggregate_segmentation_object_mappings",
+            n_max_co_processes=n_max_co_processes, n_cores=nb_cpus, remove_jobfolder=True)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -84,7 +85,6 @@ def _aggregate_segmentation_object_mappings_thread(args):
                     keys = sv.attr_dict["mapping_%s_ids" % obj_type]
                     values = sv.attr_dict["mapping_%s_ratios" % obj_type]
                     mappings[obj_type] += Counter(dict(zip(keys, values)))
-
         ssv.load_attr_dict()
         for obj_type in obj_types:
             if obj_type in mappings:
@@ -100,14 +100,15 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
                             nb_cpus=None, n_max_co_processes=None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
+    Args:
+        ssd: SuperSegmentationDataset
+        obj_types: List[str]
+        n_jobs: int
+        nb_cpus: int
+        n_max_co_processes: int
 
-    Parameters
-    ----------
-    ssd : SuperSegmentationDataset
-    obj_types : List[str]
-    n_jobs : int
-    nb_cpus : int
-    n_max_co_processes: int
+    Returns:
+
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -119,16 +120,17 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                       multi_params, nb_cpus=n_max_co_processes)
+                                       multi_params, debug=False, nb_cpus=n_max_co_processes)
 
     else:
-        _ = qu.QSUB_script(multi_params, "apply_mapping_decisions",
-                           n_cores=nb_cpus, n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True)
+        _ = qu.batchjob_script(
+            multi_params, "apply_mapping_decisions", n_cores=nb_cpus,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _apply_mapping_decisions_thread(args):
     # TODO: investigate `correct_for_background` when `obj_type=='sj'`
+    #  correct_for_background is not required anymore with the new mapping procedure
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -143,6 +145,8 @@ def _apply_mapping_decisions_thread(args):
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id, True)
+        version_dc = ssv.config["versions"]
+        cell_objects_dc = ssv.config['cell_objects']
         ssv.load_attr_dict()
 
         for obj_type in obj_types:
@@ -170,7 +174,7 @@ def _apply_mapping_decisions_thread(args):
 
             if lower_ratio is None:
                 try:
-                    lower_ratio = ssv.config['cell_objects']["lower_mapping_ratios"][
+                    lower_ratio = cell_objects_dc["lower_mapping_ratios"][
                         obj_type]
                 except:
                     msg = "Lower ratio undefined. SSV {}.".format(ssv_id)
@@ -179,7 +183,7 @@ def _apply_mapping_decisions_thread(args):
 
             if upper_ratio is None:
                 try:
-                    upper_ratio = ssv.config['cell_objects']["upper_mapping_ratios"][
+                    upper_ratio = cell_objects_dc["upper_mapping_ratios"][
                         obj_type]
                 except:
                     log_proc.error("Upper ratio undefined - 1. assumed. "
@@ -188,7 +192,7 @@ def _apply_mapping_decisions_thread(args):
 
             if sizethreshold is None:
                 try:
-                    sizethreshold = ssv.config['cell_objects']["sizethresholds"][
+                    sizethreshold = cell_objects_dc["sizethresholds"][
                         obj_type]
                 except:
                     msg = "Size threshold undefined. SSV {}.".format(ssv_id)
@@ -201,14 +205,13 @@ def _apply_mapping_decisions_thread(args):
                 for i_so_id in range(
                         len(ssv.attr_dict["mapping_%s_ids" % obj_type])):
                     so_id = ssv.attr_dict["mapping_%s_ids" % obj_type][i_so_id]
-                    obj_version = ssv.config["versions"][obj_type]
+                    obj_version = version_dc[obj_type]
                     this_so = segmentation.SegmentationObject(
                         so_id, obj_type,
                         version=obj_version,
                         scaling=ssv.scaling,
                         working_dir=ssv.working_dir)
                     this_so.load_attr_dict()
-
                     if 0 in this_so.attr_dict["mapping_ids"]:
                         ratio_0 = this_so.attr_dict["mapping_ratios"][
                             this_so.attr_dict["mapping_ids"] == 0][0]
@@ -242,16 +245,15 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
 
-    Parameters
-    ----------
-    synssv_version : str
-    stride : int
-    nb_cpus : int
-    n_max_co_processes : int
-    syn_threshold : float
+    Args:
+        synssv_version: str
+        stride: int
+        log:
+        nb_cpus: int
+        n_max_co_processes: int
+        syn_threshold: float
 
-    Returns
-    -------
+    Returns:
 
     """
     if syn_threshold is None:
@@ -270,9 +272,9 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
             multi_params, nb_cpus=nb_cpus)
 
     else:
-        _ = qu.QSUB_script(multi_params, "map_synssv_objects",
-                           n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(
+            multi_params, "map_synssv_objects", n_max_co_processes=n_max_co_processes,
+            remove_jobfolder=True, log=log)
 
 
 def map_synssv_objects_thread(args):
@@ -284,8 +286,8 @@ def map_synssv_objects_thread(args):
                                                       version_dict=version_dict)
 
     syn_ssv_sd = segmentation.SegmentationDataset(obj_type="syn_ssv",
-                                               working_dir=working_dir,
-                                               version=synssv_version)
+                                                  working_dir=working_dir,
+                                                  version=synssv_version)
 
     ssv_partners = syn_ssv_sd.load_cached_data("neuron_partners")
     syn_prob = syn_ssv_sd.load_cached_data("syn_prob")
@@ -314,17 +316,19 @@ def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):
     """
     Caches the SSV meshes locally with 20 cpus in parallel.
 
-    Parameters
-    ----------
-    working_dir : str
-        Path to working directory.
-    version : str
-        version identifier, like 'spgt' for spine ground truth SSD. Defaults
-        to the SSD of the cellular SSVs.
-    ssd_type : str
-        Default is 'ssv'
-    nb_cpus : int
-        Default is 20.
+    Args:
+        working_dir: str
+            Path to working directory.
+        version: str
+            version identifier, like 'spgt' for spine ground truth SSD. Defaults
+            to the SSD of the cellular SSVs.
+        ssd_type: str
+            Default is 'ssv'
+        nb_cpus: int
+            Default is 20.
+
+    Returns:
+
     """
     ssds = super_segmentation.SuperSegmentationDataset(working_dir=working_dir,
                                                        version=version,

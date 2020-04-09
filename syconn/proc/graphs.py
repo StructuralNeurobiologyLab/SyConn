@@ -24,20 +24,21 @@ def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
     Smooth vertex labels by applying a majority vote on a
     BFS subset of nodes for every node in the graph
     Parameters
-    ----------
-    vertices : np.array
-        N, 3
-    vertex_labels : np.array
-        N, 1
-    max_edge_length : float
-        maximum distance between vertices to consider them connected in the
-        graph
-    n_voting : int
-        Number of collected nodes during BFS used for majority vote
-    Returns
-    -------
-    np.array
+
+    Args:
+        vertices: np.array
+            N, 3
+        vertex_labels: np.array
+            N, 1
+        max_edge_length: float
+            maximum distance between vertices to consider them connected in the
+            graph
+        n_voting: int
+            Number of collected nodes during BFS used for majority vote
+
+    Returns: np.array
         smoothed vertex labels
+
     """
     G = create_graph_from_coords(vertices, max_dist=max_edge_length, mst=False,
                                  force_single_cc=False)
@@ -57,22 +58,20 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     Creates subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
 
-    Parameters
-    ----------
-    g : Graph
-    max_nb : int
-    verbose : bool
-    start_nodes : iterable
-        node ID's
+    Args:
+        g: Graph
+        max_nb: int
+        verbose: bool
+        start_nodes: iterable
+            node ID's
 
-    Returns
-    -------
-    dict
+    Returns: dict
+
     """
     subnodes = {}
     if verbose:
         nb_nodes = g.number_of_nodes()
-        pbar = tqdm.tqdm(total=nb_nodes)
+        pbar = tqdm.tqdm(total=nb_nodes, leave=False)
     if start_nodes is None:
         iter_ixs = g.nodes()
     else:
@@ -106,17 +105,15 @@ def split_subcc_join(g: nx.Graph, subgraph_size: int,
     Creates a subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
 
-    Parameters
-    ----------
-    g : Graph
-    subgraph_size : int
-    lo_first_n : int
-        leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
-        nodes, i.e. not use them as new starting nodes.
+    Args:
+        g: Graph
+        subgraph_size: int
+        lo_first_n: int
+            leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
+            nodes, i.e. not use them as new starting nodes.
 
-    Returns
-    -------
-    dict
+    Returns: dict
+
     """
     start_node = list(g.nodes())[0]
     for n, d in dict(g.degree).items():
@@ -178,22 +175,20 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     """
     Split graph into glia and non-glua CC's.
 
-    Parameters
-    ----------
-    nx_g : nx.Graph
-    thresh : float
-    clahe : bool
-    shortest_paths_dest_dir : str
-        None (default), else path to directory to write shortest paths
-        between neuron type SV end nodes
-    nb_cpus : int
-    pred_key_appendix : str
-    verbose : bool
+    Args:
+        nx_g: nx.Graph
+        thresh: float
+        clahe: bool
+        shortest_paths_dest_dir: str
+            None (default), else path to directory to write shortest paths
+            between neuron type SV end nodes
+        nb_cpus: int
+        pred_key_appendix: str
+        verbose: bool
 
-    Returns
-    -------
-    list, list
+    Returns: list, list
         Neuron, glia connected components.
+
     """
     glia_key = "glia_probas"
     if clahe:
@@ -211,22 +206,20 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     Split SuperSegmentationObject into glia and non glia
     SegmentationObjects.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    thresh : float
-    clahe : bool
-    shortest_paths_dest_dir : str
-        None (default), else path to directory to write shortest paths
-        between neuron type SV end nodes
-    pred_key_appendix : str
-        Defines type of glia predictions
-    verbose : bool
+    Args:
+        sso: SuperSegmentationObject
+        thresh: float
+        clahe: bool
+        shortest_paths_dest_dir: str
+            None (default), else path to directory to write shortest paths
+            between neuron type SV end nodes
+        pred_key_appendix: str
+            Defines type of glia predictions
+        verbose: bool
 
-    Returns
-    -------
-    list, list (of SegmentationObject)
+    Returns: list, list (of SegmentationObject)
         Neuron, glia nodes
+
     """
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
@@ -283,15 +276,16 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     Calculate distance weights for shortest path analysis or similar, based on
     glia and size vertex properties and removes unsupporting glia nodes.
 
-    Parameters
-    ----------
-    g : Graph
-    return_removed_nodes : bool
+    Args:
+        g: Graph
+        size_dict:
+        glia_dict:
+        return_removed_nodes: bool
+        shortest_paths_dest_dir:
 
-    Returns
-    -------
-    list of list of nodes
+    Returns: list of list of nodes
         Remaining connected components of type neuron
+
     """
     # set up node weights based on glia prediction and size
     # weights = {}
@@ -372,18 +366,16 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
     vertices have negligible distance (0.0001) to ensure shortest path
     along non-glia surfaces.
 
-    Parameters
-    ----------
-    glia_path : list of SegmentationObjects
-    glia_dict : dict
-        Dictionary which keys the SegmentationObjects in glia_path and returns
-        their glia prediction
-    write_paths : bool
+    Args:
+        glia_path: list of SegmentationObjects
+        glia_dict: dict
+            Dictionary which keys the SegmentationObjects in glia_path and returns
+            their glia prediction
+        write_paths: bool
 
-    Returns
-    -------
-    float
+    Returns: float
         Shortest path between neuron type nodes in nm
+
     """
     g = nx.Graph()
     col = {}
@@ -449,20 +441,19 @@ def eucl_dist(a, b):
 
 def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
                    node2ccsize_dict_glia, min_cc_size_glia):
-    """Currently not in use, Refactoring needed
+    """
+    Currently not in use, Refactoring needed
     Find paths between neuron type SV grpah nodes which contain glia nodes.
 
-    Parameters
-    ----------
-    g : nx.Graph
-    glia_dict :
-    node2ccsize_dict :
-    min_cc_size_neuron :
-    node2ccsize_dict_glia :
-    min_cc_size_glia :
+    Args:
+        g: nx.Graph
+        glia_dict:
+        node2ccsize_dict:
+        min_cc_size_neuron:
+        node2ccsize_dict_glia:
+        min_cc_size_glia:
 
-    Returns
-    -------
+    Returns:
 
     """
     end_nodes = []
@@ -499,12 +490,14 @@ def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
     Writes very simple skeleton, each node represents the center of mass of a
     SV, and edges are created in list order.
 
-    Parameters
-    ----------
-    so_path : list of SegmentationObject
-    dest_path : str
-    scaling : np.ndarray or tuple
-    comment : str
+    Args:
+        so_path: list of SegmentationObject
+        dest_path: str
+        scaling: np.ndarray or tuple
+        comment: str
+
+    Returns:
+
     """
     if scaling is None:
         scaling = np.array(global_params.config['scaling'])
@@ -534,14 +527,12 @@ def coordpath2anno(coords, scaling=None):
     Creates skeleton from scaled coordinates, assume coords are in order for
     edge creation.
 
-    Parameters
-    ----------
-    coords : np.array
-    scaling : np.ndarray
+    Args:
+        coords: np.array
+        scaling: np.ndarray
 
-    Returns
-    -------
-    SkeletonAnnotation
+    Returns: SkeletonAnnotation
+
     """
     if scaling is None:
         scaling = global_params.config['scaling']
@@ -563,20 +554,19 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
     """
     Generate skeleton from sample locations by adding edges between points
     with a maximum distance and then pruning the skeleton using MST.
-    
-    Parameters
-    ----------
-    coords : np.array
-    max_dist : float
-    force_single_cc : bool
-        force that the tree generated from coords is a single connected 
-        component
 
-    Returns
-    -------
-    np. array 
+    Args:
+        coords: np.array
+        max_dist: float
+        force_single_cc: bool
+            force that the tree generated from coords is a single connected
+            component
+        mst:
+
+    Returns: np. array
         edge list of nodes (coords) using the ordering of coords, i.e. the
         edge (1, 2) connects coordinate coord[1] and coord[2].
+
     """
     g = nx.Graph()
     if len(coords) == 1:
@@ -611,18 +601,22 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
     Draw graph with nodes colored in red (glia) and blue) depending on their
     class. Writes drawing to dest_path.
 
-    Parameters
-    ----------
-    G : nx.Graph
-    dest_path : str
-    min_sv_size : int
-    seed : int
-        Default: 0; random seed for layout generation
-    ext_glia : dict
-        keys: node in G, values: number indicating class
-    glia_key : str
-    node_size_cap : int
-    mcmp : color palette
+    Args:
+        G: nx.Graph
+        dest_path: str
+        min_sv_size: int
+        ext_glia: dict
+            keys: node in G, values: number indicating class
+        iterations:
+        seed: int
+            Default: 0; random seed for layout generation
+        glia_key: str
+        node_size_cap: int
+        mcmp: color palette
+        pos:
+
+    Returns:
+
     """
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -664,7 +658,7 @@ def nxGraph2kzip(g, coords, kzip_path):
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     node_mapping = {}
-    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()))
+    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()), leave=False)
     for v in g.nodes():
         c = coords[v]
         n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
@@ -696,7 +690,7 @@ def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
     anno = SkeletonAnnotation()
     anno.scaling = ssv.scaling
     node_mapping = {}
-    pbar = tqdm.tqdm(total=len(coords) + len(sv_graph.edges()))
+    pbar = tqdm.tqdm(total=len(coords) + len(sv_graph.edges()), leave=False)
     for v in sv_graph.nodes:
         c = coords[v]
         n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
