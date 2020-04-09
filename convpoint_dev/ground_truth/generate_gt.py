@@ -9,8 +9,6 @@ import numpy as np
 import os
 import glob
 import re
-import pickle as pkl
-from syconn.proc.meshes import mesh_area_calc
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
 from syconn.reps.super_segmentation import SuperSegmentationObject
@@ -82,7 +80,7 @@ def labels2mesh(args):
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
 
-    # filter nodes where label = -1
+    # remove nodes where label = -1
     a_node_coords = a_node_coords[(a_node_labels != -1)]
     a_node_labels = a_node_labels[(a_node_labels != -1)]
 

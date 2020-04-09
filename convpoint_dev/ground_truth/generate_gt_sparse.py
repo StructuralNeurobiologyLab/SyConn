@@ -8,7 +8,6 @@
 import os
 import glob
 import re
-import ipdb
 import numpy as np
 import networkx as nx
 from collections import deque
@@ -22,25 +21,6 @@ from morphx.classes.hybridmesh import HybridMesh
 from syconn.reps.super_segmentation import SuperSegmentationObject
 
 
-def comment2int(comment: str):
-    if comment == "gt_dendrite" or comment == "shaft":
-        return 0
-    elif comment == "gt_axon":
-        return 1
-    elif comment == "gt_soma" or comment == "other":
-        return 2
-    elif comment == "gt_bouton":
-        return 3
-    elif comment == "gt_terminal":
-        return 4
-    elif comment == "gt_neck" or comment == "neck":
-        return 5
-    elif comment == "gt_head" or comment == "head":
-        return 6
-    else:
-        return -1
-
-
 def labels2mesh(args):
     """
     Args:
@@ -49,15 +29,15 @@ def labels2mesh(args):
             out_path: path to folder where output should be saved.
     """
 
-    kzip_path, out_path = args
+    kzip_path, out_path, version = args
 
     # get sso
     sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
-    sso = SuperSegmentationObject(sso_id)
+    sso = SuperSegmentationObject(sso_id, version=version)
     sso.load_attr_dict()
 
     # load cell and cell organelles (order of meshes in array is important for later merging process)
-    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
+    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
     label_map = [-1, 7, 8, 9]
 
     hms = []
@@ -83,7 +63,7 @@ def labels2mesh(args):
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
 
-    # filter nodes where label = -1
+    # remove nodes where label = -1
     a_node_coords = a_node_coords[(a_node_labels != -1)]
     a_node_labels = a_node_labels[(a_node_labels != -1)]
 
@@ -129,6 +109,25 @@ def labels2mesh(args):
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
 
 
+def comment2int(comment: str):
+    if comment == "gt_dendrite" or comment == "shaft":
+        return 0
+    elif comment == "gt_axon":
+        return 1
+    elif comment == "gt_soma" or comment == "other":
+        return 2
+    elif comment == "gt_bouton":
+        return 3
+    elif comment == "gt_terminal":
+        return 4
+    elif comment == "gt_neck" or comment == "neck":
+        return 5
+    elif comment == "gt_head" or comment == "head":
+        return 6
+    else:
+        return -1
+
+
 def label_search(g: nx.Graph, source: int) -> int:
     visited = [source]
     neighbors = g.neighbors(source)
@@ -144,23 +143,23 @@ def label_search(g: nx.Graph, source: int) -> int:
     return 0
 
 
-def gt_generation(kzip_paths, out_path):
+def gt_generation(kzip_paths, out_path, version: str = 'semsegaxoness'):
     if not os.path.isdir(out_path):
         os.makedirs(out_path)
 
-    params = [(p, out_path) for p in kzip_paths]
-
+    params = [(p, out_path, version) for p in kzip_paths]
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
     # set paths
-    destination = "/wholebrain/u/jklimesch/thesis/gt/gt_meshsets/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/20_03_18/"
+    # global_params.wd = "/wholebrain/scratch/areaxfs3/"
     global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/gt_julian/sparse_gt/old_encoding/"
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/raw_julian/sparse_gt/new/"
 
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
 
     # generate ground truth
-    gt_generation(file_paths, destination)
+    gt_generation(file_paths, destination, version='semsegaxoness')
