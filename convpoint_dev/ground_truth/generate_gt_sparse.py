@@ -13,6 +13,8 @@ import networkx as nx
 from collections import deque
 from sklearn.neighbors import KDTree
 from knossos_utils.skeleton_utils import load_skeleton
+from syconn.reps.super_segmentation_helper import map_myelin2coords
+
 from syconn import global_params
 from syconn.mp.mp_utils import start_multiprocess_imap
 from multiprocessing import cpu_count
@@ -28,18 +30,16 @@ def labels2mesh(args):
             kzip_path: path to current sso.
             out_path: path to folder where output should be saved.
     """
-
     kzip_path, out_path, version = args
 
-    # get sso
+    # load and prepare sso
     sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=version)
     sso.load_attr_dict()
 
-    # load cell and cell organelles (order of meshes in array is important for later merging process)
+    # load cell and cell organelles
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
     label_map = [-1, 7, 8, 9]
-
     hms = []
     for ix, mesh in enumerate(meshes):
         indices, vertices, normals = mesh
@@ -49,8 +49,6 @@ def labels2mesh(args):
         hm = HybridMesh(vertices=vertices, faces=indices, labels=labels)
         hms.append(hm)
 
-    # CREATE CELL HYBRIDMESH #
-
     # load annotation object
     a_obj = load_skeleton(kzip_path)
     if len(a_obj) == 1:
@@ -59,11 +57,9 @@ def labels2mesh(args):
         a_obj = a_obj["skeleton"]
     a_nodes = list(a_obj.getNodes())
 
-    # extract node coordinates and labels
+    # extract node coordinates and labels and remove nodes with label -1
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
-
-    # remove nodes where label = -1
     a_node_coords = a_node_coords[(a_node_labels != -1)]
     a_node_labels = a_node_labels[(a_node_labels != -1)]
 
@@ -79,19 +75,17 @@ def labels2mesh(args):
     dist, ind = tree.query(a_node_coords, k=1)
     node_labels[ind.reshape(len(ind))] = a_node_labels.reshape(-1, 1)
 
+    # nodes without label get label from nearest node with label
     g = nx.Graph()
     g.add_nodes_from([(i, dict(label=node_labels[i])) for i in range(len(nodes))])
     g.add_edges_from([(edges[i][0], edges[i][1]) for i in range(len(edges))])
-
     for node in g.nodes:
         if g.nodes[node]['label'] == -1:
             ix = label_search(g, node)
             node_labels[node] = node_labels[ix]
 
+    # create cloud ensemble
     encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
-
-    # CREATE CLOUD SET #
-
     obj_names = ['hc', 'mi', 'vc', 'sy']
     hm = None
     clouds = {}
@@ -105,11 +99,25 @@ def labels2mesh(args):
             hms[ix].set_encoding({obj_names[ix]: label_map[ix]})
             clouds[obj_names[ix]] = hms[ix]
 
+    # add myelin
     ce = CloudEnsemble(clouds, hm, no_pred=['mi', 'vc', 'sy'])
+    myelinated = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    nodes_idcs = np.arange(len(hm.nodes))
+    myel_nodes = nodes_idcs[myelinated.astype(bool)]
+    myel_vertices = []
+    for node in myel_nodes:
+        myel_vertices.extend(hm.verts2node[node])
+    # myelinated vertices get type 1, not myelinated vertices get type 0
+    types = np.zeros(len(hm.vertices))
+    types[myel_vertices] = 1
+    hm.set_types(types)
+
+    # save generated cloud ensemble to file
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
 
 
 def comment2int(comment: str):
+    """ Map comments used during annotation to respective label. """
     if comment == "gt_dendrite" or comment == "shaft":
         return 0
     elif comment == "gt_axon":
@@ -129,6 +137,7 @@ def comment2int(comment: str):
 
 
 def label_search(g: nx.Graph, source: int) -> int:
+    """ Find nearest node to source which has a label. """
     visited = [source]
     neighbors = g.neighbors(source)
     de = deque([i for i in neighbors])
@@ -143,23 +152,21 @@ def label_search(g: nx.Graph, source: int) -> int:
     return 0
 
 
-def gt_generation(kzip_paths, out_path, version: str = 'semsegaxoness'):
+def gt_generation(kzip_paths, out_path, version: str = None):
     if not os.path.isdir(out_path):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
+    labels2mesh(params[0])
+
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
+    # start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
-    # set paths
-    destination = "/wholebrain/u/jklimesch/thesis/gt/20_03_18/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/20_04_09/"
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
     global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/raw_julian/sparse_gt/new/"
-
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/annotations/sparse_gt/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-
-    # generate ground truth
-    gt_generation(file_paths, destination, version='semsegaxoness')
+    gt_generation(file_paths, destination)
