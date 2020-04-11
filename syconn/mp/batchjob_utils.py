@@ -26,7 +26,7 @@ import time
 from multiprocessing import cpu_count
 from logging import Logger
 
-from ..handler.basics import temp_seed
+from ..handler.basics import temp_seed, str_delta_sec
 from ..handler.config import initialize_logging
 from .. import global_params
 from .mp_utils import start_multiprocess_imap
@@ -329,9 +329,9 @@ def batchjob_script(params: list, name: str,
     pbar.close()
 
     dtime_all = time.time() - start_all
-    dtime_all = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dtime_all))
+    dtime_all = str_delta_sec(dtime_all)
     log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
-                      f"{dtime_all} ({dtime_sub:.1f} s submission): "
+                      f"{dtime_all} ({dtime_sub:.1f}s submission): "
                       f"{nb_completed} completed, {nb_failed} failed.")
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):

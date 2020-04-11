@@ -116,7 +116,7 @@ cell_objects:
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
   # organelles to syn_ssv
-  max_vx_dist_nm: 2000
+  max_vx_dist_nm: 2000  # TODO: rename to max_vert_dist_nm
   max_rep_coord_dist_nm: 4000
   # RFC probability used for classifying whether syn or not
   thresh_synssv_proba: 0.5

@@ -35,7 +35,8 @@ __all__ = ['crop_bool_array', 'get_filepaths_from_dir', 'write_obj2pkl', 'load_p
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
            'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g', 'chunkify_successive']
+           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g',
+           'chunkify_successive', 'str_delta_sec']
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):
@@ -748,3 +749,34 @@ def temp_seed(seed):
         yield
     finally:
         np.random.set_state(state)
+
+
+def str_delta_sec(seconds: int) -> str:
+    """
+    String time formatting - omits time units which are zero.
+
+    Examples:
+        >>> sec = 2 * 24 * 3600 + 12 * 3600 + 5 * 60 + 1
+        >>> str_rep = str_delta_sec(sec)
+        >>> assert str_rep == '2d:12h:05min:01s'
+        >>> assert str_delta_sec(4 * 3600 + 20 * 60 + 10) == '4h:20min:10s'
+
+    Args:
+        seconds: Number of seconds, e.g. result of a time delta.
+
+    Returns:
+        String representation, e.g. ``'2d:12h:05min:01s'`` for
+        ``sec = 1 + 5 * 60 + 12 * 3600 + 2 * 24 * 3600``.
+    """
+    m, s = divmod(seconds, 60)
+    h, m = divmod(m, 60)
+    d, h = divmod(h, 24)
+    str_rep = ''
+    if d > 0:
+        str_rep += f'{d:d}d:'
+    if h > 0:
+        str_rep += f'{h:d}h:'
+    if m > 0:
+        str_rep += f'{m:02d}min:'
+    str_rep += f'{s:02d}s'
+    return str_rep

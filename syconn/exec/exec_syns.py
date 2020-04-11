@@ -131,7 +131,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
              f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
-    cps.map_objects_to_synssv(global_params.config.working_dir, log=log)
+    cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)

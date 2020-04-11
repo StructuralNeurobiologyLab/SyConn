@@ -7,6 +7,7 @@
 
 from collections import defaultdict
 import numpy as np
+from logging import Logger
 import os
 from scipy import spatial
 from sklearn import ensemble
@@ -961,140 +962,6 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
     return ccs
 
 
-# Code for mapping SJ to CS, three different ways: via ChunkDataset
-# (currently used), KnossosDataset, SegmentationDataset+
-# TODO: SegmentationDataset version of below, probably not necessary anymore
-def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
-                             n_folders_fs=10000,
-                             stride=20,
-                             nb_cpus=None, n_max_co_processes=None):
-    assert n_folders_fs % stride == 0
-    raise DeprecationWarning('Currently not adapted to new subfold system')
-    wd = cs_sd.working_dir
-    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
-    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
-                                               create=True, n_folders_fs=n_folders_fs)
-
-    for p in voxel_rel_paths:
-        os.makedirs(conn_sd.so_storage_path + p)
-
-    multi_params = []
-    for block_bs in [[i, i+stride] for i in range(0, n_folders_fs, stride)]:
-        multi_params.append([wd, block_bs[0], block_bs[1], conn_sd.version,
-                             sj_sd.version, cs_sd.version,
-                             rep_coord_dist_nm])
-
-    if not qu.batchjob_enabled():
-        sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
-                              multi_params, nb_cpus=nb_cpus)
-    else:
-        qu.batchjob_script(multi_params, "overlap_mapping_sj_to_cs",
-                           n_max_co_processes=n_max_co_processes)
-
-
-# TODO: SegmentationDataset version of below, probably not necessary anymore
-def _overlap_mapping_sj_to_cs_thread(args):
-    wd, block_start, block_end, conn_sd_version, sj_sd_version, cs_sd_version, \
-        rep_coord_dist_nm = args
-
-    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd,
-                                               version=conn_sd_version,
-                                               create=False)
-    sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
-                                             version=sj_sd_version,
-                                             create=False)
-    cs_sd = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
-                                             version=cs_sd_version,
-                                             create=False)
-
-    cs_id_assignment = np.linspace(0, len(cs_sd.ids), conn_sd.n_folders_fs+1).astype(np.int)
-
-    sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config['cell_objects']
-    ["sizethresholds"]['sj']] * sj_sd.scaling)
-
-    for i_cs_start_id, cs_start_id in enumerate(cs_id_assignment[block_start: block_end]):
-        # TODO: change
-        rel_path = subfold_from_ix(i_cs_start_id + block_start, conn_sd.n_folders_fs)
-
-        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                                read_only=False)
-        attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False)
-
-        next_conn_id = i_cs_start_id + block_start
-        n_items_for_path = 0
-        for cs_list_id in range(cs_start_id, cs_id_assignment[block_start + i_cs_start_id + 1]):
-            cs_id = cs_sd.ids[cs_list_id]
-
-            log_extraction.debug('CS ID: %d' % cs_id)
-
-            cs = cs_sd.get_segmentation_object(cs_id)
-
-            overlap_vx_l = overlap_mapping_sj_to_cs_single(cs, sj_sd,
-                                                           sj_kdtree=sj_kdtree,
-                                                           rep_coord_dist_nm=rep_coord_dist_nm)
-
-            for l in overlap_vx_l:
-                sj_id, overlap_vx = l
-
-                bounding_box = [np.min(overlap_vx, axis=0),
-                                np.max(overlap_vx, axis=0) + 1]
-
-                vx = np.zeros(bounding_box[1] - bounding_box[0], dtype=np.bool)
-                overlap_vx -= bounding_box[0]
-                vx[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
-
-                voxel_dc[next_conn_id] = [vx], [bounding_box[0]]
-
-                attr_dc[next_conn_id] = {'sj_id': sj_id, 'cs_id': cs_id,
-                                         'neuron_partners': cs.lookup_in_attribute_dict('neuron_partners')}
-
-                next_conn_id += conn_sd.n_folders_fs
-                n_items_for_path += 1
-
-        if n_items_for_path > 0:
-            voxel_dc.push(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
-            attr_dc.push(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
-
-
-# TODO: SegmentationDataset version of below, probably not necessary anymore
-def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm=2000):
-    cs_kdtree = spatial.cKDTree(cs.voxel_list * cs.scaling)
-
-    if sj_kdtree is None:
-        sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config['cell_objects']
-        ["sizethresholds"]['sj']] * sj_sd.scaling)
-
-    cand_sj_ids_l = sj_kdtree.query_ball_point(cs.voxel_list * cs.scaling,
-                                               r=rep_coord_dist_nm)
-    u_cand_sj_ids = set()
-    for l in cand_sj_ids_l:
-        u_cand_sj_ids.update(l)
-
-    if len(u_cand_sj_ids) == 0:
-        return []
-
-    u_cand_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config['cell_objects']["sizethresholds"]
-    ['sj']][np.array(list(u_cand_sj_ids))]
-
-    # log_extraction.debug("%d candidate sjs" % len(u_cand_sj_ids))
-
-    overlap_vx_l = []
-    for sj_id in u_cand_sj_ids:
-        sj = sj_sd.get_segmentation_object(sj_id, create=False)
-        dists, _ = cs_kdtree.query(sj.voxel_list * sj.scaling,
-                                   distance_upper_bound=1)
-
-        overlap_vx = sj.voxel_list[dists == 0]
-        if len(overlap_vx) > 0:
-            overlap_vx_l.append([sj_id, overlap_vx])
-
-    # log_extraction.debug("%d candidate sjs overlap" % len(overlap_vx_l))
-
-    return overlap_vx_l
-
-
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                      n_chunk_jobs=1000, nb_cpus=None,
                      n_max_co_processes=None):
@@ -1249,8 +1116,7 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=100,
                          nb_cpus=None, n_max_co_processes=None,
                          sym_label=1, asym_label=1):
-    """TODO: will be refactored into single method when generating syn objects
-    # TODO: Investigate, prediction results of might be buggy
+    """
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
     syn_ssv object attribute dict.
 
@@ -1275,6 +1141,8 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
     asym_label: int
         Label of asymmetric class within `kd_asym_path`.
     """
+    log_extraction.warning('DeprecationWarning: Synapse type extraction is now included '
+                           'in the object extraction. ')
     assert "syn_ssv" in sj_sd.version_dict
     if (sym_label == asym_label) and (kd_asym_path == kd_sym_path):
         raise ValueError('Both KnossosDatasets and labels for symmetric and '
@@ -1360,114 +1228,302 @@ def _extract_synapse_type_thread(args):
         this_attr_dc.push()
 
 
-# TODO: KD version of above, probably not necessary anymore
-def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
-                                    n_folders_fs=10000, n_chunk_jobs=1000,
-                                    nb_cpus=None, n_max_co_processes=None):
+def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
+                                     ssd_version: Optional[str] = None,
+                                     n_max_co_processes: Optional[int] = None,
+                                     debug: bool = False, log: Logger = None,
+                                     max_rep_coord_dist_nm: Optional[float] = None,
+                                     max_vert_dist_nm: Optional[float] = None):
+    """
+    Map sub-cellular objects of the synaptic partners of 'syn_ssv' objects and stores
+    them in their attribute dict.
 
-    wd = cs_sd.working_dir
+    The following keys will be available in the ``attr_dict`` of ``syn_ssv``-typed
+    :class:`~syconn.reps.segmentation.SegmentationObject`:
+        * 'n_mi_objs_%d':
+        * 'n_mi_vxs_%d':
+        * 'n_mi_objs_%d':
+        * 'n_mi_vxs_%d':
 
-    rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config['cell_objects']["sizethresholds"]['sj']]
+    Args:
+        wd:
+        obj_version:
+        ssd_version:
+        n_max_co_processes:
+        debug:
+        log:
+        max_rep_coord_dist_nm:
+        max_vert_dist_nm:
 
-    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
-    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
-                                               create=True, n_folders_fs=n_folders_fs)
+    Returns:
 
-    for p in voxel_rel_paths:
-        os.makedirs(conn_sd.so_storage_path + p)
-
-    if n_chunk_jobs > len(voxel_rel_paths):
-        n_chunk_jobs = len(voxel_rel_paths)
-
-    if n_chunk_jobs > len(rel_sj_ids):
-        n_chunk_jobs = len(rel_sj_ids)
-
-    sj_id_blocks = np.array_split(rel_sj_ids, n_chunk_jobs)
-    voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_chunk_jobs)
+    """
+    if max_rep_coord_dist_nm is None:
+        max_rep_coord_dist_nm = global_params.config['cell_objects']['max_rep_coord_dist_nm']
+    if max_vert_dist_nm is None:
+        max_vert_dist_nm = global_params.config['cell_objects']['max_vx_dist_nm']  # TODO: rename in config
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
+                                                      version=ssd_version)
 
     multi_params = []
-    for i_block in range(n_chunk_jobs):
-        multi_params.append([wd, sj_id_blocks[i_block],
-                             voxel_rel_path_blocks[i_block], conn_sd.version,
-                             sj_sd.version, cs_sd.version, cs_kd.knossos_path])
+
+    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
+        multi_params.append([wd, obj_version, ssd_version, ids_small_chunk,
+                             max_rep_coord_dist_nm, max_vert_dist_nm])
 
     if not qu.batchjob_enabled():
-        sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
-                              multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess_imap(
+            _map_objects_from_synssv_partners_thread, multi_params,
+            nb_cpus=n_max_co_processes, debug=debug)
+    else:
+        _ = qu.batchjob_script(
+            multi_params, "map_objects_from_synssv_partners", log=log,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+
+    # iterate over paths with syn
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
+                                                  version=obj_version)
+
+    multi_params = []
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total):
+        multi_params.append([so_dir_paths, wd, obj_version,
+                             ssd_version])
+    if not qu.batchjob_enabled():
+        _ = sm.start_multiprocess_imap(
+            _objects_from_cell_to_syn_dict, multi_params,
+            nb_cpus=n_max_co_processes, debug=debug)
+    else:
+        _ = qu.batchjob_script(
+            multi_params, "objects_from_cell_to_syn_dict", log=log,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+    if log is None:
+        log = log_extraction
+    log.debug('Deleting cache dictionaries now.')
+    # delete cache_dc
+    sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
+                               nb_cpus=global_params.config['ncores_per_node'])
+    log.debug('Deleted all cache dictionaries.')
+
+
+def _map_objects_from_synssv_partners_thread(args: tuple):
+    """
+    Helper function of 'map_objects_from_synssv_partners'.
+
+    Args:
+        args: see 'map_objects_from_synssv_partners'
+
+    Returns:
+
+    """
+    wd, obj_version, ssd_version, ssv_ids, max_rep_coord_dist_nm, max_vert_dist_nm = args
+
+    sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
+                                                  working_dir=wd,
+                                                  version=obj_version)
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
+                                                      version=ssd_version)
+    sd_vc = segmentation.SegmentationDataset(obj_type="vc", working_dir=wd)
+    id2ix_vc = {v: ix for ix, v in enumerate(sd_vc.ids)}
+    sd_mi = segmentation.SegmentationDataset(obj_type="mi", working_dir=wd)
+    id2ix_mi = {v: ix for ix, v in enumerate(sd_mi.ids)}
+
+    syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
+    for ssv_id in ssv_ids:  # Iterate over cells
+        ssv_o = ssd.get_super_segmentation_object(ssv_id)
+        ssv_o.load_attr_dict()
+        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
+                                     read_only=False, disable_locking=True)
+
+        curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
+                        (syn_neuronpartners[:, 1] == ssv_id)
+        synssv_ids = sd_syn_ssv.ids[curr_ssv_mask]
+        n_synssv = len(synssv_ids)
+        n_mi_objs = np.zeros((n_synssv, ), dtype=np.int)
+        n_mi_vxs = np.zeros((n_synssv, ), dtype=np.int)
+        n_vc_objs = np.zeros((n_synssv, ), dtype=np.int)
+        n_vc_vxs = np.zeros((n_synssv, ), dtype=np.int)
+        cache_dc['synssv_ids'] = synssv_ids
+        if n_synssv == 0:
+            cache_dc['n_mi_objs'] = n_mi_objs
+            cache_dc['n_mi_vxs'] = n_mi_vxs
+            cache_dc['n_vc_objs'] = n_vc_objs
+            cache_dc['n_vc_vxs'] = n_vc_vxs
+            cache_dc.push()
+            continue
+
+        kdtree_synssv = spatial.cKDTree(sd_syn_ssv.rep_coords[curr_ssv_mask] * sd_syn_ssv.scaling)
+
+        # vesicle clouds
+        obj_ixs = [id2ix_vc[i] for i in ssv_o.vc_ids]
+        kdtree_vc = spatial.cKDTree(sd_vc.rep_coords[obj_ixs] * sd_vc.scaling)
+
+        # mitos
+        obj_ixs = [id2ix_mi[i] for i in ssv_o.mi_ids]
+        kdtree_mi = spatial.cKDTree(sd_mi.rep_coords[obj_ixs] * sd_mi.scaling)
+
+        # returns a list of neighboring objects for every synssv (note: ix is now the index within ssv_o.mi_ids
+        close_mi_ixs = kdtree_synssv.query_ball_tree(kdtree_mi, r=max_rep_coord_dist_nm)
+        close_vc_ixs = kdtree_synssv.query_ball_tree(kdtree_vc, r=max_rep_coord_dist_nm)
+        for ii, synssv_id in enumerate(synssv_ids):
+            synssv_obj = sd_syn_ssv.get_segmentation_object(synssv_id)
+            mis = sd_mi.get_segmentation_object(ssv_o.mi_ids[close_mi_ixs[ii]])
+            vcs = sd_vc.get_segmentation_object(ssv_o.vc_ids[close_vc_ixs[ii]])
+            n_mi_objs[ii], n_mi_vxs[ii] = _map_objects_from_synssv(synssv_obj, mis, max_vert_dist_nm)
+            n_vc_objs[ii], n_vc_vxs[ii] = _map_objects_from_synssv(synssv_obj, vcs, max_vert_dist_nm)
+
+        cache_dc['n_mi_objs'] = n_mi_objs
+        cache_dc['n_mi_vxs'] = n_mi_vxs
+        cache_dc['n_vc_objs'] = n_vc_objs
+        cache_dc['n_vc_vxs'] = n_vc_vxs
+        cache_dc.push()
+
+
+def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm):
+    """
+    TODO: Loading meshes for approximating close-by object volume is slow - exchange with summed object size?
+
+    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
+    is executed in 'classify_synssv_objects'.
+    Helper function of `objects_to_single_synssv`.
+
+    Args:
+        synssv_o: 'syn_ssv' synapse object.
+        seg_objs: SegmentationObject of type 'vc' or 'mi'
+        max_vert_dist_nm: Query radius for SegmentationObject vertices. Used to estimate
+            number of nearby object voxels.
+
+    Returns:
+        Number of SegmentationObjects with >0 vertices, approximated number of
+        object voxels within `max_vert_dist_nm`.
+    """
+    synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
+
+    n_obj_vxs = []
+    for obj in seg_objs:
+        # use mesh vertices instead of voxels
+        obj_vxs = obj.mesh[1].reshape(-1, 3)
+
+        ds, _ = synssv_vx_kdtree.query(obj_vxs,
+                                       distance_upper_bound=max_vert_dist_nm)
+        # surface fraction of subcellular object which is close to synapse
+        close_frac = np.sum(ds < np.inf) / len(obj_vxs)
+        # estimate number of voxels by close-by surface area fraction times total number of voxels
+        n_obj_vxs.append(close_frac * obj.size)
+
+    n_obj_vxs = np.array(n_obj_vxs)
+
+    n_objects = np.sum(n_obj_vxs > 0)
+    n_vxs = np.sum(n_obj_vxs)
+
+    return n_objects, n_vxs
+
+
+def _objects_from_cell_to_syn_dict(args):
+    """
+    args : Tuple
+        see 'map_objects_from_synssv_partners'
+    """
+    so_dir_paths, wd, obj_version, ssd_version = args
+
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
+                                                      version=ssd_version)
+    sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
+                                                  working_dir=wd,
+                                                  version=obj_version)
+
+    for so_dir_path in so_dir_paths:
+        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                     read_only=False, disable_locking=True)
+        for synssv_id in this_attr_dc.keys():
+            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
+            synssv_o.load_attr_dict()
+            map_dc = dict()
+            for ii, ssv_partner_id in enumerate(synssv_o.attr_dict["neuron_partners"]):
+                ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
+                ssv_o.load_attr_dict()
+                cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
+
+                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
+                if len(index) != 1:
+                    msg = "Partner cell ID mismatch."
+                    log_extraction.error(msg)
+                    raise ValueError(msg)
+                index = index[0][0]
+                map_dc[f'n_mi_objs_{ii}'] = cache_dc['n_mi_objs'][index]
+                map_dc[f'n_mi_vxs_{ii}'] = cache_dc['n_mi_vxs'][index]
+                map_dc[f'n_vc_objs_{ii}'] = cache_dc['n_vc_objs'][index]
+                map_dc[f'n_vc_vxs_{ii}'] = cache_dc['n_vc_vxs'][index]
+            synssv_o.attr_dict.update(map_dc)
+            this_attr_dc[synssv_id] = synssv_o.attr_dict
+        this_attr_dc.push()
+
+
+def classify_synssv_objects(wd, obj_version=None, log=None, nb_cpus=None,
+                            n_max_co_processes=None):
+    """
+    TODO: Replace by new synapse detection.
+    Classify SSV contact sites into synaptic or non-synaptic using an RFC model
+    and store the result in the attribute dict of the syn_ssv objects.
+    For requirements see `synssv_o_features`.
+
+    Args:
+        wd:
+        obj_version:
+        log:
+        nb_cpus:
+        n_max_co_processes:
+
+    Returns:
+
+    """
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
+                                                  version=obj_version)
+
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total)
+    multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
+                    multi_params]
+
+    if not qu.batchjob_enabled():
+        _ = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
+                                        multi_params, nb_cpus=nb_cpus)
 
     else:
-        qu.batchjob_script(multi_params, "overlap_mapping_sj_to_cs_via_kd",
-                           n_max_co_processes=n_max_co_processes)
-    return conn_sd
+        _ = qu.batchjob_script(
+            multi_params,  "classify_synssv_objects", log=log,
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
-# TODO: KD version of above, probably not necessary anymore
-def _overlap_mapping_sj_to_cs_via_kd_thread(args):
-    wd, sj_ids, voxel_rel_paths, conn_sd_version, sj_sd_version, \
-        cs_sd_version, cs_kd_path = args
+def _classify_synssv_objects_thread(args):
+    """
+    Helper function of 'classify_synssv_objects'.
 
-    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd,
-                                               version=conn_sd_version,
-                                               create=False)
-    sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
-                                             version=sj_sd_version,
-                                             create=False)
-    cs_sd = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
-                                             version=cs_sd_version,
-                                             create=False)
+    Parameters
+    ----------
+    args : Tuple
+        see 'classify_synssv_objects'
+    """
+    so_dir_paths, wd, obj_version = args
 
-    cs_kd = kd_factory(cs_kd_path)
+    sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
+                                                  working_dir=wd,
+                                                  version=obj_version)
+    rfc = joblib.load(global_params.config.mpath_syn_rfc)
 
-    sj_id_blocks = np.array_split(sj_ids, len(voxel_rel_paths))
+    for so_dir_path in so_dir_paths:
+        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                     read_only=False)
 
-    for i_sj_id_block, sj_id_block in enumerate(sj_id_blocks):
-        rel_path = voxel_rel_paths[i_sj_id_block]
+        for synssv_id in this_attr_dc.keys():
+            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
+            synssv_o.load_attr_dict()
 
-        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                                read_only=False)
-        attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False)
+            feats = synssv_o_features(synssv_o)
+            syn_prob = rfc.predict_proba([feats])[0][1]
 
-        next_conn_id = ix_from_subfold(rel_path,
-                                       conn_sd.n_folders_fs)
+            synssv_o.attr_dict.update({"syn_prob": syn_prob})
+            this_attr_dc[synssv_id] = synssv_o.attr_dict
 
-        for sj_id in sj_id_block:
-            sj = sj_sd.get_segmentation_object(sj_id)
-            vxl = sj.voxel_list
-
-            cs_ids = cs_kd.from_overlaycubes_to_list(vxl, datatype=np.uint64)
-            u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
-
-            zero_ratio = c_cs_ids[u_cs_ids == 0] / np.sum(c_cs_ids)
-
-            for cs_id in u_cs_ids:
-                if cs_id == 0:
-                    continue
-
-                cs = cs_sd.get_segmentation_object(cs_id)
-                id_ratio = c_cs_ids[u_cs_ids == cs_id] / float(np.sum(c_cs_ids))
-                overlap_vx = vxl[cs_ids == cs_id]
-                cs_ratio = float(len(overlap_vx)) / cs.size
-
-                bounding_box = [np.min(overlap_vx, axis=0),
-                                np.max(overlap_vx, axis=0) + 1]
-
-                vx_block = np.zeros(bounding_box[1] - bounding_box[0], dtype=np.bool)
-                overlap_vx -= bounding_box[0]
-                vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
-
-                voxel_dc[next_conn_id] = [vx_block], [bounding_box[0]]
-                attr_dc[next_conn_id] = {'sj_id': sj_id,
-                                         'cs_id': cs_id,
-                                         'id_sj_ratio': id_ratio,
-                                         'id_cs_ratio': cs_ratio,
-                                         'background_overlap_ratio': zero_ratio}
-
-                next_conn_id += conn_sd.n_folders_fs
-
-        voxel_dc.push(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
-        attr_dc.push(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
+        this_attr_dc.push()
 
 
 # Code for property extraction of contact sites (syn_ssv)
@@ -1639,270 +1695,6 @@ def synssv_o_featurenames():
             'n_mi_vxs_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
             'n_mi_objs_neuron2', 'n_mi_vxs_neuron2', 'n_vc_objs_neuron2',
             'n_vc_vxs_neuron2']
-
-
-def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
-                          mi_version=None, vc_version=None, max_vx_dist_nm=None,
-                          max_rep_coord_dist_nm=None, log=None,
-                          nb_cpus=None, n_max_co_processes=None):
-    # TODO: optimize
-    """
-    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
-    is executed in 'classify_synssv_objects'.
-
-    Parameters
-    ----------
-    wd : str
-    obj_version : str
-    ssd_version : str
-    mi_version : str
-    vc_version : str
-    max_vx_dist_nm : float
-    max_rep_coord_dist_nm : float
-    nb_cpus : int
-    n_max_co_processes : int
-    """
-    if max_rep_coord_dist_nm is None:
-        max_rep_coord_dist_nm = global_params.config['cell_objects']['max_rep_coord_dist_nm']
-    if max_vx_dist_nm is None:
-        max_vx_dist_nm = global_params.config['cell_objects']['max_vx_dist_nm']
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=obj_version)
-
-    # chunk params
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total * 4)
-    multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version,
-                     ssd_version, max_vx_dist_nm, max_rep_coord_dist_nm) for
-                    so_dir_paths in multi_params]
-
-    if not qu.batchjob_enabled():
-        sm.start_multiprocess_imap(_map_objects_to_synssv_thread,
-                                   multi_params, nb_cpus=nb_cpus)
-
-    else:
-        qu.batchjob_script(multi_params, "map_objects_to_synssv", log=log,
-                           n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
-
-
-def _map_objects_to_synssv_thread(args):
-    """
-    Helper function of 'map_objects_to_synssv'.
-
-    Parameters
-    ----------
-    args : Tuple
-        see 'map_objects_to_synssv'
-    """
-    so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, \
-        max_vx_dist_nm, max_rep_coord_dist_nm = args
-    global_params.wd = wd
-
-    ssv = super_segmentation.SuperSegmentationDataset(working_dir=wd,
-                                                      version=ssd_version)
-    sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
-                                                  working_dir=wd,
-                                                  version=obj_version)
-    mi_sd = segmentation.SegmentationDataset(obj_type="mi",
-                                             working_dir=wd,
-                                             version=mi_version)
-    vc_sd = segmentation.SegmentationDataset(obj_type="vc",
-                                             working_dir=wd,
-                                             version=vc_version)
-    for so_dir_path in so_dir_paths:
-        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                     read_only=False)
-
-        for synssv_id in this_attr_dc.keys():
-            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
-            synssv_o.load_attr_dict()
-
-            for k in list(synssv_o.attr_dict.keys()):
-                if k.startswith("n_mi_"):
-                    del(synssv_o.attr_dict[k])
-                if k.startswith("n_vc_"):
-                    del(synssv_o.attr_dict[k])
-
-            synssv_feats = objects_to_single_synssv(
-                synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=max_vx_dist_nm,
-                max_rep_coord_dist_nm=max_rep_coord_dist_nm)
-
-            synssv_o.attr_dict.update(synssv_feats)
-            this_attr_dc[synssv_id] = synssv_o.attr_dict
-
-        this_attr_dc.push()
-
-
-def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
-                             max_rep_coord_dist_nm=4000):
-    # TODO: redesign feature and retrain RFC - total number of voxels does not make sense...
-
-    """
-    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
-    is executed in 'classify_synssv_objects'.
-    Helper function of `_map_objects_to_synssv_thread`
-
-    Parameters
-    ----------
-    synssv_o : SegmentationObject
-    ssv : SuperSegmentationObject
-    mi_sd :
-    vc_sd :
-    max_vx_dist_nm :
-    max_rep_coord_dist_nm :
-
-    Returns
-    -------
-
-    """
-    feats = {}
-    partner_ids = synssv_o.lookup_in_attribute_dict("neuron_partners")
-    for i_partner_id, partner_id in enumerate(partner_ids):
-        ssv_o = ssv.get_super_segmentation_object(partner_id)
-
-        # log_extraction.debug(len(ssv_o.mi_ids))
-        n_mi_objs, n_mi_vxs = map_objects_from_ssv(synssv_o, mi_sd, ssv_o.mi_ids,
-                                                   max_vx_dist_nm,
-                                                   max_rep_coord_dist_nm)
-
-        # log_extraction.debug(len(ssv_o.vc_ids))
-        n_vc_objs, n_vc_vxs = map_objects_from_ssv(synssv_o, vc_sd, ssv_o.vc_ids,
-                                                   max_vx_dist_nm,
-                                                   max_rep_coord_dist_nm)
-
-        feats["n_mi_objs_%d" % i_partner_id] = n_mi_objs
-        feats["n_mi_vxs_%d" % i_partner_id] = n_mi_vxs
-        feats["n_vc_objs_%d" % i_partner_id] = n_vc_objs
-        feats["n_vc_vxs_%d" % i_partner_id] = n_vc_vxs
-
-    return feats
-
-
-def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
-                         max_rep_coord_dist_nm):
-    # TODO: redesign feature and retrain RFC - total number of voxels does not make sense...
-    """
-    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
-    is executed in 'classify_synssv_objects'.
-    Helper function of `objects_to_single_synssv`.
-
-    Parameters
-    ----------
-    synssv_o : SegmentationObject
-        Contact site object of SSV
-    sd_obj : SegmentationObject
-        Dataset of cellular object to map
-    obj_ids : List[int]
-        IDs of cellular objects in question
-    max_vx_dist_nm : float
-    max_rep_coord_dist_nm : float
-
-    Returns
-    -------
-
-    """
-    obj_mask = np.in1d(sd_obj.ids, obj_ids)
-
-    if np.sum(obj_mask) == 0:
-        return 0, 0
-
-    obj_rep_coords = sd_obj.load_cached_data("rep_coord")[obj_mask] * \
-                     sd_obj.scaling
-
-    obj_kdtree = spatial.cKDTree(obj_rep_coords)
-
-    close_obj_ids = sd_obj.ids[obj_mask][obj_kdtree.query_ball_point(
-        synssv_o.rep_coord * synssv_o.scaling, r=max_rep_coord_dist_nm)]
-
-    synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
-
-    # log_extraction.debug(len(close_obj_ids))
-
-    n_obj_vxs = []
-    for close_obj_id in close_obj_ids:
-        obj = sd_obj.get_segmentation_object(close_obj_id)
-
-        # use mesh vertices instead of voxels
-        obj_vxs = obj.mesh[1].reshape(-1, 3)
-
-        ds, _ = synssv_vx_kdtree.query(obj_vxs,
-                                       distance_upper_bound=max_vx_dist_nm)
-        # surface fraction of subcellular object which is close to synapse
-        close_frac = np.sum(ds < np.inf) / len(obj_vxs)
-        # estimate number of voxels by close-by surface area fraction times total number of voxels
-        n_obj_vxs.append(close_frac * obj.size)
-
-    n_obj_vxs = np.array(n_obj_vxs)
-
-    # log_extraction.debug(n_obj_vxs)
-    n_objects = np.sum(n_obj_vxs > 0)
-    n_vxs = np.sum(n_obj_vxs)
-
-    return n_objects, n_vxs
-
-
-def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
-                            n_max_co_processes=None):
-    """
-    # TODO: Will be replaced by new synapse detection
-    Classify SSV contact sites into synaptic or non-synaptic using an RFC model
-    and store the result in the attribute dict of the syn_ssv objects.
-    For requirements see `synssv_o_features`.
-
-    Parameters
-    ----------
-    wd : str
-    obj_version : str
-    nb_cpus : int
-    n_max_co_processes : int
-    """
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=obj_version)
-
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total)
-    multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
-                    multi_params]
-
-    if not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    else:
-        _ = qu.batchjob_script(
-            multi_params,  "classify_synssv_objects", log=log,
-            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
-
-
-def _classify_synssv_objects_thread(args):
-    """
-    Helper function of 'classify_synssv_objects'.
-
-    Parameters
-    ----------
-    args : Tuple
-        see 'classify_synssv_objects'
-    """
-    so_dir_paths, wd, obj_version = args
-
-    sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
-                                                  working_dir=wd,
-                                                  version=obj_version)
-    rfc = joblib.load(global_params.config.mpath_syn_rfc)
-
-    for so_dir_path in so_dir_paths:
-        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                     read_only=False)
-
-        for synssv_id in this_attr_dc.keys():
-            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
-            synssv_o.load_attr_dict()
-
-            feats = synssv_o_features(synssv_o)
-            syn_prob = rfc.predict_proba([feats])[0][1]
-
-            synssv_o.attr_dict.update({"syn_prob": syn_prob})
-            this_attr_dc[synssv_id] = synssv_o.attr_dict
-
-        this_attr_dc.push()
 
 
 def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):

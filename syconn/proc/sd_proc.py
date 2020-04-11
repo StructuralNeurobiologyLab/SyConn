@@ -142,19 +142,17 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                           global_params.config['ncores_per_node'] * 2))
             tmp_res = sm.start_multiprocess_imap(
                 load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
-            # TODO: this loop should be replaceable by np.concatenate
-            tmp_res = np.concatenate(tmp_res)
             try:
+                tmp_res = np.concatenate(tmp_res)
                 np.save(sd.path + "/%ss.npy" % attribute, tmp_res)
             except ValueError as e:
-                log_proc.warn('ValueError {} encountered when writing numpy '
-                              'array caches in "dataset_analysis", this is '
-                              'currently caught by using `dtype=object`'
-                              'which is not advised.'.format(e))
-                if 'setting an array element with a sequence' in str(e):
+                if attribute in ['sj_ids', 'cs_ids']:
                     np.save(sd.path + "/%ss.npy" % attribute,
                             np.array(tmp_res, dtype=np.object))
                 else:
+                    log_proc.error(
+                        f'ValueError {e} encountered when writing numpy array '
+                        f'cache of attribute {attribute} in "dataset_analysis",')
                     raise ValueError(e)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 

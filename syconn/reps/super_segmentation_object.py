@@ -325,7 +325,7 @@ class SuperSegmentationObject(object):
         return (f'{type(self).__name__}(ssv_id={self.id}, ssd_type="{self.type}", '
                 f'version="{self.version}", working_dir="{self.working_dir}")')
 
-    #                                                       IMMEDIATE PARAMETERS
+    # IMMEDIATE PARAMETERS
     @property
     def type(self) -> str:
         """
@@ -387,7 +387,7 @@ class SuperSegmentationObject(object):
         """
         return self._scaling
 
-    #                                                                      PATHS
+    # PATHS
     @property
     def working_dir(self) -> str:
         """
@@ -478,13 +478,14 @@ class SuperSegmentationObject(object):
         """Identifier of vertex label storage"""
         return self.ssv_dir + "vlabel_dc.pkl"
 
-    #                                                                        IDS
+    # IDS
     @property
     def sv_ids(self) -> np.ndarray:
         """
         All cell supervoxel IDs which are assigned to this cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("sv")
+        # must be <= uint32
+        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint32)
 
     @property
     def sj_ids(self) -> np.ndarray:
@@ -492,7 +493,7 @@ class SuperSegmentationObject(object):
         All synaptic junction (sj) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("sj")
+        return np.array(self.lookup_in_attribute_dict("sj"), dtype=np.uint)
 
     @property
     def mi_ids(self) -> np.ndarray:
@@ -500,7 +501,7 @@ class SuperSegmentationObject(object):
         All mitochondria (mi) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("mi")
+        return np.array(self.lookup_in_attribute_dict("mi"), dtype=np.uint)
 
     @property
     def vc_ids(self) -> np.ndarray:
@@ -508,7 +509,7 @@ class SuperSegmentationObject(object):
         All vesicle cloud (vc) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("vc")
+        return np.array(self.lookup_in_attribute_dict("vc"), dtype=np.uint)
 
     @property
     def dense_kzip_ids(self) -> Dict[str, int]:
@@ -517,7 +518,7 @@ class SuperSegmentationObject(object):
         """
         return dict([("mi", 1), ("vc", 2), ("sj", 3)])
 
-    #                                                        SEGMENTATIONOBJECTS
+    # SegmentationObjects
     @property
     def svs(self) -> List[SegmentationObject]:
         """
@@ -562,7 +563,7 @@ class SuperSegmentationObject(object):
         """
         return self.get_seg_objects("syn_ssv")
 
-    #                                                                     MESHES
+    # MESHES
     def load_mesh(self, mesh_type) -> Optional[MeshType]:
         """
         Load mesh of a specific type, e.g. 'mi', 'sv' (cell supervoxel), 'sj' (connected
@@ -651,7 +652,7 @@ class SuperSegmentationObject(object):
             raise ValueError('Label dict for data type "{}" not supported.'
                              ''.format(data_type))
 
-    #                                                                 PROPERTIES
+    # PROPERTIES
     def celltype(self, key: Optional[str] = None) -> int:
         """
         Returns the cell type classification result. Default: CMN model, if
