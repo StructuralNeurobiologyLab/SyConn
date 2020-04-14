@@ -153,7 +153,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 def test_compression_and_decompression_for_mesh_dict():
 
     try:
-        md = MeshStorage(test_p, read_only=False)
+        md = MeshStorage(test_p, read_only=False, disable_locking=False)
         md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
                  np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
 
