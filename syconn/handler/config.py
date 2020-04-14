@@ -1005,7 +1005,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
         raise ValueError(f'Overwrite attempt of existing config file at '
-                         f'{default_conf.path_config}.')
+                         f'"{default_conf.path_config}".')
     default_conf.write_config(working_dir)
 
 
@@ -1052,10 +1052,11 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
         except TypeError:
             if not os.path.isdir(log_dir):
                 os.makedirs(log_dir)
-        if overwrite and os.path.isfile(log_dir + log_name + '.log'):
-            os.remove(log_dir + log_name + '.log')
+        log_fname = log_dir + '/' + log_name + '.log'
+        if overwrite and os.path.isfile(log_fname):
+            os.remove(log_fname)
         # add the handlers to logger
-        fh = logging.FileHandler(log_dir + log_name + ".log")
+        fh = logging.FileHandler(log_fname)
         fh.setLevel(level)
         formatter = logging.Formatter(
             '%(asctime)s (%(relative)smin) - %(name)s - %(levelname)s - %(message)s')

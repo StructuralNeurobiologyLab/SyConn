@@ -209,14 +209,28 @@ def ix_from_subfold(subfold, n_folders):
     """
     if not global_params.config.use_new_subfold:
         return ix_from_subfold_OLD(subfold, n_folders)
+    else:
+        return ix_from_subfold_new(subfold, n_folders)
 
+
+def ix_from_subfold_new(subfold, n_folders):
+    """
+
+    Parameters
+    ----------
+    subfold : str
+
+    Returns
+    -------
+    int
+    """
     parts = subfold.strip("/").split("/")
     order = int(np.log10(n_folders))
     # TODO: ' + "000"' needs to be adapted if `div_base` is made variable in `subfold_from_ix`
     if order % 2 == 0:
-        return int("".join("%.2d" % int(part) for part in parts) + "000")
+        return np.uint("".join("%.2d" % int(part) for part in parts) + "000")
     else:
-        return int("".join("%.2d" % int(part) for part in parts[:-1]) + parts[-1] + "000")
+        return np.uint("".join("%.2d" % int(part) for part in parts[:-1]) + parts[-1] + "000")
 
 
 def ix_from_subfold_OLD(subfold, n_folders):
@@ -236,9 +250,9 @@ def ix_from_subfold_OLD(subfold, n_folders):
     order = int(np.log10(n_folders))
 
     if order % 2 == 0:
-        return int("".join("%.2d" % int(part) for part in parts))
+        return np.uint("".join("%.2d" % int(part) for part in parts))
     else:
-        return int("".join("%.2d" % int(part) for part in parts[:-1]) + parts[-1])
+        return np.uint("".join("%.2d" % int(part) for part in parts[:-1]) + parts[-1])
 
 
 def subfold_from_ix_SSO(ix):

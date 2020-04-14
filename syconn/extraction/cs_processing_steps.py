@@ -23,13 +23,13 @@ import tqdm
 import shutil
 import pickle as pkl
 
-from ..handler.basics import kd_factory
+from ..handler.basics import kd_factory, chunkify
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage
-from ..handler.basics import chunkify
+from ..handler.config import initialize_logging
 from . import log_extraction
 from .. import global_params
 
@@ -112,6 +112,8 @@ def _collect_properties_from_ssv_partners_thread(args):
     """
     wd, obj_version, ssd_version, ssv_ids = args
 
+    semseg2coords_kwargs = global_params.config['spines']['semseg2coords_spines']
+
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
@@ -152,8 +154,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
-        curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness',
-                                          **global_params.config['spines']['semseg2coords_spines'])
+        curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
         sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0]
         if len(ssv_o.skeleton['nodes']) > 1:
             # if only one skeleton node, sh_vol only contains one element per location
@@ -188,7 +189,7 @@ def _from_cell_to_syn_dict(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-
+    cell_obj_conf = global_params.config['cell_objects']
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
                                      read_only=False, disable_locking=True)
@@ -197,7 +198,7 @@ def _from_cell_to_syn_dict(args):
             synssv_o.load_attr_dict()
 
             sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
-            syn_sign = -1 if sym_asym_ratio > global_params.config['cell_objects']['sym_thresh'] else 1
+            syn_sign = -1 if sym_asym_ratio > cell_obj_conf['sym_thresh'] else 1
 
             axoness = []
             latent_morph = []
@@ -244,7 +245,7 @@ def _delete_all_cache_dc(ssv_id):
 def filter_relevant_syn(sd_syn, ssd):
     """
     This function filters (likely ;) ) the intra-ssv contact
-    sites (inside of a ssv, not between ssvs) that do not need to be agglomerated.
+    sites (inside of an ssv, not between ssvs) that do not need to be agglomerated.
 
     Parameters
     ----------
@@ -255,7 +256,7 @@ def filter_relevant_syn(sd_syn, ssd):
     -------
     Dict[list]
         lookup from SSV-wide synapses to SV syn. objects, keys: SSV syn ID;
-        values: List of SV syn IDs
+        values: List of SV syn IDs.
     """
     # get all cs IDs belonging to syn objects and then retrieve corresponding
     # SVs IDs via bit shift
@@ -291,18 +292,17 @@ def filter_relevant_syn(sd_syn, ssd):
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                           nb_cpus=None, n_max_co_processes=None,
-                          n_folders_fs=10000, log=None):
+                          n_folders_fs=10000, log=None, overwrite=False):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
-    ['sj_id', 'cs_id', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
-    'cs_size', 'sj_size_pseudo']. This method requires the execution of
+    ['cs_id', 'id_cs_ratio', 'cs_size']. This method requires the execution of
     'syn_gen_via_cset' (or equivalent) beforehand.
 
     All objects of the resulting 'syn_ssv' SegmentationDataset contain the
     following attributes:
-    ['syn_sign', 'syn_type_sym_ratio', 'sj_ids', 'cs_ids', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
-    'neuron_partners']
+    ['syn_sign', 'syn_type_sym_ratio', 'asym_prop', 'sym_prop', 'cs_ids',
+    'cs_size', 'id_cs_ratio', 'neuron_partners']
 
     Parameters
     ----------
@@ -310,11 +310,11 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     cs_gap_nm :
     ssd_version :
     syn_version :
-    resume_job :
     nb_cpus :
     n_max_co_processes :
     log:
     n_folders_fs:
+    overwrite:
 
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
@@ -324,25 +324,28 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     #  used during write-outs, they are probably generated within this method's makedirs
     rel_synssv_to_syn_ids = filter_relevant_syn(syn_sd, ssd)
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
-    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
-                                        for ix in storage_location_ids])
 
     n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
                        len(rel_synssv_to_syn_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
-
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version="0", create=True,
+                                                  version="0", create=False,
                                                   n_folders_fs=n_folders_fs)
-    dataset_path = sd_syn_ssv.so_storage_path
-    if os.path.exists(dataset_path):
-        shutil.rmtree(dataset_path)
+    if os.path.exists(sd_syn_ssv.so_storage_path):
+        if not overwrite:
+            raise FileExistsError(f'"{sd_syn_ssv.so_storage_path}" already exists, but '
+                                  f'overwrite was set to False.')
+        shutil.rmtree(sd_syn_ssv.so_storage_path)
 
+    # prepare folder structure
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
+                                        for ix in storage_location_ids])
     for p in voxel_rel_paths_2stage:
         os.makedirs(sd_syn_ssv.so_storage_path + p)
 
+    # TODO: apply weighting-scheme to balance worker load
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
 
     rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
@@ -357,7 +360,147 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
             multi_params, "combine_and_split_syn", remove_jobfolder=True,
             n_max_co_processes=n_max_co_processes, log=log)
 
-    return sd_syn_ssv
+
+def _combine_and_split_syn_thread(args):
+    wd = args[0]
+    rel_cs_to_cs_agg_ids_items = args[1]
+    voxel_rel_paths = args[2]
+    syn_version = args[3]
+    syn_ssv_version = args[4]
+    scaling = args[5]
+    cs_gap_nm = args[6]
+
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
+                                                  version=syn_ssv_version)
+    sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
+                                              version=syn_version)
+
+    cell_obj_cnf = global_params.config['cell_objects']
+    use_new_subfold = global_params.config.use_new_subfold
+    # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
+    div_base = 1e3
+    id_chunk_cnt = 0
+    n_per_voxel_path = np.ceil(float(len(rel_cs_to_cs_agg_ids_items)) / len(voxel_rel_paths))
+    n_items_for_path = 0
+    cur_path_id = 0
+    base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+    os.makedirs(base_dir, exist_ok=True)
+    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
+    attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
+    # get ID/path to storage to save intermediate results
+    base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
+    next_id = base_id
+    for item in rel_cs_to_cs_agg_ids_items:
+        n_items_for_path += 1
+        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
+        syn = sd_syn.get_segmentation_object(item[1][0])
+        syn.load_attr_dict()
+        syn_attr_list = [syn.attr_dict]  # used to collect syn properties
+        voxel_list = syn.voxel_list
+        # store index of syn. objects for attribute dict retrieval
+        synix_list = [0] * len(voxel_list)
+        for syn_ix, syn_id in enumerate(item[1][1:]):
+            syn_object = sd_syn.get_segmentation_object(syn_id)
+            syn_object.load_attr_dict()
+            syn_attr_list.append(syn_object.attr_dict)
+            voxel_list = np.concatenate([voxel_list, syn_object.voxel_list])
+            synix_list += [syn_ix] * len(syn_object.voxel_list)
+        syn_attr_list = np.array(syn_attr_list)
+        synix_list = np.array(synix_list)
+        if len(voxel_list) == 0:
+            msg = 'Voxels not available for syn-object {}.'.format(str(syn))
+            log_extraction.error(msg)
+            raise ValueError(msg)
+        ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
+        for this_cc in ccs:
+            this_cc_mask = np.array(list(this_cc))
+            # retrieve the index of the syn objects selected for this CC
+            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
+                                                       return_counts=True)
+            this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
+            if np.sum(this_syn_ids_cnt) < cell_obj_cnf['min_obj_vx']['syn_ssv']:
+                continue
+            this_attr = syn_attr_list[this_syn_ixs]
+            this_vx = voxel_list[this_cc_mask]
+            abs_offset = np.min(this_vx, axis=0)
+            this_vx -= abs_offset
+            id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
+            id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
+
+            try:
+                voxel_dc[next_id] = [id_mask], [abs_offset]
+            except Exception:
+                debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
+                    sd_syn_ssv.so_storage_path, next_id, abs_offset[0],
+                    abs_offset[1], abs_offset[2])
+                msg = "Saving syn_ssv {} failed. Debug file at {}." \
+                      "".format(item, debug_out_fname)
+                log_extraction.error(msg)
+                np.save(debug_out_fname, this_vx)
+                raise ValueError(msg)
+            # aggregate syn properties
+            syn_props_agg = {}
+            for dc in this_attr:
+                for k in ['id_cs_ratio', 'cs_id', 'cs_size', 'sym_prop', 'asym_prop']:
+                    syn_props_agg.setdefault(k, []).append(dc[k])
+            # store cs and sj IDs
+            syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
+            del syn_props_agg['cs_id']
+
+            # weight cs and syn size by number of voxels present for this connected component,
+            # i.e. use 'this_agg_syn_weights' as weight
+            syn_props_agg['cs_size'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['cs_size']))
+
+            # agglomerate the syn-to-cs ratio
+            syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
+
+            # type weights as weighted sum of syn fragments
+            sym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['sym_prop']))
+            asym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['asym_prop']))
+            syn_props_agg['sym_prop'] = sym_prop
+            syn_props_agg['asym_prop'] = asym_prop
+
+            if sym_prop + asym_prop == 0:
+                sym_ratio = -1
+            else:
+                sym_ratio = sym_prop / float(asym_prop + sym_prop)
+            syn_props_agg["syn_type_sym_ratio"] = sym_ratio
+            syn_sign = -1 if sym_ratio > cell_obj_cnf['sym_thresh'] else 1
+            syn_props_agg["syn_sign"] = syn_sign
+
+            # add syn_ssv dict to AttributeStorage
+            this_attr_dc = dict(neuron_partners=ssv_ids)
+            this_attr_dc.update(syn_props_agg)
+            attr_dc[next_id] = this_attr_dc
+            if use_new_subfold:
+                next_id += np.uint(1)
+                if next_id - base_id >= div_base:
+                    # next ID chunk mapped to this storage
+                    id_chunk_cnt += 1
+                    old_base_id = base_id
+                    base_id += np.uint(sd_syn_ssv.n_folders_fs*div_base) * id_chunk_cnt
+                    assert subfold_from_ix(base_id, sd_syn_ssv.n_folders_fs, old_version=False) == \
+                           subfold_from_ix(old_base_id, sd_syn_ssv.n_folders_fs, old_version=False)
+                    next_id = base_id
+            else:
+                next_id += np.uint(sd_syn.n_folders_fs)
+
+        if n_items_for_path > n_per_voxel_path:
+            voxel_dc.push()
+            attr_dc.push()
+            cur_path_id += 1
+            n_items_for_path = 0
+            id_chunk_cnt = 0
+            base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
+            next_id = base_id
+            base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+            os.makedirs(base_dir, exist_ok=True)
+            voxel_dc = VoxelStorage(base_dir + "voxel.pkl", read_only=False)
+            attr_dc = AttributeDict(base_dir + "attr_dict.pkl", read_only=False)
+
+    if n_items_for_path > 0:
+        voxel_dc.push()
+        attr_dc.push()
 
 
 def combine_and_split_syn_old(
@@ -427,170 +570,6 @@ def combine_and_split_syn_old(
             n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
-
-
-def _combine_and_split_syn_thread(args):
-    wd = args[0]
-    rel_cs_to_cs_agg_ids_items = args[1]
-    voxel_rel_paths = args[2]
-    syn_version = args[3]
-    syn_ssv_version = args[4]
-    scaling = args[5]
-    cs_gap_nm = args[6]
-
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=syn_ssv_version)
-
-    sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
-                                              version=syn_version)
-
-    n_per_voxel_path = np.ceil(float(len(rel_cs_to_cs_agg_ids_items)) / len(voxel_rel_paths))
-    if n_per_voxel_path > sd_syn.n_folders_fs:
-        log_extraction.warning('Number of items per storage dict for "syn" objects'
-                               ' is bigger than `segmentation.SegmentationDataset'
-                               '("syn", working_dir=wd).n_folders_fs`.')
-
-    n_items_for_path = 0
-    cur_path_id = 0
-    base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
-    os.makedirs(base_dir, exist_ok=True)
-    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
-    attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
-    # get ID/path to storage to save intermediate results
-    next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-    for item in rel_cs_to_cs_agg_ids_items:
-        n_items_for_path += 1
-        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
-        syn = sd_syn.get_segmentation_object(item[1][0])
-        syn.load_attr_dict()
-        syn_attr_list = [syn.attr_dict]  # used to collect syn properties
-        voxel_list = syn.voxel_list
-        # store index of syn. objects for attribute dict retrieval
-        synix_list = [0] * len(voxel_list)
-        for syn_ix, syn_id in enumerate(item[1][1:]):
-            syn_object = sd_syn.get_segmentation_object(syn_id)
-            syn_object.load_attr_dict()
-            syn_attr_list.append(syn_object.attr_dict)
-            voxel_list = np.concatenate([voxel_list, syn_object.voxel_list])
-            synix_list += [syn_ix] * len(syn_object.voxel_list)
-        syn_attr_list = np.array(syn_attr_list)
-        synix_list = np.array(synix_list)
-        if len(voxel_list) == 0:
-            msg = 'Voxels not available for syn-object {}.'.format(str(syn))
-            log_extraction.error(msg)
-            raise ValueError(msg)
-        ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
-        for this_cc in ccs:
-            this_cc_mask = np.array(list(this_cc))
-            # retrieve the index of the syn objects selected for this CC
-            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
-                                                       return_counts=True)
-            this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
-            if np.sum(this_syn_ids_cnt) < global_params.config['cell_objects']['min_obj_vx']['syn_ssv']:
-                continue
-            this_attr = syn_attr_list[this_syn_ixs]
-            this_vx = voxel_list[this_cc_mask]
-            abs_offset = np.min(this_vx, axis=0)
-            this_vx -= abs_offset
-            id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
-            id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
-
-            try:
-                voxel_dc[next_id] = [id_mask], [abs_offset]
-            except Exception:
-                debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
-                    sd_syn_ssv.so_storage_path, next_id, abs_offset[0],
-                    abs_offset[1], abs_offset[2])
-                msg = "Saving syn_ssv {} failed. Debug file at {}." \
-                      "".format(item, debug_out_fname)
-                log_extraction.error(msg)
-                np.save(debug_out_fname, this_vx)
-                raise ValueError(msg)
-            # aggregate syn properties
-            syn_props_agg = {}
-            for dc in this_attr:
-                for k in ['background_overlap_ratio', 'id_cs_ratio', 'id_sj_ratio', 'cs_id',
-                          'sj_id', 'sj_size_pseudo', 'cs_size', 'sym_prop', 'asym_prop']:
-                    syn_props_agg.setdefault(k, []).append(dc[k])
-            # store cs and sj IDs
-            syn_props_agg['sj_ids'] = syn_props_agg['sj_id']
-            del syn_props_agg['sj_id']
-            syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
-            del syn_props_agg['cs_id']
-            # calculate weighted mean of sj, cs and background ratios
-            syn_props_agg['sj_size_pseudo'] = this_agg_syn_weights * \
-                                              np.array(syn_props_agg['sj_size_pseudo'])
-            syn_props_agg['cs_size'] = this_agg_syn_weights * \
-                                       np.array(syn_props_agg['cs_size'])
-            syn_props_agg['id_sj_ratio'] = this_agg_syn_weights * \
-                                           np.array(syn_props_agg['id_sj_ratio'])
-            syn_props_agg['id_cs_ratio'] = this_agg_syn_weights * \
-                                           np.array(syn_props_agg['id_cs_ratio'])
-            syn_props_agg['background_overlap_ratio'] = this_agg_syn_weights * np.array(
-                syn_props_agg['background_overlap_ratio'])
-            sj_size_pseudo_norm = np.sum(syn_props_agg['sj_size_pseudo'])
-            cs_size_norm = np.sum(syn_props_agg['cs_size'])
-            sj_s_w = syn_props_agg['id_sj_ratio'] * syn_props_agg['sj_size_pseudo']
-            syn_props_agg['id_sj_ratio'] = np.sum(sj_s_w) / sj_size_pseudo_norm
-            back_s_w = syn_props_agg['background_overlap_ratio'] * \
-                       syn_props_agg['sj_size_pseudo']
-            syn_props_agg['background_overlap_ratio'] = np.sum(back_s_w) / sj_size_pseudo_norm
-            cs_s_w = syn_props_agg['id_cs_ratio'] * syn_props_agg['cs_size']
-            syn_props_agg['id_cs_ratio'] = np.sum(cs_s_w) / cs_size_norm
-
-            # type weights as weighted sum of syn fragments
-            syn_props_agg['sym_prop'] = this_agg_syn_weights * np.array(syn_props_agg['sym_prop'])
-            sym_prop = np.sum(syn_props_agg['sym_prop'] * syn_props_agg['sj_size_pseudo']) \
-                       / sj_size_pseudo_norm
-            syn_props_agg['asym_prop'] = this_agg_syn_weights * \
-                                         np.array(syn_props_agg['asym_prop'])
-            asym_prop = np.sum(syn_props_agg['asym_prop'] * syn_props_agg['sj_size_pseudo']) / \
-                        sj_size_pseudo_norm
-            syn_props_agg['sym_prop'] = sym_prop
-            syn_props_agg['asym_prop'] = asym_prop
-
-            if sym_prop + asym_prop == 0:
-                sym_ratio = -1
-            else:
-                sym_ratio = sym_prop / float(asym_prop + sym_prop)
-            syn_props_agg["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > global_params.config['cell_objects']['sym_thresh'] else 1
-            syn_props_agg["syn_sign"] = syn_sign
-
-            del syn_props_agg['cs_size']
-            del syn_props_agg['sj_size_pseudo']
-            # add syn_ssv dict to AttributeStorage
-            this_attr_dc = dict(neuron_partners=ssv_ids)
-            this_attr_dc.update(syn_props_agg)
-            attr_dc[next_id] = this_attr_dc
-            if global_params.config.use_new_subfold:
-                next_id += 1
-            else:
-                next_id += sd_syn.n_folders_fs
-
-        if n_items_for_path > n_per_voxel_path:
-            # TODO: passing explicit dest_path might not be required here
-            voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                              "/voxel.pkl")
-            attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/attr_dict.pkl")
-
-            cur_path_id += 1
-            n_items_for_path = 0
-
-            next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-
-            base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
-            os.makedirs(base_dir, exist_ok=True)
-            voxel_dc = VoxelStorage(base_dir + "voxel.pkl", read_only=False)
-            attr_dc = AttributeDict(base_dir + "attr_dict.pkl", read_only=False)
-
-    if n_items_for_path > 0:
-        # TODO: passing explicit dest_path might not be required here
-        voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                          "/voxel.pkl")
-        attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/attr_dict.pkl")
 
 
 def _combine_and_split_syn_thread_old(args):
@@ -988,6 +967,8 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     -------
 
     """
+    raise DeprecationWarning('This method was replaced by '
+                             '"cs_extraction_steps.extract_contact_sites".')
     wd = cs_sd.working_dir
 
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config['cell_objects']["sizethresholds"]['sj']]
@@ -1033,6 +1014,8 @@ def syn_gen_via_cset_thread(args):
     wd, sj_ids, voxel_rel_paths, syn_sd_version, sj_sd_version, \
         cs_sd_version, cset_path = args
 
+    cell_obj_cnf = global_params.config['cell_objects']
+
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
                                               version=syn_sd_version,
                                               create=False)
@@ -1062,7 +1045,7 @@ def syn_gen_via_cset_thread(args):
             bb = sj.bounding_box
             #  this SJ-CS overlap method will be outdated very soon
             if np.any(np.linalg.norm((bb[1] - bb[0]) * sd_syn.scaling) >
-                      global_params.config['cell_objects']['thresh_sj_bbd_syngen']):
+                      cell_obj_cnf['thresh_sj_bbd_syngen']):
                 log_extraction.debug(
                     'Skipped huge SJ with size: {}, offset: {}, sj_id: {}, sj_c'
                     'oord: {}'.format(sj.size, sj.bounding_box[0], sj_id,
@@ -1267,7 +1250,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
 
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
+    for ids_small_chunk in chunkify(ssd.ssv_ids, n_max_co_processes):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk,
                              max_rep_coord_dist_nm, max_vert_dist_nm])
 
@@ -1285,13 +1268,13 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, n_max_co_processes):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _objects_from_cell_to_syn_dict, multi_params,
-            nb_cpus=n_max_co_processes, debug=debug)
+            nb_cpus=n_max_co_processes, debug=False)
     else:
         _ = qu.batchjob_script(
             multi_params, "objects_from_cell_to_syn_dict", log=log,
@@ -1323,9 +1306,7 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
     sd_vc = segmentation.SegmentationDataset(obj_type="vc", working_dir=wd)
-    id2ix_vc = {v: ix for ix, v in enumerate(sd_vc.ids)}
     sd_mi = segmentation.SegmentationDataset(obj_type="mi", working_dir=wd)
-    id2ix_mi = {v: ix for ix, v in enumerate(sd_mi.ids)}
 
     syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
     for ssv_id in ssv_ids:  # Iterate over cells
@@ -1351,15 +1332,16 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
             cache_dc.push()
             continue
 
+        vc_mask = np.in1d(sd_vc.ids, ssv_o.vc_ids)
+        mi_mask = np.in1d(sd_mi.ids, ssv_o.mi_ids)
+
         kdtree_synssv = spatial.cKDTree(sd_syn_ssv.rep_coords[curr_ssv_mask] * sd_syn_ssv.scaling)
 
         # vesicle clouds
-        obj_ixs = [id2ix_vc[i] for i in ssv_o.vc_ids]
-        kdtree_vc = spatial.cKDTree(sd_vc.rep_coords[obj_ixs] * sd_vc.scaling)
+        kdtree_vc = spatial.cKDTree(sd_vc.rep_coords[vc_mask] * sd_vc.scaling)
 
         # mitos
-        obj_ixs = [id2ix_mi[i] for i in ssv_o.mi_ids]
-        kdtree_mi = spatial.cKDTree(sd_mi.rep_coords[obj_ixs] * sd_mi.scaling)
+        kdtree_mi = spatial.cKDTree(sd_mi.rep_coords[mi_mask] * sd_mi.scaling)
 
         # returns a list of neighboring objects for every synssv (note: ix is now the index within ssv_o.mi_ids
         close_mi_ixs = kdtree_synssv.query_ball_tree(kdtree_mi, r=max_rep_coord_dist_nm)
@@ -1552,7 +1534,8 @@ def write_conn_gt_kzips(conn, n_objects, folder):
         skeleton_utils.write_skeleton(folder + "/obj_%d.k.zip" % conn_id, [a])
 
 
-def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
+def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path_kzip: str, overwrite: bool = False,
+                   rfc_path_out: str = None, max_dist_vx: int = 20) -> \
         Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]:
     """
     Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic
@@ -1567,18 +1550,40 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
         path_kzip: Path to kzip file with synapse labels as node comments
             ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
             respectively).
+        overwrite: Replace existing files.
+        rfc_path_out: Filename for dumped RFC.
+        max_dist_vx: Maximum voxel distance between sample and target.
 
     Returns:
         The trained random forest classifier and the feature and label data.
     """
+    log = log_extraction
+    if global_params.config.working_dir is not None or rfc_path_out is not None:
+        if rfc_path_out is None:
+            model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
+            log(f'Working directory is set to {global_params.config.working_dir} - '
+                f'trained RFC will be dumped at {model_base_dir}.')
+            os.makedirs(model_base_dir, exist_ok=True)
+            rfc_path_out = global_params.config.mpath_syn_rfc
+        else:
+            log = initialize_logging('create_syn_rfc', os.path.dirname(rfc_path_out))
+        if os.path.isfile(rfc_path_out) and not overwrite:
+            raise FileExistsError()
     assert conn.type == 'syn_ssv'
-    annos = skeleton_utils.loadj0126NML(path_kzip)
-    if len(annos) != 1:
-        raise ValueError('Zero or more than one annotation object in GT kzip.')
+    anno = skeleton_utils.load_skeleton(path_kzip)['Synapse annotation']
 
+    log.info(f'Initiated RFC fitting procedure with GT file "{path_kzip}" and {conn}.')
+
+    base_dir = os.path.split(path_kzip)[0]
+    mapped_synssv_objects_kzip = f'{base_dir}/mapped_synssv.k.zip'
+    if os.path.isfile(mapped_synssv_objects_kzip):
+        if not overwrite:
+            raise FileExistsError(f'File with mapped synssv objects already exists '
+                                  f'at "{mapped_synssv_objects_kzip}"')
+        os.remove(mapped_synssv_objects_kzip)
     label_coords = []
     labels = []
-    for node in annos[0].getNodes():
+    for node in anno.getNodes():
         c = node.getComment()
         if not ((c == 'synaptic') | (c == 'non-synaptic')):
             continue
@@ -1599,22 +1604,29 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     labels = labels[ixs][ixs_random]
     conn_kdtree = spatial.cKDTree(conn.rep_coords * conn.scaling)
     ds, list_ids = conn_kdtree.query(label_coords * conn.scaling)
-
     synssv_ids = conn.ids[list_ids]
-    mapped_synssv_objects_kzip = os.path.split(path_kzip)[0] + '/mapped_synssv.k.zip'
-    log_extraction.info(f'Mapped {len(labels)} GT coordinates to {conn.type}-objects.')
+    mask = np.ones(synssv_ids.shape, dtype=np.bool)
+    log.info(f'Mapped {len(labels)} GT coordinates to {conn.type}-objects.')
     for label_id in np.where(ds > 0)[0]:
         dists, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling,
-                                             k=100)
+                                             k=20)
         for close_id in close_ids[np.argsort(dists)]:
             conn_o = conn.get_segmentation_object(conn.ids[close_id])
             vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]),
                            axis=-1)
-            if np.min(vx_ds) == 0:
+            if np.min(vx_ds) < max_dist_vx:
                 synssv_ids[label_id] = conn.ids[close_id]
                 break
-    log_extraction.info(f'Synapse features will now be generated and written to '
-                        f'{mapped_synssv_objects_kzip}.')
+        if np.min(vx_ds) > max_dist_vx:
+            mask[label_id] = 0
+
+    if np.sum(mask) == 0:
+        raise ValueError
+    synssv_ids = synssv_ids[mask]
+    labels = labels[mask]
+    log.info(f'Found {np.sum(mask)} samples with a distance < {max_dist_vx} vx to the target.')
+
+    log.info(f'Synapse features will now be generated and written to {mapped_synssv_objects_kzip}.')
     features = []
     skel = skeleton.Skeleton()
     anno = skeleton.SkeletonAnnotation()
@@ -1622,12 +1634,17 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     pbar = tqdm.tqdm(total=len(synssv_ids))
     for kk, synssv_id in enumerate(synssv_ids):
         synssv_o = conn.get_segmentation_object(synssv_id)
+        rep_coord = synssv_o.rep_coord * conn.scaling
         # synssv_o.mesh2kzip(mapped_synssv_objects_kzip, ext_color=None,
         # ply_name='{}.ply'.format(synssv_id))
-        n = skeleton.SkeletonNode().from_scratch(anno, synssv_o.rep_coord[0], synssv_o.rep_coord[1],
-                                                 synssv_o.rep_coord[2])
+        n = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
         n.setComment('{}'.format(labels[kk]))
         anno.addNode(n)
+        rep_coord = label_coords[kk] * conn.scaling
+        n_l = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
+        n_l.setComment('gt node; {}'.format(labels[kk]))
+        anno.addNode(n_l)
+        anno.addEdge(n, n_l)
         features.append(synssv_o_features(synssv_o))
         pbar.update(1)
     pbar.close()
@@ -1642,28 +1659,28 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     v_labels = labels[mask_annotated]
     v_labels = (v_labels == "synaptic").astype(np.int)
     score = cross_val_score(rfc, v_features, v_labels, cv=10)
-    log_extraction.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
-    log_extraction.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
+    log.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
+    log.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
         np.mean(score), np.std(score)))
 
     rfc.fit(v_features, v_labels)
+    acc = rfc.score(v_features, v_labels)
+    log.info(f'Training accuracy: {acc:.4f}')
     feature_names = synssv_o_featurenames()
     feature_imp = rfc.feature_importances_
     assert len(feature_imp) == len(feature_names)
-    log_extraction.info('RFC importances:\n' + "\n".join(
+    log.info('RFC importances:\n' + "\n".join(
         [f"{feature_names[ii]}: {feature_imp[ii]}" for ii in range(len(feature_imp))]))
-
-    model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
-    os.makedirs(model_base_dir, exist_ok=True)
-
-    joblib.dump(rfc, global_params.config.mpath_syn_rfc)
-    log_extraction.info(f'Wrote parameters of trained RFC to '
-                        f'{global_params.config.mpath_syn_rfc}.')
+    if rfc_path_out is not None:
+        joblib.dump(rfc, rfc_path_out)
+        log.info(f'Wrote parameters of trained RFC to "{rfc_path_out}".')
+    else:
+        log.info('Working directory and rfc_path_out not set - trained RFC was not dumped to file.')
 
     return rfc, v_features, v_labels
 
 
-def synssv_o_features(synssv_o):
+def synssv_o_features(synssv_o: segmentation.SegmentationObject):
     """
     Collects syn_ssv feature for synapse prediction using an RFC.
 
@@ -1677,8 +1694,7 @@ def synssv_o_features(synssv_o):
     """
     synssv_o.load_attr_dict()
 
-    features = [synssv_o.size,
-                synssv_o.attr_dict["id_sj_ratio"],
+    features = [synssv_o.size, synssv_o.mesh_area,
                 synssv_o.attr_dict["id_cs_ratio"]]
 
     partner_ids = synssv_o.lookup_in_attribute_dict("neuron_partners")
@@ -1691,7 +1707,7 @@ def synssv_o_features(synssv_o):
 
 
 def synssv_o_featurenames():
-    return ['size', 'id_sj_ratio', 'id_cs_ratio', 'n_mi_objs_neuron1',
+    return ['size_vx', 'mesh_area_um2', 'id_cs_ratio', 'n_mi_objs_neuron1',
             'n_mi_vxs_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
             'n_mi_objs_neuron2', 'n_mi_vxs_neuron2', 'n_vc_objs_neuron2',
             'n_vc_vxs_neuron2']

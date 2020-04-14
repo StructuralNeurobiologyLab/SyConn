@@ -45,7 +45,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 
     def create_LZ4Dict_wait_for_3s_then_close():
         # created and locked LZ4Dict for 3s
-        pkl1 = CompressedStorage(test_p, read_only=False)
+        pkl1 = CompressedStorage(test_p, read_only=False, disable_locking=False)
         pkl1[1] = np.ones((5, 5))
         time.sleep(3)
         pkl1.push()
@@ -55,7 +55,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         time.sleep(0)
         start = time.time()
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1,
+            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1, disable_locking=False,
                                      max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
             logging.warning('FAILED: create_fail_expected_runtime_error_at_1s' + str(e))
@@ -69,7 +69,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         time.sleep(0)
         start = time.time()
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=2)
+            pkl2 = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=2)
             logging.warning('FAILED: create_fail_expected_runtime_error_at_2s')
             q2.put(1)
         except RuntimeError as e:
@@ -81,7 +81,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         start = time.time()
 
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1)
+            pkl2 = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=1)
             logging.info('PASSED: create_success_expected')
             q3.put(0)
         except RuntimeError as e:

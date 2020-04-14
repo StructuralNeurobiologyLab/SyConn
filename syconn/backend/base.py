@@ -120,7 +120,7 @@ class FSBase(StorageBase):
     """
     def __init__(self, inp_p: str, cache_decomp: bool = False,
                  read_only: bool = True, max_delay: int = 100,
-                 timeout: int = 1000, disable_locking: bool = False,
+                 timeout: int = 1000, disable_locking: bool = True,
                  max_nb_attempts: int = 100):
         """
 

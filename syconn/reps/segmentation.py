@@ -386,12 +386,12 @@ class SegmentationObject(object):
         """
         Path to the folder where the data of this supervoxel is stored.
         """
-        if os.path.exists("%s/%s/voxel.pkl" % (self.so_storage_path,
-                                      subfold_from_ix(self.id, self.n_folders_fs))):
-            return "%s/%s/" % (self.so_storage_path,
-                               subfold_from_ix(self.id, self.n_folders_fs))
+        base_path = f"{self.so_storage_path}/" \
+                    f"{subfold_from_ix(self.id, self.n_folders_fs)}/"
+        if os.path.exists(f"{base_path}/voxel.pkl"):
+            return base_path
         else:
-            # TODO: why True?
+            # use old folder scheme with leading 0s, e.g. '09'
             return "%s/%s/" % (self.so_storage_path, subfold_from_ix(
                 self.id, self.n_folders_fs, old_version=True))
 
@@ -1467,10 +1467,6 @@ class SegmentationDataset(object):
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
               objects.
-            * 'sj_ids': Synaptic junction IDs associated with each 'syn_ssv' synapse.
-            * 'id_sj_ratio': Overlap ratio between synaptic junction (sj) and contact
-              site objects.
-
     """
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None,
                  working_dir: Optional[str] = None,
@@ -1718,14 +1714,14 @@ class SegmentationDataset(object):
     @property
     def so_dir_paths(self) -> List[str]:
         """
-        Paths to all supervoxel object directories in the directory tree
+        Sorted paths to all supervoxel object directories in the directory tree
         :py:attr:`~so_storage_path`.
         """
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
         # TODO: do not perform a glob. all possible paths are determined by
         #  'n_folders_fs' -> much faster, less IO
-        return glob.glob(p)
+        return sorted(glob.glob(p))
 
     @property
     def config(self) -> DynConfig:

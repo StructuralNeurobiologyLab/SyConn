@@ -67,7 +67,7 @@ cval = args.cval
 if cval is None:
     cval = 0
 
-lr = 5e-3
+lr = 5e-4
 lr_stepsize = 1000
 lr_dec = 0.995
 max_steps = 100000
@@ -184,8 +184,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2)
+# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
+lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,

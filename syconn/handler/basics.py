@@ -768,7 +768,7 @@ def str_delta_sec(seconds: int) -> str:
         String representation, e.g. ``'2d:12h:05min:01s'`` for
         ``sec = 1 + 5 * 60 + 12 * 3600 + 2 * 24 * 3600``.
     """
-    m, s = divmod(seconds, 60)
+    m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
     d, h = divmod(h, 24)
     str_rep = ''

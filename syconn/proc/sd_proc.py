@@ -88,6 +88,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                 if len(this_attr_dict['id']) == 0:
                     continue
                 value = this_attr_dict[attribute]
+                if attribute == 'id':
+                    value = np.array(value, np.uint)
                 if attribute not in attr_dict:  # TODO: Fail if any attribute does not exist in 'this_attr_dict'
                     if type(value) is not list:
                         sh = list(value.shape)
@@ -119,41 +121,45 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
                                          n_max_co_processes=n_max_co_processes,
                                          suffix=sd.type)
-        out_files = glob.glob(path_to_out + "/*")
+        out_files = np.array(glob.glob(path_to_out + "/*"))
 
-        ii = 0
         res_keys = []
-        while ii < len(out_files):
-            with open(out_files[ii], 'rb') as f:
+        file_mask = np.zeros(len(out_files), dtype=np.int)
+        for ii, p in enumerate(out_files):
+            with open(p, 'rb') as f:
                 res_dc = pkl.load(f)
-                if len(res_dc['id']) > 0:
-                    res_keys = list(res_dc.keys())
-                    break
-                ii += 1
+                n_el = len(res_dc['id'])
+                if n_el > 0:
+                    file_mask[ii] = n_el
+                    if len(res_keys) == 0:
+                        res_keys = list(res_dc.keys())
         if len(res_keys) == 0:
             raise ValueError(f'No objects found during dataset_analysis of {sd}.')
-        log_proc.debug(f'Caching {len(res_keys)} attributes during '
+        n_ids = np.sum(file_mask)
+        log_proc.debug(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
                        f'dataset_analysis:\n{res_keys}')
         # TODO: spawn this as QSUB job!
         for attribute in tqdm.tqdm(res_keys, leave=False):
             # start_multiprocess_imap obeys parameter order and therefore the
             # collected attributes will share the same ordering.
-            params = list(basics.chunkify([(p, attribute) for p in out_files],
+            params = list(basics.chunkify([(p, attribute) for p in out_files[file_mask > 0]],
                                           global_params.config['ncores_per_node'] * 2))
             tmp_res = sm.start_multiprocess_imap(
                 load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
             try:
                 tmp_res = np.concatenate(tmp_res)
+                assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
                 np.save(sd.path + "/%ss.npy" % attribute, tmp_res)
             except ValueError as e:
                 if attribute in ['sj_ids', 'cs_ids']:
-                    np.save(sd.path + "/%ss.npy" % attribute,
-                            np.array(tmp_res, dtype=np.object))
+                    tmp_res = np.array(tmp_res, dtype=np.object)
+                    np.save(sd.path + "/%ss.npy" % attribute, tmp_res)
                 else:
                     log_proc.error(
                         f'ValueError {e} encountered when writing numpy array '
                         f'cache of attribute {attribute} in "dataset_analysis",')
                     raise ValueError(e)
+            del tmp_res
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
@@ -166,7 +172,8 @@ def load_attr_helper(args):
             if len(dc['id']) == 0:
                 continue
             value = dc[attr]
-
+            if attr == 'id':
+                value = np.array(value, np.uint)
             if type(value) is not list:  # assume numpy array
                 if len(res) == 0:
                     sh = list(value.shape)
@@ -373,6 +380,8 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
     all_times = []
     step_names = []
+    dict_paths_tmp = []
+
 
     # extract mapping
     start = time.time()
@@ -390,7 +399,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     cell_prop_worker = dict()
     subcell_mesh_workers = [dict() for _ in range(len(kd_organelle_paths))]
     subcell_prop_workers = [dict() for _ in range(len(kd_organelle_paths))]
-    dict_paths_tmp = []
     # needed for caching target storage folder for all objects
     all_ids = {k: [] for k in list(kd_organelle_paths.keys()) + ['sv']}
 

@@ -67,7 +67,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     objects (keys: ``sym_prop``, ``asym_prop``).
 
     Todo:
-        extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
+        Replace sj_0 Segmentation dataset by the overlapping CS<->
         sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
         syn_0 -> use syns as new sjs during rendering!
         -> Run CS generation in parallel with mapping to at least get the syn objects before
@@ -75,8 +75,9 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         vc and syn (instead of sj)).
 
     Notes:
-        Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
-        `syn_gen_via_cset`` and ``extract_synapse_type``.
+        * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
+        * Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
+          `syn_gen_via_cset`` and ``extract_synapse_type``.
 
     Args:
         n_max_co_processes: Number of parallel workers.
@@ -260,6 +261,9 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=struct,
             version=0, n_folders_fs=n_folders_fs)
+        if os.path.isdir(sc_sd.path):
+            log.debug('Found existing SD at {}. Removing it now.'.format(sc_sd.path))
+            shutil.rmtree(sc_sd.path)
         ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
         for ix in tqdm.tqdm(ids, leave=False):
             curr_dir = sc_sd.so_storage_path + target_dir_func(
@@ -292,7 +296,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
     if qu.batchjob_enabled():
-        shutil.rmtree(path_to_out, ignore_errors=True)
+        shutil.rmtree(path_to_out + '/../', ignore_errors=True)
 
 
 def _contact_site_extraction_thread(args: Union[tuple, list]) \
@@ -332,7 +336,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     kd = basics.kd_factory(knossos_path)
     # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
     #  see below.
-    kd_syn = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
+    kd_sj = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
     if global_params.config.syntype_available:
         kd_syntype_sym = basics.kd_factory(global_params.config.kd_sym_path)
         kd_syntype_asym = basics.kd_factory(global_params.config.kd_asym_path)
@@ -369,10 +373,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
-        # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
+        # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
-        syn_d = (kd_syn.load_seg(size=size, offset=offset, mag=1,
-                                 datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
+        sj_d = (kd_sj.load_seg(size=size, offset=offset, mag=1,
+                                datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
@@ -401,8 +405,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                 asym_d = np.array(sym_d == global_params.config.asym_label, dtype=np.uint8)
                 sym_d = np.array(sym_d == global_params.config.sym_label, dtype=np.uint8)
         else:
-            sym_d = np.zeros_like(syn_d)
-            asym_d = np.zeros_like(syn_d)
+            sym_d = np.zeros_like(sj_d)
+            asym_d = np.zeros_like(sj_d)
         cum_dt_data += time.time() - start
 
         # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
@@ -424,8 +428,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
             # TODO: add to parameters to config
-            res = scipy.ndimage.binary_dilation(
-                res, iterations=2)
+            res = scipy.ndimage.binary_dilation(res, iterations=2)
             # only update background or the objects itself
             proc_mask = (binary_mask == 1) | (sub_vol == 0)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
@@ -436,7 +439,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # and the asym and sym voxels, do not use overlap here!
         curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
-            syn_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
+            sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             asym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap])
         cum_dt_proc += time.time() - start
@@ -445,7 +448,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                                   overlap:-overlap]], chunk.folder + "cs.h5",
                                  ['cs'], overwrite=True)
         # syn segmentation only contain the overlap voxels between SJ and CS
-        contacts[syn_d == 0] = 0
+        contacts[sj_d == 0] = 0
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "syn.h5",
                                  ['syn'], overwrite=True)
@@ -606,17 +609,16 @@ def _write_props_to_syn_thread(args):
 
             # TODO: should be refactored at some point, changed to bounding box of
             #  the overlap object instead of the SJ bounding box. Also the background ratio was adapted
-            n_vxs_in_sjbb = np.prod(bb[1] - bb[0]) # number of CS voxels in syn BB
-            id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
-            cs_ratio = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
-            background_overlap_ratio = 1 - id_ratio  # TODO: not the same as before anymore: local
+            n_vxs_in_sjbb = np.prod(bb[1] - bb[0])  # number of CS voxels in syn BB
+            # id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
+            cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
             # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
-            add_feat_dict = {'sj_id': cs_id, 'cs_id': cs_id,
-                             'id_sj_ratio': id_ratio,
-                             'sj_size_pseudo': n_vxs_in_sjbb,
-                             'id_cs_ratio': cs_ratio,
-                             'cs_size': size_cs,
-                             'background_overlap_ratio': background_overlap_ratio}
+            add_feat_dict = {'cs_id': cs_id,
+                             # 'id_sj_ratio': id_ratio,
+                             # 'sj_size_pseudo': n_vxs_in_sjbb,
+                             'id_cs_ratio': cs_ratio_vx,
+                             'cs_size': size_cs}
+                             # 'background_overlap_ratio': background_overlap_ratio}
             this_attr_dc[cs_id].update(add_feat_dict)
             voxel_dc[cs_id] = bbs
             voxel_dc.increase_object_size(cs_id, size)

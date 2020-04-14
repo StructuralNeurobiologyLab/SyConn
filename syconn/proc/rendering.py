@@ -574,7 +574,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     path_to_out = batchjob_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         n_cores=n_cores, disable_batchjob=disable_batchjob,
-        n_max_co_processes=n_jobs,
+        n_max_co_processes=n_jobs, overwrite=True,
         additional_flags="--gres=gpu:1" if not disable_batchjob else "")
     out_files = glob.glob(path_to_out + "/*")
     views = []
@@ -594,7 +594,8 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                 sv_views = views[part_views[i]:part_views[i+1]]
                 so.save_views(sv_views, woglia=render_kwargs_def['woglia'],
                               cellobjects_only=render_kwargs_def['cellobjects_only'],
-                              index_views=render_kwargs_def["render_indexviews"])
+                              index_views=render_kwargs_def["render_indexviews"],
+                              enable_locking=True)
         else:
             write_sv_views_chunked(svs, views, part_views,
                                    dict(woglia=render_kwargs_def['woglia'],
@@ -607,7 +608,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     return views
 
 
-def write_sv_views_chunked(svs, views, part_views, view_kwargs):
+def write_sv_views_chunked(svs, views, part_views, view_kwargs, disable_locking=False):
     """
 
     Args:
@@ -616,6 +617,7 @@ def write_sv_views_chunked(svs, views, part_views, view_kwargs):
         part_views: np.ndarray[int]
             Cumulated number of views -> indices of start and end of SV views in `views` array
         view_kwargs: dict
+        disable_locking:
 
     Returns:
 
@@ -629,7 +631,8 @@ def write_sv_views_chunked(svs, views, part_views, view_kwargs):
         else:
             view_dc[curr_view_dest] = {sv.id: view_ixs}
     for k, v in view_dc.items():
-        view_storage = CompressedStorage(k, read_only=False)  # locking is enabled by default
+        view_storage = CompressedStorage(k, read_only=False,
+                                         disable_locking=disable_locking)
         for sv_id, sv_view_ixs in v.items():
             view_storage[sv_id] = views[sv_view_ixs[0]:sv_view_ixs[1]]
         view_storage.push()

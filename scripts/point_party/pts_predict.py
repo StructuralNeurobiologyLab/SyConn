@@ -48,12 +48,11 @@ def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader, mkwargs: 
             try:
                 g_inp = [torch.from_numpy(i).to(DEVICE).float() for i in inp]
                 res = m(*g_inp).cpu().numpy()
-                del g_inp
+                del g_inp, inp
             except RuntimeError as e:
                 print(f'Splitting model input due to RuntimeError "{e}".')
                 # memory seemed not to be freed by applying the model on half the data
                 del m
-                gc.collect()
                 m = model_loader(mkwargs)
                 # TODO: hacky - apply recursively, make it work with arbitrary output
                 n_third = len(inp) // 3
@@ -61,6 +60,7 @@ def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader, mkwargs: 
                 res2 = m(*(torch.from_numpy(i[n_third:(2*n_third)]).to(DEVICE).float() for i in inp)).cpu().numpy()
                 res3 = m(*(torch.from_numpy(i[(2*n_third):]).to(DEVICE).float() for i in inp)).cpu().numpy()
                 res = np.concatenate([res1, res2, res3])
+            gc.collect()
         q_cnt.put(len(ssv_ids))
         q_out.put((ssv_ids, res))
     q_out.put('END')
@@ -83,6 +83,7 @@ def load_model(mkwargs):
     import torch
     m = ModelNet40(5, 8, **mkwargs).to(DEVICE)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
+    m = torch.nn.DataParallel(m)
     m.eval()
     return m
 
@@ -221,11 +222,11 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp80k/'
-    for run in range(3):
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp75k/'
+    for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb40000_noBN_moreAug4_CV{}_eval0/'
+        mdir = base_dir + '/celltype_pts_scale30000_nb75000_noBN_moreAug4_CV{}_eval{}/'
         use_bn = True
         track_running_stats = False
         if 'noBN' in mdir:
@@ -233,6 +234,7 @@ if __name__ == '__main__':
         if 'trackRunStats' in mdir:
             track_running_stats = True
         npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
+        scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)
         mkwargs = dict(use_bn=use_bn, track_running_stats=track_running_stats)
         log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
@@ -241,13 +243,13 @@ if __name__ == '__main__':
         for CV in range(ncv_min, n_cv):
             split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                            f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-            mpath = f'{mdir.format(CV)}/state_dict.pth'
+            mpath = f'{mdir.format(CV, run)}/state_dict.pth'
             log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
 
             # if os .path.isfile(fname_pred):
             #     continue
-            res_dc = predict_pts_wd(ssd_kwargs, load_model, mkwargs, npoints, 30000, ssv_ids=split_dc['valid'],
+            res_dc = predict_pts_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ssv_ids=split_dc['valid'],
                                     nloader=2, npredictor=1, use_test_aug=True)
             basics.write_obj2pkl(fname_pred, res_dc)
 

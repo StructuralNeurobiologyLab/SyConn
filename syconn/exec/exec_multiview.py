@@ -915,6 +915,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     multi_params = chunkify(multi_params, max_n_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
+
     _ = qu.batchjob_script(
         multi_params, "render_views_glia_removal", log=log,
         n_max_co_processes=global_params.config.ngpu_total,

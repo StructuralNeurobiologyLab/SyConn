@@ -111,10 +111,11 @@ def batchjob_script(params: list, name: str,
         python_path: Path to python binary.
         disable_batchjob: Use single node multiprocessing.
         use_dill: Use dill to enable pickling of lambda expressions.
-        remove_jobfolder: Remove `batchjob_folder` after successful termination.
+            remove_jobfolder: Remove `batchjob_folder` after successful termination.
         log: Logger.
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
+        overwrite:
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -138,6 +139,8 @@ def batchjob_script(params: list, name: str,
     if n_max_co_processes is None:
         n_max_co_processes = np.min([global_params.config.ncore_total // n_cores,
                                      len(params)])
+    else:
+        n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
     if script_folder is not None:
         path_to_scripts = script_folder
@@ -177,8 +180,8 @@ def batchjob_script(params: list, name: str,
             job_name = "".join([letters[l] for l in
                                 np.random.randint(0, len(letters), 8)])
     log_batchjob.info(
-        'Started BatchJob script "{}" ({}) with {} tasks using {} parallel jobs, each'
-        ' using {} core(s).'.format(name, job_name, len(params),
+        'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks using {} parallel jobs, each'
+        ' using {} core(s).'.format(name, job_name, suffix, len(params),
                                     n_max_co_processes, n_cores))
     if len(job_name) > 8:
         msg = "job_name is longer than 8 characters. This is untested."
@@ -892,8 +895,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
     log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
-                       ' parallel jobs, each using {} core(s).'.format(
-        name, len(params), n_max_co_processes, n_cores))
+                       ' parallel jobs, each using {} core(s).'.format(name, len(params), n_max_co_processes, n_cores))
     start = time.time()
 
     if script_folder is not None:
@@ -949,15 +951,14 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
         log_mp.error(msg)
         log_batchjob.error(msg)
         raise ValueError(msg)
-    elif len("".join(out_str)) == 0:
-        if remove_jobfolder:
-            shutil.rmtree(job_folder, ignore_errors=True)
-    else:
+    elif len("".join(out_str)) != 0:
         msg = 'Warnings/errors occurred during ' \
               '"{}".:\n{} See logs at {} for details.'.format(name, out_str,
                                                               job_folder)
         log_mp.warning(msg)
         log_batchjob.warning(msg)
+    if remove_jobfolder:
+        shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(
         name, time.time() - start))
     return path_to_out
