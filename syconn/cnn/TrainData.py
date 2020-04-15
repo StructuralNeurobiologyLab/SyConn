@@ -14,8 +14,8 @@ from knossos_utils import KnossosDataset
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
-from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, \
-    generate_pts_sample, pts_loader_scalar, pts_feat_dict
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
+from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, pts_feat_dict
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset

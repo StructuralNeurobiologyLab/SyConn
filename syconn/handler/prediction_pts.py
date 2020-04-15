@@ -28,6 +28,35 @@ pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
 pts_feat_ds_dict = dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100)
 
 
+# TODO: move to handler.basics
+def write_ply(fn, verts, colors):
+    ply_header = '''ply
+    format ascii 1.0
+    element vertex %(vert_num)d
+    property float x
+    property float y
+    property float z
+    property uchar red
+    property uchar green
+    property uchar blue
+    end_header
+
+    '''
+    verts = np.hstack([verts, colors])
+    with open(fn, 'wb') as f:
+        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
+        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
+
+
+def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
+    col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
+              4: [[250, 100, 100]], 2: [[100, 200, 100]]}
+    cols = np.zeros(pts.shape, dtype=np.uint8)
+    for k in pts_feat_dict.values():
+        mask = feats[:, k] == 1
+        cols[mask] = col_dc[k]
+    write_ply(fname, pts, cols)
+
 def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue,
                 model_loader: Callable, pred_func: Callable,
                 mkwargs: dict, device: str):
@@ -127,6 +156,7 @@ def listener(q_cnt: Queue, q_in: Queue, q_loader_sync: Queue,
 def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                       loader_func: Callable, pred_func: Callable,
                       npoints: int, scale_fact: float,
+                      output_func: Optional[Callable] = None,
                       mkwargs: Optional[dict] = None,
                       nloader: int = 4, npredictor: int = 2,
                       ssv_ids: Optional[Union[list, np.ndarray]] = None,
@@ -145,9 +175,6 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         * prediction worker (pred_func) -> output queue
         * output queue -> result dictionary (return)
 
-    Todo:
-        * Add output queue processing function
-
     Args:
         ssd_kwargs: Keyword arguments to specify the underlying ``SuperSegmentationDataset``.
         model_loader: Function which returns the pytorch model object.
@@ -156,6 +183,13 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         mkwargs: Model keyword arguments.
         npoints: Number of points used to generate a sample.
         scale_fact: Scale factor; used to normalize point clouds prior to model inference.
+        output_func: Transforms the elements in the output queue and stores it in the final dictionary.
+            If None, elements as returned by `pred_func` are assumed to be of form ``(ssv_ids, results)``:
+
+                def output_func(res_dc, (ssv_ids, predictions)):
+                    for ssv_id, ssv_pred in zip(*(ssv_ids, predictions)):
+                        res_dc[ssv_id].append(ssv_pred)
+
         nloader: Number of workers loading samples from the given cell IDs via `load_func`.
         npredictor: Number of workers which will call `model_loader` and process (via `pred_func`) the output of
             the "loaders", i.e. workers which retrieve samples via `loader_func`.
@@ -188,14 +222,18 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         npoints = 25000
         scale_fact = 30000
         mkwargs = dict(use_bn=False, track_running_stats=False)
-        res_dc = predict_pts_plain(ssd_kwargs, load_model, pts_loader_scalar, pts_pred_scalar,
-                                   npoints, scale_fact, ssv_ids=ssv_ids,
-                                   nloader=2, npredictor=1, use_test_aug=True)
+        dict_out = predict_pts_plain(ssd_kwargs, load_model, pts_loader_scalar, pts_pred_scalar,
+                                     npoints, scale_fact, ssv_ids=ssv_ids,
+                                     nloader=2, npredictor=1, use_test_aug=True)
 
     Returns:
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
 
     """
+    if output_func is None:
+        def output_func(res_dc, ret):
+            for ix, out in zip(*ret):
+                res_dc[ix].append(out)
     transform = [clouds.Normalization(scale_fact), clouds.Center()]
     if use_test_aug:
         transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
@@ -226,11 +264,11 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                  for el in params_in]
     for p in producers:
         p.start()
-    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, pred_func, mkwargs, device)) for _ in
-                 range(npredictor)]
+    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, pred_func,
+                                                   mkwargs, device)) for _ in range(npredictor)]
     for c in consumers:
         c.start()
-    res_dc = collections.defaultdict(list)
+    dict_out = collections.defaultdict(list)
     cnt_end = 0
     lsnr = Process(target=listener, args=(q_cnt, q_in, q_loader_sync, npredictor,
                                           nloader, nsamples_tot))
@@ -245,8 +283,7 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         if res == 'END':
             cnt_end += 1
             continue
-        for ssv_id, logit in zip(*res):
-            res_dc[ssv_id].append(logit[None, ])
+        output_func(dict_out, res)
 
     print('Finished collection of results.')
     q_cnt.put(None)
@@ -260,7 +297,7 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         c.join()
         c.close()
     print('Joined consumers.')
-    return res_dc
+    return dict_out
 
 
 def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
@@ -467,7 +504,7 @@ def pts_pred_scalar(m, inp, q_out, q_cnt, device):
     ssv_ids, inp = inp
     with torch.no_grad():
         g_inp = [torch.from_numpy(i).to(device).float() for i in inp]
-        res = m(*g_inp).cpu().numpy()
+        res = m(*g_inp).cpu().numpy()[:, np.newaxis]
         del g_inp, inp
     q_cnt.put(len(ssv_ids))
     q_out.put((ssv_ids, res))

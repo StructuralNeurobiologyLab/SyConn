@@ -4,7 +4,7 @@ import re
 import gc
 from multiprocessing import Process, Queue
 from syconn.handler import basics, config
-from syconn.handler.prediction_pts import worker_load, \
+from syconn.handler.prediction_pts import predict_pts_plain, \
     worker_pred, pts_loader_scalar, pts_pred_scalar, listener
 from syconn.handler.prediction import certainty_estimate
 from syconn.handler.basics import chunkify, chunkify_successive
@@ -27,7 +27,7 @@ def load_model(mkwargs, device):
 
 
 def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, nloader=4, npredictor=2,
-                        ssv_ids=None, use_test_aug=False):
+                        ssv_ids=None, use_test_aug=False, device='cuda'):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -50,61 +50,12 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
     Returns:
 
     """
-    transform = [clouds.Normalization(scale_fact), clouds.Center()]
-    if use_test_aug:
-        transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
-    transform = clouds.Compose(transform)
-    bs = 40  # ignored during inference
-    ssd = SuperSegmentationDataset(**ssd_kwargs)
-    if ssv_ids is None:
-        ssv_ids = ssd.ssv_ids
-    # minimum redundanc
-    min_redundancy = 25
-    # three times as many predictions as npoints fit into the ssv vertices
-    ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints * 3, min_redundancy) for ssv in
-                      ssd.get_super_segmentation_object(ssv_ids)]
-    kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, transform=transform)
-    ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
-                              for ii in range(len(ssv_ids))])
-    params_in = [{**kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
-        ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
-
-    # total samples:
-    nsamples_tot = len(ssv_ids)
-
-    q_in = Queue(maxsize=20*npredictor)
-    q_cnt = Queue()
-    q_out = Queue()
-    q_loader_sync = Queue()
-    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, pts_loader_scalar, el))
-                 for el in params_in]
-    for p in producers:
-        p.start()
-    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, pts_pred_scalar, mkwargs)) for _ in
-                 range(npredictor)]
-    for c in consumers:
-        c.start()
-    res_dc = collections.defaultdict(list)
-    cnt_end = 0
-    lsnr = Process(target=listener, args=(q_cnt, q_in, q_loader_sync, npredictor,
-                                          nloader, nsamples_tot))
-    lsnr.start()
-    while True:
-        if q_out.empty():
-            if cnt_end == npredictor:
-                break
-            time.sleep(1)
-            continue
-        res = q_out.get()
-        if res == 'END':
-            cnt_end += 1
-            continue
-        for ssv_id, logit in zip(*res):
-            res_dc[ssv_id].append(logit[None, ])
-
-    res_dc = dict(res_dc)
-    for ssv_id in res_dc:
-        logit = np.concatenate(res_dc[ssv_id])
+    out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mkwargs=mkwargs,
+                               npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
+                               ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device)
+    out_dc = dict(out_dc)
+    for ssv_id in out_dc:
+        logit = np.concatenate(out_dc[ssv_id])
         if da_equals_tan:
             # accumulate evidence for DA and TAN
             logit[:, 1] += logit[:, 6]
@@ -113,20 +64,8 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
             # INT is now at index 6 -> label 6 is INT
         cls = np.argmax(logit, axis=1).squeeze()
         cls_maj = collections.Counter(cls).most_common(1)[0][0]
-        res_dc[ssv_id] = (cls_maj, certainty_estimate(logit, is_logit=True))
-    print('Finished collection of results.')
-    q_cnt.put(None)
-    lsnr.join()
-    print('Joined listener.')
-    for p in producers:
-        p.join()
-        p.close()
-    print('Joined producers.')
-    for c in consumers:
-        c.join()
-        c.close()
-    print('Joined consumers.')
-    return res_dc
+        out_dc[ssv_id] = (cls_maj, certainty_estimate(logit, is_logit=True))
+    return out_dc
 
 
 if __name__ == '__main__':
@@ -135,11 +74,11 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp75k/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp25k/'
     for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb75000_noBN_moreAug4_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale30000_nb25000_noBN_moreAug4_CV{}_eval{}/'
         use_bn = True
         track_running_stats = False
         if 'noBN' in mdir:
@@ -156,12 +95,10 @@ if __name__ == '__main__':
         for CV in range(ncv_min, n_cv):
             split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                            f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-            mpath = f'{mdir.format(CV, run)}/state_dict.pth'
+            mpath = f'{mdir.format(CV, run)}/state_dict_minlr_step75000.pth'
             log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
 
-            # if os .path.isfile(fname_pred):
-            #     continue
             res_dc = predict_celltype_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ssv_ids=split_dc['valid'],
                                          nloader=2, npredictor=1, use_test_aug=True)
             basics.write_obj2pkl(fname_pred, res_dc)

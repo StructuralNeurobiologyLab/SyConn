@@ -1358,32 +1358,3 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     # convert to certainty estimate
     return 1 - entr_norm
 
-
-# TODO: move to handler.basics
-def write_ply(fn, verts, colors):
-    ply_header = '''ply
-    format ascii 1.0
-    element vertex %(vert_num)d
-    property float x
-    property float y
-    property float z
-    property uchar red
-    property uchar green
-    property uchar blue
-    end_header
-
-    '''
-    verts = np.hstack([verts, colors])
-    with open(fn, 'wb') as f:
-        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
-        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
-
-
-def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
-    col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
-              4: [[250, 100, 100]], 2: [[100, 200, 100]]}
-    cols = np.zeros(pts.shape, dtype=np.uint8)
-    for k in pts_feat_dict.values():
-        mask = feats[:, k] == 1
-        cols[mask] = col_dc[k]
-    write_ply(fname, pts, cols)
