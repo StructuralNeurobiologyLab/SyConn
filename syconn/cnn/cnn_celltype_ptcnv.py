@@ -30,7 +30,7 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=40000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
@@ -70,7 +70,7 @@ if cval is None:
 lr = 5e-4
 lr_stepsize = 1000
 lr_dec = 0.995
-max_steps = 100000
+max_steps = 125000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -81,9 +81,10 @@ track_running_stats = False
 use_bn = False
 num_classes = 8
 onehot = True
+act = 'swish'
 
 if name is None:
-    name = f'celltype_pts_scale{scale_norm}_nb{npoints}'
+    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -114,7 +115,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=use_bn,
-                   track_running_stats=track_running_stats)
+                   track_running_stats=track_running_stats, act=act)
 name += '_moreAug4'
 # model = ModelNetBig(input_channels, num_classes, dropout=dr)
 # name += '_big'
@@ -185,7 +186,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=5000, T_mult=2)
+lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,

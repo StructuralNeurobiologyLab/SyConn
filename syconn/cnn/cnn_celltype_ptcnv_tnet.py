@@ -91,7 +91,7 @@ if __name__ == '__main__':
     lr = 5e-4
     lr_stepsize = 1000
     lr_dec = 0.995
-    max_steps = 1000000
+    max_steps = 500000
     margin = 0.2
     dr = 0.3
 

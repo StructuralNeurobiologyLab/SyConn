@@ -1,15 +1,12 @@
-# SyConn-dev
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
-
 import collections
 import os
 import re
 import gc
 from multiprocessing import Process, Queue
 from syconn.handler import basics, config
-from syconn.handler.prediction import generate_pts_sample, \
-    pts_feat_dict, certainty_estimate, pts_loader_ssvs
+from syconn.handler.prediction_pts import worker_load, \
+    worker_pred, pts_loader_scalar, pts_pred_scalar, listener
+from syconn.handler.prediction import certainty_estimate
 from syconn.handler.basics import chunkify, chunkify_successive
 import numpy as np
 import time
@@ -17,104 +14,20 @@ import tqdm
 import morphx.processing.clouds as clouds
 from sklearn.metrics.classification import classification_report
 from syconn.reps.super_segmentation import SuperSegmentationDataset
-DEVICE = 'cuda:0'
 
 
-def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue, model_loader, mkwargs: dict):
-    import torch
-    m = model_loader(mkwargs)
-    stop_received = False
-    while True:
-        if not q_in.empty():
-            inp = q_in.get()
-            if inp == 'STOP':
-                if stop_received:
-                    # already got STOP signal, put back in queue for other worker.
-                    q_in.put('STOP')
-                    # wait for the other worker to get the signal
-                    time.sleep(2)
-                    continue
-                stop_received = True
-                if not q_in.empty():
-                    continue
-                break
-        else:
-            if stop_received:
-                break
-            time.sleep(0.5)
-            continue
-        ssv_ids, inp = inp
-        with torch.no_grad():
-            try:
-                g_inp = [torch.from_numpy(i).to(DEVICE).float() for i in inp]
-                res = m(*g_inp).cpu().numpy()
-                del g_inp, inp
-            except RuntimeError as e:
-                print(f'Splitting model input due to RuntimeError "{e}".')
-                # memory seemed not to be freed by applying the model on half the data
-                del m
-                m = model_loader(mkwargs)
-                # TODO: hacky - apply recursively, make it work with arbitrary output
-                n_third = len(inp) // 3
-                res1 = m(*(torch.from_numpy(i[:n_third]).to(DEVICE).float() for i in inp)).cpu().numpy()
-                res2 = m(*(torch.from_numpy(i[n_third:(2*n_third)]).to(DEVICE).float() for i in inp)).cpu().numpy()
-                res3 = m(*(torch.from_numpy(i[(2*n_third):]).to(DEVICE).float() for i in inp)).cpu().numpy()
-                res = np.concatenate([res1, res2, res3])
-            gc.collect()
-        q_cnt.put(len(ssv_ids))
-        q_out.put((ssv_ids, res))
-    q_out.put('END')
-
-
-def worker_load(q: Queue, q_loader_sync: Queue, gen, kwargs: dict):
-    for el in gen(**kwargs):
-        while True:
-            if q.full():
-                time.sleep(1)
-            else:
-                break
-        q.put(el)
-    time.sleep(1)
-    q_loader_sync.put('DONE')
-
-
-def load_model(mkwargs):
+def load_model(mkwargs, device):
     from elektronn3.models.convpoint import ModelNet40
     import torch
-    m = ModelNet40(5, 8, **mkwargs).to(DEVICE)
+    m = ModelNet40(5, 8, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m = torch.nn.DataParallel(m)
     m.eval()
     return m
 
 
-def listener(q_cnt: Queue, q_in, q_loader_sync, npredictor, nloader, total):
-    pbar = tqdm.tqdm(total=total)
-    cnt_loder_done = 0
-    while True:
-        if q_cnt.empty():
-            time.sleep(1)
-        else:
-            res = q_cnt.get()
-            if res is None:  # final stop
-                assert cnt_loder_done == nloader
-                pbar.close()
-                break
-            pbar.update(res)
-        if q_loader_sync.empty() or cnt_loder_done == nloader:
-            time.sleep(1)
-        else:
-            _ = q_loader_sync.get()
-            cnt_loder_done += 1
-            print('Loader finished.')
-            if cnt_loder_done == nloader:
-                for _ in range(npredictor):
-                    time.sleep(1)
-                    q_in.put('STOP')
-
-
-def predict_pts_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, nloader=4, npredictor=2,
-                   ssv_ids=None, use_test_aug=False):
+def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, nloader=4, npredictor=2,
+                        ssv_ids=None, use_test_aug=False):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -163,11 +76,11 @@ def predict_pts_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, nload
     q_cnt = Queue()
     q_out = Queue()
     q_loader_sync = Queue()
-    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, pts_loader_ssvs, el))
+    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, pts_loader_scalar, el))
                  for el in params_in]
     for p in producers:
         p.start()
-    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, mkwargs)) for _ in
+    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, pts_pred_scalar, mkwargs)) for _ in
                  range(npredictor)]
     for c in consumers:
         c.start()
@@ -249,8 +162,8 @@ if __name__ == '__main__':
 
             # if os .path.isfile(fname_pred):
             #     continue
-            res_dc = predict_pts_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ssv_ids=split_dc['valid'],
-                                    nloader=2, npredictor=1, use_test_aug=True)
+            res_dc = predict_celltype_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ssv_ids=split_dc['valid'],
+                                         nloader=2, npredictor=1, use_test_aug=True)
             basics.write_obj2pkl(fname_pred, res_dc)
 
         # compare to GT

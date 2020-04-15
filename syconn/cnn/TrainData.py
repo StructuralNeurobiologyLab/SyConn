@@ -15,7 +15,7 @@ from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, \
-    generate_pts_sample, pts_loader_ssvs, pts_feat_dict
+    generate_pts_sample, pts_loader_scalar, pts_feat_dict
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -221,11 +221,11 @@ if elektronn3_avail:
                     point and feature array; if batch size is 1, the first axis is removed.
             """
             if draw_local:
-                sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, train=True, draw_local=True)][0]
             else:
-                sso_id, (sample_feats, sample_pts) = [*pts_loader_ssvs(
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, train=True)][0]
             assert np.unique(sso_id) == self.sso_ids[item]

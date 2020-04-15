@@ -4,18 +4,16 @@ import time
 from multiprocessing import Process, Queue
 from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
     VoxelStorage
-from syconn.handler.basics import write_txt2kzip,write_data2kzip,\
-    read_txt_from_zip, remove_from_zip
+from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
+     read_txt_from_zip, remove_from_zip
 import os
 import logging
 import traceback
 import zipfile
 import sys
 
-
+# TODO: use tempfile
 dir_path = os.path.dirname(os.path.realpath(__file__))
-logging.basicConfig(filename=dir_path + '/test_backend.log',
-                    level=logging.DEBUG, filemode='w')
 
 test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
@@ -376,7 +374,7 @@ def test_basics_write_txt2kzip():
 
     try:
         txt = 'test'
-        write_txt2kzip(dir_path + '/test.kzip',txt, "test")
+        write_txt2kzip(dir_path + '/test.kzip', txt, "test")
 
         if os.path.isfile(dir_path + '/test.kzip'):
             os.remove(dir_path + '/test.kzip')

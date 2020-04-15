@@ -4,6 +4,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 # import here, otherwise it might fail if it is imported after importing torch
 # see https://github.com/pytorch/pytorch/issues/19739
 import open3d as o3d
@@ -18,7 +19,6 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
 from .. import global_params
 
-import networkx as nx
 import re
 import numpy as np
 import os
@@ -26,12 +26,7 @@ import sys
 import time
 import tqdm
 from logging import Logger
-import functools
-from morphx.classes.hybridcloud import HybridCloud
 import shutil
-from sklearn.preprocessing import label_binarize
-from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices
 from typing import Iterable, Union, Optional, Any, Tuple, Callable
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -1362,193 +1357,6 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     entr_norm = entropy(proba) / entr_max
     # convert to certainty estimate
     return 1 - entr_norm
-
-
-pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
-# in nm, should be replaced by Poisson disk sampling
-pts_feat_ds_dict = dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100)
-
-
-def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
-                        num_obj_types: int, onehot: bool = True,
-                        npoints: Optional[int] = None, use_syntype: bool = True,
-                        downsample: Optional[float] = None):
-    # TODO: add optional downsampling here
-    feat_dc = dict(feat_dc)
-    if use_syntype:
-        if 'syn_ssv' in feat_dc:
-            del feat_dc['syn_ssv']
-    else:
-        if 'syn_ssv_sym' in feat_dc:
-            del feat_dc['syn_ssv_sym']
-        if 'syn_ssv_asym' in feat_dc:
-            del feat_dc['syn_ssv_asym']
-    if cellshape_only is True:
-        sample_pts = sample_pts['sv']
-        sample_feats = np.ones((len(sample_pts), 1)) * feat_dc['sv']
-    else:
-        sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
-                                       for k in feat_dc.keys()])
-        if onehot:
-            sample_feats = label_binarize(sample_feats, classes=np.arange(num_obj_types))
-        else:
-            sample_feats = sample_feats[..., None]
-        # len(sample_feats) is the equal to the total number of vertices
-        sample_pts = np.concatenate([sample_pts[k] for k in feat_dc.keys()])
-    if npoints is not None:
-        idx_arr = np.random.choice(np.arange(len(sample_pts)),
-                                   npoints, replace=len(sample_pts) < npoints)
-        sample_pts = sample_pts[idx_arr]
-        sample_feats = sample_feats[idx_arr]
-    return sample_pts, sample_feats
-
-
-@functools.lru_cache(256)
-def _load_ssv_hc(args):
-    ssv, feats, feat_labels = args
-    vert_dc = dict()
-    # TODO: replace by poisson disk sampling
-    for k in feats:
-        pcd = o3d.geometry.PointCloud()
-        verts = ssv.load_mesh(k)[1].reshape(-1, 3)
-        pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[k])
-        vert_dc[k] = np.asarray(pcd.points)
-    sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
-                                   for ii, k in enumerate(feats)])
-    sample_pts = np.concatenate([vert_dc[k] for k in feats])
-    if not ssv.load_skeleton():
-        raise ValueError(f'Couldnt find skeleton of {ssv}')
-    nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
-    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
-    # cache verts2node
-    _ = hc.verts2node
-    return hc
-
-
-def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
-                    transform: Optional[Callable] = None, train=False,
-                    draw_local=False, draw_local_dist=1000):
-    """
-
-    Args:
-        ssd_kwargs:
-        ssv_ids:
-        batchsize:
-        npoints:
-        transform:
-        train:
-        draw_local: Will draw similar contexts from approx.
-            the same location, requires a single unique element in ssv_ids
-        draw_local_dist: Maximum distance to similar source node in nm.
-
-    Returns:
-
-    """
-    from ..reps.super_segmentation import SuperSegmentationDataset
-    np.random.shuffle(ssv_ids)
-    ssd = SuperSegmentationDataset(**ssd_kwargs)
-    # TODO: add `use_syntype kwarg and cellshape only
-    feat_dc = dict(pts_feat_dict)
-    if 'syn_ssv' in feat_dc:
-        del feat_dc['syn_ssv']
-    if not train:
-        if draw_local:
-            raise NotImplementedError()
-        for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
-            if draw_local and occ % 2:
-                raise ValueError(f'draw_local is set to True but the number of SSV samples is uneven.')
-            ssv = ssd.get_super_segmentation_object(ssv_id)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values())))
-            npoints_ssv = min(len(hc.vertices), npoints)
-            batch = np.zeros((occ, npoints_ssv, 3))
-            batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((occ,), dtype=np.uint) * ssv_id
-            cnt = 0
-            # TODO: this should be deterministic during inference
-            nodes = hc.base_points(density_mode=False, threshold=5000, source=len(hc.nodes)//2)
-            source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
-            for source_node in source_nodes:
-                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                sample_feats = pc.features
-                sample_pts = pc.vertices
-                # make sure there is always the same number of points within a batch
-                sample_ixs = np.arange(len(sample_pts))
-                # np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                pc._vertices = sample_pts
-                pc._features = sample_feats
-                if transform is not None:
-                    transform(pc)
-                batch[cnt] = pc.vertices
-                batch_f[cnt] = pc.features
-                cnt += 1
-            assert cnt == occ
-            yield (ixs, (batch_f, batch))
-    else:
-        ssv_ids = np.unique(ssv_ids)
-
-        for curr_ssvids in ssv_ids:
-            ssv = ssd.get_super_segmentation_object(curr_ssvids)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values())))
-            npoints_ssv = min(len(hc.vertices), npoints)
-            # add a +-10% fluctuation in the number of input points
-            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-            npoints_ssv += npoints_add
-            batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
-            cnt = 0
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
-                                            replace=len(hc.nodes) < batchsize)
-            if draw_local:
-                # only use half of the nodes and choose a close-by node as root for similar context retrieval
-                source_nodes = source_nodes[::2]
-                sn_new = []
-                g = hc.graph(simple=False)
-                for n in source_nodes:
-                    sn_new.append(n)
-                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                    neighs = np.array(list(paths.keys()), dtype=np.int)
-                    sn_new.append(np.random.choice(neighs, 1)[0])
-                source_nodes = sn_new
-            for source_node in source_nodes:
-                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                sample_feats = pc.features
-                sample_pts = pc.vertices
-                # shuffling
-                sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add up to 10% of duplicated points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                pc._vertices = sample_pts
-                pc._features = sample_feats
-                if transform is not None:
-                    transform(pc)
-                batch[cnt] = pc.vertices
-                batch_f[cnt] = pc.features
-                cnt += 1
-            assert cnt == batchsize
-            yield (ixs, (batch_f, batch))
 
 
 # TODO: move to handler.basics
