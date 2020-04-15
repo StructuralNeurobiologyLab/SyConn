@@ -15,6 +15,7 @@ from importlib import reload
 import sys
 
 from ..mp.batchjob_utils import batchjob_script
+from ..mp.mp_utils import start_multiprocess_imap
 from . import log_proc
 from .. import global_params
 from ..handler.basics import flatten_list
@@ -234,8 +235,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         ws = (256, 128)
     if verbose:
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
-                       ' platform "{}".'.format(
-            len(coords), sso.id, global_params.config['pyopengl_platform']))
+                       ' platform "{}".'.format(len(coords), sso.id, global_params.config['pyopengl_platform']))
         start = time.time()
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
@@ -499,10 +499,9 @@ def render_sso_ortho_views(sso):
     return views
 
 
-def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_locations=None,
+def render_sso_coords_multiprocessing(ssv, n_jobs, rendering_locations=None,
                                       verbose=False, render_kwargs=None, view_key=None,
-                                      render_indexviews=True, return_views=True,
-                                      disable_batchjob=True):
+                                      render_indexviews=True, return_views=True):
     """
 
     Args:
@@ -536,6 +535,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                          'iews=False`). When using specific rendering locations, '
                          'views have to be returned-')
     svs = None
+    ssv.nb_cpus = n_jobs
     if rendering_locations is None:  # use SV rendering locations
         svs = list(ssv.svs)
         if ssv._sample_locations is None and not ssv.attr_exists("sample_locations"):
@@ -553,13 +553,6 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                        dtype=np.uint8) * 255
     params = np.array_split(rendering_locations, n_jobs)
 
-    ssv_id = ssv.id
-    working_dir = wd
-    sso_kwargs = {'ssv_id': ssv_id,
-                  'working_dir': working_dir,
-                  "version": ssv.version,
-                  'nb_cpus': n_cores,
-                  'sv_ids': [sv.id for sv in ssv.svs]}
     # TODO: refactor kwargs!
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                          'ws': None, 'cellobjects_only': False, 'wire_frame': False,
@@ -568,22 +561,10 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     if render_kwargs is not None:
         render_kwargs_def.update(render_kwargs)
 
-    params = [[par, sso_kwargs, render_kwargs_def, ix] for ix, par in
-              enumerate(params)]
-    # This is single node multiprocessing -> `disable_batchjob=False`
-    path_to_out = batchjob_script(
-        params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
-        n_cores=n_cores, disable_batchjob=disable_batchjob,
-        n_max_co_processes=n_jobs, overwrite=True,
-        additional_flags="--gres=gpu:1" if not disable_batchjob else "")
-    out_files = glob.glob(path_to_out + "/*")
-    views = []
-    out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
-    for out_file in out_files2:
-        with open(out_file, 'rb') as f:
-            views.append(pkl.load(f))
+    _ = ssv.mesh  # cache mesh
+    params = [[par, ssv, render_kwargs_def] for par in params]
+    views = start_multiprocess_imap(_render_views_multiproc, params)
     views = np.concatenate(views)
-    shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     if svs is not None and return_views is False:
         start_writing = time.time()
         if render_kwargs_def['cellobjects_only']:
@@ -605,6 +586,36 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
         log_proc.debug('Writing SV renderings took {:.2f}s'.format(
             end_writing - start_writing))
         return
+    return views
+
+
+def _render_views_multiproc(args):
+    coords, sso, kwargs = args
+
+    render_indexviews = kwargs['render_indexviews']
+    del kwargs['render_indexviews']
+
+    # TODO: refactor kwargs
+    if 'overwrite' in kwargs:
+        del kwargs['overwrite']
+    if render_indexviews:
+        if 'add_cellobjects' in kwargs:
+            del kwargs['add_cellobjects']
+        if 'clahe' in kwargs:
+            del kwargs['clahe']
+        if 'wire_frame' in kwargs:
+            del kwargs['wire_frame']
+        if 'cellobjects_only' in kwargs:
+            del kwargs['cellobjects_only']
+        if 'return_rot_mat' in kwargs:
+            del kwargs['return_rot_mat']
+        if 'woglia' in kwargs:
+            del kwargs['woglia']
+        views = render_sso_coords_index_views(sso, coords, **kwargs)
+    else:
+        if 'woglia' in kwargs:
+            del kwargs['woglia']
+        views = render_sso_coords(sso, coords, **kwargs)
     return views
 
 
@@ -666,14 +677,14 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
     if render_indexviews is False:
         if len(rendering_locations) > 360:
             views = render_sso_coords_multiprocessing(
-                ssv, working_dir, rendering_locations=rendering_locations,
+                ssv, rendering_locations=rendering_locations,
                 n_jobs=n_jobs, verbose=verbose, render_indexviews=render_indexviews)
         else:
             views = render_sso_coords(ssv, rendering_locations, verbose=verbose)
     else:
         if len(rendering_locations) > 140:
             views = render_sso_coords_multiprocessing(
-                ssv, working_dir, rendering_locations=rendering_locations,
+                ssv, rendering_locations=rendering_locations,
                 render_indexviews=render_indexviews, n_jobs=n_jobs, verbose=verbose)
         else:
             views = render_sso_coords_index_views(ssv, rendering_locations, verbose=verbose)

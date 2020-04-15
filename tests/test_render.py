@@ -7,9 +7,6 @@ fname = f'{os.path.dirname(__file__)}/../data/renderexample.k.zip'
 
 
 def test_multiprocessed_vs_serial_rendering():
-    # TODO: `render_sso_coords_multiprocessing` does not work with SSVs
-    #  initialized from `init_sso_from_kzip`
-    return
     from syconn.proc.ssd_assembly import init_sso_from_kzip
     import numpy as np
     from syconn.proc.rendering import render_sso_coords, \
@@ -22,7 +19,7 @@ def test_multiprocessed_vs_serial_rendering():
     exlocs = np.concatenate(ssv.sample_locations())
     exlocs = exlocs[:10]
     views = render_sso_coords_multiprocessing(
-        ssv, working_dir, rendering_locations=exlocs,
+        ssv, rendering_locations=exlocs,
         render_indexviews=render_indexview, n_jobs=10, verbose=True)
 
     # overwrite any precomputed caches by re-initialization of SSV

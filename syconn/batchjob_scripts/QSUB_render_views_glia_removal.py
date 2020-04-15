@@ -42,8 +42,7 @@ for g in ch:
     # corresponding SVs are parsed explicitly ('sv_ids=sv_ixs')
     sv_ixs = np.sort(list(g.nodes()))
     sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
-                                  create=False, sv_ids=sv_ixs,
-                                  enable_locking_so=True)
+                                  create=False, sv_ids=sv_ixs, mesh_caching=True)
     # nodes of sso._rag need to be SV
     new_G = nx.Graph()
     for e in g.edges():
@@ -60,9 +59,10 @@ for g in ch:
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True)
 n_parallel_jobs = global_params.config['ncores_per_node']  # // global_params.config['ngpus_per_node']
 for ssv in ssvs_large:
-    render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
+    render_sso_coords_multiprocessing(ssv, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
                                       render_kwargs=render_kwargs)
+    ssv.clear_cache()
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
                      skip_indexviews=True)
 # render small SSVs in parallel, one job per SSV

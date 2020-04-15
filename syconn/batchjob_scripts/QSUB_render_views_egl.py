@@ -57,11 +57,11 @@ print(f'Started rendering of {len(ssvs_large)} large SSVs and '
       f'{len(ssvs_small)} small SSVs.')
 # this job is always started using half of the node and with one GPU
 for ssv in ssvs_large:
-    render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
+    render_sso_coords_multiprocessing(ssv, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
                                       render_kwargs=render_kwargs)
 
-    render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
+    render_sso_coords_multiprocessing(ssv, n_parallel_jobs,
                                       render_indexviews=True, return_views=False,
                                       render_kwargs=render_kwargs)
 print(f'Finished rendering of {len(ssvs_large)} large SSVs.')

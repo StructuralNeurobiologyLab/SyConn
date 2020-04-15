@@ -537,9 +537,8 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
         # # render index-views only
         for ssv_id in big_ssv:
             ssv = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
-            render_sso_coords_multiprocessing(ssv, global_params.config.working_dir, verbose=True,
-                                              return_views=False, disable_batchjob=False,
-                                              n_jobs=n_parallel_jobs, n_cores=n_cores,
+            render_sso_coords_multiprocessing(ssv, verbose=True, return_views=False,
+                                              n_jobs=n_parallel_jobs,
                                               render_indexviews=True)
         log.info('Finished rendering of {}/{} SSVs.'.format(len(big_ssv),
                                                             len(nb_svs_per_ssv)))

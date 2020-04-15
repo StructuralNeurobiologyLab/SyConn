@@ -161,7 +161,7 @@ class SuperSegmentationObject(object):
                  object_caching: bool = True, voxel_caching: bool = True,
                  mesh_caching: bool = True, view_caching: bool = False,
                  config: Optional[DynConfig] = None, nb_cpus: int = 1,
-                 enable_locking: bool = True, enable_locking_so: bool = False,
+                 enable_locking: bool = False, enable_locking_so: bool = False,
                  ssd_type: str = "ssv"):
         """
 
@@ -197,18 +197,14 @@ class SuperSegmentationObject(object):
         if version == 'temp':
             version = 'tmp'
         if version == "tmp":
-            self._object_caching = False
-            self._voxel_caching = False
-            self._mesh_caching = False
-            self._view_caching = False
             self.enable_locking = False
             create = False
         else:
             self.enable_locking = enable_locking
-            self._object_caching = object_caching
-            self._voxel_caching = voxel_caching
-            self._mesh_caching = mesh_caching
-            self._view_caching = view_caching
+        self._object_caching = object_caching
+        self._voxel_caching = voxel_caching
+        self._mesh_caching = mesh_caching
+        self._view_caching = view_caching
 
         self.enable_locking_so = enable_locking_so
         self.nb_cpus = nb_cpus
@@ -1684,7 +1680,9 @@ class SuperSegmentationObject(object):
         self._voxels_xy_downsampled = None
         self._views = None
         self._sample_locations = None
-        self._meshes = None
+        self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
+                        "vc": None, "mi": None, "conn": None,
+                        "syn_ssv_sym": None, "syn_ssv_asym": None}
         self.skeleton = None
 
     def preprocess(self):
