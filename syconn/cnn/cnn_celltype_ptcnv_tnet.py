@@ -93,7 +93,7 @@ if __name__ == '__main__':
     lr_dec = 0.995
     max_steps = 500000
     margin = 0.2
-    dr = 0.3
+    dr = 0.2
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!

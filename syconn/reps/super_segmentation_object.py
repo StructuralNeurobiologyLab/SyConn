@@ -401,7 +401,7 @@ class SuperSegmentationObject(object):
         return "%s_%s" % (self.type, self.version.lstrip("_"))
 
     @property
-    def ssds_dir(self) -> str:
+    def ssd_dir(self) -> str:
         """
         Path to the
         :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
@@ -410,11 +410,16 @@ class SuperSegmentationObject(object):
         return "%s/%s/" % (self.working_dir, self.identifier)
 
     @property
+    def ssd_kwargs(self):
+        return dict(working_dir=self.working_dir, version=self.version,
+                    ssd_type=self.type, sso_locking=self.enable_locking)
+
+    @property
     def ssv_dir(self) -> str:
         """
         Path to the folder where the data of this super-supervoxel is stored.
         """
-        return "%s/so_storage/%s/" % (self.ssds_dir,
+        return "%s/so_storage/%s/" % (self.ssd_dir,
                                       subfold_from_ix_SSO(self.id))
 
     @property

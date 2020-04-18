@@ -3,7 +3,7 @@
 # Copyright (c) 2019 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
-from syconn.cnn.TrainData import CellCloudData
+from syconn.cnn.TrainData import CellCloudGlia
 
 import os
 import torch
@@ -15,8 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, \
-    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig, ModelNet40xConv
+from elektronn3.models.convpoint import SegSmall
 from elektronn3.training import Trainer3d, Backup, metrics
 try:
     from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -29,8 +28,8 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
+parser.add_argument('--bs', type=int, default=16, help='Batch size')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
@@ -42,9 +41,6 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
-parser.add_argument('--cval', default=None,
-                    help='Cross-validation split indicator.', type=int)
-
 
 args = parser.parse_args()
 
@@ -62,12 +58,8 @@ batch_size = args.bs
 npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
-cval = args.cval
 
-if cval is None:
-    cval = 0
-
-lr = 5e-4
+lr = 1e-4
 lr_stepsize = 1000
 lr_dec = 0.995
 max_steps = 125000
@@ -79,24 +71,23 @@ use_syntype = True
 dr = 0.2
 track_running_stats = False
 use_bn = False
-num_classes = 8
-onehot = True
+num_classes = 2
+use_subcell = False
 act = 'swish'
 
 if name is None:
-    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_{act}'
+    name = f'glia_pts_scale{scale_norm}_nb{npoints}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
-    if not use_syntype:
-        name += '_noSyntype'
-if onehot:
+    if use_syntype:
+        name += '_Syntype'
+if use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
-    name += '_flatinp'
 if not use_bn:
     name += '_noBN'
-if track_running_stats:
+elif track_running_stats:
     name += '_trackRunStats'
 
 if use_cuda:
@@ -114,27 +105,10 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=use_bn,
-                   track_running_stats=track_running_stats, act=act)
-name += '_moreAug4'
-# model = ModelNetBig(input_channels, num_classes, dropout=dr)
-# name += '_big'
+model = SegSmall(input_channels, num_classes, dropout=dr, use_bn=use_bn,
+                 track_running_stats=track_running_stats, act=act)
 
-# model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
-# name += '_attention'
-#
-# model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints,
-#                              dropout=dr)
-# name += '_attention_big_2'
-
-
-# model = ModelNetSelection(input_channels, num_classes, npoints=npoints, dropout=dr)
-# name += '_selection'
-
-# model = ModelNetSelectionBig(input_channels, num_classes, dropout=dr)
-# name += '_selection_big'
-
-name += f'_CV{cval}_eval{eval_nr}'
+name += f'eval{eval_nr}'
 model = nn.DataParallel(model)
 
 if use_cuda:
@@ -164,12 +138,10 @@ train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='norma
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
-train_ds = CellCloudData(npoints=npoints, transform=train_transform, cv_val=cval,
-                         cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size)
-valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False,
-                         cv_val=cval, cellshape_only=cellshape_only,
-                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size)
+train_ds = CellCloudGlia(npoints=npoints, transform=train_transform,
+                         batch_size=batch_size)
+valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False,
+                         batch_size=batch_size)
 
 # PREPARE AND START TRAINING #
 

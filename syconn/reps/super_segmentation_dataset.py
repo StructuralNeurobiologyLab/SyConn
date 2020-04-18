@@ -116,8 +116,7 @@ class SuperSegmentationDataset(object):
                 there is no real use-case for this.
             version_dict: Dictionary which contains the versions of other dataset types which share
                 the same working directory.
-            sv_mapping: Dictionary mapping sueprvoxel IDs (key) to the super-supervoxel ID it
-                belongs to.
+            sv_mapping: Dictionary mapping supervoxel IDs (key) to their super-supervoxel ID.
             scaling: Array defining the voxel size in XYZ. Default is taken from the
                 `config.yml` file.
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`.
@@ -205,10 +204,13 @@ class SuperSegmentationDataset(object):
             else:
                 raise Exception("No version dict specified in config")
 
+        # TODO: add create kwarg and and only do this if create=True
         if not os.path.exists(self.path):
             os.makedirs(self.path)
 
         if sv_mapping is not None:
+            if type(sv_mapping) is dict and 0 in sv_mapping:
+                raise ValueError
             self.apply_mergelist(sv_mapping)
 
     def __repr__(self):
@@ -539,9 +541,9 @@ class SuperSegmentationDataset(object):
     def save_dataset_deep(self, extract_only: bool = False,
                           attr_keys: Iterable[str] = (),
                           n_jobs: Optional[int] = None,
-                          nb_cpus: Optional[int] = None,
+                          nb_cpus: Optional[int] = None, use_batchjob=True,
                           n_max_co_processes: Optional[int] = None,
-                          new_mapping: bool = True):
+                          new_mapping: bool = True, overwrite=False):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
@@ -556,8 +558,11 @@ class SuperSegmentationDataset(object):
             n_jobs: Currently requires any string to enable batch job system,
                 will be replaced by a global flag soon.
             nb_cpus: CPUs per worker.
+            use_batchjob: Use batchjob processing instead of local multiprocessing.
             n_max_co_processes: Number of parallel worker.
             new_mapping: Whether to apply new mapping (see :func:`~mapping_dict`).
+            overwrite: Remove existing SSD folder, if Fals and a folder already
+                exists it raises FileExistsError.
 
         Returns:
 
@@ -565,7 +570,8 @@ class SuperSegmentationDataset(object):
         save_dataset_deep(self, extract_only=extract_only,
                           attr_keys=attr_keys, n_jobs=n_jobs,
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
-                          n_max_co_processes=n_max_co_processes)
+                          n_max_co_processes=n_max_co_processes,
+                          overwrite=overwrite, use_batchjob=use_batchjob)
 
     def predict_cell_types_skelbased(self, stride: int = 1000,
                            nb_cpus=1):
@@ -648,15 +654,17 @@ class SuperSegmentationDataset(object):
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
                       attr_keys: Iterable = (), n_jobs: Optional[int] = None,
-                      nb_cpus: Optional[int] = None,
+                      nb_cpus: Optional[int] = None, use_batchjob=True,
                       n_max_co_processes: Optional[int] = None,
-                      new_mapping: bool = True):
+                      new_mapping: bool = True, overwrite=False):
     """
     Saves attributes of all SSVs within the given SSD and computes properties
     like size and representative coordinate. `ids.npy` order may change after
     repeated runs.
 
     Todo:
+        * extract_only requires refactoring as it stores cache arrays under a
+          different filename.
         * allow partial updates of a subset of attributes (e.g. use already
           existing `ids.npy` in case of updating, aka `extract_only=True`).
         * Check consistency of ordering for different runs.
@@ -668,11 +676,22 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             (-> updates will not apply to the `load_cached_data` method).
         attr_keys: Attributes to cache, only used if `extract_only=True`
         n_jobs: Currently requires any string to enable batch job system,
-            will be replaced by a global flag soon
-        nb_cpus: CPUs per worker
-        n_max_co_processes: Number of parallel worker
-        new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`)
+            will be replaced by a global flag soon.
+        nb_cpus: CPUs per worker.
+        use_batchjob: Use batchjob processing instead of local multiprocessing.
+        n_max_co_processes: Number of parallel worker.
+        new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`).
+        overwrite: Remove existing SSD folder, if Fals and a folder already
+            exists it raises FileExistsError.
     """
+    if os.path.exists(ssd.path) and len(glob.glob(ssd.path)) > 1:
+        if not overwrite:
+            msg = f'{ssd} already exists and overwrite is False.'
+            log_reps.error(msg)
+            raise FileExistsError(msg)
+        else:
+            shutil.rmtree(ssd.path)
+
     ssd.save_dataset_shallow()
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total
@@ -681,7 +700,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
                      ssd.working_dir, extract_only, attr_keys,
                      ssd._type, new_mapping) for ssv_id_block in multi_params]
 
-    if not qu.batchjob_enabled():
+    if not qu.batchjob_enabled() or not use_batchjob:
         results = sm.start_multiprocess(
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)

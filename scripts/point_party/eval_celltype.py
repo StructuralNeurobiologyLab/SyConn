@@ -4,8 +4,6 @@ import re
 import gc
 from multiprocessing import Process, Queue
 from syconn.handler import basics, config
-from syconn.handler.prediction_pts import predict_pts_plain, \
-    worker_pred, pts_loader_scalar, pts_pred_scalar, listener
 from syconn.handler.prediction import certainty_estimate
 from syconn.handler.basics import chunkify, chunkify_successive
 import numpy as np
@@ -14,6 +12,8 @@ import tqdm
 import morphx.processing.clouds as clouds
 from sklearn.metrics.classification import classification_report
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.handler.prediction_pts import predict_pts_plain, \
+    pts_loader_scalar, pts_pred_scalar
 
 
 def load_model(mkwargs, device):
@@ -74,11 +74,11 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp25k/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp75k/'
     for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb25000_noBN_moreAug4_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale30000_nb75000_noBN_moreAug4_CV{}_eval{}/'
         use_bn = True
         track_running_stats = False
         if 'noBN' in mdir:
@@ -143,7 +143,7 @@ if __name__ == '__main__':
                 valid_certainty.append(curr_cert)
                 valid_ids_local.append(curr_id)
                 if curr_pred != curr_l:
-                    log.info(f'id: {curr_id}  targtet: {curr_l}  pred: {curr_pred}  ce: {curr_cert}')
+                    log.info(f'id: {curr_id} target: {curr_l} prediction: {curr_pred} certainty: {curr_cert:.2f}')
             log.info(f'\nCV split: {CV}')
             log.info(classification_report(valid_ls_local, valid_preds_local, labels=np.arange(7),
                                            target_names=target_names))

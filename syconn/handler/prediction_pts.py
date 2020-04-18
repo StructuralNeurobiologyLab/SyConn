@@ -6,11 +6,12 @@
 # see https://github.com/pytorch/pytorch/issues/19739
 import open3d as o3d
 import collections
-from typing import Iterable, Union, Optional, Any, Tuple, Callable
+from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
 from multiprocessing import Process, Queue
 from syconn.handler.basics import chunkify_successive
 import numpy as np
 import time
+import tqdm
 import tqdm
 import torch
 import morphx.processing.clouds as clouds
@@ -20,6 +21,7 @@ import networkx as nx
 from sklearn.preprocessing import label_binarize
 from morphx.processing.hybrids import extract_subset
 from morphx.processing.objects import bfs_vertices
+from morphx.processing.graphs import bfs_num
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 # TODO: specify further, add to config
@@ -49,13 +51,16 @@ def write_ply(fn, verts, colors):
 
 
 def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
+    assert pts.ndim == 2
+    assert feats.ndim == 2
     col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
               4: [[250, 100, 100]], 2: [[100, 200, 100]]}
     cols = np.zeros(pts.shape, dtype=np.uint8)
-    for k in pts_feat_dict.values():
+    for k in range(feats.shape[1]):
         mask = feats[:, k] == 1
         cols[mask] = col_dc[k]
     write_ply(fname, pts, cols)
+
 
 def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue,
                 model_loader: Callable, pred_func: Callable,
@@ -437,6 +442,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             ssv = ssd.get_super_segmentation_object(curr_ssvids)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values())))
+            print(_load_ssv_hc.cache_info())
             npoints_ssv = min(len(hc.vertices), npoints)
             # add a +-10% fluctuation in the number of input points
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
@@ -510,32 +516,98 @@ def pts_pred_scalar(m, inp, q_out, q_cnt, device):
     q_out.put((ssv_ids, res))
 
 
-def pts_loader_localscal(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
-                         batchsize: int, npoints: int,
-                         transform: Optional[Callable] = None,
-                         train: bool = False, draw_local: bool = False,
-                         draw_local_dist: int = 1000
-                         ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def pts_loader_glia(ssv_params: List[Tuple[int, dict]],
+                    out_point_label: List[Union[str, int]],
+                    batchsize: int, npoints: int,
+                    transform: Optional[Callable] = None,
+                    n_out_pts: int = 100,
+                    use_subcell: bool = False,
+                    ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     local point-to-scalar tasks, e.g. morphology embeddings or glia detection.
 
     Args:
-        ssd_kwargs: SuperSegmentationDataset keyword arguments specifying e.g.
-            working directory, version, etc.
-        ssv_ids: SuperSegmentationObject IDs for which samples are generated.
+        ssv_params: SuperSegmentationObject IDs and SSD kwargs for which samples are generated.
+        out_point_label: Either key for sso.skeleton attribute or int (used for all out locations).
         batchsize: Only used during training.
         npoints: Number of points used to generate sample context.
         transform: Transformation/agumentation applied to every sample.
-        train: If false, eval mode -> batch size won't be used.
-        draw_local: Will draw similar contexts from approx.
-            the same location, requires a single unique element in ssv_ids
-        draw_local_dist: Maximum distance to similar source node in nm.
+        n_out_pts: Maximum number of out points.
+        use_subcell: Use points of subcellular structure.
 
-    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
+    Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
 
     """
-    raise NotImplementedError('TBD')
+    # TODO: support node attributes in hybrid cloud graph also
+    if type(out_point_label) == str:
+        raise NotImplementedError
+    # TODO: add noise on output points?
+    feat_dc = dict(pts_feat_dict)
+    # TODO: add use_syntype
+    del feat_dc['syn_ssv_asym']
+    del feat_dc['syn_ssv_sym']
+    if not use_subcell:
+        del feat_dc['mi']
+        del feat_dc['vc']
+        del feat_dc['syn_ssv']
+
+    for curr_ssv_params in ssv_params:
+        ssd = SuperSegmentationDataset(**curr_ssv_params[1])
+        ssv = ssd.get_super_segmentation_object(curr_ssv_params[0])
+        hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+            feat_dc.values())))
+        npoints_ssv = min(len(hc.vertices), npoints)
+        # add a +-10% fluctuation in the number of input points
+        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+        npoints_ssv += npoints_add
+        batch = np.zeros((batchsize, npoints_ssv, 3))
+        batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+        batch_out = np.zeros((batchsize, n_out_pts, 3))
+        batch_out_l = np.zeros((batchsize, n_out_pts, 1))
+        ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+        cnt = 0
+        source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
+                                        replace=len(hc.nodes) < batchsize)
+        # g = hc.graph(simple=False)
+        for source_node in source_nodes:
+            # create local context
+            node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+            hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+            sample_feats = hc.features
+            sample_pts = hc.vertices
+            # get target locations
+            base_points = hc_sub.base_points(threshold=1000)  # ~1um apart
+            base_points = np.random.choice(base_points, n_out_pts,
+                                           replace=len(base_points) < n_out_pts)
+            out_coords = hc_sub.nodes[base_points]
+            # sub-sample vertices
+            sample_ixs = np.arange(len(sample_pts))
+            np.random.shuffle(sample_ixs)
+            sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+            sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+            # add up to 10% of duplicated points before applying the transform if sample_pts
+            # has less points than npoints_ssv
+            npoints_add = npoints_ssv - len(sample_pts)
+            idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+            sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+            sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+            # one hot encoding
+            sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+            hc_sub._vertices = sample_pts
+            hc_sub._features = sample_feats
+            hc_sub._nodes = out_coords
+            # apply augmentations
+            if transform is not None:
+                transform(hc_sub)
+            batch[cnt] = hc_sub.vertices
+            batch_f[cnt] = hc_sub.features
+            batch_out[cnt] = hc_sub.nodes
+            # TODO: currently only supports type(out_point_label) = int
+            batch_out_l[cnt] = out_point_label
+            cnt += 1
+        assert cnt == batchsize
+        yield (ixs, (batch_f, batch), (batch_out, batch_out_l))
 
 
 def pts_loader_semseg(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
