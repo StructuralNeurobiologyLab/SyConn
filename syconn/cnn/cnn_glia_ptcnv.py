@@ -29,8 +29,8 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=16, help='Batch size')
-parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=20000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument(
@@ -59,7 +59,7 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 
-lr = 1e-4
+lr = 5e-4
 lr_stepsize = 1000
 lr_dec = 0.995
 max_steps = 125000
@@ -106,7 +106,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 model = SegSmall(input_channels, num_classes, dropout=dr, use_bn=use_bn,
-                 track_running_stats=track_running_stats, act=act)
+                 track_running_stats=track_running_stats, act=act, use_bias=True)
 
 name += f'eval{eval_nr}'
 model = nn.DataParallel(model)
@@ -199,7 +199,8 @@ trainer = Trainer3d(
     schedulers={"lr": lr_sched},
     num_classes=num_classes,
     # example_input=example_input,
-    dataloader_kwargs=dict(collate_fn=lambda x: x[0])
+    dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
+    nbatch_avg=5
 )
 
 # Archiving training script, src folder, env info

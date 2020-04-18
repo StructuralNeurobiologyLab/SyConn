@@ -1,3 +1,4 @@
+# TODO: refactor and remove tags
 stages:
   - build
   - test
@@ -9,7 +10,7 @@ test:
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
-    - pytest --ignore=tests/test_run.py
+    - pytest
   except:
     - master
   tags:
@@ -22,6 +23,7 @@ test-full:
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
     - pytest
+    - pytest tests/test_run.py  # full example run
   only:
     - master
   tags:

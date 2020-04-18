@@ -174,7 +174,7 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    exec_dense_prediction.predict_myelin()
+    # exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()

@@ -30,8 +30,6 @@ except ImportError as e:
 import os
 import threading
 from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
-from functools import lru_cache
 try:
     from torch.utils.data import Dataset
     import torch
@@ -41,7 +39,6 @@ except ImportError as e:
     elektronn3_avail = False
     Dataset = None
     Identity = None
-from morphx.classes.pointcloud import PointCloud
 from typing import Callable
 from sklearn.utils.class_weight import compute_class_weight
 import h5py
