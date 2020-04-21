@@ -28,7 +28,7 @@ from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
-from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage
+from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage, MeshStorage
 from ..handler.config import initialize_logging
 from . import log_extraction
 from .. import global_params
@@ -367,7 +367,7 @@ def _combine_and_split_syn_thread(args):
     voxel_rel_paths = args[2]
     syn_version = args[3]
     syn_ssv_version = args[4]
-    scaling = args[5]
+    scaling = args[5]  # TODO: use syn scaling..
     cs_gap_nm = args[6]
 
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -385,33 +385,43 @@ def _combine_and_split_syn_thread(args):
     cur_path_id = 0
     base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
     os.makedirs(base_dir, exist_ok=True)
-    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
-    attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     next_id = base_id
+
+    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
+    attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
+    mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
+
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
         ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
         syn = sd_syn.get_segmentation_object(item[1][0])
+
         syn.load_attr_dict()
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
-        voxel_list = syn.voxel_list
+        voxel_list = [syn.voxel_list]
         # store index of syn. objects for attribute dict retrieval
-        synix_list = [0] * len(voxel_list)
+        synix_list = [0] * len(syn.voxel_list)
         for syn_ix, syn_id in enumerate(item[1][1:]):
             syn_object = sd_syn.get_segmentation_object(syn_id)
             syn_object.load_attr_dict()
             syn_attr_list.append(syn_object.attr_dict)
-            voxel_list = np.concatenate([voxel_list, syn_object.voxel_list])
+            voxel_list.append(syn_object.voxel_list)
             synix_list += [syn_ix] * len(syn_object.voxel_list)
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
-        if len(voxel_list) == 0:
+
+        if len(synix_list) == 0:
             msg = 'Voxels not available for syn-object {}.'.format(str(syn))
             log_extraction.error(msg)
             raise ValueError(msg)
-        ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
+
+        ccs = connected_cluster_kdtree(voxel_list, dist_intra_object=cs_gap_nm,
+                                           dist_inter_object=20000, scale=scaling)
+
+        voxel_list = np.concatenate(voxel_list)
+
         for this_cc in ccs:
             this_cc_mask = np.array(list(this_cc))
             # retrieve the index of the syn objects selected for this CC
@@ -426,15 +436,29 @@ def _combine_and_split_syn_thread(args):
             this_vx -= abs_offset
             id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
             id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
-
+            syn_ssv = sd_syn_ssv.get_segmentation_object(next_id)
+            if (os.path.abspath(syn_ssv.attr_dict_path)
+                    != os.path.abspath(base_dir + "/attr_dict.pkl")):
+                raise ValueError(f'Path mis-match!')
+            this_attr_dc = dict(neuron_partners=ssv_ids)
             try:
                 voxel_dc[next_id] = [id_mask], [abs_offset]
-            except Exception:
+                syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
+                syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
+                syn_ssv.calculate_bounding_box(voxel_dc=voxel_dc)
+                this_attr_dc["rep_coord"] = syn_ssv.rep_coord
+                this_attr_dc["bounding_box"] = syn_ssv.bounding_box
+                this_attr_dc["size"] = syn_ssv.size
+                ind, vert, normals = syn_ssv._mesh_from_scratch()
+                mesh_dc[syn_ssv.id] = [ind, vert, normals]
+                this_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
+                this_attr_dc["mesh_area"] = syn_ssv.mesh_area
+            except Exception as e:
                 debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
                     sd_syn_ssv.so_storage_path, next_id, abs_offset[0],
                     abs_offset[1], abs_offset[2])
-                msg = "Saving syn_ssv {} failed. Debug file at {}." \
-                      "".format(item, debug_out_fname)
+                msg = f"Saving {syn_ssv} failed with {e}. Debug file at " \
+                      f"{debug_out_fname}."
                 log_extraction.error(msg)
                 np.save(debug_out_fname, this_vx)
                 raise ValueError(msg)
@@ -469,7 +493,6 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg["syn_sign"] = syn_sign
 
             # add syn_ssv dict to AttributeStorage
-            this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
             attr_dc[next_id] = this_attr_dc
             if use_new_subfold:
@@ -488,6 +511,7 @@ def _combine_and_split_syn_thread(args):
         if n_items_for_path > n_per_voxel_path:
             voxel_dc.push()
             attr_dc.push()
+            mesh_dc.push()
             cur_path_id += 1
             n_items_for_path = 0
             id_chunk_cnt = 0
@@ -495,12 +519,67 @@ def _combine_and_split_syn_thread(args):
             next_id = base_id
             base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
-            voxel_dc = VoxelStorage(base_dir + "voxel.pkl", read_only=False)
-            attr_dc = AttributeDict(base_dir + "attr_dict.pkl", read_only=False)
+            voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
+            attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
+            mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
     if n_items_for_path > 0:
         voxel_dc.push()
         attr_dc.push()
+        mesh_dc.push()
+
+
+def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: float,
+                             dist_inter_object: float, scale: np.ndarray) -> List[set]:
+    """
+    Identify connected components within N objects. Two stage process: 1st stage adds edges between every
+    object voxel which are at most 2 voxels apart. The edges are added to a global graph which is used to
+    calculate connected components. In the 2nd stage, connected components are considered close if they are within a
+    maximum distance of `dist_inter_object` between a random voxel used as their representative coordinate.
+    Close connected components will then be connected if the minimum distance between any of their voxels is
+    smaller than `dist_intra_object`.
+
+    Args:
+        voxel_coords: List of numpy arrays in voxel coordinates.
+        dist_intra_object: Maximum distance between two voxels of different synapses to
+            consider them the same object. In nm.
+        dist_inter_object: Maximum distance between two objects to check for close voxels
+            between them. In nm.
+        scale: Voxel sizes in nm (XYZ).
+
+    Returns:
+        Connected components across all N input objects with at most `dist_intra_cluster` distance.
+    """
+    import networkx as nx
+    graph = nx.Graph()
+    ixs_offset = np.cumsum([0] + [len(syn_vxs) for syn_vxs in voxel_coords[:-1]])
+    # add intra object edges
+    for ii in range(len(voxel_coords)):
+        off = ixs_offset[ii]
+        graph.add_nodes_from(np.arange(len(voxel_coords[ii])) + off)
+        kdtree = spatial.cKDTree(voxel_coords[ii])
+        pairs = np.array(list(kdtree.query_pairs(r=2)), dtype=np.int)
+        graph.add_edges_from(pairs + off)
+    del kdtree, pairs
+    voxel_coords_flat = np.concatenate(voxel_coords) * scale
+    ccs = [np.array(list(cc)) for cc in nx.connected_components(graph)]
+    rep_coords = np.array([voxel_coords_flat[cc[0]] for cc in ccs])
+    kdtree = spatial.cKDTree(rep_coords)
+    pairs = kdtree.query_pairs(r=dist_inter_object)
+    del kdtree
+    # add minimal inter-object edges
+    for c1, c2 in pairs:
+        c1_ixs = ccs[c1]
+        c2_ixs = ccs[c2]
+        kd1 = spatial.cKDTree(voxel_coords_flat[c1_ixs])
+        dists, nn_ixs = kd1.query(voxel_coords_flat[c2_ixs], distance_upper_bound=dist_intra_object)
+        if min(dists) > dist_intra_object:
+            continue
+        argmin = np.argmin(dists)
+        ix_c1 = c1_ixs[nn_ixs[argmin]]
+        ix_c2 = c2_ixs[argmin]
+        graph.add_edge(ix_c1, ix_c2)
+    return list(nx.connected_components(graph))
 
 
 def combine_and_split_syn_old(

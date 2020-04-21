@@ -60,6 +60,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
+        if recompute or compute_meshprops:
+            n_jobs *= 4
     paths = sd.so_dir_paths
     if compute_meshprops:
         if not (sd.type in global_params.config['meshes']['downsampling'] and sd.type in
@@ -208,6 +210,8 @@ def _dataset_analysis_thread(args):
                 so_ids = list(this_vx_dc.keys())
             else:
                 so_ids = list(this_attr_dc.keys())
+            if compute_meshprops:
+                this_mesh_dc = MeshStorage(p + "/mesh.pkl", read_only=True, disable_locking=True)
             for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
                 so = segmentation.SegmentationObject(so_id, obj_type,
@@ -226,6 +230,8 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
                 if compute_meshprops:
+                    if so.id in this_mesh_dc:
+                        so._mesh = this_mesh_dc[so.id]
                     # if mesh does not exist beforehand, it will be generated
                     so.attr_dict["mesh_bb"] = so.mesh_bb
                     so.attr_dict["mesh_area"] = so.mesh_area

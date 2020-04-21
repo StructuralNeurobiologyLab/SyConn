@@ -156,7 +156,7 @@ if elektronn3_avail:
             if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
-                return len(self.sso_ids) * 80
+                return len(self.sso_ids) * 20
             else:
                 return max(len(self.sso_ids) // 5, 1)
 
@@ -325,9 +325,9 @@ if elektronn3_avail:
             if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
-                return len(self.sso_params) * 80
+                return len(self.sso_params) * 15
             else:
-                return max(len(self.sso_params) // 5, 1)
+                return max(len(self.sso_params) // 10, 1)
 
         def load_ssv_sample(self, item: int):
             """

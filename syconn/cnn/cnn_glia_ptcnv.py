@@ -67,10 +67,10 @@ max_steps = 125000
 # celltype specific
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
-use_syntype = True
+use_syntype = False
 dr = 0.2
 track_running_stats = False
-use_bn = False
+use_norm = 'gn'
 num_classes = 2
 use_subcell = False
 act = 'swish'
@@ -85,9 +85,11 @@ if use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
-if not use_bn:
+if use_norm is False:
     name += '_noBN'
-elif track_running_stats:
+else:
+    name += f'_{use_norm}'
+if track_running_stats:
     name += '_trackRunStats'
 
 if use_cuda:
@@ -105,10 +107,10 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes, dropout=dr, use_bn=use_bn,
+model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                  track_running_stats=track_running_stats, act=act, use_bias=True)
 
-name += f'eval{eval_nr}'
+name += f'_eval{eval_nr}'
 model = nn.DataParallel(model)
 
 if use_cuda:
@@ -191,7 +193,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=10,
+    num_workers=5,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

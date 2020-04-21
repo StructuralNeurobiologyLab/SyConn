@@ -2447,6 +2447,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
     if len(ssv_syncoords) == 0:
         return
+    ssv_synids = np.array([syn.id for syn in sso.syn_ssv])
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
     ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
@@ -2461,12 +2462,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                                         'dist_axoness_averaging'])
     curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
     ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
+    ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
     if len(ssv_syncoords) == 0:  # node spine head synapses
         return
     kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
     _, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
     # iterate over connected skeleton nodes labeled as spine head
-    for c, node_ix in zip(ssv_syncoords, close_node_ids):
+    for c, node_ix, ssv_id in zip(ssv_syncoords, close_node_ids, ssv_synids):
         # get closest skeleton node
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
@@ -2527,8 +2529,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 log_reps.warn(f'SSO {sso.id} contained erroneous volume'
                               f' to spine head assignment. Found no spine head '
                               f'cluster within 10x10x10 voxel subcube at '
-                              f'{c + offset}, expected 1. Fall-back is using '
-                              f'the volume of the closest spine head cluster '
+                              f'{c + offset} of syn_ssv with ID={ssv_id}, expected 1. '
+                              f'Fall-back is using the volume of the closest spine head cluster '
                               f'via nearest-neighbor.')
             else:
                 max_id = ids[np.argmax(cnts)]

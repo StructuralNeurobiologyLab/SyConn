@@ -558,7 +558,9 @@ def pts_loader_glia(ssv_params: List[Tuple[int, dict]],
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
             feat_dc.values())))
         npoints_ssv = min(len(hc.vertices), npoints)
-        # add a +-10% fluctuation in the number of input points
+        # add a +-10% fluctuation in the number of input and output points
+        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+        n_out_pts += npoints_add
         npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
         npoints_ssv += npoints_add
         batch = np.zeros((batchsize, npoints_ssv, 3))

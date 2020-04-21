@@ -79,16 +79,20 @@ if __name__ == '__main__':
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
         mdir = base_dir + '/celltype_pts_scale30000_nb75000_noBN_moreAug4_CV{}_eval{}/'
-        use_bn = True
+        use_norm = False
         track_running_stats = False
-        if 'noBN' in mdir:
-            use_bn = False
-        if 'trackRunStats' in mdir:
-            track_running_stats = True
+        if '_noBN_' in mdir:
+            use_norm = False
+        if '_gn_' in mdir:
+            use_norm = 'gn'
+        elif '_bn_' in mdir:
+            use_norm = 'bn'
+            if 'trackRunStats' in mdir:
+                track_running_stats = True
         npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
         scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)
-        mkwargs = dict(use_bn=use_bn, track_running_stats=track_running_stats)
+        mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats)
         log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
                  f'model_kwargs={mkwargs} and da_equals_tan={da_equals_tan}.\n'
                  f'GT: version={gt_version} at wd={wd}\n')
@@ -152,7 +156,7 @@ if __name__ == '__main__':
             valid_ids.extend(valid_ids_local)
 
         log.info(f'Final prediction result for run {run} with npoints={npoints}, '
-                 f'track_running_stats={track_running_stats}, use_bn={use_bn}.')
+                 f'track_running_stats={track_running_stats}, use_norm={use_norm}.')
         log.info(classification_report(valid_ls, valid_preds, labels=np.arange(7),
                                        target_names=target_names))
         log.info('-------------------------------')

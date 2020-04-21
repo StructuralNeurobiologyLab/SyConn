@@ -1183,8 +1183,6 @@ class SegmentationObject(object):
             for i_bin_arr in range(len(bin_arrs)):
                 sizes.append(np.sum(bin_arrs[i_bin_arr]))
 
-            self._size = np.sum(sizes)
-
             sizes = np.array(sizes)
             center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
                                  np.mean(block_offsets[:, 1] * sizes) / self.size,

@@ -78,7 +78,7 @@ cellshape_only = False
 use_syntype = True
 dr = 0.2
 track_running_stats = False
-use_bn = False
+use_norm = 'gn'
 num_classes = 8
 onehot = True
 act = 'swish'
@@ -94,10 +94,12 @@ if onehot:
 else:
     input_channels = 1
     name += '_flatinp'
-if not use_bn:
+if use_norm is False:
     name += '_noBN'
-if track_running_stats:
-    name += '_trackRunStats'
+    if track_running_stats:
+        name += '_trackRunStats'
+else:
+    name += f'_{use_norm}'
 
 if use_cuda:
     device = torch.device('cuda')
@@ -114,25 +116,9 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = ModelNet40(input_channels, num_classes, dropout=dr, use_bn=use_bn,
+model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act)
 name += '_moreAug4'
-# model = ModelNetBig(input_channels, num_classes, dropout=dr)
-# name += '_big'
-
-# model = ModelNetAttention(input_channels, num_classes, npoints=npoints, dropout=dr)
-# name += '_attention'
-#
-# model = ModelNetAttentionBig(input_channels, num_classes, npoints=npoints,
-#                              dropout=dr)
-# name += '_attention_big_2'
-
-
-# model = ModelNetSelection(input_channels, num_classes, npoints=npoints, dropout=dr)
-# name += '_selection'
-
-# model = ModelNetSelectionBig(input_channels, num_classes, dropout=dr)
-# name += '_selection_big'
 
 name += f'_CV{cval}_eval{eval_nr}'
 model = nn.DataParallel(model)

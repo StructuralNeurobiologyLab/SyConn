@@ -124,7 +124,9 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
-    dataset_analysis(sd_syn_ssv, compute_meshprops=True)
+    # recompute=False: size, bounding box, rep_coord and mesh properties
+    # have already been processed in combine_and_split_syn
+    dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
