@@ -27,7 +27,7 @@ except ImportError:
     import pickle as pkl
 
 #
-def kimimaro_skelgen(cube_size, cube_offset, overlap):
+def kimimaro_skelgen(cube_size, cube_offset, overlap, boundary):
     """
     code from https://pypi.org/project/kimimaro/
     Args:
@@ -40,9 +40,12 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap):
     overlap = np.array(overlap)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
-    cube_size_ov = cube_size + 2*overlap
-    cube_offset_ov = cube_offset - overlap
-    seg = kd.from_overlaycubes_to_matrix(cube_size_ov, cube_offset_ov, mag=2)
+    if np.all(cube_size < boundary) == True:
+        cube_size_ov = cube_size + 2*overlap
+        cube_offset_ov = cube_offset - overlap
+        seg = kd.load_seg(size = cube_size_ov*2, offset = np.array(cube_offset_ov)*2, mag=2).swapaxes(0, 2)
+    else:
+        seg = kd.load_seg(size = cube_size*2, offset = np.array(cube_offset)*2, mag = 2).swapaxes(0, 2)
 
     seg_cell = np.zeros_like(seg)
     for x in range(seg.shape[0]):
@@ -55,7 +58,8 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap):
 
     seg_cell = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg_cell, iterations=None)
 
-    seg_cell = seg_cell[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
+    if np.all(cube_size < boundary) == True:
+        seg_cell = seg_cell[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
     #kimimaro code
 
     skels = kimimaro.skeletonize(

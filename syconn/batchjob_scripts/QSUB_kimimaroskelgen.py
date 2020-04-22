@@ -16,8 +16,8 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
-cube_size, cube_offset, overlap = args
-skels = kimimaro_skelgen(cube_size, cube_offset, overlap)
+cube_size, cube_offset, overlap, boundary = args
+skels = kimimaro_skelgen(cube_size, cube_offset, overlap, boundary)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(skels, f)

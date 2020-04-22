@@ -18,7 +18,7 @@ import argparse
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
 
-
+import pdb
 if __name__ == '__main__':
     # pare arguments
     parser = argparse.ArgumentParser(description='SyConn example run')
@@ -173,17 +173,15 @@ if __name__ == '__main__':
     # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    exec_dense_prediction.predict_myelin()
+    #exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
-
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc)
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
 
     time_stamps.append(time.time())

@@ -578,7 +578,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     log.info('Success.')
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimimaro = True):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -640,7 +640,8 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    exec_skeleton.run_skeleton_kimimaro()
+    if kimimaro == True:
+        exec_skeleton.run_kimimaro_skelgen()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
