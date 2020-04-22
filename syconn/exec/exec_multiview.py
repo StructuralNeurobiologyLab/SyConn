@@ -642,6 +642,8 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimim
 
     if kimimaro == True:
         exec_skeleton.run_kimimaro_skelgen()
+    else:
+        exe_skeleton.run_skeleton_generation()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
