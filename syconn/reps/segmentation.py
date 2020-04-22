@@ -762,7 +762,10 @@ class SegmentationObject(object):
         Returns:
             3D array of the all voxels which belong to this supervoxel.
         """
-        return load_voxels(self, voxel_dc=voxel_dc)
+        voxels = load_voxels(self, voxel_dc=voxel_dc)
+        if self.voxel_caching:
+            self._voxels = voxels
+        return voxels
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
         return load_voxels_downsampled(self, downsampling=downsampling)

@@ -418,7 +418,7 @@ def _combine_and_split_syn_thread(args):
             raise ValueError(msg)
 
         ccs = connected_cluster_kdtree(voxel_list, dist_intra_object=cs_gap_nm,
-                                           dist_inter_object=20000, scale=scaling)
+                                       dist_inter_object=20000, scale=scaling)
 
         voxel_list = np.concatenate(voxel_list)
 

@@ -219,13 +219,16 @@ def _dataset_analysis_thread(args):
                 so.attr_dict = this_attr_dc[so_id]
                 if recompute:
                     # prevent loading voxels in case we use VoxelStorageDyn
-                    if not isinstance(this_vx_dc, VoxelStorageDyn):  # use fall-back
+                    if not isinstance(this_vx_dc, VoxelStorageDyn):
+                        # use fall-back, so._voxels will be used for mesh computation but also
+                        # triggers the calculation of size and bounding box.
                         so.load_voxels(voxel_dc=this_vx_dc)
-                        so.calculate_rep_coord(voxel_dc=this_vx_dc)
                     else:
+                        # VoxelStorageDyn stores pre-computed bounding box, size and rep coord values.
                         so.calculate_bounding_box(this_vx_dc)
-                        so.calculate_rep_coord(this_vx_dc)
                         so.calculate_size(this_vx_dc)
+
+                    so.calculate_rep_coord(this_vx_dc)
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
@@ -240,7 +243,7 @@ def _dataset_analysis_thread(args):
                         global_attr_dict[attribute] = []
                     global_attr_dict[attribute].append(so.attr_dict[attribute])
                 this_attr_dc[so_id] = so.attr_dict
-            if recompute:
+            if recompute or compute_meshprops:
                 this_attr_dc.push()
     if 'bounding_box' in global_attr_dict:
         global_attr_dict['bounding_box'] = np.array(global_attr_dict['bounding_box'], dtype=np.int32)
