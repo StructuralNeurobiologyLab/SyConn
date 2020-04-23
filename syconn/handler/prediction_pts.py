@@ -62,6 +62,44 @@ def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
     write_ply(fname, pts, cols)
 
 
+def worker_postproc(q_out: Queue, q_postproc: Queue,
+                    postproc_func: Callable, postproc_kwargs: dict):
+    """
+
+    Args:
+        q_out:
+        q_postproc:
+        postproc_func:
+        postproc_kwargs:
+    """
+    stop_received = False
+    while True:
+        if not q_postproc.empty():
+            inp = q_postproc.get()
+            if inp == 'STOP':
+                if stop_received:
+                    # already got STOP signal, put back in queue for other worker.
+                    q_postproc.put('STOP')
+                    # wait for the other worker to get the signal
+                    time.sleep(2)
+                    continue
+                stop_received = True
+                if not q_postproc.empty():
+                    continue
+                # put another stop to the queue. Global stop is only triggered by a single stop signal
+                q_postproc.put('STOP')
+                break
+        else:
+            if stop_received:
+                # put another stop to the queue. Global stop is only triggered by a single stop signal
+                q_postproc.put('STOP')
+                break
+            time.sleep(0.5)
+            continue
+        postproc_func(inp, **postproc_kwargs)
+    q_out.put('END')
+
+
 def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue,
                 model_loader: Callable, pred_func: Callable,
                 mkwargs: dict, device: str):
@@ -98,7 +136,7 @@ def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue,
             time.sleep(0.5)
             continue
         pred_func(m, inp, q_out, q_cnt, device)
-    q_out.put('END')
+    q_out.put('STOP')
 
 
 def worker_load(q: Queue, q_loader_sync: Queue, loader_func: Callable,
@@ -160,14 +198,16 @@ def listener(q_cnt: Queue, q_in: Queue, q_loader_sync: Queue,
 
 def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                       loader_func: Callable, pred_func: Callable,
-                      npoints: int, scale_fact: float,
+                      npoints: int, scale_fact: float, postproc_func: Optional[Callable] = None,
+                      postproc_kwargs: Optional[dict] = None,
                       output_func: Optional[Callable] = None,
                       mkwargs: Optional[dict] = None,
-                      nloader: int = 4, npredictor: int = 2,
+                      nloader: int = 4, npredictor: int = 2, npostptroc: int = 1,
                       ssv_ids: Optional[Union[list, np.ndarray]] = None,
                       use_test_aug: bool = False,
                       device: str = 'cuda') -> dict:
     """
+    # TODO: use batch size during inference to avoid memory issues
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions `npreds` per cell is calculated based on the
     fraction of the total number of vertices over `npoints` times two, but at least 5.
@@ -177,17 +217,20 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
     Overview:
         * loader (load_func) -> input queue
         * input queue -> prediction worker
-        * prediction worker (pred_func) -> output queue
+        * prediction worker (pred_func) -> postprocessing queue (default: identity)
+        * postprocessing worker (postproc_func) -> output queue
         * output queue -> result dictionary (return)
 
     Args:
         ssd_kwargs: Keyword arguments to specify the underlying ``SuperSegmentationDataset``.
         model_loader: Function which returns the pytorch model object.
+        mkwargs: Model keyword arguments used in `model_loader` call.
         loader_func: Loader function, used by `nloader` workers retrieving samples.
         pred_func: Predict function, used by `npredictor` workers performing the inference.
-        mkwargs: Model keyword arguments.
         npoints: Number of points used to generate a sample.
         scale_fact: Scale factor; used to normalize point clouds prior to model inference.
+        postproc_kwargs: Keyword arguments for post-processing.
+        postproc_func: Optional post-processing layer for the output of pred_func.
         output_func: Transforms the elements in the output queue and stores it in the final dictionary.
             If None, elements as returned by `pred_func` are assumed to be of form ``(ssv_ids, results)``:
 
@@ -198,6 +241,7 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         nloader: Number of workers loading samples from the given cell IDs via `load_func`.
         npredictor: Number of workers which will call `model_loader` and process (via `pred_func`) the output of
             the "loaders", i.e. workers which retrieve samples via `loader_func`.
+        npostptroc: Optional worker for post processing, see `postproc_func`.
         ssv_ids: IDs of cells to predict.
         use_test_aug: Use test-time augmentations. Currently this adds the following transformation
             to the basic transforms:
@@ -239,6 +283,11 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         def output_func(res_dc, ret):
             for ix, out in zip(*ret):
                 res_dc[ix].append(out)
+    if postproc_func is None:
+        def postproc_func(x): return x
+    if postproc_kwargs is None:
+        postproc_kwargs = dict()
+
     transform = [clouds.Normalization(scale_fact), clouds.Center()]
     if use_test_aug:
         transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
@@ -264,14 +313,19 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
     q_in = Queue(maxsize=20*npredictor)
     q_cnt = Queue()
     q_out = Queue()
+    q_postproc = Queue()
     q_loader_sync = Queue()
     producers = [Process(target=worker_load, args=(q_in, q_loader_sync, loader_func, el))
                  for el in params_in]
     for p in producers:
         p.start()
-    consumers = [Process(target=worker_pred, args=(q_out, q_cnt, q_in, model_loader, pred_func,
+    consumers = [Process(target=worker_pred, args=(q_postproc, q_cnt, q_in, model_loader, pred_func,
                                                    mkwargs, device)) for _ in range(npredictor)]
     for c in consumers:
+        c.start()
+    postprocs = [Process(target=worker_postproc, args=(q_out, q_postproc, postproc_func, postproc_kwargs
+                                                       )) for _ in range(npostptroc)]
+    for c in postprocs:
         c.start()
     dict_out = collections.defaultdict(list)
     cnt_end = 0
@@ -302,6 +356,10 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         c.join()
         c.close()
     print('Joined consumers.')
+    for c in postprocs:
+        c.join()
+        c.close()
+    print('Joined post-processor.')
     return dict_out
 
 
@@ -408,7 +466,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             ixs = np.ones((occ,), dtype=np.uint) * ssv_id
             cnt = 0
             # TODO: this should be deterministic during inference
-            nodes = hc.base_points(density_mode=False, threshold=5000, source=len(hc.nodes) // 2)
+            nodes = hc.base_points(threshold=5000, source=len(hc.nodes) // 2)
             source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
             for source_node in source_nodes:
                 local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
@@ -493,7 +551,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             yield (ixs, (batch_f, batch))
 
 
-def pts_pred_scalar(m, inp, q_out, q_cnt, device):
+def pts_pred_scalar(m, inp, q_out, q_cnt, device, bs):
     """
 
     Args:
@@ -506,12 +564,14 @@ def pts_pred_scalar(m, inp, q_out, q_cnt, device):
     Returns:
 
     """
-    # TODO: is it possible to get 'device' directly frm model 'm'?
+    # TODO: is it possible to get 'device' directly from model 'm'?
     ssv_ids, inp = inp
+    res = []
     with torch.no_grad():
-        g_inp = [torch.from_numpy(i).to(device).float() for i in inp]
-        res = m(*g_inp).cpu().numpy()[:, np.newaxis]
-        del g_inp, inp
+        for i in inp:
+            res.extend(m.predict(torch.from_numpy(i).to(device).float()
+                                 ).cpu().numpy()[:, np.newaxis])
+    del inp
     q_cnt.put(len(ssv_ids))
     q_out.put((ssv_ids, res))
 

@@ -39,7 +39,6 @@ from zmesh import Mesher
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                      compute_meshprops=False):
-    # TODO: refactor s.t. jobs use more than 1 CPU, currently submission times are slow
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -81,9 +80,6 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                              multi_params, nb_cpus=n_max_co_processes,
                                              debug=False)
         # Creating summaries
-        # TODO: This is a potential bottleneck for very large datasets
-        # TODO: resulting cache-arrays might have different lengths if attribute is missing in
-        #  some dictionaries -> add checks!
         attr_dict = {}
         for this_attr_dict in results:
             for attribute in this_attr_dict:
@@ -92,7 +88,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                 value = this_attr_dict[attribute]
                 if attribute == 'id':
                     value = np.array(value, np.uint)
-                if attribute not in attr_dict:  # TODO: Fail if any attribute does not exist in 'this_attr_dict'
+                if attribute not in attr_dict:
                     if type(value) is not list:
                         sh = list(value.shape)
                         sh[0] = 0
@@ -140,32 +136,37 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         n_ids = np.sum(file_mask)
         log_proc.debug(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
                        f'dataset_analysis:\n{res_keys}')
-        # TODO: spawn this as QSUB job!
-        for attribute in tqdm.tqdm(res_keys, leave=False):
-            # start_multiprocess_imap obeys parameter order and therefore the
-            # collected attributes will share the same ordering.
-            params = list(basics.chunkify([(p, attribute) for p in out_files[file_mask > 0]],
-                                          global_params.config['ncores_per_node'] * 2))
-            tmp_res = sm.start_multiprocess_imap(
-                load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
-            try:
-                tmp_res = np.concatenate(tmp_res)
-                assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
-                np.save(sd.path + "/%ss.npy" % attribute, tmp_res)
-            except ValueError as e:
-                if attribute in ['sj_ids', 'cs_ids']:
-                    tmp_res = np.array(tmp_res, dtype=np.object)
-                    np.save(sd.path + "/%ss.npy" % attribute, tmp_res)
-                else:
-                    log_proc.error(
-                        f'ValueError {e} encountered when writing numpy array '
-                        f'cache of attribute {attribute} in "dataset_analysis",')
-                    raise ValueError(e)
-            del tmp_res
+        out_files = out_files[file_mask > 0]
+        params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
+        qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
+                           remove_jobfolder=True)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
-def load_attr_helper(args):
+def _dataset_analysis_collect(args):
+    attribute, out_files, n_ids, sd_path = args
+    # start_multiprocess_imap obeys parameter order and therefore the
+    # collected attributes will share the same ordering.
+    params = list(basics.chunkify([(p, attribute) for p in out_files],
+                                  global_params.config['ncores_per_node'] * 2))
+    tmp_res = sm.start_multiprocess_imap(
+        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
+    try:
+        tmp_res = np.concatenate(tmp_res)
+        assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
+        np.save(sd_path + "/%ss.npy" % attribute, tmp_res)
+    except ValueError as e:
+        if attribute in ['sj_ids', 'cs_ids']:
+            tmp_res = np.array(tmp_res, dtype=np.object)
+            np.save(sd_path + "/%ss.npy" % attribute, tmp_res)
+        else:
+            log_proc.error(
+                f'ValueError {e} encountered when writing numpy array '
+                f'cache of attribute {attribute} in "dataset_analysis",')
+            raise ValueError(e)
+
+
+def _load_attr_helper(args):
     res = []
     for arg in args:
         fname, attr = arg
@@ -202,6 +203,7 @@ def _dataset_analysis_thread(args):
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
         else:
+            new_mesh_generated = False
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                          read_only=not recompute)
             if recompute:
@@ -233,8 +235,14 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
                 if compute_meshprops:
+                    # make sure so._mesh is available prior to mesh_bb and mesh_area call (otherwise every unavailable
+                    # mesh will be generated from scratch and saved to so.mesh_path for every single object.
                     if so.id in this_mesh_dc:
                         so._mesh = this_mesh_dc[so.id]
+                    else:
+                        new_mesh_generated = True
+                        so._mesh = so._mesh_from_scratch()
+                        this_mesh_dc[so.id] = so._mesh
                     # if mesh does not exist beforehand, it will be generated
                     so.attr_dict["mesh_bb"] = so.mesh_bb
                     so.attr_dict["mesh_area"] = so.mesh_area
@@ -245,6 +253,8 @@ def _dataset_analysis_thread(args):
                 this_attr_dc[so_id] = so.attr_dict
             if recompute or compute_meshprops:
                 this_attr_dc.push()
+                if new_mesh_generated:
+                    this_mesh_dc.push()
     if 'bounding_box' in global_attr_dict:
         global_attr_dict['bounding_box'] = np.array(global_attr_dict['bounding_box'], dtype=np.int32)
     if 'rep_coord' in global_attr_dict:
@@ -279,28 +289,20 @@ def _write_mapping_to_sv_thread(args):
 
 def _cache_storage_paths(args):
     target_p, all_ids, n_folders_fs = args
-    # start = time.time()
     # outputs target folder hierarchy for object storage
     if global_params.config.use_new_subfold:
         target_dir_func = rep_helper.subfold_from_ix_new
     else:
         target_dir_func = rep_helper.subfold_from_ix_OLD
     dest_dc_tmp = defaultdict(list)
-    # for obj_id in tqdm.tqdm(all_ids, total=len(all_ids)):
     for obj_id in all_ids:
         dest_dc_tmp[target_dir_func(
             obj_id, n_folders_fs)].append(obj_id)
     del all_ids
-    # dt = (time.time() - start) / 60
-    # log_proc.debug(f'Generated target directories for all objects after '
-    #                f'{dt:.2f} min.')
-    # start = time.time()
     cd = CompressedStorage(target_p, disable_locking=True)
     for k, v in dest_dc_tmp.items():
         cd[k] = np.array(v, dtype=np.uint64)  # TODO: dtype needs to be configurable
     cd.push()
-    # dt = (time.time() - start) / 60
-    # log_proc.debug(f'Wrote all targets to pkl in {dt:.2f} min.')
 
 
 def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,

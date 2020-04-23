@@ -7,6 +7,8 @@ backend: "FS"
 # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
 pyopengl_platform: 'egl'
 
+version: 0.2
+
 existing_cell_organelles: ['mi', 'sj', 'vc']
 syntype_avail:
 

@@ -22,7 +22,7 @@ if os.environ['PYOPENGL_PLATFORM'] != 'egl':
     raise EnvironmentError(f'PyOpenGL backened should be "egl". '
                            f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
-OpenGL.USE_ACCELERATE = True  # unclear behavior
+OpenGL.USE_ACCELERATE = False  # unclear behavior
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL.framebufferobjects import *
@@ -621,7 +621,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         views_key: str
         return_rot_matrices: bool
         depth_map: bool
-        smooth_shade:
+        smooth_shade: bool
         wire_frame: bool
         nb_views:
         triangulation: bool

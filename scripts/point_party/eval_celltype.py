@@ -1,28 +1,22 @@
 import collections
-import os
 import re
-import gc
-from multiprocessing import Process, Queue
 from syconn.handler import basics, config
 from syconn.handler.prediction import certainty_estimate
-from syconn.handler.basics import chunkify, chunkify_successive
 import numpy as np
-import time
-import tqdm
-import morphx.processing.clouds as clouds
 from sklearn.metrics.classification import classification_report
-from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.prediction_pts import predict_pts_plain, \
     pts_loader_scalar, pts_pred_scalar
 
 
 def load_model(mkwargs, device):
     from elektronn3.models.convpoint import ModelNet40
+    from elektronn3.models.base import InferenceModel
     import torch
     m = ModelNet40(5, 8, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
+    # pts_pred_scalar (pred_func used in predict_pts_plain) requires the model object to have a .predict method
     m = torch.nn.DataParallel(m)
-    m.eval()
+    m = InferenceModel(m)
     return m
 
 
@@ -74,13 +68,17 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp75k/'
+    # base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp75k/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
     for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb75000_noBN_moreAug4_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale30000_nb25000_swish_noBN_moreAug4_CV{}_eval{}/'
         use_norm = False
         track_running_stats = False
+        activation = 'relu'
+        if 'swish' in mdir:
+            activation = 'swish'
         if '_noBN_' in mdir:
             use_norm = False
         if '_gn_' in mdir:
@@ -92,14 +90,14 @@ if __name__ == '__main__':
         npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
         scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)
-        mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats)
+        mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation)
         log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
                  f'model_kwargs={mkwargs} and da_equals_tan={da_equals_tan}.\n'
                  f'GT: version={gt_version} at wd={wd}\n')
         for CV in range(ncv_min, n_cv):
             split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                            f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-            mpath = f'{mdir.format(CV, run)}/state_dict_minlr_step75000.pth'
+            mpath = f'{mdir.format(CV, run)}/state_dict_minlr_step124000.pth'
             log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
 

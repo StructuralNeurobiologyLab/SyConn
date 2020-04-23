@@ -883,7 +883,7 @@ class SegmentationObject(object):
             self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def _mesh_from_scratch(self, downsampling: Optional[Tuple[int, int, int]] = None,
-                           n_closings: Optional[int] = None, **kwargs):
+                           n_closings: Optional[int] = None, **kwargs) -> List[np.ndarray]:
         """
         Calculate the mesh based on :func:`~syconn.proc.meshes.get_object_mesh`.
 
@@ -1720,8 +1720,6 @@ class SegmentationDataset(object):
         """
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
-        # TODO: do not perform a glob. all possible paths are determined by
-        #  'n_folders_fs' -> much faster, less IO
         return sorted(glob.glob(p))
 
     @property

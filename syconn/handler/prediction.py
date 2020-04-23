@@ -37,6 +37,7 @@ from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
+import torch
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
@@ -1035,52 +1036,11 @@ class NeuralNetworkInterface(object):
         return proba
 
 
-def get_axoness_model():
-    """
-    Retrained with GP dendrites. May 2018.
-    """
-    m = NeuralNetworkInterface(global_params.config.mpath_axoness,
-                               imposed_batch_size=200,
-                               nb_labels=3, normalize_data=True)
-    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
-    return m
-
-
-def get_axoness_model_e3():
-    """Those networks are typically trained with `naive_view_normalization_new` """
-    from elektronn3.models.base import InferenceModel
-    path = global_params.config.mpath_axoness_e3
-    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
-    return m
-
-
-def get_glia_model():
-    m = NeuralNetworkInterface(global_params.config.mpath_glia,
-                               imposed_batch_size=200, nb_labels=2,
-                               normalize_data=True)
-    _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
-    return m
-
-
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
-    path = global_params.config.mpath_glia_e3
-    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
-    return m
-
-
-def get_celltype_model(init_gpu=None):
-    """
-    Retrained on new GT on Jan. 13th, 2019.
-    """
-    # this model was trained with 'naive_view_normalization_new'
-    m = NeuralNetworkInterface(global_params.config.mpath_celltype,
-                               imposed_batch_size=2, nb_labels=4,
-                               normalize_data=True,
-                               normalize_func=naive_view_normalization_new,
-                               init_gpu=init_gpu)
-    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    m = torch.jit.load(global_params.config.mpath_glia_e3)
+    m = InferenceModel(m, normalize_func=naive_view_normalization_new)
     return m
 
 
@@ -1097,26 +1057,8 @@ def get_celltype_model_e3():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    path = global_params.config.mpath_celltype_e3
-    m = InferenceModel(path, bs=40)
-    return m
-
-
-def get_celltype_model_large_e3():
-    """Those networks are typically trained with `naive_view_normalization_new`
-     Unlike the other e3 InferenceModel instances, here the view normalization
-     is applied in the downstream inference method (`predict_sso_celltype`)
-      because the celltype model also gets scalar values as input which should
-      not be normalized."""
-    try:
-        from elektronn3.models.base import InferenceModel
-    except ImportError as e:
-        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
-              "com/ELEKTRONN/elektronn3' for more information.".format(e)
-        log_main.error(msg)
-        raise ImportError(msg)
-    path = global_params.config.mpath_celltype_large_e3
-    m = InferenceModel(path)
+    m = torch.jit.load(global_params.config.mpath_celltype_e3)
+    m = InferenceModel(m, bs=40, multi_gpu=False)
     return m
 
 
@@ -1129,7 +1071,8 @@ def get_semseg_spiness_model():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_spiness
-    m = InferenceModel(path)
+    m = torch.jit.load(path)
+    m = InferenceModel(m)
     m._path = path
     return m
 
@@ -1143,7 +1086,8 @@ def get_semseg_axon_model():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_axonsem
-    m = InferenceModel(path)
+    m = torch.jit.load(path)
+    m = InferenceModel(m)
     m._path = path
     return m
 
@@ -1157,22 +1101,8 @@ def get_tripletnet_model_e3():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    m_path = global_params.config.mpath_tnet
-    m = InferenceModel(m_path)
-    return m
-
-
-def get_tripletnet_model_large_e3():
-    """Those networks are typically trained with `naive_view_normalization_new` """
-    try:
-        from elektronn3.models.base import InferenceModel
-    except ImportError as e:
-        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
-              "com/ELEKTRONN/elektronn3' for more information.".format(e)
-        log_main.error(msg)
-        raise ImportError(msg)
-    m_path = global_params.config.mpath_tnet_large
-    m = InferenceModel(m_path)
+    m = torch.jit.load(global_params.config.mpath_tnet)
+    m = InferenceModel(m)
     return m
 
 
@@ -1190,8 +1120,8 @@ def get_myelin_cnn():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    m_path = global_params.config.mpath_myelin
-    m = Predictor(m_path)
+    m = torch.jit.load(global_params.config.mpath_myelin)
+    m = Predictor(m)
     return m
 
 

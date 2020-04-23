@@ -111,6 +111,10 @@ class Config(object):
         with open(fname_conf, 'w') as f:
             f.write(yaml.dump(self.entries, default_flow_style=False))
 
+    def version(self):
+        from syconn import __version__
+        return __version__
+
 
 class DynConfig(Config):
     """
@@ -400,18 +404,7 @@ class DynConfig(Config):
             Path to tCMN - a decoder network of local cell morphology trained via
             triplet loss.
         """
-        return self.model_dir + '/tCMN/'
-
-    @property
-    def mpath_tnet_large(self) -> str:
-        """
-        Trained on a large field of view.
-
-        Returns:
-            Path to tCMN - a decoder network of cell morphology trained via
-            triplet loss.
-        """
-        return self.model_dir + '/tCMN_large/'
+        return self.model_dir + '/tCMN/model.pts'
 
     @property
     def mpath_spiness(self) -> str:
@@ -420,7 +413,7 @@ class DynConfig(Config):
             Path to model trained on detecting spine head, neck, dendritic shaft,
             and ``other`` (soma and axon) via 2D projections (-> semantic segmentation).
         """
-        return self.model_dir + '/spiness/'
+        return self.model_dir + '/spiness/model.pts'
 
     @property
     def mpath_axonsem(self) -> str:
@@ -429,14 +422,7 @@ class DynConfig(Config):
             Path to model trained on detecting axon, terminal boutons and en-passant,
             dendrites and somata via 2D projections (-> semantic segmentation).
         """
-        return self.model_dir + '/axoness_semseg/'
-
-    @property
-    def mpath_celltype(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/celltype/celltype.mdl'
+        return self.model_dir + '/axoness_semseg/model.pts'
 
     @property
     def mpath_celltype_e3(self) -> str:
@@ -444,38 +430,7 @@ class DynConfig(Config):
         Returns:
             Path to model trained on prediction cell types from multi-view sets.
         """
-        return self.model_dir + '/celltype_e3/'
-
-    @property
-    def mpath_celltype_large_e3(self) -> str:
-        """
-        Trained on a large field of view.
-
-        Returns:
-            Path to model trained to infer cell types from multi-view sets.
-        """
-        return self.model_dir + '/celltype_large_e3/'
-
-    @property
-    def mpath_axoness(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/axoness/axoness.mdl'
-
-    @property
-    def mpath_axoness_e3(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/axoness_e3/'
-
-    @property
-    def mpath_glia(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/glia/glia.mdl'
+        return self.model_dir + '/celltype_e3/model.pts'
 
     @property
     def mpath_glia_e3(self) -> str:
@@ -484,7 +439,7 @@ class DynConfig(Config):
             Path to model trained to classify local 2D projections into glia
             vs. neuron (img2scalar).
         """
-        return self.model_dir + '/glia_e3/'
+        return self.model_dir + '/glia_e3/model.pts'
 
     @property
     def mpath_myelin(self) -> str:
@@ -493,7 +448,7 @@ class DynConfig(Config):
             Path to model trained on identifying myelinated cell parts
             within 3D EM raw data.
         """
-        return self.model_dir + '/myelin/model.pt'
+        return self.model_dir + '/myelin/model.pts'
 
     @property
     def mpath_syntype(self) -> str:
@@ -989,6 +944,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     if type(scaling) is np.ndarray:
         scaling = scaling.tolist()
     entries['scaling'] = scaling
+    entries['version'] = default_conf.version()
     entries['syntype_avail'] = syntype_avail
 
     entries['meshes']['allow_mesh_gen_cells'] = allow_mesh_gen_cells

@@ -17,7 +17,7 @@ except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
     cython_out = None
 
-VERSION = '0.2'
+VERSION = '0.3'
 
 
 def read_readme():
@@ -37,9 +37,12 @@ version = '%(version)s'
         f.write(content % {'version': VERSION})
 
 
+write_version_py()
+
+
 setup(
     name='SyConn',
-    version='0.2',
+    version=VERSION,
     description='Analysis pipeline for EM raw data based on deep and '
                 'supervised learning to extract high level biological'
                 'features and connectivity.',

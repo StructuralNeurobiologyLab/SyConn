@@ -3390,18 +3390,11 @@ def celltype_predictor(args):
     Returns:
 
     """
-    # from ..handler.prediction import get_celltype_model
-    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3, \
-        get_tripletnet_model_large_e3, get_celltype_model_large_e3
+    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3
     ssv_ids = args
     # randomly initialize gpu
-    # m = get_celltype_model(init_gpu=0)
-    if not global_params.config.use_large_fov_views_ct:
-        m = get_celltype_model_e3()
-        m_tnet = get_tripletnet_model_e3()
-    else:
-        m = get_celltype_model_large_e3()
-        m_tnet = get_tripletnet_model_large_e3()
+    m = get_celltype_model_e3()
+    m_tnet = get_tripletnet_model_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:

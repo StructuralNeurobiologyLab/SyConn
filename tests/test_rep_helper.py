@@ -34,3 +34,8 @@ def test_subfold2ix_inverse():
 
 def test_uint64():
     return
+
+
+if __name__ == '__main__':
+    test_subfold_from_ix()
+    test_subfold2ix_inverse()

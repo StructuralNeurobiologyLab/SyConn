@@ -22,7 +22,7 @@ if os.environ['PYOPENGL_PLATFORM'] != 'osmesa':
     raise EnvironmentError(f'PyOpenGL backened should be "osmesa". '
                            f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
-OpenGL.USE_ACCELERATE = True  # unclear behavior
+OpenGL.USE_ACCELERATE = False  # unclear behavior
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL.framebufferobjects import *
@@ -586,7 +586,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
             log_proc.debug("Calculation of rotation matrices took {:.2f}s."
                            "".format(time.time() - start))
     if verbose:
-        log_proc.debug("Starting local rendering at %d locations (%s)." %
+        log_proc.debug("Started local rendering at %d locations (%s)." %
                        (len(coords), views_key))
     ctx = init_ctx(ws, depth_map=depth_map)
     mviews = multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths,

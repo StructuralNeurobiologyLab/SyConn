@@ -1856,12 +1856,11 @@ def pred_sv_chunk_semseg(args):
     """
 
     from syconn.proc.sd_proc import sos_dict_fact, init_sos
-    from elektronn3.models.base import InferenceModel
     from syconn.backend.storage import CompressedStorage
+    from syconn.handler.prediction import get_semseg_spiness_model
     so_chunk_paths = args[0]
-    model_kwargs = args[1]
-    so_kwargs = args[2]
-    pred_kwargs = args[3]
+    so_kwargs = args[1]
+    pred_kwargs = args[2]
 
     # By default use views after glia removal
     if 'woglia' in pred_kwargs:
@@ -1876,7 +1875,7 @@ def pred_sv_chunk_semseg(args):
     else:
         raw_only = False
 
-    model = InferenceModel(**model_kwargs)
+    model = get_semseg_spiness_model()
     for p in so_chunk_paths:
         # get raw views
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"

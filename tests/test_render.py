@@ -93,9 +93,12 @@ def test_egl_and_osmesa_swap_and_equivalence():
     nb_of_pixels = np.prod(raw_views.shape)
     # fraction of different vertex indices must be below 1 out of 100k
     assert np.sum(index_views != index_views_osmesa) / nb_of_pixels < 1e-5
-    # maximum deviation of depth value must be smaller
-    assert np.max(((raw_views-raw_views_osmesa)**2)**0.5) == 1
-    # affected pixels must be below 0.05
+    # maximum deviation of depth value must be small
+    # used to be 1 instead of 20, changed with commit 53ff49e0 (only 9 pixel in total with high deviation)
+    # manual inspection of the one image causing this deviation yielded no qualitative difference
+    assert np.max(np.abs(raw_views-raw_views_osmesa)) < 20
+    assert np.sum(np.abs(raw_views - raw_views_osmesa) > 1) / nb_of_pixels < 1e-5
+    # fraction of affected pixels must be below 0.05
     assert np.sum(raw_views != raw_views_osmesa) / nb_of_pixels < 0.05
 
 

@@ -57,7 +57,7 @@ for g in ch:
 # render huge SSVs in parallel, multiple jobs per SSV, use more threads than cores -> increase
 # GPU load
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True)
-n_parallel_jobs = global_params.config['ncores_per_node']  # // global_params.config['ngpus_per_node']
+n_parallel_jobs = global_params.config['ncores_per_node']
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssv, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
@@ -69,6 +69,7 @@ render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
 sso_kwargs = dict(version=version, create=False, working_dir=wd)
 if len(ssvs_small) != 0:
     multi_params = [[ssv.id, ssv.sv_ids] for ssv in ssvs_small]
+    print([len(el[1]) for el in multi_params])
     multi_params = chunkify(multi_params, n_parallel_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]

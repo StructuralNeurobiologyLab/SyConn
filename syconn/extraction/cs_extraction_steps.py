@@ -33,8 +33,6 @@ from . import log_extraction
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
-from ..proc.image import multi_mop_backgroundonly
-import multiprocessing
 try:
     from .block_processing_C import process_block_nonzero as process_block_nonzero_C
     from .block_processing_C import extract_cs_syntype
@@ -290,7 +288,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     dataset_analysis(sd_syn, recompute=True, compute_meshprops=False)
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
-    log.info(f'Identified {n_cs}) contact sites and {n_syn} synapses within size threshold.')
+    log.info(f'Identified {n_cs} contact sites and {n_syn} synapses within size threshold.')
     dataset_analysis(sd_cs, recompute=True, compute_meshprops=False)
     for p in dict_paths_tmp:
         os.remove(p)
@@ -607,18 +605,11 @@ def _write_props_to_syn_thread(args):
             this_attr_dc[cs_id]["sym_prop"] = sym_prop
             this_attr_dc[cs_id]["asym_prop"] = asym_prop
 
-            # TODO: should be refactored at some point, changed to bounding box of
-            #  the overlap object instead of the SJ bounding box. Also the background ratio was adapted
-            n_vxs_in_sjbb = np.prod(bb[1] - bb[0])  # number of CS voxels in syn BB
-            # id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
             cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
             # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
             add_feat_dict = {'cs_id': cs_id,
-                             # 'id_sj_ratio': id_ratio,
-                             # 'sj_size_pseudo': n_vxs_in_sjbb,
                              'id_cs_ratio': cs_ratio_vx,
                              'cs_size': size_cs}
-                             # 'background_overlap_ratio': background_overlap_ratio}
             this_attr_dc[cs_id].update(add_feat_dict)
             voxel_dc[cs_id] = bbs
             voxel_dc.increase_object_size(cs_id, size)

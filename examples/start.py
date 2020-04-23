@@ -193,7 +193,7 @@ if __name__ == '__main__':
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction(e3=True)
+        exec_multiview.run_glia_prediction()
         exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
