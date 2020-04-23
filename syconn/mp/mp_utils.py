@@ -19,7 +19,8 @@ from . import log_mp
 MyPool = multiprocessing.Pool
 
 
-def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
+def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0,
+                     show_progress=False):
     """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
         A parallel version of the map function with a progress bar.
 
@@ -32,6 +33,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
             front_num (int, default=3): The number of iterations to run
             serially before kicking off the parallel job.
              Useful for catching bugs
+             show_progress:
         Returns:
             [function(array[0]), function(array[1]), ...]
     """
@@ -158,7 +160,8 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     start = time.time()
     if nb_cpus > 1:
         if show_progress:
-            result = parallel_process(params, func, nb_cpus)
+            result = parallel_process(params, func, nb_cpus,
+                                      show_progress=show_progress)
         else:
             with MyPool(nb_cpus) as pool:
                 result = list(pool.map(func, params))

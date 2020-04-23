@@ -8,18 +8,15 @@
 
 import argparse
 import os
-import _pickle
 
 import torch
 from torch import nn
 from torch import optim
 import zipfile
-# TODO: Make torch and numpy RNG seed configurable
-
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='cellorganelle_unet_sameConv_BN_inmem_RESUMED',
+                    default='cellorganelle_unet_sameConv_GN',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=200,
@@ -47,10 +44,12 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
+parser.add_argument('--sr', type=str, default=os.path.expanduser('~/e3training/'), help='Save root.')
+
 args = parser.parse_args()
 
 if not args.disable_cuda and torch.cuda.is_available():
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 
@@ -63,39 +62,22 @@ elektronn3.select_mpl_backend('Agg')
 from elektronn3.data import PatchCreator, transforms, utils, get_preview_batch
 from elektronn3.training import Trainer, Backup, metrics, Padam, handlers
 from elektronn3.models.unet import UNet
-from elektronn3.modules.loss import DiceLoss, DiceLossFancy
+from elektronn3.modules import DiceLoss, CombinedLoss
 from elektronn3.training.metrics import channel_metric
 
-torch.backends.cudnn.benchmark = True  # Improves overall performance in *most* cases
-
-# model = UNet_valid_blocks(
-#     out_channels=5,
-#     n_blocks=5,
-#     start_filts=64,
-#     planar_blocks=(1,2),
-#     activation='relu',
-#     batch_norm=True,
-#     valid_blocks = (0,1,2),
-#     adaptive=False
-# ).to(device)
-# offset = model.offset
-
+out_channels = 4
 model = UNet(
     in_channels=1,
-    out_channels=4,
+    out_channels=out_channels,
     n_blocks=5,
-    start_filts=28,
+    start_filts=48,
     planar_blocks=(0, 3),
     activation='relu',
-    batch_norm=True,
-    # conv_mode='valid',
-    #up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
-    adaptive=True  # Experimental. Disable if results look weird.
+    normalization='group8',
 ).to(device)
 
 # Example for a model-compatible input.
-example_input = torch.randn(1, 1, 40, 144, 144)
-
+example_input = torch.randn(1, 1, 32, 144, 144)
 enable_save_trace = False if args.jit == 'disabled' else True
 if args.jit == 'onsave':
     # Make sure that tracing works
@@ -110,7 +92,7 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # USER PATHS
-save_root = os.path.expanduser('~/e3_training/')
+save_root = args.sr
 os.makedirs(save_root, exist_ok=True)
 gt_dir = os.path.expanduser('/wholebrain/songbird/j0126/GT/cellorganelle_gt/')
 
@@ -158,7 +140,6 @@ if args.resume is not None:  # Load pretrained network
 common_transforms = [
     transforms.SqueezeTarget(dim=0),  # Workaround for neuro_data_cdhw
     #transforms.Normalize(mean=dataset_mean, std=dataset_std),
-    transforms.DropIfTooMuchBG(bg_id=0, threshold=0.9),
 ]
 train_transform = transforms.Compose(common_transforms + [
     transforms.RandomGrayAugment(channels=[0], prob=0.1),
@@ -173,43 +154,35 @@ valid_transform = transforms.Compose(common_transforms + [])
 aniso_factor = 2  # Anisotropy in z dimension. E.g. 2 means half resolution in z dimension.
 common_data_kwargs = {  # Common options for training and valid sets.
     'aniso_factor': aniso_factor,
-    'patch_shape': (48, 144, 144),
-    'num_classes': 4,
-    # 'offset': (20, 46, 46),
+    'patch_shape': (32, 144, 144),
+    'in_memory': True  # Uncomment to avoid disk I/O (if you have enough host memory for the data)
 }
 
 type_args = list(range(len(input_h5data)))
 train_dataset = PatchCreator(
-    in_memory=True,
-    input_h5data=[input_h5data[i] for i in type_args if i not in valid_indices],
-    target_h5data=[target_h5data[i] for i in type_args if i not in valid_indices],
+    input_sources=[input_h5data[i] for i in type_args if i not in valid_indices],
+    target_sources=[target_h5data[i] for i in type_args if i not in valid_indices],
     train=True,
     epoch_size=args.epoch_size,
     warp_prob=0.2,
     warp_kwargs={
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
-        'warp_amount': 0.1,
+        'warp_amount': 0.5,
+        'lock_z': True
     },
     transform=train_transform,
     **common_data_kwargs
 )
 valid_dataset = None if not valid_indices else PatchCreator(
-    in_memory=True,
-    input_h5data=[input_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
-    target_h5data=[target_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
+    input_sources=[input_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
+    target_sources=[target_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
     train=False,
     epoch_size=10,  # How many samples to use for each validation run
     warp_prob=0,
     warp_kwargs={'sample_aniso': aniso_factor != 1},
     transform=valid_transform,
     **common_data_kwargs
-)
-# Use first validation cube for previews. Can be set to any other data source.
-preview_batch = get_preview_batch(
-    # use first cube - might also be training data but always previews the same slice!
-    h5data=input_h5data[3],
-    preview_shape=(48, 144, 144),
 )
 
 optimizer = torch.optim.Adam(
@@ -225,9 +198,22 @@ schedulers = {'lr': lr_sched}
 # All these metrics assume a binary classification problem. If you have
 #  non-binary targets, remember to adapt the metrics!
 valid_metrics = {
+    'val_accuracy': metrics.bin_accuracy,
+    'val_precision': metrics.bin_precision,
+    'val_recall': metrics.bin_recall,
+    'val_DSC': metrics.bin_dice_coefficient,
+    'val_IoU': metrics.bin_iou,
 }
+if out_channels > 2:
+    # Add separate per-class accuracy metrics only if there are more than 2 classes
+    valid_metrics.update({
+        f'val_IoU_c{i}': metrics.Accuracy(i)
+        for i in range(out_channels)
+    })
 
-criterion = DiceLoss(apply_softmax=True, weight=class_weights)
+crossentropy = nn.CrossEntropyLoss(weight=class_weights)
+dice = DiceLoss(weight=class_weights)
+criterion = CombinedLoss([crossentropy, dice], weight=[0.5, 0.5], device=device)
 
 # Create trainer
 trainer = Trainer(
@@ -237,26 +223,16 @@ trainer = Trainer(
     device=device,
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
-    batchsize=1,
-    num_workers=4,
+    batch_size=1,
+    num_workers=1,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,
-    enable_save_trace=enable_save_trace,
-    schedulers=schedulers,#{"lr": optim.lr_scheduler.StepLR(optimizer, 1000, 0.995)},
+    schedulers=schedulers,
     valid_metrics=valid_metrics,
-    #preview_batch=preview_batch,
-    #preview_interval=5,
-    enable_videos=False,  # Uncomment to get rid of videos in tensorboard
-    offset=train_dataset.offset,
-    apply_softmax_for_prediction=True,
-    num_classes=train_dataset.num_classes,
-    ipython_shell=False,
-    # TODO: Tune these:
-    #preview_tile_shape=(48, 96, 96),
-    #preview_overlap_shape=(48, 96, 96),
-    #sample_plotting_handler = handlers._tb_log_sample_images_Synapse,
-    #mixed_precision=True,  # Enable to use Apex for mixed precision training
+    enable_save_trace=enable_save_trace,
+    enable_videos=False,
+    out_channels=out_channels,
 )
 
 # Archiving training script, src folder, env info

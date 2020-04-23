@@ -34,16 +34,14 @@ class TripletNet(nn.Module):
         super().__init__()
         self.rep_net = rep_net
 
-    def forward(self, feat, inp):
+    def forward(self, x0, x1, x2):
         if not self.training:
-            assert feat.dim() == 3, 'Expecting feature shape (B, N, C) and ' \
-                                    'input shape (B, N, 3) during inference.'
-            return self.rep_net(feat, inp)
-        assert feat.dim() == 4, 'Expecting feature shape (B, 3, N, C) and ' \
-                                'input shape (B, 3, N, 3) during training.'
-        z_0 = self.rep_net(feat[0], inp[0])
-        z_1 = self.rep_net(feat[1], inp[1])
-        z_2 = self.rep_net(feat[2], inp[2])
+            assert x1 is None and x2 is None
+            return self.rep_net(x0[0], x0[1])
+        assert x1 is not None, x2 is not None
+        z_0 = self.rep_net(x0[0], x0[1])
+        z_1 = self.rep_net(x1[0], x1[1])
+        z_2 = self.rep_net(x2[0], x2[1])
         dist_a = F.pairwise_distance(z_0, z_1, 2)
         dist_b = F.pairwise_distance(z_0, z_2, 2)
         return dist_a, dist_b, z_0, z_1, z_2
@@ -57,8 +55,8 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
     parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=75000, help='Number of sample points')
-    parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
+    parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
+    parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
     parser.add_argument('--cl', type=int, default=5, help='Number of classes')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
     parser.add_argument('--seed', default=0, help='Random seed')
@@ -90,20 +88,23 @@ if __name__ == '__main__':
     size = args.ana
     save_root = args.sr
 
-    lr = 1e-2
+    lr = 5e-4
     lr_stepsize = 1000
     lr_dec = 0.995
-    max_steps = 1000000
-    margin = 0.4
+    max_steps = 500000
+    margin = 0.2
+    dr = 0.2
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!
     cellshape_only = False
     use_syntype = True
     onehot = True
+    track_running_stats = False
+    use_bn = False
 
     if name is None:
-        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_' \
+        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_expLR_' \
                f'cv{cval}_nDim{Z_DIM}'
         if cellshape_only:
             name += '_cellshapeOnly'
@@ -120,6 +121,11 @@ if __name__ == '__main__':
     else:
         device = torch.device('cpu')
 
+    if not use_bn:
+        name += '_noBN'
+    if track_running_stats:
+        name += '_trackRunStats'
+
     print(f'Running on device: {device}')
 
     # set paths
@@ -130,7 +136,9 @@ if __name__ == '__main__':
     # CREATE NETWORK AND PREPARE DATA SET #
 
     # # Model selection
-    model = ModelNet40(input_channels, Z_DIM)
+    model = ModelNet40(input_channels, Z_DIM, dropout=dr, use_bn=use_bn,
+                       track_running_stats=track_running_stats)
+    name += '_moreAug4'
 
     # model = ModelNetBig(input_channels, Z_DIM)
     # name += '_big'
@@ -139,6 +147,7 @@ if __name__ == '__main__':
     # name += '_attention'
 
     model = TripletNet(model)
+    model = nn.DataParallel(model)
 
     if use_cuda:
         model.to(device)
@@ -158,34 +167,32 @@ if __name__ == '__main__':
         model = tracedmodel
 
     # Transformations to be applied to samples before feeding them to the network
-    train_transform = clouds.Compose([clouds.RandomVariation((-20, 20)),  # in nm
+    train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
                                       clouds.Normalization(scale_norm),
                                       clouds.Center(),
-                                      clouds.RandomRotate()])
+                                      clouds.RandomRotate(apply_flip=True),
+                                      clouds.RandomScale(distr_scale=0.05, distr='normal')])
     valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                       clouds.Center()])
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype,
-                                    onehot=onehot)
-    valid_ds = CellCloudDataTriplet(npoints=npoints, transform=valid_transform, train=False,
-                                    cv_val=cval, cellshape_only=cellshape_only,
-                                    use_syntype=use_syntype, onehot=onehot)
+                                    onehot=onehot, batch_size=batch_size)
 
     # PREPARE AND START TRAINING #
 
     # set up optimization
-    # optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    optimizer = torch.optim.SGD(
-        model.parameters(),
-        lr=lr,  # Learning rate is set by the lr_sched below
-        momentum=0.9,
-        weight_decay=0.5e-4,
-    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    # optimizer = torch.optim.SGD(
+    #     model.parameters(),
+    #     lr=lr,  # Learning rate is set by the lr_sched below
+    #     momentum=0.9,
+    #     weight_decay=0.5e-4,
+    # )
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=1.5)
+    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,
@@ -206,12 +213,13 @@ if __name__ == '__main__':
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
-        batchsize=batch_size,
+        batchsize=1,
         num_workers=10,
         save_root=save_root,
         enable_save_trace=enable_save_trace,
         exp_name=name,
         schedulers={"lr": lr_sched},
+        dataloader_kwargs=dict(collate_fn=lambda x: x[0])
     )
 
     # Archiving training script, src folder, env info

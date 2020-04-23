@@ -16,7 +16,6 @@ from sklearn.decomposition import PCA
 from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
-import time
 try:
     import vtki
     __vtk_avail__ = True
@@ -330,7 +329,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         mo = MeshObject("", ind, verts)
         # compute normals
         norm = mo.normals.reshape((-1, 3))
-    return np.array(ind, dtype=np.int), verts, norm
+    return [np.array(ind, dtype=np.int), verts, norm]
 
 
 def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
@@ -355,8 +354,8 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
     if triangulation_kwargs is None:
         triangulation_kwargs = {}
     if np.isscalar(obj.voxels):
-        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
-               np.zeros((0,), dtype=np.float32)
+        return [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
+                np.zeros((0,), dtype=np.float32)]
     try:
         min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj.type]
     except KeyError:
@@ -370,8 +369,8 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
             # log_proc.debug('Did not create mesh for object of type "{}" '
             #                ' with ID {} because its size is {} voxels.'
             #                ''.format(obj.type, obj.id, len(obj.voxel_list)))
-            return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32), \
-                   np.zeros((0,), dtype=np.float32)
+            return [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32), \
+                    np.zeros((0,), dtype=np.float32)]
         msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
               ' of type "{}". It contained {} voxels.'.format(str(e), obj.id, obj.type,
                                                               len(obj.voxel_list))
@@ -382,7 +381,7 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
     assert len(vertices) == len(normals) or len(normals) == 0, \
         "Length of normals (%s) does not correspond to length of" \
         " vertices (%s)." % (str(normals.shape), str(vertices.shape))
-    return indices.flatten(), vertices.flatten(), normals.flatten()
+    return [indices.flatten(), vertices.flatten(), normals.flatten()]
 
 
 def normalize_vertices(vertices):
@@ -476,16 +475,22 @@ def get_rotmatrix_from_points(points):
 
     """
     if len(points) <= 2:
-        return np.zeros((16))
+        return np.zeros(16)
     new_center = np.mean(points, axis=0)
     points -= new_center
-    pca = PCA(n_components=3, random_state=0)
-    pca.fit(points)
     rot_mat = np.zeros((4, 4))
-    rot_mat[:3, :3] = pca.components_
+    rot_mat[:3, :3] = _calc_pca_components(points)
     rot_mat[3, 3] = 1
     rot_mat = rot_mat.flatten('F')
     return rot_mat
+
+
+def _calc_pca_components(pts):
+    cov = np.cov(pts, rowvar=False)
+    evals, evecs = np.linalg.eig(cov)
+    idx = np.argsort(evals)[::-1]
+    evecs = evecs[:, idx].transpose()
+    return evecs
 
 
 def flag_empty_spaces(coords, vertices, edge_length):

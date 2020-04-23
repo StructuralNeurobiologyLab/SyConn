@@ -233,18 +233,16 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so: 'segmentation.SegmentationObject',
-              recompute: bool = False)\
-        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) -> List[np.ndarray]:
     """
     Load mesh of SegmentationObject.
-    TODO: Currently ignores potential color/label array
+    TODO: Currently ignores potential color/label array.
 
     Args:
         so: SegmentationObject
         recompute: bool
 
-    Returns: Tuple[np.array]
+    Returns:
         indices, vertices, normals; all flattened
 
     """
@@ -264,11 +262,11 @@ def load_mesh(so: 'segmentation.SegmentationObject',
             msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)"\
                   "with id %d.".format(e, so.type, so.id)
             log_reps.error(msg)
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
+            return [np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))]
     else:
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
-            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
+            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))]
         indices, vertices, normals = so._mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
@@ -280,7 +278,7 @@ def load_mesh(so: 'segmentation.SegmentationObject',
     indices = np.array(indices, dtype=np.int)
     normals = np.array(normals, dtype=np.float32)
     col = np.array(col, dtype=np.uint8)
-    return indices, vertices, normals
+    return [indices, vertices, normals]
 
 
 def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False) \

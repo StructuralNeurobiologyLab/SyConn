@@ -19,9 +19,8 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_2p_32f_gtv3_noBN', help='Manually '
-                                                                                      'set '
-                                                                           'experiment name')
+parser.add_argument('-n', '--exp-name', default='myelin_unet_gtv3_GN_new',
+                    help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
     help='How many training samples to process between '
@@ -30,6 +29,14 @@ parser.add_argument(
 parser.add_argument(
     '-m', '--max-steps', type=int, default=1500000,
     help='Maximum number of training steps to perform.'
+)
+parser.add_argument(
+    '-j', '--jit', metavar='MODE', default='onsave',
+    choices=['disabled', 'train', 'onsave'],
+    help="""Options:
+"disabled": Completely disable JIT tracing;
+"onsave": Use regular Python model for training, but trace it on-demand for saving training state;
+"train": Use traced model for training and serialize it on disk"""
 )
 parser.add_argument(
     '-t', '--max-runtime', type=int, default=3600 * 24 * 4,  # 4 days
@@ -45,6 +52,7 @@ parser.add_argument(
     '--deterministic', action='store_true',
     help='Run in fully deterministic mode (at the cost of execution speed).'
 )
+parser.add_argument('--sr', type=str, default=os.path.expanduser('~/e3training/'), help='Save root.')
 args = parser.parse_args()
 
 # Set up all RNG seeds, set level of determinism
@@ -76,19 +84,36 @@ else:
     device = torch.device('cpu')
 logger.info(f'Running on device: {device}')
 
+out_channels = 2
 model = UNet(
+    out_channels=out_channels,
     n_blocks=4,
-    start_filts=16,
+    start_filts=32,
     planar_blocks=(0, 2),
     activation='relu',
-    batch_norm=False,
+    normalization='group8',
 ).to(device)
 
+# Example for a model-compatible input.
+example_input = torch.randn(1, 1, 48, 144, 144)
+enable_save_trace = False if args.jit == 'disabled' else True
+if args.jit == 'onsave':
+    # Make sure that tracing works
+    tracedmodel = torch.jit.trace(model, example_input.to(device))
+elif args.jit == 'train':
+    if getattr(model, 'checkpointing', False):
+        raise NotImplementedError(
+            'Traced models with checkpointing currently don\'t '
+            'work, so either run with --disable-trace or disable '
+            'checkpointing.')
+    tracedmodel = torch.jit.trace(model, example_input.to(device))
+    model = tracedmodel
+
 # USER PATHS
-save_root = os.path.expanduser('~/e3training/')
+save_root = args.sr
 os.makedirs(save_root, exist_ok=True)
 
-data_root = os.path.expanduser('~/')
+data_root = os.path.expanduser('/wholebrain/scratch/pschuber/')
 input_h5data = [
     (os.path.join(data_root, f'myelin_{i}.h5'), 'raw')
     for i in [0, 2, 3, 0, 2, 3]
@@ -137,6 +162,7 @@ train_transform = transforms.Compose(common_transforms + [
     transforms.RandomGrayAugment(channels=[0], prob=0.3),
     transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.3),
     transforms.AdditiveGaussianNoise(sigma=0.1, channels=[0], prob=0.3),
+    transforms.RandomBlurring({'probability': 0.1})
 ])
 valid_transform = transforms.Compose(common_transforms + [])
 
@@ -145,27 +171,25 @@ aniso_factor = 2  # Anisotropy in z dimension. E.g. 2 means half resolution in z
 common_data_kwargs = {  # Common options for training and valid sets.
     'aniso_factor': aniso_factor,
     'patch_shape': (48, 96, 96),
-    # 'offset': (8, 20, 20),
-    'num_classes': 2,
-    # 'in_memory': True  # Uncomment to avoid disk I/O (if you have enough host memory for the data)
+    'in_memory': True  # Uncomment to avoid disk I/O (if you have enough host memory for the data)
 }
 train_dataset = PatchCreator(
-    input_h5data=[input_h5data[i] for i in range(len(input_h5data)) if i not in valid_indices],
-    target_h5data=[target_h5data[i] for i in range(len(input_h5data)) if i not in valid_indices],
+    input_sources=[input_h5data[i] for i in range(len(input_h5data)) if i not in valid_indices],
+    target_sources=[target_h5data[i] for i in range(len(input_h5data)) if i not in valid_indices],
     train=True,
     epoch_size=args.epoch_size,
     warp_prob=0.2,
     warp_kwargs={
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
-        'warp_amount': 0.1,
+        'warp_amount': 0.4,
     },
     transform=train_transform,
     **common_data_kwargs
 )
 valid_dataset = None if not valid_indices else PatchCreator(
-    input_h5data=[input_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
-    target_h5data=[target_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
+    input_sources=[input_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
+    target_sources=[target_h5data[i] for i in range(len(input_h5data)) if i in valid_indices],
     train=False,
     epoch_size=10,  # How many samples to use for each validation run
     warp_prob=0,
@@ -176,7 +200,7 @@ valid_dataset = None if not valid_indices else PatchCreator(
 
 optimizer = optim.SGD(
     model.parameters(),
-    lr=0.001,  # Learning rate is set by the lr_sched below
+    lr=0.001,
     momentum=0.9,
     weight_decay=0.5e-4,
 )
@@ -200,9 +224,8 @@ valid_metrics = {
     'val_IoU': metrics.bin_iou,
 }
 
-
-crossentropy = nn.CrossEntropyLoss()  # weight=torch.tensor((0.2, 0.8)))
-dice = DiceLoss()  # weight=torch.tensor((0.2, 0.8)), apply_softmax=True)
+crossentropy = nn.CrossEntropyLoss()
+dice = DiceLoss()
 criterion = CombinedLoss([crossentropy, dice], weight=[0.5, 0.5], device=device)
 
 # Create trainer
@@ -213,16 +236,16 @@ trainer = Trainer(
     device=device,
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
-    batchsize=1,
-    num_workers=1,
+    batch_size=2,
+    num_workers=2,
     save_root=save_root,
     exp_name=args.exp_name,
+    example_input=example_input,
     schedulers={'lr': lr_sched},
     valid_metrics=valid_metrics,
-    enable_videos=True,
-    offset=train_dataset.offset,
-    apply_softmax_for_prediction=True,
-    num_classes=train_dataset.num_classes,
+    enable_save_trace=enable_save_trace,
+    enable_videos=False,
+    out_channels=out_channels,
 )
 
 # Archiving training script, src folder, env info
@@ -230,7 +253,6 @@ Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
 
 # Start training
 trainer.run(max_steps=max_steps, max_runtime=max_runtime)
-
 
 # How to re-calculate mean, std and class_weights for other datasets:
 #  dataset_mean = utils.calculate_means(train_dataset.inputs)

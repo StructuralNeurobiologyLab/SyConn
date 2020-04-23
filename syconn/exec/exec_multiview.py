@@ -20,7 +20,7 @@ from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
-
+from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.prediction import get_glia_model
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc.rendering import render_sso_coords_multiprocessing
@@ -34,7 +34,6 @@ from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.exec import exec_skeleton
-from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.mp_utils import start_multiprocess_imap
 
 
@@ -112,15 +111,13 @@ def run_axoness_mapping(max_n_jobs: Optional[int] = None):
     log.info('Finished axoness mapping.')
 
 
-def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
-                           e3: bool = True):
+def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
     Run the axoness inference based on the ``img2scalar`` CMN. See
     :func:`~run_semsegaxoness_prediction` for the semantic segmentation model.
 
     Args:
         max_n_jobs_gpu: Number of parallel jobs.
-        e3: If True, use elektronn3 models.
 
     Notes:
         Requires :func:`~run_create_neuron_ssd`, :func:`~run_neuron_rendering` and
@@ -140,13 +137,7 @@ def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
              'on SV level in the attribute dict with key "{}"'.format(pred_key))
-    if e3 is True:
-        model_kwargs = 'get_axoness_model_e3'
-    else:
-        m = get_axoness_model()
-        model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
-                            imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
-                            channels_to_load=m.channels_to_load)
+    model_kwargs = 'get_axoness_model_e3'
     
     # all other kwargs like obj_type='sv' and version are the current SV
     # SegmentationDataset by default
@@ -158,23 +149,12 @@ def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for
                     par in multi_params]
 
-    if e3 is True:
-        # TODO: using two GPUs on a single node seems to be error-prone
-        #  -> wb13 froze when processing example_cube=2
-        n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-        _ = qu.batchjob_script(multi_params, "predict_sv_views_chunked_e3", log=log,
-                               n_max_co_processes=global_params.config.ngpu_total,
-                               n_cores=n_cores, suffix="_axoness",
-                               additional_flags="--gres=gpu:1", remove_jobfolder=True)
-    else:
-        for par in multi_params:
-            mk = par[1]
-            # SLURM is GPU aware, no need for random assignments.
-            mk["init_gpu"] = 0  # np.random.rand(0, 2)
-        _ = qu.batchjob_script(multi_params, "predict_sv_views_chunked", log=log,
-                               n_max_co_processes=global_params.config.ngpu_total // 2,
-                               n_cores=global_params.config['ncores_per_node'], suffix="_axoness",
-                               additional_flags="--gres=gpu:1", remove_jobfolder=True)
+    n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
+    _ = qu.batchjob_script(multi_params, "predict_sv_views_chunked_e3", log=log,
+                           n_max_co_processes=global_params.config.ngpu_total,
+                           n_cores=n_cores, suffix="_axoness",
+                           additional_flags="--gres=gpu:1", remove_jobfolder=True)
+
     log.info('Finished axon prediction. Now checking for missing predictions.')
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=global_params.config['ncores_per_node'])
     if len(res) > 0:
@@ -370,11 +350,9 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, max_n_jobs_gpu)
     # set model properties
-    model_kwargs = dict(src=global_params.config.mpath_spiness,
-                        multi_gpu=False)
     so_kwargs = dict(working_dir=global_params.config.working_dir)
     pred_kwargs = dict(pred_key=global_params.config['spines']['semseg2mesh_spines']['semseg_key'])
-    multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
+    multi_params = [[par, so_kwargs, pred_kwargs]
                     for par in multi_params]
     log.info('Starting spine prediction.')
     qu.batchjob_script(multi_params, "predict_spiness_chunked", log=log,
@@ -420,7 +398,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     """
 
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ngpu_total * 4 if \
+        max_n_jobs = global_params.config.ngpu_total * 10 if \
             global_params.config['pyopengl_platform'] == 'egl' \
             else global_params.config.ncore_total * 4
     log = initialize_logging('neuron_view_rendering_small',
@@ -451,7 +429,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     if global_params.config['pyopengl_platform'] == 'osmesa':  # utilize all CPUs
         qu.batchjob_script(multi_params, "render_views", log=log, suffix='_small',
                            n_max_co_processes=global_params.config.ncore_total,
-                           remove_jobfolder=False)
+                           remove_jobfolder=True)
     elif global_params.config['pyopengl_platform'] == 'egl':  # utilize 1 GPU per task
         # run EGL on single node: 20 parallel jobs
         if not qu.batchjob_enabled():
@@ -536,9 +514,8 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
         # # render index-views only
         for ssv_id in big_ssv:
             ssv = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
-            render_sso_coords_multiprocessing(ssv, global_params.config.working_dir, verbose=True,
-                                              return_views=False, disable_batchjob=False,
-                                              n_jobs=n_parallel_jobs, n_cores=n_cores,
+            render_sso_coords_multiprocessing(ssv, verbose=True, return_views=False,
+                                              n_jobs=n_parallel_jobs,
                                               render_indexviews=True)
         log.info('Finished rendering of {}/{} SSVs.'.format(len(big_ssv),
                                                             len(nb_svs_per_ssv)))
@@ -570,7 +547,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.config['ncores_per_node'])
     if len(res) != 0:
-        msg = "Not all SSVs were rendered! {}/{} missing:\n" \
+        msg = "Not all SSVs were rendered! {}/{} missing. Example IDs:\n" \
               "{}".format(len(res), len(ssd.ssv_ids),
                           res[:10])
         log.error(msg)
@@ -592,6 +569,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimim
     log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
+
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
 
     # if rag was not created by glia splitting procedure this filtering is required
@@ -681,12 +659,9 @@ def _ssv_rag_writer(args):
         nx.write_edgelist(ssv_rag, ssv.edgelist_path)
 
 
-def run_glia_prediction(e3: bool = False):
+def run_glia_prediction():
     """
     Predict glia supervoxels based on the ``img2scalar`` CMN.
-
-    Args:
-        e3: If True, use elektronn3 models.
 
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
@@ -708,15 +683,7 @@ def run_glia_prediction(e3: bool = False):
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     multi_params = chunkify(sd.so_dir_paths, global_params.config.ngpu_total * 2)
     # get model properties
-    if e3 is True:
-        model_kwargs = 'get_glia_model_e3'
-    else:
-        m = get_glia_model()
-        model_kwargs = dict(model_path=m._path,
-                            normalize_data=m.normalize_data,
-                            imposed_batch_size=m.imposed_batch_size,
-                            nb_labels=m.nb_labels,
-                            channels_to_load=m.channels_to_load)
+    model_kwargs = 'get_glia_model_e3'
     # all other kwargs like obj_type='sv' and version are the current SV
     # SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir)
@@ -727,28 +694,12 @@ def run_glia_prediction(e3: bool = False):
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
-    if e3 is True:
-        # TODO: using two GPUs on a single node seems to be error-prone
-        #  -> wb13 froze when processing example_cube=2
-        n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-        qu.batchjob_script(multi_params, "predict_sv_views_chunked_e3", log=log,
-                           n_max_co_processes=global_params.config.ngpu_total,
-                           script_folder=None, n_cores=n_cores,
-                           suffix="_glia", additional_flags="--gres=gpu:1",
-                           remove_jobfolder=True)
-    else:
-        # randomly assign to gpu 0 or 1
-        for par in multi_params:
-            mk = par[1]
-            # GPUs are made available for every job via slurm,
-            # no need for random assignments: np.random.rand(0, 2)
-            mk["init_gpu"] = 0
-        _ = qu.batchjob_script(multi_params, "predict_sv_views_chunked", log=log,
-                               n_max_co_processes=global_params.config.ngpu_total,
-                               n_cores=global_params.config['ncores_per_node'] //
-                                     global_params.config['ngpus_per_node'],
-                               suffix="_glia", additional_flags="--gres=gpu:1",
-                               remove_jobfolder=True)
+    n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
+    qu.batchjob_script(multi_params, "predict_sv_views_chunked_e3", log=log,
+                       n_max_co_processes=global_params.config.ngpu_total,
+                       script_folder=None, n_cores=n_cores,
+                       suffix="_glia", additional_flags="--gres=gpu:1",
+                       remove_jobfolder=True)
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.config['ncores_per_node'])
     missing_not_contained_in_rag = np.setdiff1d(res, all_sv_ids_in_rag)  # TODO: report at least.

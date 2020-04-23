@@ -20,11 +20,10 @@ from knossos_utils import knossosdataset, chunky
 
 knossosdataset._set_noprint(True)
 
-from ..handler import log_handler
 from ..mp import batchjob_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
-from ..handler import basics
+from ..handler import basics, log_handler, compression
 from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
 from ..proc.image import multi_mop, apply_morphological_operations
 from .. import global_params
@@ -280,8 +279,8 @@ def _gauss_threshold_connected_components_thread(args):
                 bin_data_dict = cset.from_chunky_to_matrix(size, box_offset,
                                                            filename, hdf5names)
             else:
-                bin_data_dict = basics.load_from_h5py(chunk.folder + filename + ".h5",
-                                                      hdf5names, as_dict=True)
+                bin_data_dict = compression.load_from_h5py(chunk.folder + filename + ".h5",
+                                                           hdf5names, as_dict=True)
 
         labels_data = []
         for nb_hdf5_name in range(len(hdf5names)):
@@ -303,8 +302,8 @@ def _gauss_threshold_connected_components_thread(args):
                 # tmp_data = scipy.ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
 
             if hdf5_name in ["p4", "vc"] and membrane_filename is not None and hdf5_name_membrane is not None:
-                membrane_data = basics.load_from_h5py(chunk.folder + membrane_filename + ".h5",
-                                                      hdf5_name_membrane)[0]
+                membrane_data = compression.load_from_h5py(chunk.folder + membrane_filename + ".h5",
+                                                           hdf5_name_membrane)[0]
                 membrane_data_shape = membrane_data.shape
                 offset = (np.array(membrane_data_shape) - np.array(tmp_data.shape)) / 2
                 membrane_data = membrane_data[offset[0]: membrane_data_shape[0]-offset[0],
@@ -330,7 +329,7 @@ def _gauss_threshold_connected_components_thread(args):
 
         h5_fname = chunk.folder + filename + "_connected_components%s.h5" % suffix
         os.makedirs(os.path.split(h5_fname)[0], exist_ok=True)
-        basics.save_to_h5py(labels_data, h5_fname, hdf5names)
+        compression.save_to_h5py(labels_data, h5_fname, hdf5names)
     return nb_cc_list
 
 
@@ -401,16 +400,15 @@ def _make_unique_labels_thread(func_args):
         this_max_nb_dict = args[3]
         suffix = args[4]
 
-        cc_data_list = basics.load_from_h5py(chunk.folder + filename +
-                                             "_connected_components%s.h5"
-                                             % suffix, hdf5names)
+        cc_data_list = compression.load_from_h5py(
+            chunk.folder + filename + "_connected_components%s.h5" % suffix, hdf5names)
 
         for nb_hdf5_name in range(len(hdf5names)):
             hdf5_name = hdf5names[nb_hdf5_name]
             matrix = cc_data_list[nb_hdf5_name]
             matrix[matrix > 0] += this_max_nb_dict[hdf5_name]
 
-        basics.save_to_h5py(cc_data_list,
+        compression.save_to_h5py(cc_data_list,
                             chunk.folder + filename +
                             "_unique_components%s.h5"
                             % suffix, hdf5names)
@@ -526,9 +524,8 @@ def _make_stitch_list_thread(args):
     cset = chunky.load_dataset(cpath_head_folder)
     for nb_chunk in nb_chunks:
         chunk = cset.chunk_dict[nb_chunk]
-        cc_data_list = basics.load_from_h5py(chunk.folder + filename +
-                                             "_unique_components%s.h5"
-                                             % suffix, hdf5names)
+        cc_data_list = compression.load_from_h5py(chunk.folder + filename +
+                                                  "_unique_components%s.h5" % suffix, hdf5names)
 
         if n_erosion > 0:
             # erode segmentation once to avoid start location dependent segmentation artifacts
@@ -554,9 +551,8 @@ def _make_stitch_list_thread(args):
             if neighbours[ii] != -1:
                 compare_chunk = cset.chunk_dict[neighbours[ii]]
                 cc_data_list_to_compare = \
-                    basics.load_from_h5py(compare_chunk.folder + filename +
-                                          "_unique_components%s.h5"
-                                          % suffix, hdf5names)
+                    compression.load_from_h5py(
+                        compare_chunk.folder + filename + "_unique_components%s.h5" % suffix, hdf5names)
                 if n_erosion > 0:
                     # erode segmentation once to avoid start location dependent segmentation artifacts
                     for kk in range(len(cc_data_list_to_compare)):
@@ -722,9 +718,8 @@ def _apply_merge_list_thread(args):
 
     merge_list_dict = pkl.load(open(merge_list_dict_path, 'rb'))
     for chunk in chunks:
-        cc_data_list = basics.load_from_h5py(chunk.folder + filename +
-                                             "_unique_components%s.h5"
-                                             % postfix, hdf5names)
+        cc_data_list = compression.load_from_h5py(
+            chunk.folder + filename + "_unique_components%s.h5" % postfix, hdf5names)
         for nb_hdf5_name in range(len(hdf5names)):
             hdf5_name = hdf5names[nb_hdf5_name]
             this_cc = cc_data_list[nb_hdf5_name]
@@ -738,7 +733,7 @@ def _apply_merge_list_thread(args):
             this_cc = id_changer[this_cc]
             cc_data_list[nb_hdf5_name] = np.array(this_cc, dtype=np.uint32)
 
-        basics.save_to_h5py(cc_data_list,
+        compression.save_to_h5py(cc_data_list,
                             chunk.folder + filename +
                             "_stitched_components%s.h5" % postfix,
                             hdf5names)
@@ -877,7 +872,7 @@ def _extract_voxels_thread(args):
 
                 if not os.path.exists(path):
                     path = chunk.folder + filename + ".h5"
-                this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
+                this_segmentation = compression.load_from_h5py(path, [hdf5_name])[0]
             else:
                 kd = kd_factory(overlaydataset_path)
 
@@ -1228,7 +1223,7 @@ def _extract_voxels_combined_thread_OLD(args):
 
                 if not os.path.exists(path):
                     path = chunk.folder + filename + ".h5"
-                this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
+                this_segmentation = compression.load_from_h5py(path, [hdf5_name])[0]
             else:
                 kd = kd_factory(overlaydataset_path)
 

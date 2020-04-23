@@ -889,7 +889,7 @@ def map_myelin2coords(coords: np.ndarray,
     Args:
         coords: Coordinates used to retrieve myelin predictions. In voxel coordinates (``mag=1``).
         cube_edge_avg: Cube size used for averaging myelin predictions for each location.
-            The laoded data cube will always have the extent given by `cube_edge_avg`, regardless
+            The loaded data cube will always have the extent given by `cube_edge_avg`, regardless
             of the value of `mag`.
         thresh_proba: Classification threshold in uint8 values (0..255).
         thresh_majority: Majority ratio for myelin (between 0..1), i.e.
@@ -906,9 +906,11 @@ def map_myelin2coords(coords: np.ndarray,
     kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
+    cube_edge_avg = cube_edge_avg * mag
     for ix, c in enumerate(coords):
-        offset, size = c // mag - cube_edge_avg // 2, cube_edge_avg
-        myelin_proba = kd.load_raw(size=size*mag, offset=offset, mag=mag).swapaxes(0, 2)
+        # switch to mag reference system, afterwards rescale to mag 1 again
+        offset = c - cube_edge_avg // 2
+        myelin_proba = kd.load_raw(size=cube_edge_avg, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
         myelin_preds[ix] = myelin_ratio > thresh_majority
     return myelin_preds
@@ -1854,12 +1856,11 @@ def pred_sv_chunk_semseg(args):
     """
 
     from syconn.proc.sd_proc import sos_dict_fact, init_sos
-    from elektronn3.models.base import InferenceModel
     from syconn.backend.storage import CompressedStorage
+    from syconn.handler.prediction import get_semseg_spiness_model
     so_chunk_paths = args[0]
-    model_kwargs = args[1]
-    so_kwargs = args[2]
-    pred_kwargs = args[3]
+    so_kwargs = args[1]
+    pred_kwargs = args[2]
 
     # By default use views after glia removal
     if 'woglia' in pred_kwargs:
@@ -1874,7 +1875,7 @@ def pred_sv_chunk_semseg(args):
     else:
         raw_only = False
 
-    model = InferenceModel(**model_kwargs)
+    model = get_semseg_spiness_model()
     for p in so_chunk_paths:
         # get raw views
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
@@ -2445,6 +2446,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
     if len(ssv_syncoords) == 0:
         return
+    ssv_synids = np.array([syn.id for syn in sso.syn_ssv])
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
     ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
@@ -2459,12 +2461,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                                         'dist_axoness_averaging'])
     curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
     ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
+    ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
     if len(ssv_syncoords) == 0:  # node spine head synapses
         return
     kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
     _, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
     # iterate over connected skeleton nodes labeled as spine head
-    for c, node_ix in zip(ssv_syncoords, close_node_ids):
+    for c, node_ix, ssv_id in zip(ssv_syncoords, close_node_ids, ssv_synids):
         # get closest skeleton node
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
@@ -2525,8 +2528,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 log_reps.warn(f'SSO {sso.id} contained erroneous volume'
                               f' to spine head assignment. Found no spine head '
                               f'cluster within 10x10x10 voxel subcube at '
-                              f'{c + offset}, expected 1. Fall-back is using '
-                              f'the volume of the closest spine head cluster '
+                              f'{c + offset} of syn_ssv with ID={ssv_id}, expected 1. '
+                              f'Fall-back is using the volume of the closest spine head cluster '
                               f'via nearest-neighbor.')
             else:
                 max_id = ids[np.argmax(cnts)]

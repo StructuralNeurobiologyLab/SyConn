@@ -4,9 +4,10 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 # import here, otherwise it might fail if it is imported after importing torch
 # see https://github.com/pytorch/pytorch/issues/19739
-import open3d
+import open3d as o3d
 from ..handler.config import initialize_logging
 from ..reps import log_reps
 from ..mp import batchjob_utils as qu
@@ -19,27 +20,24 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
 from .. import global_params
 
 import re
-from sklearn.preprocessing import label_binarize
 import numpy as np
 import os
 import sys
-from multiprocessing import Process, Queue
 import time
 import tqdm
 from logging import Logger
 import shutil
-from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple, Generator
-from scipy.ndimage import zoom
+from typing import Iterable, Union, Optional, Any, Tuple, Callable
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
 from knossos_utils.knossosdataset import KnossosDataset
-from sklearn.metrics import log_loss
 from scipy.stats import entropy
 from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
+import torch
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
@@ -1038,52 +1036,11 @@ class NeuralNetworkInterface(object):
         return proba
 
 
-def get_axoness_model():
-    """
-    Retrained with GP dendrites. May 2018.
-    """
-    m = NeuralNetworkInterface(global_params.config.mpath_axoness,
-                               imposed_batch_size=200,
-                               nb_labels=3, normalize_data=True)
-    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
-    return m
-
-
-def get_axoness_model_e3():
-    """Those networks are typically trained with `naive_view_normalization_new` """
-    from elektronn3.models.base import InferenceModel
-    path = global_params.config.mpath_axoness_e3
-    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
-    return m
-
-
-def get_glia_model():
-    m = NeuralNetworkInterface(global_params.config.mpath_glia,
-                               imposed_batch_size=200, nb_labels=2,
-                               normalize_data=True)
-    _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
-    return m
-
-
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
-    path = global_params.config.mpath_glia_e3
-    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
-    return m
-
-
-def get_celltype_model(init_gpu=None):
-    """
-    Retrained on new GT on Jan. 13th, 2019.
-    """
-    # this model was trained with 'naive_view_normalization_new'
-    m = NeuralNetworkInterface(global_params.config.mpath_celltype,
-                               imposed_batch_size=2, nb_labels=4,
-                               normalize_data=True,
-                               normalize_func=naive_view_normalization_new,
-                               init_gpu=init_gpu)
-    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    m = torch.jit.load(global_params.config.mpath_glia_e3)
+    m = InferenceModel(m, normalize_func=naive_view_normalization_new)
     return m
 
 
@@ -1100,26 +1057,8 @@ def get_celltype_model_e3():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    path = global_params.config.mpath_celltype_e3
-    m = InferenceModel(path, bs=40)
-    return m
-
-
-def get_celltype_model_large_e3():
-    """Those networks are typically trained with `naive_view_normalization_new`
-     Unlike the other e3 InferenceModel instances, here the view normalization
-     is applied in the downstream inference method (`predict_sso_celltype`)
-      because the celltype model also gets scalar values as input which should
-      not be normalized."""
-    try:
-        from elektronn3.models.base import InferenceModel
-    except ImportError as e:
-        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
-              "com/ELEKTRONN/elektronn3' for more information.".format(e)
-        log_main.error(msg)
-        raise ImportError(msg)
-    path = global_params.config.mpath_celltype_large_e3
-    m = InferenceModel(path)
+    m = torch.jit.load(global_params.config.mpath_celltype_e3)
+    m = InferenceModel(m, bs=40, multi_gpu=False)
     return m
 
 
@@ -1132,7 +1071,8 @@ def get_semseg_spiness_model():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_spiness
-    m = InferenceModel(path)
+    m = torch.jit.load(path)
+    m = InferenceModel(m)
     m._path = path
     return m
 
@@ -1146,7 +1086,8 @@ def get_semseg_axon_model():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_axonsem
-    m = InferenceModel(path)
+    m = torch.jit.load(path)
+    m = InferenceModel(m)
     m._path = path
     return m
 
@@ -1160,22 +1101,8 @@ def get_tripletnet_model_e3():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    m_path = global_params.config.mpath_tnet
-    m = InferenceModel(m_path)
-    return m
-
-
-def get_tripletnet_model_large_e3():
-    """Those networks are typically trained with `naive_view_normalization_new` """
-    try:
-        from elektronn3.models.base import InferenceModel
-    except ImportError as e:
-        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
-              "com/ELEKTRONN/elektronn3' for more information.".format(e)
-        log_main.error(msg)
-        raise ImportError(msg)
-    m_path = global_params.config.mpath_tnet_large
-    m = InferenceModel(m_path)
+    m = torch.jit.load(global_params.config.mpath_tnet)
+    m = InferenceModel(m)
     return m
 
 
@@ -1193,8 +1120,8 @@ def get_myelin_cnn():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    m_path = global_params.config.mpath_myelin
-    m = Predictor(m_path)
+    m = torch.jit.load(global_params.config.mpath_myelin)
+    m = Predictor(m)
     return m
 
 
@@ -1361,39 +1288,3 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     # convert to certainty estimate
     return 1 - entr_norm
 
-
-pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
-
-
-def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
-                        num_obj_types: int, onehot: bool = True,
-                        npoints: Optional[int] = None, use_syntype: bool = True,
-                        downsample: Optional[float] = None):
-    # TODO: add optional downsampling here
-    feat_dc = dict(feat_dc)
-    if use_syntype:
-        if 'syn_ssv' in feat_dc:
-            del feat_dc['syn_ssv']
-    else:
-        if 'syn_ssv_sym' in feat_dc:
-            del feat_dc['syn_ssv_sym']
-        if 'syn_ssv_asym' in feat_dc:
-            del feat_dc['syn_ssv_asym']
-    if cellshape_only is True:
-        sample_pts = sample_pts['sv']
-        sample_feats = np.ones((len(sample_pts), 1)) * feat_dc['sv']
-    else:
-        sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
-                                       for k in feat_dc.keys()])
-        if onehot:
-            sample_feats = label_binarize(sample_feats, classes=np.arange(num_obj_types))
-        else:
-            sample_feats = sample_feats[..., None]
-        # len(sample_feats) is the equal to the total number of vertices
-        sample_pts = np.concatenate([sample_pts[k] for k in feat_dc.keys()])
-    if npoints is not None:
-        idx_arr = np.random.choice(np.arange(len(sample_pts)),
-                                   npoints, replace=len(sample_pts) < npoints)
-        sample_pts = sample_pts[idx_arr]
-        sample_feats = sample_feats[idx_arr]
-    return sample_pts, sample_feats

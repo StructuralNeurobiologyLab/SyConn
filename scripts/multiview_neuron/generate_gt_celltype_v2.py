@@ -84,8 +84,7 @@ if __name__ == "__main__":
 
     # --------------------------------------------------------------------------
     # TEST PREDICTIONS OF TRAIN AND VALIDATION DATA
-    from syconn.handler.prediction import get_celltype_model_large_e3, \
-        get_tripletnet_model_large_e3, get_celltype_model_e3
+    from syconn.handler.prediction import get_celltype_model_e3
     from syconn.proc.stats import cluster_summary, projection_tSNE, model_performance
     from elektronn3.models.base import InferenceModel
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject

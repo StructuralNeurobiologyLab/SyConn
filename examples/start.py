@@ -5,6 +5,9 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
+from syconn import global_params
+from syconn.handler.config import generate_default_conf, initialize_logging
+
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 import numpy as np
@@ -15,10 +18,7 @@ import sys
 import time
 import argparse
 
-from syconn import global_params
-from syconn.handler.config import generate_default_conf, initialize_logging
 
-import pdb
 if __name__ == '__main__':
     # pare arguments
     parser = argparse.ArgumentParser(description='SyConn example run')
@@ -37,8 +37,8 @@ if __name__ == '__main__':
     example_wd = os.path.expanduser(args.working_dir) + "/"
 
     # set up basic parameter, log, working directory and config file
-    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
     experiment_name = 'j0126_example'
+    log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
     prior_glia_removal = True
     key_val_pairs_conf = [
@@ -61,8 +61,8 @@ if __name__ == '__main__':
         chunk_size = (256, 256, 256)
     else:
         chunk_size = (512, 512, 256)
-    n_folders_fs = 1000
-    n_folders_fs_sc = 1000
+    n_folders_fs = 100
+    n_folders_fs_sc = 100
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
                      os.path.expanduser('~/SyConn/')]:
@@ -80,11 +80,12 @@ if __name__ == '__main__':
 
     generate_default_conf(example_wd, scale,
                           key_value_pairs=key_val_pairs_conf,
-                          force_overwrite=True)
+                          force_overwrite=False)
 
-    if global_params.wd is not None:
-        log.critical('Example run started. Working directory was overwritten and set'
-                     ' to "{}".'.format(example_wd))
+    if global_params.config.working_dir is not None and global_params.config.working_dir != example_wd:
+        msg = f'Active working directory is already set to "{example_wd}". Aborting.'
+        log.critical(msg)
+        raise RuntimeError(msg)
 
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
@@ -168,20 +169,24 @@ if __name__ == '__main__':
 
     log.info('Finished example cube initialization (shape: {}). Starting'
              ' SyConn pipeline.'.format(bd))
+
+    # START SyConn
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    #exec_dense_prediction.predict_myelin()
+    # exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
+
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,n_folders_fs_sc=n_folders_fs_sc)
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                    n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
 
     time_stamps.append(time.time())
@@ -190,7 +195,7 @@ if __name__ == '__main__':
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction(e3=True)
+        exec_multiview.run_glia_prediction()
         exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')

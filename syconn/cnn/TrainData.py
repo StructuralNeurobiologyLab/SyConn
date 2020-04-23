@@ -11,11 +11,12 @@ import matplotlib
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 from knossos_utils import KnossosDataset
+import pandas
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
-from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, \
-    generate_pts_sample, pts_feat_dict
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
+from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, pts_feat_dict, pts_loader_glia
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -29,8 +30,6 @@ except ImportError as e:
 import os
 import threading
 from sklearn.model_selection import train_test_split
-from sklearn.decomposition import PCA
-from functools import lru_cache
 try:
     from torch.utils.data import Dataset
     import torch
@@ -40,7 +39,6 @@ except ImportError as e:
     elektronn3_avail = False
     Dataset = None
     Identity = None
-from morphx.classes.pointcloud import PointCloud
 from typing import Callable
 from sklearn.utils.class_weight import compute_class_weight
 import h5py
@@ -59,75 +57,41 @@ if elektronn3_avail:
         """
         Loader for cell vertices.
         """
-        def __init__(self, base_dir=None, npoints=20000, transform: Callable = Identity(),
+        def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
                      train=True, cv_val=0, cellshape_only=False, use_syntype=True,
-                     onehot=True):
+                     onehot=True, batch_size=1):
             """
-            Notes:
-                Cache re-usage is set to 10.
-
-            Code used to produce the npz files:
-
-                ply_header = '''ply
-                format ascii 1.0
-                element vertex %(vert_num)d
-                property float x
-                property float y
-                property float z
-                property uchar red
-                property uchar green
-                property uchar blue
-                end_header
-
-                '''
-                def write_ply(fn, verts, colors):
-                    #verts = verts.reshape(-1, 3)
-                    #colors = colors.reshape(-1, 3)
-                    verts = np.hstack([verts, colors])
-                    with open(fn, 'wb') as f:
-                        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
-                        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
-
-                import os
-                import tqdm
-                col_dc = {'sv': [[200, 200, 200]], 'mi': [[100, 100, 200]], 'syn_ssv_sym': [[200, 100, 200]], 'syn_ssv_asym':[[250, 100, 100]], 'vc': [[100, 200, 100]], 'syn_ssv': [[200, 100, 100]]}
-                base_dir = '/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4/pts_arrays/'
-                os.makedirs(base_dir, exist_ok=True)
-                for ssv in tqdm.tqdm(ssd.ssvs, total=len(ssd.ssv_ids), leave=False):
-                    out_dc = {}
-                    for k in col_dc:
-                        out_dc[k] = ssv.load_mesh(k)[1].reshape(-1, 3)
-                    # ssv.meshes2kzip(f'{base_dir}/{ssv.id}.k.zip')
-                    verts_tot = np.concatenate(list(out_dc.values()))
-                    col_tot = []
-                    for k, v in out_dc.items():
-                        if len(v) > 0:
-                            col_tot.append(np.array(col_dc[k]*len(v), dtype=np.uint8))
-                        else:
-                            col_tot.append(np.zeros((0, 3), dtype=np.uint8))
-                    col_tot = np.concatenate(col_tot, axis=0)
-                    write_ply(f'{base_dir}/{ssv.id}.ply', verts_tot, col_tot)
-                    np.savez(f'{base_dir}/{ssv.id}.npz', **out_dc)
-
 
             Args:
-                base_dir : Folder with the .npy files storing the cell mesh vertices.
+                ssd_kwargs : Kwargs to init the SuperSegmentationDataset which contains
+                    the GT
                 train :  True, or False (-> validation data will be used with key 'valid')
                 transform : transformations which are applied in `__getitem__`.
                 cv_val : Cross validation value.
                 use_syntype: If True, uses different features for symmetric and asymmetric
                     synapses,
             """
+            # TODO: built in cellshape_only, use_syntype, onehot again
+            if not use_syntype or cellshape_only or not onehot:
+                raise NotImplementedError
+            if not (onehot and use_syntype and not cellshape_only):
+                raise NotImplementedError
             super().__init__()
-            if 'wb' not in socket.gethostname():
-                gt_dir = '/home/pschuber/GT_celltype_pts/'
+            if ssd_kwargs is not None:
+                self.ssd_kwargs = ssd_kwargs
+            elif 'wb' not in socket.gethostname():
+                wd_path = os.path.expanduser('~/mnt/wb//wholebrain/songbird/j0126/areaxfs_v6/')
+                self.ssd_kwargs = dict(working_dir=wd_path, version='ctgt_v4')
             else:
-                gt_dir = '/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4/'
-            log_cnn.info(f'Set "{gt_dir}" as GT directory.')
-            if base_dir is None:
-                base_dir = f'{gt_dir}/pts_arrays/'
+                self.ssd_kwargs = dict(working_dir='/wholebrain/songbird/j0126/areaxfs_v6/',
+                                       version='ctgt_v4')
+            ssd = SuperSegmentationDataset(**self.ssd_kwargs)
+            gt_dir = ssd.path
+
+            log_cnn.info(f'Set {ssd} as GT source.')
+
             if cv_val is -1:
-                log_cnn.critical(f'"cval_val" was set ti -1. training will also '
+                log_cnn.critical(f'"cval_val" was set to -1. training will also '
                                  f'include validation data.')
                 split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
                 split_dc = load_pkl2obj(split_dc_path)
@@ -140,12 +104,9 @@ if elektronn3_avail:
                 split_dc['valid'] = split_dc['train']
             label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
             self.train = train
-            self._cache_cnt = 0
             self.num_pts = npoints
-            self._cached_pts = None
-            self._cached_pts_feats = None
-            self._cached_id = None
-            self._max_cache_cnt = 10 if self.train else 2
+            self._batch_size = batch_size
+            self._curr_ssv_id = None
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
@@ -156,17 +117,12 @@ if elektronn3_avail:
                 self._num_obj_types = 4
             self.label_dc = label_dc
             self.splitting_dict = split_dc
-            id_key = "train" if train else "valid"
-            fnames = []
-            sso_ids = []
-            for sso_id in split_dc[id_key]:
-                sso_ids.append(sso_id)
-                fnames.append(f'{base_dir}/{sso_id}.npz')
-            self.fnames = fnames
-            self.sso_ids = sso_ids
-            print('Using {} .npy GT files for {}.'.format(
-                len(self.fnames), "training" if train else "validation"))
+            self.sso_ids = self.splitting_dict['train'] if train else self.splitting_dict['valid']
+            for ix in self.sso_ids:
+                if ix not in ssd.ssv_ids:
+                    raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
             self.transform = transform
+            print(f'Using splitting dict at "{split_dc_path}".')
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
@@ -186,68 +142,53 @@ if elektronn3_avail:
                 Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
-            if self._cache_cnt > self._max_cache_cnt or self._cached_pts is None:
-                self._cache_cnt = 0
-                if self.train:
-                    item = np.random.randint(0, len(self.fnames))
-                self._cached_id = self.sso_ids[item]
-                self._cached_pts, self._cached_pts_feats = self.load_ssv_sample(item)
-                if np.any(np.isnan(self._cached_pts)):
-                    log_cnn.error(f'Cell {self._cached_id} contains NaN vertices.')
-                    raise()
-
-            # TODO: reseed deterministically
-            idx_arr = np.random.choice(np.arange(len(self._cached_pts)), self.num_pts,
-                                       replace=len(self._cached_pts) < self.num_pts)
-            pc = PointCloud(vertices=self._cached_pts[idx_arr])
-            self.transform(pc)
-            if np.any(np.isnan(pc.vertices)):
-                log_cnn.error(f'PointCloud of {self._cached_id} contains'
-                              f' NaN vertices.')
-                raise ()
-            pts = torch.from_numpy(np.asarray(pc.vertices)).float()
-            if np.any(np.isnan(pc.vertices)):
-                log_cnn.error(f'PointCloud after transformations of cell'
-                              f' {self._cached_id} contains NaN vertices.')
-                raise ()
-            lbs = torch.from_numpy(self.label_dc[self._cached_id][None].astype(np.int)).long()
-            feats = torch.from_numpy(self._cached_pts_feats[idx_arr]).float()
-            self._cache_cnt += 1
+            item = np.random.randint(0, len(self.sso_ids))
+            self._curr_ssv_id = self.sso_ids[item]
+            pts, feats = self.load_ssv_sample(item)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size,
+                           dtype=np.int)
+            pts = torch.from_numpy(pts).float()
+            lbs = torch.from_numpy(lbs[..., None]).long()
+            feats = torch.from_numpy(feats).float()
             return {'pts': pts, 'features': feats, 'target': lbs}
 
         def __len__(self):
             if self.train:
-                return len(self.fnames) * 50
+                # make use of the underlying LRU cache with high epoch size,
+                # worker instances of the pytorch loader will reset after each epoch
+                return len(self.sso_ids) * 20
             else:
-                return 100
+                return max(len(self.sso_ids) // 5, 1)
 
-        def load_ssv_sample(self, item, npoints=None):
+        def load_ssv_sample(self, item: int, draw_local: bool = False):
             """
+            Args:
+                item: Cell ID.
+                draw_local: Sample two similar samples from the same location.
+
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
+
+            Returns:
+                if draw_local:
+                    Two tuples of points and features: [(pts0, feat0), (pts1, feat1)]
+                else:
+                    point and feature array; if batch size is 1, the first axis is removed.
             """
-            sample_pts = _load_npz(self.fnames[item])
-            if self.cellshape_only is True:
-                sample_pts = sample_pts['sv']
-                sample_feats = np.ones((len(sample_pts), 1)) * self._feat_dc['sv']
+            if draw_local:
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
+                    self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
+                    self.num_pts, transform=self.transform, train=True, draw_local=True)][0]
             else:
-                sample_pts, sample_feats = generate_pts_sample(
-                    sample_pts, self._feat_dc, self.cellshape_only, self._num_obj_types,
-                    self.onehot, npoints, self.use_syntype)
-            return sample_pts, sample_feats
-
-
-    @lru_cache(maxsize=256)
-    def _load_npz(fname):
-        pts = np.load(fname)
-        sample_pts = {k: None for k in pts.files}
-        for k in pts.files:
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(pts[k])
-            pcd = pcd.voxel_down_sample(voxel_size=50)
-            sample_pts[k] = np.asarray(pcd.points)
-        return sample_pts
+                sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
+                    self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
+                    self.num_pts, transform=self.transform, train=True)][0]
+            assert np.unique(sso_id) == self.sso_ids[item]
+            if self._batch_size == 1 and not draw_local:
+                return sample_pts[0], sample_feats[0]
+            else:
+                return sample_pts, sample_feats
 
 
     class CellCloudDataTriplet(CellCloudData):
@@ -255,59 +196,160 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, **kwargs):
+        def __init__(self, draw_local: bool=True, **kwargs):
+            """
+
+            Args:
+                draw_local: Sample two similar samples from the same location. False will learn
+                    similarities of cells, not local morphology.
+                **kwargs:
+            """
             super().__init__(**kwargs)
-            self._cached_pts_altern = None
-            self._cached_id_altern = None
-            self._cached_pts_feats_altern = None
-            self._cache_cnt_altern = 0
-            # alternative data should have different permutation pattern
-            self._max_cache_cnt_altern = max(int(self._max_cache_cnt // 3 + 1), 1)
+            self._curr_ssv_id_altern = None
+            self.draw_local = draw_local
 
         def __getitem__(self, item):
-            if self._cache_cnt_altern > self._max_cache_cnt_altern \
-                    or self._cached_pts_altern is None:
-                self._cache_cnt_altern = 0
-                if self.train:
-                    item = np.random.randint(0, len(self.fnames))
-                self._cached_id_altern = self.sso_ids[item]
-                self._cached_pts_altern, self._cached_pts_feats_altern \
-                    = self.load_ssv_sample(item)
+            item = np.random.randint(0, len(self.sso_ids))
+            self._curr_ssv_id_altern = self.sso_ids[item]
+            pts_altern, feats_altern = self.load_ssv_sample(item)
 
-            # TODO: reseed deterministically
-            idx_arr = np.random.choice(np.arange(len(self._cached_pts_altern)),
-                                       self.num_pts)
-            pc = PointCloud(vertices=self._cached_pts_altern[idx_arr])
-            self.transform(pc)
+            pts_altern = torch.from_numpy(pts_altern).float()
+            feats_altern = torch.from_numpy(feats_altern).float()
 
-            pts = torch.from_numpy(pc.vertices).float()
-            feats = torch.from_numpy(self._cached_pts_feats_altern[idx_arr]).float()
-
-            # draw two times from a different cell
+            # draw base and similar sample from a different cell
             while True:
-                ix = np.random.randint(0, len(self.fnames))
-                if self.sso_ids[ix] != self._cached_id_altern:
-                    self._cached_id = self.sso_ids[ix]
+                ix = np.random.randint(0, len(self.sso_ids))
+                if self.sso_ids[ix] != self._curr_ssv_id_altern:
+                    self._curr_ssv_id = self.sso_ids[ix]
                     break
-            x0 = self.load_ssv_sample(ix, self.num_pts)  # base sample
-            pc = PointCloud(vertices=x0[0])
-            self.transform(pc)
-            x0 = {'pts': torch.from_numpy(pc.vertices).float(), 'features':
-                  torch.from_numpy(x0[1]).float()}
+            if self.draw_local:
+                # consecutive samples belong together
+                pts, feats = self.load_ssv_sample(ix, draw_local=True)
+                pts0, pts1 = pts[0::2], pts[1::2]
+                feats0, feats1 = feats[0::2], feats[1::2]
+            else:
+                pts0, feats0 = self.load_ssv_sample(ix)  # base sample
+                pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
 
-            x1 = self.load_ssv_sample(ix, self.num_pts)  # similar sample to base
-            pc = PointCloud(vertices=x1[0])
-            self.transform(pc)
-            x1 = {'pts': torch.from_numpy(pc.vertices).float(), 'features':
-                  torch.from_numpy(x1[1]).float()}
-            x2 = {'pts': pts, 'features': feats}  # alternative sample
-            res = {}
-            for k in x0:
-                res[k] = torch.cat([x0[k].unsqueeze(0), x1[k].unsqueeze(0),
-                                    x2[k].unsqueeze(0)], dim=0)
-            del x0, x1, x2
-            self._cache_cnt_altern += 1
-            return res
+            x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
+                  torch.from_numpy(feats0).float()}
+            x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
+                  torch.from_numpy(feats1).float()}
+            x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+            return x0, x1, x2
+
+
+    class CellCloudGlia(Dataset):
+        """
+        Loader for cell vertices.
+        """
+
+        def __init__(self, npoints=20000, transform: Callable = Identity(),
+                     train=True, batch_size=1, use_subcell=False):
+            """
+
+            Args:
+                train :  True, or False (-> validation data will be used with key 'valid')
+                transform : transformations which are applied in `__getitem__`.
+            """
+            if 'wb' not in socket.gethostname():
+                wd_path = os.path.expanduser('~/mnt/wb//wholebrain/songbird/j0126/areaxfs_v6/')
+            else:
+                wd_path = '/wholebrain/songbird/j0126/areaxfs_v6/'
+            ssd = SuperSegmentationDataset(wd_path)
+
+            # Define specific subset with no glia merges
+            nonglia_ssv_ids = np.array([
+                10919937, 16096256, 23144450, 2734465, 34811392, 491527,
+                15933443, 16113665, 24414208, 2854913, 37558272, 8339462,
+                15982592, 18571264, 26501121, 33581058, 46319619], dtype=np.uint)
+            # use celltype GT
+            csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
+            df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
+            nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint), nonglia_ssv_ids])
+
+            self.sso_params = [(sso.id, sso.ssd_kwargs) for sso in
+                               ssd.get_super_segmentation_object(nonglia_ssv_ids)]
+            ssd_glia = SuperSegmentationDataset(working_dir=wd_path, version='gliagt')
+            self.sso_params += [(sso.id, sso.ssd_kwargs) for sso in ssd_glia.ssvs]
+            log_cnn.info(f'Set {ssd} as GT source.')
+
+            # get dataset statistics
+            self.label_dc = {sso_id: 0 for sso_id in nonglia_ssv_ids}
+            self.label_dc.update({sso_id: 1 for sso_id in ssd_glia.ssv_ids})
+            classes, c_cnts = np.unique([self.label_dc[ix] for ix in
+                                         self.label_dc], return_counts=True)
+            size_cnt_glia = [sso.size for sso in ssd_glia.ssvs]
+            size_cnt_neuron = [sso.size for sso in ssd.get_super_segmentation_object(nonglia_ssv_ids)]
+            print(f"neuron (0): {np.sum(size_cnt_neuron)//1e9} GVx\n"
+                  f"glia (1): {np.sum(size_cnt_glia)//1e9} GVx")
+            print(f"[labels, cell count]: {classes}, {c_cnts}")
+
+            if use_subcell:  # TODO: add syntype
+                self._num_obj_types = 4
+            else:
+                self._num_obj_types = 1
+            self.use_subcell = use_subcell
+            self.train = train
+            self.num_pts = npoints
+            self._batch_size = batch_size
+            self._curr_ssv_id = None
+            self._curr_ssd_kwargs = None
+            self._curr_ssv_label = None
+            self._feat_dc = pts_feat_dict
+            self.transform = transform
+
+        def __getitem__(self, item):
+            """
+            Samples random points (with features) from the cell vertices.
+            Features are set to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending
+            on the vertex type. The subset of vertices is drawn randomly (uniformly).
+
+            Args:
+                item : If ``self.train=True``, `item` will be overwritten by
+                    ``np.random.randint(0, len(self.fnames))``.
+
+            Returns:
+                Point array (N, 3), feature array (N, ), cell label (scalar). N
+                is the number of points set during initialization.
+            """
+            item = np.random.randint(0, len(self.sso_params))
+            pts, feats, out_pts, out_l = self.load_ssv_sample(item)
+            pts = torch.from_numpy(pts).float()
+            feats = torch.from_numpy(feats).float()
+            out_pts = torch.from_numpy(out_pts).float()
+            lbs = torch.from_numpy(out_l).long()
+            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': lbs}
+
+        def __len__(self):
+            if self.train:
+                # make use of the underlying LRU cache with high epoch size,
+                # worker instances of the pytorch loader will reset after each epoch
+                return len(self.sso_params) * 15
+            else:
+                return max(len(self.sso_params) // 10, 1)
+
+        def load_ssv_sample(self, item: int):
+            """
+            Args:
+                item: Cell ID.
+
+            Internal parameters:
+                * `feat_dc`: Labels for the different point types:
+                  ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
+
+            Returns:
+                point and feature array; if batch size is 1, the first axis is removed.
+            """
+            self._curr_ssv_id, self._curr_ssd_kwargs = self.sso_params[item]
+            self._curr_ssv_label = self.label_dc[self.sso_params[item][0]]
+            sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
+                [*pts_loader_glia(self.sso_params[item:item+1], [self._curr_ssv_label], self._batch_size,
+                self.num_pts, transform=self.transform, use_subcell=self.use_subcell)][0]
+            if self._batch_size == 1:
+                return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
+            else:
+                return sample_pts, sample_feats, out_pts, out_labels
 
 
     class MultiviewDataCached(Dataset):
@@ -338,7 +380,7 @@ if elektronn3_avail:
             if self.train:
                 self.num_read_limit = num_read_limit
             else:
-                self.num_read_limit = 1  #no need to repeat sample points in validation
+                self.num_read_limit = 1  # no need to repeat sample points in validation
             self.secondary = self.secondary_t = None
             self.read(0)
             self.primary, self.primary_t = self.secondary, self.secondary_t

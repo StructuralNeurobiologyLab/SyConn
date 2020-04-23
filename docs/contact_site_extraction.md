@@ -17,6 +17,7 @@ It consists of two steps: (1) Finding and extracting contact sites between super
 * KnossosDataset of symmetric, asymmetric and SJ predictions (WIP)
 
 ## Finding Contact Sites
+# TODO: this needs to be adapted to the new extraction procedure
 
 Contact sites are detected from a segmentation stored in knossos overlaycubes and saved to a chunk dataset (see `chunk_prediction` for details on how to create chunk datasets).
 This combines all contact sites between two supervoxels into a single object. `combine_and_split_cs_agg` splits these apart later, based on connected components.

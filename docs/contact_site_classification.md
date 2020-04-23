@@ -23,7 +23,7 @@ Mapping these objects helps to improve the features used for classifying the con
 In principle, one could imagine that the overlap between a synapse object and a contact site object is already a sufficient identification of a synapse between two neurites. In practice, we found that a further classification can improve the performance,
 because it can incorporate other relevant features, such as vesicles clouds in proximity.
 
-    cps.create_syn_gt(sd_syn_ssv, path_to_gt_kzip)
+    cps.create_syn_rfc(sd_syn_ssv, path_to_gt_kzip)
 
 creates the ground truth for the RFC and also trains and stores the classifier. Then, the ``SegmentationObjects`` of type ``syn_ssv`` can be classified with
 

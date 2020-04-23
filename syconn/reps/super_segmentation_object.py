@@ -161,7 +161,7 @@ class SuperSegmentationObject(object):
                  object_caching: bool = True, voxel_caching: bool = True,
                  mesh_caching: bool = True, view_caching: bool = False,
                  config: Optional[DynConfig] = None, nb_cpus: int = 1,
-                 enable_locking: bool = True, enable_locking_so: bool = False,
+                 enable_locking: bool = False, enable_locking_so: bool = False,
                  ssd_type: str = "ssv"):
         """
 
@@ -197,18 +197,14 @@ class SuperSegmentationObject(object):
         if version == 'temp':
             version = 'tmp'
         if version == "tmp":
-            self._object_caching = False
-            self._voxel_caching = False
-            self._mesh_caching = False
-            self._view_caching = False
             self.enable_locking = False
             create = False
         else:
             self.enable_locking = enable_locking
-            self._object_caching = object_caching
-            self._voxel_caching = voxel_caching
-            self._mesh_caching = mesh_caching
-            self._view_caching = view_caching
+        self._object_caching = object_caching
+        self._voxel_caching = voxel_caching
+        self._mesh_caching = mesh_caching
+        self._view_caching = view_caching
 
         self.enable_locking_so = enable_locking_so
         self.nb_cpus = nb_cpus
@@ -256,7 +252,10 @@ class SuperSegmentationObject(object):
                 raise ValueError(msg)
         else:
             self._working_dir = working_dir
-            self._config = DynConfig(working_dir)
+            if self._config is None:
+                self._config = DynConfig(working_dir)
+            else:
+                assert self._config.working_dir == self._working_dir
 
         if global_params.wd is None:
             global_params.wd = self._working_dir
@@ -319,10 +318,10 @@ class SuperSegmentationObject(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.id, self.type, self.version, self.ssv_dir)
+        return (f'{type(self).__name__}(ssv_id={self.id}, ssd_type="{self.type}", '
+                f'version="{self.version}", working_dir="{self.working_dir}")')
 
-    #                                                       IMMEDIATE PARAMETERS
+    # IMMEDIATE PARAMETERS
     @property
     def type(self) -> str:
         """
@@ -384,7 +383,7 @@ class SuperSegmentationObject(object):
         """
         return self._scaling
 
-    #                                                                      PATHS
+    # PATHS
     @property
     def working_dir(self) -> str:
         """
@@ -402,7 +401,7 @@ class SuperSegmentationObject(object):
         return "%s_%s" % (self.type, self.version.lstrip("_"))
 
     @property
-    def ssds_dir(self) -> str:
+    def ssd_dir(self) -> str:
         """
         Path to the
         :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
@@ -411,11 +410,16 @@ class SuperSegmentationObject(object):
         return "%s/%s/" % (self.working_dir, self.identifier)
 
     @property
+    def ssd_kwargs(self):
+        return dict(working_dir=self.working_dir, version=self.version,
+                    ssd_type=self.type, sso_locking=self.enable_locking)
+
+    @property
     def ssv_dir(self) -> str:
         """
         Path to the folder where the data of this super-supervoxel is stored.
         """
-        return "%s/so_storage/%s/" % (self.ssds_dir,
+        return "%s/so_storage/%s/" % (self.ssd_dir,
                                       subfold_from_ix_SSO(self.id))
 
     @property
@@ -475,13 +479,14 @@ class SuperSegmentationObject(object):
         """Identifier of vertex label storage"""
         return self.ssv_dir + "vlabel_dc.pkl"
 
-    #                                                                        IDS
+    # IDS
     @property
     def sv_ids(self) -> np.ndarray:
         """
         All cell supervoxel IDs which are assigned to this cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("sv")
+        # must be <= uint32
+        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint32)
 
     @property
     def sj_ids(self) -> np.ndarray:
@@ -489,7 +494,7 @@ class SuperSegmentationObject(object):
         All synaptic junction (sj) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("sj")
+        return np.array(self.lookup_in_attribute_dict("sj"), dtype=np.uint)
 
     @property
     def mi_ids(self) -> np.ndarray:
@@ -497,7 +502,7 @@ class SuperSegmentationObject(object):
         All mitochondria (mi) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("mi")
+        return np.array(self.lookup_in_attribute_dict("mi"), dtype=np.uint)
 
     @property
     def vc_ids(self) -> np.ndarray:
@@ -505,7 +510,7 @@ class SuperSegmentationObject(object):
         All vesicle cloud (vc) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return self.lookup_in_attribute_dict("vc")
+        return np.array(self.lookup_in_attribute_dict("vc"), dtype=np.uint)
 
     @property
     def dense_kzip_ids(self) -> Dict[str, int]:
@@ -514,7 +519,7 @@ class SuperSegmentationObject(object):
         """
         return dict([("mi", 1), ("vc", 2), ("sj", 3)])
 
-    #                                                        SEGMENTATIONOBJECTS
+    # SegmentationObjects
     @property
     def svs(self) -> List[SegmentationObject]:
         """
@@ -559,7 +564,7 @@ class SuperSegmentationObject(object):
         """
         return self.get_seg_objects("syn_ssv")
 
-    #                                                                     MESHES
+    # MESHES
     def load_mesh(self, mesh_type) -> Optional[MeshType]:
         """
         Load mesh of a specific type, e.g. 'mi', 'sv' (cell supervoxel), 'sj' (connected
@@ -648,7 +653,7 @@ class SuperSegmentationObject(object):
             raise ValueError('Label dict for data type "{}" not supported.'
                              ''.format(data_type))
 
-    #                                                                 PROPERTIES
+    # PROPERTIES
     def celltype(self, key: Optional[str] = None) -> int:
         """
         Returns the cell type classification result. Default: CMN model, if
@@ -1683,7 +1688,9 @@ class SuperSegmentationObject(object):
         self._voxels_xy_downsampled = None
         self._views = None
         self._sample_locations = None
-        self._meshes = None
+        self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
+                        "vc": None, "mi": None, "conn": None,
+                        "syn_ssv_sym": None, "syn_ssv_asym": None}
         self.skeleton = None
 
     def preprocess(self):
@@ -3388,18 +3395,11 @@ def celltype_predictor(args):
     Returns:
 
     """
-    # from ..handler.prediction import get_celltype_model
-    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3, \
-        get_tripletnet_model_large_e3, get_celltype_model_large_e3
+    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3
     ssv_ids = args
     # randomly initialize gpu
-    # m = get_celltype_model(init_gpu=0)
-    if not global_params.config.use_large_fov_views_ct:
-        m = get_celltype_model_e3()
-        m_tnet = get_tripletnet_model_e3()
-    else:
-        m = get_celltype_model_large_e3()
-        m_tnet = get_tripletnet_model_large_e3()
+    m = get_celltype_model_e3()
+    m_tnet = get_tripletnet_model_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:

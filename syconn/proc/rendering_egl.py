@@ -18,9 +18,11 @@ from . import log_proc
 from .. import global_params
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
 
-os.environ['PYOPENGL_PLATFORM'] = 'egl'
+if os.environ['PYOPENGL_PLATFORM'] != 'egl':
+    raise EnvironmentError(f'PyOpenGL backened should be "egl". '
+                           f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
-OpenGL.USE_ACCELERATE = True  # unclear behavior
+OpenGL.USE_ACCELERATE = True
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL.framebufferobjects import *
@@ -514,14 +516,10 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         view_sh = (nb_views, ws[1], ws[0])
     else:
         view_sh = (nb_views, ws[1], ws[0], 4)
-    log_proc.debug('Initializing result array.')
     res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
-    log_proc.debug('Initializing OpenGL.')
     init_opengl(ws, depth_map=depth_map, clear_value=1.0,
                 smooth_shade=smooth_shade, wire_frame=wire_frame)
-    log_proc.debug('Initializing OpenGL object.')
     init_object(indices, vertices, normals, colors, ws)
-    log_proc.debug('Starting rendering.')
     n_empty_views = 0
     if verbose:
         pbar = tqdm.tqdm(total=len(res), mininterval=0.5, leave=False)
@@ -623,7 +621,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         views_key: str
         return_rot_matrices: bool
         depth_map: bool
-        smooth_shade:
+        smooth_shade: bool
         wire_frame: bool
         nb_views:
         triangulation: bool
