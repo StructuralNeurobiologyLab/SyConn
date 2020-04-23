@@ -22,7 +22,7 @@ if os.environ['PYOPENGL_PLATFORM'] != 'osmesa':
     raise EnvironmentError(f'PyOpenGL backened should be "osmesa". '
                            f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
-OpenGL.USE_ACCELERATE = False  # unclear behavior
+OpenGL.USE_ACCELERATE = True
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL.framebufferobjects import *
