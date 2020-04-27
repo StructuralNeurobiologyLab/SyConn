@@ -116,7 +116,8 @@ def gt_generation(kzip_paths, dest_dir=None):
     if not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
 
-    dest_p_results = "{}/gt_convpoint/".format(dest_dir)
+    # dest_p_results = "{}/gt_convpoint/".format(dest_dir)
+    dest_p_results = "{}/gt_convpoint_edge/".format(dest_dir)
     if not os.path.isdir(dest_p_results):
         os.makedirs(dest_p_results)
 
@@ -134,7 +135,8 @@ if __name__ == "__main__":
     # set paths
     dest_gt_dir = "/wholebrain/scratch/yliu/merger_gt_semseg_pointcloud/"
     # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_CSfilter_kzip_v10_02/"
+    # label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_CSfilter_kzip_v10_02/"
+    label_file_folder = "/wholebrain/scratch/yliu/false_merger_generation/merger_with_edge/"
 
     file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
 

@@ -40,22 +40,34 @@ from sys import getsizeof
 # ==========================
 
 # Directory pointed to the training / validation dataset
-dataset_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_v10_5views_200_6000/'
+# dataset_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_v10_5views_200_6000_v02/'
+dataset_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_mesh/merger_(512_256)_15360_(2e3_20e3)_10k/'
 # Path to where the trained model is saved
-save_root = os.path.expanduser('~/e3training/')
+# save_root = os.path.expanduser('~/e3training/')
+save_root = os.path.expanduser('~/Unet_(512_256)_15360_(2e3_20e3)_10k/')
 
 # optimizer, choose from ['SGD', 'Adam']
 opt = 'Adam'
 
+# IMPORTANT: change this strictly according to the `ws` of your data
+# see `ws` in generate_merger_gt_semseg.py
+example_input = torch.randn(1, 4, 256, 512)
+# example_input = torch.randn(1, 4, 128, 256)
+
+# Hyper-parameters
+# lr = 0.002
+# lr_stepsize = 1000
+# lr_dec = 0.99
+# batch_size = 20
 # Hyper-parameters
 lr = 0.004
-lr_stepsize = 500
-lr_dec = 0.995
-batch_size = 6
+lr_stepsize = 1000
+lr_dec = 0.99
+batch_size = 10
 
 
 def get_model():
-    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    vgg_model = VGGNet(model='vgg19', requires_grad=True, in_channels=4)
     model = FCNs(base_net=vgg_model, n_class=3)
     # model = UNet(in_channels=4, out_channels=6, n_blocks=5, start_filts=32,
     #              merge_mode='concat', planar_blocks=(), #up_mode='resize',
@@ -104,7 +116,7 @@ if __name__ == "__main__":
     model = get_model()
     model.to(device)
 
-    example_input = torch.randn(1, 4, 128, 256)
+    # example_input = torch.randn(1, 4, 256, 512)
 
     enable_save_trace = False if args.jit == 'disabled' else True
     if args.jit == 'onsave':
@@ -196,7 +208,9 @@ if __name__ == "__main__":
     # valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.config['compartments']['gt_path_axonseg'])
 
     # criterion = LovaszLoss().to(device)
-    criterion = DiceLoss().to(device)
+    # criterion = DiceLoss().to(device)
+
+    criterion = DiceLoss(apply_softmax=True, weight=torch.tensor([0.4, 0.5, 0.1]).to(device)).to(device)
 
     valid_metrics = {
     # 'val_accuracy': metrics.bin_accuracy,

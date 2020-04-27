@@ -30,7 +30,8 @@ except ImportError:
 from elektronn3.training import metrics
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
-from elektronn3.models.unet_plusplus import NestedUNet
+from elektronn3.models.unets.nested_unet import NestedUNet
+from elektronn3.models.unets.attention_unet import AttU_Net, R2AttU_Net
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from sys import getsizeof
@@ -40,39 +41,44 @@ from sys import getsizeof
 # ==========================
 
 # Directory pointed to the training / validation dataset
-dataset_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_v10_5views_200_6000/'
+# dataset_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_v10_5views_200_6000_v02/'
+dataset_dir = '/wholebrain/scratch/yliu/merger_gt_semseg_mesh/merger_(512_256)_15360_(2e3_20e3)_10k/'
 # Path to where the trained model is saved
-save_root = os.path.expanduser('~/e3training/')
+# save_root = os.path.expanduser('~/e3training/')
+save_root = os.path.expanduser('~/Unet_(512_256)_15360_(2e3_20e3)_10k/')
 
 # optimizer, choose from ['SGD', 'Adam']
 opt = 'Adam'
 
 # Hyper-parameters
 lr = 0.004
-lr_stepsize = 500
-lr_dec = 0.995
-batch_size = 6
+# lr = 0.001
+lr_stepsize = 1000
+lr_dec = 0.99
+batch_size = 10  # batch_size=20 doesn't work with Unet++
+
+# IMPORTANT: change this strictly according to the `ws` of your data
+# see `ws` in generate_merger_gt_semseg.py
+example_input = torch.randn(1, 4, 256, 512)
+# example_input = torch.randn(1, 4, 128, 256)
 
 
-def get_model():
-    # ===================
-    # FCN
-    # ===================
-    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    # model = FCNs(base_net=vgg_model, n_class=3)
+def get_model(network="unet", unet_blocks=6, deepsupervision=False):
+    model = None
+    if network == "unet" or network == "":
+        model = UNet(in_channels=4, out_channels=3, n_blocks=unet_blocks, start_filts=32,
+                     merge_mode='concat', planar_blocks=(), #up_mode='resize',
+                     activation='relu', batch_norm=True, dim=2,)
 
-    # ===================
-    # U-Net
-    # ===================
-    model = UNet(in_channels=4, out_channels=3, n_blocks=5, start_filts=32,
-                 merge_mode='concat', planar_blocks=(), #up_mode='resize',
-                 activation='relu', batch_norm=True, dim=2,)
+    elif network == "unet++":
+        model = NestedUNet(in_channels=4, out_channels=3, deepsupervision=deepsupervision)
 
-    # ===================
-    # U-Net++
-    # ===================
-    # model = NestedUNet(in_channels=4, out_channels=3, deepsupervision=False)
-    # model = NestedUNet(in_channels=4, out_channels=3, deepsupervision=True)
+    elif network == "attention-unet":
+        model = AttU_Net(in_channels=4, out_channels=3)
+    elif network == "rcnn-attention-unet":
+        model = R2AttU_Net(in_channels=4, out_channels=3)
+    else:
+        Exception("Invalid network name, currently only ['unet', 'unet++', 'attention-unet', 'rcnn-attention-unet']")
     return model
 
 
@@ -98,6 +104,10 @@ if __name__ == "__main__":
     "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
     "train": Use traced model for training and serialize it on disk"""
     )
+    parser.add_argument('--network', type=str, default="rcnn-attention-unet", help='network architecture')
+    parser.add_argument('--unet-blocks', type=int, default=6, help='number of downsampling/upsampling layers in unet')
+    parser.add_argument('--deepsupervision', type=bool, default=False, help='number of downsampling/upsampling layers in unet')
+
     args = parser.parse_args()
     if not args.disable_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
@@ -114,22 +124,26 @@ if __name__ == "__main__":
 
     max_steps = args.max_steps
 
-    model = get_model()
+    model = get_model(args.network, args.unet_blocks, args.deepsupervision)
+    # print("U-Net: number of blocks: {}".format(model.n_blocks))
+    # print(model)
     model.to(device)
 
-    example_input = torch.randn(1, 4, 128, 256)
-    enable_save_trace = False if args.jit == 'disabled' else True
-    if args.jit == 'onsave':
-        # Make sure that tracing works
-        tracedmodel = torch.jit.trace(model, example_input.to(device))
-    elif args.jit == 'train':
-        if getattr(model, 'checkpointing', False):
-            raise NotImplementedError(
-                'Traced models with checkpointing currently don\'t '
-                'work, so either run with --disable-trace or disable '
-                'checkpointing.')
-        tracedmodel = torch.jit.trace(model, example_input.to(device))
-        model = tracedmodel
+
+    if not args.deepsupervision and args.network != 'rcnn-attention-unet':
+        # example_input = torch.randn(1, 4, 128, 256)
+        enable_save_trace = False if args.jit == 'disabled' else True
+        if args.jit == 'onsave':
+            # Make sure that tracing works
+            tracedmodel = torch.jit.trace(model, example_input.to(device))
+        elif args.jit == 'train':
+            if getattr(model, 'checkpointing', False):
+                raise NotImplementedError(
+                    'Traced models with checkpointing currently don\'t '
+                    'work, so either run with --disable-trace or disable '
+                    'checkpointing.')
+            tracedmodel = torch.jit.trace(model, example_input.to(device))
+            model = tracedmodel
 
     optimizer_state_dict = None
     lr_sched_state_dict = None
@@ -209,7 +223,8 @@ if __name__ == "__main__":
     # valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.config['compartments']['gt_path_axonseg'])
 
     # criterion = LovaszLoss().to(device)
-    criterion = DiceLoss().to(device)
+    # criterion = DiceLoss().to(device)
+    criterion = DiceLoss(apply_softmax=True, weight=torch.tensor([0.4, 0.5, 0.1]).to(device)).to(device)
 
     valid_metrics = {
         # 'val_accuracy': metrics.bin_accuracy,

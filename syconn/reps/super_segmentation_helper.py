@@ -2157,7 +2157,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
     be predicted with the given `model` and maps prediction results onto mesh.
     Vertex labels are stored on file system and can be accessed via
     `sso.label_dict('vertex')[semseg_key]`.
-    If sso._sample_locations is None it `generate_rendering_locs(verts, comp_window / 3)`
+    If sso._sample_locations is None it `semseg_of_sso_nocache(verts, comp_window / 3)`
     will be called to generate rendering locations.
 
     Examples:

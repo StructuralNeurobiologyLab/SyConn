@@ -256,6 +256,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
     if pts.ndim == 2:
+        print("pts.ndim == 2")
         if np.max(pts) <= 1:
             msg = "Currently this function only supports point " \
                   "clouds with coordinates >> 1."
@@ -294,17 +295,23 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
                     np.float32)
                 n_dilations += 1
     else:
-        volume = volume.astype(np.float32)
+        print("TEST: n_closing <= 0 ")
+        # volume = volume.astype(np.float32)
+        print("TEST: volume")
     if single_cc:
+        print("TEST: single_cc")
         labeled, nb_cc = ndimage.label(volume)
         cnt = Counter(labeled[labeled != 0])
         l, occ = cnt.most_common(1)[0]
         volume = np.array(labeled == l, dtype=np.float32)
     # InterpixelBoundary, OuterBoundary, InnerBoundary
+    print("TEST: boundaryDistanceTransform")
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary")
     dt[volume == 1] *= -1
+    print("TEST: gaussianSmoothing, 1")
     volume = gaussianSmoothing(dt, 1)
     if np.sum(volume < 0) == 0 or np.sum(volume > 0) == 0:  # less smoothing
+        print("TEST: gaussianSmoothing, 0.5")
         volume = gaussianSmoothing(dt, 0.5)
     try:
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
@@ -1138,10 +1145,11 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     # options += openmesh.Options.Binary
     mesh_obj = openmesh.TriMesh()
     ind, vert, norm = mesh
+
     if vert.ndim == 1:
-        vert = vert.reshape(-1 ,3)
+        vert = vert.reshape(-1, 3)
     if ind.ndim == 1:
-        ind = ind.reshape(-1 ,3)
+        ind = ind.reshape(-1, 3)
     if center is not None:
         vert -= center
     if scale is not None:

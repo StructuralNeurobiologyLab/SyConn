@@ -11,19 +11,21 @@ from syconn.reps.super_segmentation import *
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.meshes import merge_meshes
 from syconn.handler.basics import data2kzip, write_obj2pkl, load_pkl2obj
+from syconn.proc.ssd_proc import merge_ssv
 
 # Parameters
 
 ### Path to load dataset
-global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
+# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
 # cs_version = 'agg_0'
 
-# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
+global_params.wd = '/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/'
+# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v10_newcb_cbsplits/'
 cs_version = 0
-# global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/'  # local test
 
 # Path to store output kzip files
-folder_name = "/merger_(256_128)_30720_(2e3_20e3)_10000/"
+# folder_name = "/merger_(256_128)_30720_(2e3_20e3)_10000/"
+folder_name = "/merger_with_edge/"
 data_folder = global_params.wd.split('/')[-2]
 suffix_list = data_folder.split('_')[1:]
 pkl_version = suffix_list[0]
@@ -59,9 +61,11 @@ def write_dict_to_txt(dict, fname):
     f.write(str(dict))
     f.close()
 
+
 def read_dict_from_txt(fname: str):
     f = open(fname, 'r')
     return eval(f.read())
+
 
 def cs_partner(id) -> Optional[List[int]]:
     """
@@ -74,35 +78,8 @@ def cs_partner(id) -> Optional[List[int]]:
     partner.append(id - (partner[0] << 32))
     return partner
 
-def merge_superseg_objects(cell_obj1, cell_obj2):
 
-    # TODO: test why working_dir='/tmp/' raise some errors
-    # TODO: add the edge. General  two closest nodes, add an edge between, add to SperSeghelper
-    # merge meshes
-    merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
-    for mesh_type in ['sv', 'sj', 'syn_ssv', 'vc', 'mi']:
-        mesh1 = cell_obj1.load_mesh(mesh_type)
-        mesh2 = cell_obj2.load_mesh(mesh_type)
-        ind_lst = [mesh1[0], mesh2[0]]
-        vert_lst = [mesh1[1], mesh2[1]]
-
-        merged_cell._meshes[mesh_type] = merge_meshes(ind_lst, vert_lst)
-        merged_cell._meshes[mesh_type] += ([None, None], ) # add normals
-    
-    # merge skeletons
-    merged_cell.skeleton = {}
-    cell_obj1.load_skeleton()
-    cell_obj2.load_skeleton()
-    merged_cell.skeleton['edges'] = np.concatenate([cell_obj1.skeleton['edges'],
-                                                    cell_obj2.skeleton['edges'] +
-                                                    len(cell_obj1.skeleton['nodes'])]) # additional offset
-    merged_cell.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
-                                                    cell_obj2.skeleton['nodes']])
-    merged_cell.skeleton['diameters'] = np.concatenate([cell_obj1.skeleton['diameters'],
-                                                        cell_obj2.skeleton['diameters']])
-    return merged_cell
-
-def create_lookup_table(num_cs_id, dict_sv2svv):
+def create_lookup_table(num_cs_id, contact_sites, dict_sv2svv):
     """Loop through all contact_sites ids and if two corresponding cells are found,
     store the cell_id and corresponding cs_id into dictionary
 
@@ -152,9 +129,8 @@ if __name__ == "__main__":
     contact_sites = SegmentationDataset(obj_type='cs', version=cs_version)  # class holding all contact-site between SVs
     dict_sv2ssv = ssd.mapping_dict_reversed  # dict: {supervoxel : super-supervoxel}
 
-
     if create_new_cs_ids:
-        cell_pair2cs_ids, cell_pairs = create_lookup_table(num_cs_id, dict_sv2ssv)
+        cell_pair2cs_ids, cell_pairs = create_lookup_table(num_cs_id, contact_sites, dict_sv2ssv)
         write_obj2pkl(path_pkl_file, cell_pair2cs_ids)
     else:
         cell_pair2cs_ids = dict()
@@ -166,7 +142,7 @@ if __name__ == "__main__":
             print("Loading cell_pair2cs_ids from pkl file successful.")
         except:
             print("cell_pair2cs_ids_" + pkl_version + ".pkl not found in {}".format(path_pkl_file))
-            cell_pair2cs_ids, cell_pairs = create_lookup_table(num_cs_id, dict_sv2ssv)
+            cell_pair2cs_ids, cell_pairs = create_lookup_table(num_cs_id, contact_sites, dict_sv2ssv)
             write_obj2pkl(path_pkl_file, cell_pair2cs_ids)
 
     assert len(cell_pair2cs_ids) == len(cell_pairs), "inconsistent length"
@@ -178,16 +154,16 @@ if __name__ == "__main__":
     print("in which {} pairs have more than one cs.".format(count))
 
     print("Generating merged cells")
-    count = 1
     # cell_pairs = cell_pairs[501:501+num_generated_cells]
-    cell_pairs = cell_pairs[:num_generated_cells]
     for i in trange(len(cell_pairs), desc='cell_pairs'):
         cell_pair = cell_pairs[i]
         c1, c2 = cell_pair[0], cell_pair[1]
         assert c1 != c2, "same cells cannot be merged."
 
         cell_obj1, cell_obj2 = ssd.get_super_segmentation_object([c1, c2])
-        merged_cell = merge_superseg_objects(cell_obj1, cell_obj2)
+
+        # merged_cell = merge_superseg_objects(cell_obj1, cell_obj2)
+        merged_cell = merge_ssv(cell_obj1, cell_obj2)
         merged_cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling  # coordinates of all nodes
 
         # labels:
@@ -206,6 +182,8 @@ if __name__ == "__main__":
                 cs_coord = cs_obj.rep_coord * merged_cell.scaling
                 cs_coord_list.append(cs_coord)
         if len(cs_coord_list) == 0:
+            print("No cs found: {}.".format(count))
+            count += 1
             continue
 
         # find medium cube around artificial merger and set it to 0 (no-merger/cell_body)
@@ -249,4 +227,5 @@ if __name__ == "__main__":
         # TODO: export2kzip should run through
 
         count += 1
+
     print("Total merged_cells generated: {}".format(count))
