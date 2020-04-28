@@ -28,7 +28,7 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=16, help='Batch size')
+parser.add_argument('--bs', type=int, default=12, help='Batch size')
 parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=20000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -93,7 +93,7 @@ if track_running_stats:
     name += '_trackRunStats'
 
 if use_cuda:
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 
@@ -108,10 +108,10 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=True)
+                 track_running_stats=track_running_stats, act=act, use_bias=False)
 
 name += f'_eval{eval_nr}'
-model = nn.DataParallel(model)
+# model = nn.DataParallel(model)
 
 if use_cuda:
     model.to(device)
@@ -132,7 +132,7 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-75, 75), distr='normal'),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),

@@ -489,34 +489,20 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
         # identify huge SSVs and process them individually on whole cluster
         big_ssv = ssd.ssv_ids[~size_mask]
 
-        # # TODO: Currently high memory consumption when rendering index views! take into account
-        # #  when multiprocessing
-        # # TODO: refactor `render_sso_coords_multiprocessing` and then use `QSUB_render_views_egl`
-        # #  here!
         # render normal views only
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
         n_parallel_jobs = global_params.config.ngpu_total
-        render_kwargs = dict(add_cellobjects=True, woglia=True, overwrite=True,
-                             skip_indexviews=True)
-        sso_kwargs = dict(working_dir=global_params.config.working_dir, nb_cpus=n_cores,
-                          enable_locking_so=False, enable_locking=False)
 
         # sort ssv ids according to their number of SVs (descending)
         ordering = np.argsort(nb_svs_per_ssv[~size_mask])
         multi_params = big_ssv[ordering[::-1]]
         multi_params = chunkify(multi_params, max_n_jobs)
         # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-        multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]
-        qu.batchjob_script(multi_params, "render_views", suffix='_big',
+        multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
+        qu.batchjob_script(multi_params, "render_views_egl", suffix='_big',
                            n_max_co_processes=n_parallel_jobs, log=log,
                            additional_flags="--gres=gpu:1",
                            n_cores=n_cores, remove_jobfolder=True)
-        # # render index-views only
-        for ssv_id in big_ssv:
-            ssv = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
-            render_sso_coords_multiprocessing(ssv, verbose=True, return_views=False,
-                                              n_jobs=n_parallel_jobs,
-                                              render_indexviews=True)
         log.info('Finished rendering of {}/{} SSVs.'.format(len(big_ssv),
                                                             len(nb_svs_per_ssv)))
 

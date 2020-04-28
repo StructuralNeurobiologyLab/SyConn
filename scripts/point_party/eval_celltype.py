@@ -12,11 +12,12 @@ def load_model(mkwargs, device):
     from elektronn3.models.convpoint import ModelNet40
     from elektronn3.models.base import InferenceModel
     import torch
+    mpath = mkwargs['mpath']
+    del mkwargs['mpath']
     m = ModelNet40(5, 8, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     # pts_pred_scalar (pred_func used in predict_pts_plain) requires the model object to have a .predict method
     m = torch.nn.DataParallel(m)
-    m = InferenceModel(m)
     return m
 
 
@@ -64,7 +65,7 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
 
 if __name__ == '__main__':
     ncv_min = 0
-    n_cv = 10
+    n_cv = 1
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
@@ -73,7 +74,7 @@ if __name__ == '__main__':
     for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb25000_swish_noBN_moreAug4_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale30000_nb25000_swish_gn_moreAug5_CV{}_eval{}/'
         use_norm = False
         track_running_stats = False
         activation = 'relu'
@@ -97,7 +98,8 @@ if __name__ == '__main__':
         for CV in range(ncv_min, n_cv):
             split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                            f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-            mpath = f'{mdir.format(CV, run)}/state_dict_minlr_step124000.pth'
+            mpath = f'{mdir.format(CV, run)}/state_dict_minlr_step123999.pth'
+            mkwargs['mpath'] = mpath
             log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
 

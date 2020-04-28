@@ -27,6 +27,7 @@ from ..handler.basics import kd_factory, chunkify
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
+from ..reps import segmentation_helper as seghelp
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage, MeshStorage
 from ..handler.config import initialize_logging
@@ -1377,6 +1378,8 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
     Returns:
 
     """
+    # TODO: add global overwrite kwarg
+    overwrite = True
     wd, obj_version, ssd_version, ssv_ids, max_rep_coord_dist_nm, max_vert_dist_nm = args
 
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
@@ -1388,20 +1391,28 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
     sd_mi = segmentation.SegmentationDataset(obj_type="mi", working_dir=wd)
 
     syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
+    # dts = dict(id_mask=0, kds=0, map_verts=0, directio=0, meshcache=0)
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
+
+        # start = time.time()
         ssv_o.load_attr_dict()
+        if overwrite and os.path.isfile(ssv_o.ssv_dir + "/cache_syn.pkl"):
+            os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
         cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
                                      read_only=False, disable_locking=True)
+        if not overwrite and ('n_vc_vxs' in cache_dc):
+            continue
+        # dts['directio'] += time.time() - start
 
         curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
                         (syn_neuronpartners[:, 1] == ssv_id)
         synssv_ids = sd_syn_ssv.ids[curr_ssv_mask]
         n_synssv = len(synssv_ids)
-        n_mi_objs = np.zeros((n_synssv, ), dtype=np.int)
-        n_mi_vxs = np.zeros((n_synssv, ), dtype=np.int)
-        n_vc_objs = np.zeros((n_synssv, ), dtype=np.int)
-        n_vc_vxs = np.zeros((n_synssv, ), dtype=np.int)
+        n_mi_objs = np.zeros((n_synssv,), dtype=np.int)
+        n_mi_vxs = np.zeros((n_synssv,), dtype=np.int)
+        n_vc_objs = np.zeros((n_synssv,), dtype=np.int)
+        n_vc_vxs = np.zeros((n_synssv,), dtype=np.int)
         cache_dc['synssv_ids'] = synssv_ids
         if n_synssv == 0:
             cache_dc['n_mi_objs'] = n_mi_objs
@@ -1410,10 +1421,18 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
             cache_dc['n_vc_vxs'] = n_vc_vxs
             cache_dc.push()
             continue
-
+        # start = time.time()
         vc_mask = np.in1d(sd_vc.ids, ssv_o.vc_ids)
         mi_mask = np.in1d(sd_mi.ids, ssv_o.mi_ids)
+        # dts['id_mask'] += time.time() - start
+        vc_ids = sd_vc.ids[vc_mask]
+        mi_ids = sd_mi.ids[mi_mask]
+        if len(vc_ids) < 2 and len(mi_ids) < 2:
+            continue
+        vc_sizes = sd_vc.sizes[vc_mask]
+        mi_sizes = sd_mi.sizes[mi_mask]
 
+        # start = time.time()
         kdtree_synssv = spatial.cKDTree(sd_syn_ssv.rep_coords[curr_ssv_mask] * sd_syn_ssv.scaling)
 
         # vesicle clouds
@@ -1425,21 +1444,46 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         # returns a list of neighboring objects for every synssv (note: ix is now the index within ssv_o.mi_ids
         close_mi_ixs = kdtree_synssv.query_ball_tree(kdtree_mi, r=max_rep_coord_dist_nm)
         close_vc_ixs = kdtree_synssv.query_ball_tree(kdtree_vc, r=max_rep_coord_dist_nm)
+        # dts['kds'] += time.time() - start
+
+        # start = time.time()
+        close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int)]
+        close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int))]
+
+        md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_object(close_mi_ids))
+        md_vc = seghelp.load_so_meshes_bulk(sd_vc.get_segmentation_object(close_vc_ids))
+        # md_synssv = seghelp.load_so_meshes_bulk(sd_syn_ssv.get_segmentation_object(synssv_ids))
+        # dts['meshcache'] += time.time() - start
+
+        # start = time.time()
         for ii, synssv_id in enumerate(synssv_ids):
             synssv_obj = sd_syn_ssv.get_segmentation_object(synssv_id)
-            mis = sd_mi.get_segmentation_object(ssv_o.mi_ids[close_mi_ixs[ii]])
-            vcs = sd_vc.get_segmentation_object(ssv_o.vc_ids[close_vc_ixs[ii]])
+            # synssv_obj._mesh = md_synssv[synssv_id]
+            mis = sd_mi.get_segmentation_object(mi_ids[close_mi_ixs[ii]])
+            # load cached meshes
+            for jj, ix in enumerate(close_mi_ixs[ii]):
+                mi = mis[jj]
+                mi._size = mi_sizes[ix]
+                mi._mesh = md_mi[mi.id]
+            vcs = sd_vc.get_segmentation_object(vc_ids[close_vc_ixs[ii]])
+            for jj, ix in enumerate(close_vc_ixs[ii]):
+                vc = vcs[jj]
+                vc._size = vc_sizes[ix]
+                vc._mesh = md_vc[vc.id]
             n_mi_objs[ii], n_mi_vxs[ii] = _map_objects_from_synssv(synssv_obj, mis, max_vert_dist_nm)
             n_vc_objs[ii], n_vc_vxs[ii] = _map_objects_from_synssv(synssv_obj, vcs, max_vert_dist_nm)
+        # dts['map_verts'] += time.time() - start
 
+        # start = time.time()
         cache_dc['n_mi_objs'] = n_mi_objs
         cache_dc['n_mi_vxs'] = n_mi_vxs
         cache_dc['n_vc_objs'] = n_vc_objs
         cache_dc['n_vc_vxs'] = n_vc_vxs
         cache_dc.push()
+        # dts['directio'] += time.time() - start
 
 
-def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm):
+def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2):
     """
     TODO: Loading meshes for approximating close-by object volume is slow - exchange with summed object size?
 
@@ -1452,22 +1496,24 @@ def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm):
         seg_objs: SegmentationObject of type 'vc' or 'mi'
         max_vert_dist_nm: Query radius for SegmentationObject vertices. Used to estimate
             number of nearby object voxels.
+        sample_fact: only use every Xth vertex.
 
     Returns:
         Number of SegmentationObjects with >0 vertices, approximated number of
         object voxels within `max_vert_dist_nm`.
     """
-    synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
+    # synssv_kdtree = spatial.cKDTree(synssv_o.mesh[1].reshape(-1, 3)[::sample_fact])
+    synssv_kdtree = spatial.cKDTree(synssv_o.voxel_list[::sample_fact] * synssv_o.scaling)
 
     n_obj_vxs = []
     for obj in seg_objs:
         # use mesh vertices instead of voxels
-        obj_vxs = obj.mesh[1].reshape(-1, 3)
+        obj_vxs = obj.mesh[1].reshape(-1, 3)[::sample_fact]
 
-        ds, _ = synssv_vx_kdtree.query(obj_vxs,
-                                       distance_upper_bound=max_vert_dist_nm)
+        ds, _ = synssv_kdtree.query(obj_vxs, distance_upper_bound=max_vert_dist_nm)
         # surface fraction of subcellular object which is close to synapse
         close_frac = np.sum(ds < np.inf) / len(obj_vxs)
+
         # estimate number of voxels by close-by surface area fraction times total number of voxels
         n_obj_vxs.append(close_frac * obj.size)
 

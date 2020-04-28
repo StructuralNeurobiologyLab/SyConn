@@ -169,7 +169,6 @@ train_dataset = PatchCreator(
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
         'warp_amount': 0.5,
-        'lock_z': True
     },
     transform=train_transform,
     **common_data_kwargs

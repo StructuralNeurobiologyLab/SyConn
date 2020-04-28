@@ -345,7 +345,7 @@ if elektronn3_avail:
             self._curr_ssv_label = self.label_dc[self.sso_params[item][0]]
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
                 [*pts_loader_glia(self.sso_params[item:item+1], [self._curr_ssv_label], self._batch_size,
-                self.num_pts, transform=self.transform, use_subcell=self.use_subcell)][0]
+                self.num_pts, transform=self.transform, use_subcell=self.use_subcell, train=True)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:

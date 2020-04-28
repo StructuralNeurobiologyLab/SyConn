@@ -19,7 +19,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='myelin_unet_gtv3_GN_new',
+parser.add_argument('-n', '--exp-name', default='myelin_unet_gtv3_GN',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
@@ -79,7 +79,7 @@ from elektronn3.models.unet import UNet
 
 
 if not args.disable_cuda and torch.cuda.is_available():
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 logger.info(f'Running on device: {device}')
@@ -87,9 +87,9 @@ logger.info(f'Running on device: {device}')
 out_channels = 2
 model = UNet(
     out_channels=out_channels,
-    n_blocks=4,
-    start_filts=32,
-    planar_blocks=(0, 2),
+    n_blocks=5,
+    start_filts=48,
+    planar_blocks=(0, 3),
     activation='relu',
     normalization='group8',
 ).to(device)
@@ -170,7 +170,7 @@ valid_transform = transforms.Compose(common_transforms + [])
 aniso_factor = 2  # Anisotropy in z dimension. E.g. 2 means half resolution in z dimension.
 common_data_kwargs = {  # Common options for training and valid sets.
     'aniso_factor': aniso_factor,
-    'patch_shape': (48, 96, 96),
+    'patch_shape': (32, 144, 144),
     'in_memory': True  # Uncomment to avoid disk I/O (if you have enough host memory for the data)
 }
 train_dataset = PatchCreator(
@@ -182,7 +182,7 @@ train_dataset = PatchCreator(
     warp_kwargs={
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
-        'warp_amount': 0.4,
+        'warp_amount': 0.5,
     },
     transform=train_transform,
     **common_data_kwargs
@@ -198,16 +198,22 @@ valid_dataset = None if not valid_indices else PatchCreator(
     **common_data_kwargs
 )
 
-optimizer = optim.SGD(
+# optimizer = optim.SGD(
+#     model.parameters(),
+#     lr=0.001,
+#     momentum=0.9,
+#     weight_decay=0.5e-4,
+# )
+# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
+
+optimizer = torch.optim.Adam(
     model.parameters(),
-    lr=0.001,
-    momentum=0.9,
+    lr=2e-3,
     weight_decay=0.5e-4,
 )
-optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 
-lr_stepsize = 500
-lr_dec = 0.995
+lr_stepsize = 200
+lr_dec = 0.997
 lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 if optimizer_state_dict is not None:
     optimizer.load_state_dict(optimizer_state_dict)
@@ -224,8 +230,9 @@ valid_metrics = {
     'val_IoU': metrics.bin_iou,
 }
 
-crossentropy = nn.CrossEntropyLoss()
-dice = DiceLoss()
+weight=torch.tensor((0.3, 0.7))
+crossentropy = nn.CrossEntropyLoss(weight)
+dice = DiceLoss(weight=weight)
 criterion = CombinedLoss([crossentropy, dice], weight=[0.5, 0.5], device=device)
 
 # Create trainer

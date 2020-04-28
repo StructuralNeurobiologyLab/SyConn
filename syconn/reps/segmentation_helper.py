@@ -8,9 +8,11 @@ from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
     VoxelStorage, SkeletonStorage, VoxelStorageDyn
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
+from . import rep_helper as rh
 from . import log_reps
 from .. import global_params
 
+from collections import defaultdict
 import glob
 import numpy as np
 from scipy import ndimage
@@ -409,3 +411,73 @@ def find_missing_sv_attributes(sd, attr_key, n_cores=20):
     res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
                                   debug=False)
     return np.concatenate(res)
+
+
+def load_so_meshes_bulk(sos: List['segmentation.SegmentationObject'],
+                        use_new_subfold: bool = True, cache_decomp=True):
+    """
+
+    Args:
+        sos:
+        use_new_subfold:
+        cache_decomp:
+
+    Returns:
+
+    """
+    md_out = MeshStorage(None)  # in-memory dict with compression
+    if len(sos) == 0:
+        return md_out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    cnt = 0
+    for subfold, ids in sub2ids.items():
+        mesh_path = f'{base_path}/{subfold}/mesh.pkl'
+        md = MeshStorage(mesh_path, disable_locking=True,
+                         cache_decomp=cache_decomp)
+        for so_id in ids:
+            cnt += 1
+            md_out._dc_intern[so_id] = md._dc_intern[so_id]
+    assert cnt == len(sos)
+    return md_out
+
+
+def load_so_voxels_bulk(sos: List['segmentation.SegmentationObject'],
+                        use_new_subfold: bool = True, cache_decomp=True):
+    """
+
+    Args:
+        sos:
+        use_new_subfold:
+        cache_decomp:
+
+    Returns:
+
+    """
+    raise NotImplementedError
+    vd_out = VoxelStorage(None, cache_decomp=cache_decomp)  # in-memory dict with compression
+    if len(sos) == 0:
+        return vd_out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    cnt = 0
+    for subfold, ids in sub2ids.items():
+        voxel_path = f'{base_path}/{subfold}/voxel.pkl'
+        vd = VoxelStorage(voxel_path, disable_locking=True)
+        for so_id in ids:
+            cnt += 1
+            vd_out._dc_intern[so_id] = vd._dc_intern[so_id]
+    assert cnt == len(sos)
+    return vd_out

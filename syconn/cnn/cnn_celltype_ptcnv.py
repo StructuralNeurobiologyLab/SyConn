@@ -30,7 +30,7 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
@@ -118,7 +118,7 @@ save_root = os.path.expanduser(save_root)
 # Model selection
 model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act)
-name += '_moreAug4'
+name += '_moreAug5'
 
 name += f'_CV{cval}_eval{eval_nr}'
 model = nn.DataParallel(model)
@@ -142,7 +142,7 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-75, 75), distr='normal'),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
@@ -182,7 +182,9 @@ lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
 #     mode='exp_range',
 #     gamma=0.99994,
 # )
-criterion = torch.nn.CrossEntropyLoss()
+# extra weight for HVC and LMAN
+# STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
+criterion = torch.nn.CrossEntropyLoss(weight=torch.Tensor([1, 1, 1, 2, 2, 1, 1, 1]))
 if use_cuda:
     criterion.cuda()
 

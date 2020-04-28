@@ -27,7 +27,7 @@ from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_predict
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
     working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
-    experiment_name = 'j0251_example'
+    experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
     key_val_pairs_conf = [
@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # Preparing data
     # --------------------------------------------------------------------------
     # Setup working directory and logging
-    log = initialize_logging('example_run', log_dir=working_dir + '/logs/')
+    log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     time_stamps = [time.time()]
     step_idents = ['t-0']
     log.info('Step 0/8 - Preparation')

@@ -122,6 +122,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
+        # TODO: do this multi-processed
         file_mask = np.zeros(len(out_files), dtype=np.int)
         for ii, p in enumerate(out_files):
             with open(p, 'rb') as f:
@@ -134,7 +135,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         if len(res_keys) == 0:
             raise ValueError(f'No objects found during dataset_analysis of {sd}.')
         n_ids = np.sum(file_mask)
-        log_proc.debug(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
+        log_proc.info(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
                        f'dataset_analysis:\n{res_keys}')
         out_files = out_files[file_mask > 0]
         params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
@@ -154,11 +155,13 @@ def _dataset_analysis_collect(args):
     try:
         tmp_res = np.concatenate(tmp_res)
         assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
-        np.save(sd_path + "/%ss.npy" % attribute, tmp_res)
+        np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
     except ValueError as e:
-        if attribute in ['sj_ids', 'cs_ids']:
+        # allow dtype=object only for the following attributes with ragged shape:
+        if attribute in ['sj_ids', 'cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios',
+                         'mapping_vc_ids', 'mapping_vc_ratios']:
             tmp_res = np.array(tmp_res, dtype=np.object)
-            np.save(sd_path + "/%ss.npy" % attribute, tmp_res)
+            np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
         else:
             log_proc.error(
                 f'ValueError {e} encountered when writing numpy array '
@@ -174,6 +177,7 @@ def _load_attr_helper(args):
             dc = pkl.load(f)
             if len(dc['id']) == 0:
                 continue
+
             value = dc[attr]
             if attr == 'id':
                 value = np.array(value, np.uint)
@@ -197,8 +201,7 @@ def _dataset_analysis_thread(args):
     working_dir = args[3]
     recompute = args[4]
     compute_meshprops = args[5]
-    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
-                            mesh_area=[])
+    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[])
     for p in paths:
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
