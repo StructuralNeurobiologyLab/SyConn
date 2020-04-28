@@ -100,19 +100,19 @@ def labels2mesh(args):
             clouds[obj_names[ix]] = hms[ix]
     ce = CloudEnsemble(clouds, hm, no_pred=['mi', 'vc', 'sy'])
 
-    # add myelin (see docstring of map_myelin2coords)
-    sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
-    majorityvote_skeleton_property(sso, 'myelin')
-    myelinated = sso.skeleton['myelin_avg10000']
-    nodes_idcs = np.arange(len(hm.nodes))
-    myel_nodes = nodes_idcs[myelinated.astype(bool)]
-    myel_vertices = []
-    for node in myel_nodes:
-        myel_vertices.extend(hm.verts2node[node])
-    # myelinated vertices get type 1, not myelinated vertices get type 0
-    types = np.zeros(len(hm.vertices))
-    types[myel_vertices] = 1
-    hm.set_types(types)
+    # # add myelin (see docstring of map_myelin2coords)
+    # sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    # majorityvote_skeleton_property(sso, 'myelin')
+    # myelinated = sso.skeleton['myelin_avg10000']
+    # nodes_idcs = np.arange(len(hm.nodes))
+    # myel_nodes = nodes_idcs[myelinated.astype(bool)]
+    # myel_vertices = []
+    # for node in myel_nodes:
+    #     myel_vertices.extend(hm.verts2node[node])
+    # # myelinated vertices get type 1, not myelinated vertices get type 0
+    # types = np.zeros(len(hm.vertices))
+    # types[myel_vertices] = 1
+    # hm.set_types(types)
 
     # save generated cloud ensemble to file
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
@@ -165,12 +165,12 @@ def gt_generation(kzip_paths, out_path, version: str = None):
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/gt/intermediate/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/annotations/sparse_gt/spgt/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/20_04_16/raw/new/"
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/annotations/sparse_gt/new/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
-    global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    gt_generation(file_paths, destination, version='spgt')
+    # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+    # gt_generation(file_paths, destination, version='spgt')
     # axon GT
-    # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    # gt_generation(file_paths, destination)
+    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    gt_generation(file_paths, destination)

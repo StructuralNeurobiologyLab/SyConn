@@ -3,6 +3,8 @@ import glob
 import numpy as np
 from typing import Union
 from tqdm import tqdm
+import networkx as nx
+from collections import deque
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
@@ -57,7 +59,6 @@ def convert_test_gt(gt_path: str, out_path: str):
 
 def convert_single(sso: SuperSegmentationObject, label: Union[int, np.ndarray], train: bool = True) -> CloudEnsemble:
     # load cell and cell organelles
-
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
     label_map = [-1, 7, 8, 9]
     hms = []
@@ -74,6 +75,15 @@ def convert_single(sso: SuperSegmentationObject, label: Union[int, np.ndarray], 
     skel = sso.skeleton
     nodes = skel['nodes'] * sso.scaling
     edges = skel['edges']
+
+    if not train:
+        g = nx.Graph()
+        g.add_nodes_from([(i, dict(label=label[i])) for i in range(len(nodes))])
+        g.add_edges_from([(edges[i][0], edges[i][1]) for i in range(len(edges))])
+        for node in g.nodes:
+            if g.nodes[node]['label'] == -1:
+                ix = label_search(g, node)
+                label[node] = label[ix]
 
     # create cloud ensemble
     encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
@@ -111,6 +121,22 @@ def convert_single(sso: SuperSegmentationObject, label: Union[int, np.ndarray], 
     return ce
 
 
+def label_search(g: nx.Graph, source: int) -> int:
+    """ Find nearest node to source which has a label. """
+    visited = [source]
+    neighbors = g.neighbors(source)
+    de = deque([i for i in neighbors])
+    while de:
+        curr = de.pop()
+        if g.nodes[curr]['label'] != -1:
+            return curr
+        if curr not in visited:
+            visited.append(curr)
+            neighbors = g.neighbors(curr)
+            de.extendleft([i for i in neighbors if i not in visited])
+    return 0
+
+
 if __name__ == "__main__":
     # ssv_path = '~/thesis/gt/cmn/annotations/axgt_splitting.pkl'
     # label_path = '~/thesis/gt/cmn/annotations/axgt_labels.pkl'
@@ -119,5 +145,5 @@ if __name__ == "__main__":
     # convert_training_gt(ssv_path, label_path, train_path, val_path)
 
     test_gt = '~/thesis/gt/cmn/annotations/test/'
-    test_out = '~/thesis/gt/cmn/test/'
+    test_out = '~/thesis/gt/cmn/test/raw/'
     convert_test_gt(test_gt, test_out)
