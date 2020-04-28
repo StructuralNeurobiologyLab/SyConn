@@ -1659,7 +1659,7 @@ def majority_vote_compartments(sso, ax_pred_key='axoness'):
     Returns:
 
     """
-    g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
+    g = sso.weighted_graph(add_node_attr=(ax_pred_key,))
     soma_free_g = g.copy()
     for n, d in g.nodes(data=True):
         if d[ax_pred_key] == 2:

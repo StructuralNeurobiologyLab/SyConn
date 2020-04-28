@@ -21,12 +21,14 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset
+from syconn.handler.prediction import get_glia_model
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc.rendering import render_sso_coords_multiprocessing
 from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 from syconn import global_params
-from syconn.handler.basics import chunkify
+from syconn.handler.prediction import get_axoness_model
+from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.handler.config import initialize_logging
@@ -96,11 +98,9 @@ def run_axoness_mapping(max_n_jobs: Optional[int] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    # sort ssv ids according to their number of SVs (descending)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
-                               in ssd.ssv_ids])
-    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
-    multi_params = chunkify(multi_params, max_n_jobs)
+    # sort ssv ids according to their size(descending)
+    ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
+    multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
 
     multi_params = [(par, pred_key_appendix) for par in multi_params]
     log.info('Starting axoness mapping.')
@@ -541,7 +541,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     log.info('Success.')
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimimaro = True):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -604,7 +604,10 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    exec_skeleton.run_skeleton_generation()
+    if kimimaro == True:
+        exec_skeleton.run_kimimaro_skelgen()
+    else:
+        exe_skeleton.run_skeleton_generation()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
@@ -850,7 +853,6 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     multi_params = chunkify(multi_params, max_n_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
-
     _ = qu.batchjob_script(
         multi_params, "render_views_glia_removal", log=log,
         n_max_co_processes=global_params.config.ngpu_total,

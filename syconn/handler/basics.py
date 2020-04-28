@@ -531,6 +531,24 @@ def chunkify(lst: Union[list, np.ndarray], n: int) -> List[list]:
         n = len(lst)
     return [lst[i::n] for i in range(n)]
 
+def chunkify_weighted(lst, n, weights):
+    """
+    splits list into n-subists according to weights
+    Args:
+        lst: list
+        n: int
+        weights: array
+
+    Returns:
+
+    """
+    if len(lst) < n:
+        n = len(lst)
+        return [lst[i::n] for i in range(n)] #no weighting needed
+    ordered = np.argsort(weights)
+    lst = lst[ordered[::-1]]
+    return [lst[i::n] for i in range(n)]
+
 
 def chunkify_weighted(lst, n, weights):
     """

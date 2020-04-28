@@ -172,6 +172,8 @@ if __name__ == '__main__':
 
     # START SyConn
     log.info('Example data will be processed in "{}".'.format(example_wd))
+
+    # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
     # exec_dense_prediction.predict_myelin()

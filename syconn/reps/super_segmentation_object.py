@@ -1424,6 +1424,7 @@ class SuperSegmentationObject(object):
         if to_kzip:
             self.save_skeleton_to_kzip()
 
+
     def load_skeleton(self) -> bool:
         """
         Loads skeleton and will compute it if it does not exist yet (requires
@@ -1432,6 +1433,7 @@ class SuperSegmentationObject(object):
         Returns:
             True if successfully loaded/generated skeleton, else False.
         """
+        from syconn.exec.exec_skeleton import run_kimimaro_skelgen
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
             # nodes are stored as uint32, TODO: look into that and change if possible.
@@ -1439,9 +1441,10 @@ class SuperSegmentationObject(object):
             return True
         except:
             if global_params.config.allow_skel_gen:
-                self.calculate_skeleton()
+                run_kimimaro_skelgen(curr_dir = global_params.config.working_dir)
                 return True
             return False
+
 
     def syn_sign_ratio(self, weighted: bool = True,
                        recompute: bool = True,
@@ -3076,6 +3079,7 @@ class SuperSegmentationObject(object):
         self.enable_locking = locking_tmp
         return res
 
+
     def average_node_axoness_views(self, **kwargs):
         """
         Apply a sliding window averaging along the axon predictions stored at the
@@ -3254,8 +3258,8 @@ class SuperSegmentationObject(object):
             The shortest path in nanometers for each start coordinate.
         """
         if axoness_key is None:
-            axoness_key = 'axoness_avg{}'.format(global_params.config['compartments'][
-                                            'dist_axoness_averaging'])
+            axoness_key = 'axoness_avg{}'.format(global_params.config['compartments']
+                                            ['dist_axoness_averaging'])
         nodes = self.skeleton['nodes']
         soma_ixs = np.nonzero(self.skeleton[axoness_key] == 2)[0]
         if np.sum(soma_ixs) == 0:
@@ -3272,6 +3276,7 @@ class SuperSegmentationObject(object):
             curr_path = np.min([shortest_paths[soma_ix] for soma_ix in soma_ixs])
             shortest_paths_of_interest.append(curr_path)
         return shortest_paths_of_interest
+
 
 
 # ------------------------------------------------------------------------------
