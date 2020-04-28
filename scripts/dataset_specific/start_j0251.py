@@ -161,7 +161,7 @@ if __name__ == '__main__':
     step_idents.append('SSD generation')
 
     log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering()
+    # exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 

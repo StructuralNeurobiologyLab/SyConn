@@ -24,7 +24,6 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
 from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
@@ -1424,7 +1423,6 @@ class SuperSegmentationObject(object):
         if to_kzip:
             self.save_skeleton_to_kzip()
 
-
     def load_skeleton(self) -> bool:
         """
         Loads skeleton and will compute it if it does not exist yet (requires
@@ -1433,18 +1431,18 @@ class SuperSegmentationObject(object):
         Returns:
             True if successfully loaded/generated skeleton, else False.
         """
-        from syconn.exec.exec_skeleton import run_kimimaro_skelgen
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
-            # nodes are stored as uint32, TODO: look into that and change if possible.
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
+            # TODO: add a per-SSV skeletonization for kimimaro or raise an error for now
+            # running the skeletonization for the entire dataset cluster-wide is
+            # not a working solution
             if global_params.config.allow_skel_gen:
-                run_kimimaro_skelgen(curr_dir = global_params.config.working_dir)
+                self.calculate_skeleton()
                 return True
-            return False
-
+            raise FileNotFoundError(f'Could not find skeleton of {self}.')
 
     def syn_sign_ratio(self, weighted: bool = True,
                        recompute: bool = True,
@@ -3079,7 +3077,6 @@ class SuperSegmentationObject(object):
         self.enable_locking = locking_tmp
         return res
 
-
     def average_node_axoness_views(self, **kwargs):
         """
         Apply a sliding window averaging along the axon predictions stored at the
@@ -3276,7 +3273,6 @@ class SuperSegmentationObject(object):
             curr_path = np.min([shortest_paths[soma_ix] for soma_ix in soma_ixs])
             shortest_paths_of_interest.append(curr_path)
         return shortest_paths_of_interest
-
 
 
 # ------------------------------------------------------------------------------

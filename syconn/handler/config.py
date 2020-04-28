@@ -623,7 +623,7 @@ class DynConfig(Config):
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
                           use_large_fov_views_ct: bool = False,
-                          allow_skel_gen: bool = True,
+                          allow_skel_gen: bool = False,
                           use_new_renderings_locs: bool = True,
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
@@ -809,7 +809,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
             max_simplification_error: 40  # in nm
 
         skeleton:
-          allow_skel_gen: True
+          allow_skel_gen: False
           feature_context_rfc: # in nm
             axoness: 8000
             spiness: 1000

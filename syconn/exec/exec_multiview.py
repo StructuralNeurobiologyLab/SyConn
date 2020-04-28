@@ -21,13 +21,10 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.handler.prediction import get_glia_model
 from syconn.proc.graphs import create_ccsize_dict
-from syconn.proc.rendering import render_sso_coords_multiprocessing
 from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 from syconn import global_params
-from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
@@ -541,7 +538,8 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     log.info('Success.')
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimimaro = True):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None,
+                          kimimaro: bool = True):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -604,10 +602,10 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimim
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    if kimimaro == True:
+    if kimimaro is True:
         exec_skeleton.run_kimimaro_skelgen()
     else:
-        exe_skeleton.run_skeleton_generation()
+        exec_skeleton.run_skeleton_generation()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
