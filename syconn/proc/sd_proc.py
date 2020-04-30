@@ -817,7 +817,7 @@ def _map_subcell_extract_props_thread(args):
     if global_params.config.use_new_meshing:
         dt_times_dc['overall'] = time.time() - start_all
         dt_str = ["{:<20}".format(f"{k}: {v:.2f}s") for k, v in dt_times_dc.items()]
-        log_proc.debug('{}'.format("".join(dt_str)))
+        # log_proc.debug('{}'.format("".join(dt_str)))
     return worker_nr, ref_mesh_dict
 
 
