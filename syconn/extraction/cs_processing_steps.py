@@ -1621,7 +1621,7 @@ def _classify_synssv_objects_thread(args):
 
         for synssv_id in this_attr_dc.keys():
             synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
-            synssv_o.load_attr_dict()
+            synssv_o.attr_dict = this_attr_dc[synssv_id]
 
             feats = synssv_o_features(synssv_o)
             syn_prob = rfc.predict_proba([feats])[0][1]
@@ -1816,12 +1816,10 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject):
     -------
     List
     """
-    synssv_o.load_attr_dict()
-
     features = [synssv_o.size, synssv_o.mesh_area,
                 synssv_o.attr_dict["id_cs_ratio"]]
 
-    partner_ids = synssv_o.lookup_in_attribute_dict("neuron_partners")
+    partner_ids = synssv_o.attr_dict("neuron_partners")
     for i_partner_id, partner_id in enumerate(partner_ids):
         features.append(synssv_o.attr_dict["n_mi_objs_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_mi_vxs_%d" % i_partner_id])

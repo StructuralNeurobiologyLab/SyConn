@@ -660,8 +660,11 @@ class SegmentationObject(object):
         Returns:
             Mesh surface area in um^2
         """
-
-        return mesh_area_calc(self.mesh)
+        # TODO: decide if caching should be possible
+        mesh_area = self.lookup_in_attribute_dict('mesh_area')
+        if mesh_area is None:
+            mesh_area = mesh_area_calc(self.mesh)
+        return mesh_area
 
     @property
     def sample_locations_exist(self) -> bool:

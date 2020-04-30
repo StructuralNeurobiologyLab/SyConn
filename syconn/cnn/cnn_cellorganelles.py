@@ -49,7 +49,7 @@ parser.add_argument('--sr', type=str, default=os.path.expanduser('~/e3training/'
 args = parser.parse_args()
 
 if not args.disable_cuda and torch.cuda.is_available():
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
