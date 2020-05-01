@@ -7,10 +7,12 @@ stages:
 test:
   stage: test
   script:
+    - pytest --cache-clear
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
     - pytest
+    - pytest --cache-clear
   except:
     - master
   tags:
@@ -19,11 +21,13 @@ test:
 test-full:
   stage: test
   script:
+    - pytest --cache-clear
     - source ~/.bashrc
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
     - pytest
     - pytest tests/test_run.py  # full example run
+    - pytest --cache-clear
   only:
     - master
   tags:
