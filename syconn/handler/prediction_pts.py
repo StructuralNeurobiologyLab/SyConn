@@ -27,7 +27,8 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 # TODO: specify further, add to config
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
 # in nm, should be replaced by Poisson disk sampling
-pts_feat_ds_dict = dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100)
+pts_feat_ds_dict = dict(celltype=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
+                        glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 
 
 # TODO: move to handler.basics
@@ -404,14 +405,14 @@ def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
 
 @functools.lru_cache(256)
 def _load_ssv_hc(args):
-    ssv, feats, feat_labels = args
+    ssv, feats, feat_labels, pt_type = args
     vert_dc = dict()
     # TODO: replace by poisson disk sampling
     for k in feats:
         pcd = o3d.geometry.PointCloud()
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[k])
+        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
         vert_dc[k] = np.asarray(pcd.points)
     sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
                                    for ii, k in enumerate(feats)])
@@ -464,7 +465,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 raise ValueError(f'draw_local is set to True but the number of SSV samples is uneven.')
             ssv = ssd.get_super_segmentation_object(ssv_id)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values())))
+                feat_dc.values()), 'celltype'))
             npoints_ssv = min(len(hc.vertices), npoints)
             batch = np.zeros((occ, npoints_ssv, 3))
             batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
@@ -504,7 +505,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
         for curr_ssvids in ssv_ids:
             ssv = ssd.get_super_segmentation_object(curr_ssvids)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values())))
+                feat_dc.values()), 'celltype'))
             npoints_ssv = min(len(hc.vertices), npoints)
             # add a +-10% fluctuation in the number of input points
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
@@ -639,7 +640,7 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         ssd = SuperSegmentationDataset(**curr_ssv_params[1])
         ssv = ssd.get_super_segmentation_object(curr_ssv_params[0])
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-            feat_dc.values())))
+            feat_dc.values()), 'glia'))
         npoints_ssv = min(len(hc.vertices), npoints)
         # add a +-10% fluctuation in the number of input and output points
         npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
@@ -666,8 +667,8 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                 # create local context
                 node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                sample_feats = hc.features
-                sample_pts = hc.vertices
+                sample_feats = hc_sub.features
+                sample_pts = hc_sub.vertices
                 # get target locations
                 base_points = hc_sub.base_points(threshold=1000)  # ~1um apart
                 base_points = np.random.choice(base_points, n_out_pts_curr,
@@ -703,7 +704,7 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             assert cnt == batchsize
             if not train:
                 batch_process = (ii+1)/n_batches
-                yield (ssv.id, (batch_f, batch), (batch_out, batch_out_orig, batch_process))
+                yield (ssv.id, (batch_f, batch, batch_out), batch_out_orig, batch_process)
             else:
                 yield (ssv.id, (batch_f, batch), (batch_out, batch_out_l))
 
@@ -723,12 +724,10 @@ def pts_pred_glia(m, inp, q_out, q_cnt, device, bs):
 
     """
     # TODO: is it possible to get 'device' directly from model 'm'?
-    ssv_id, (m_fts, m_pts), (out_pts,  out_pts_orig, batch_process) = inp
-    n_samples = len(m_pts)
-    assert n_samples == len(m_fts) == len(out_pts)
+    ssv_id, model_inp,  out_pts_orig, batch_process = inp
     with torch.no_grad():
         g_inp = [torch.from_numpy(i).to(device).float() for i
-                 in (m_fts, m_pts, out_pts)]
+                 in model_inp]
         out = m(*g_inp).cpu().numpy()
     res = dict(t_pts=out_pts_orig, t_l=out, b_process=batch_process)
 

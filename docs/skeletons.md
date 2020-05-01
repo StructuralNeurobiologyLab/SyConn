@@ -25,7 +25,7 @@ The object `sso` then has a attribute `sso.skeleton` which stores nodes, edges
 and possible properties in a dictionary.
 
 In order to precompute the skeletons of all SSV, the QSUB script `QSUB_export_skeletons_new`
-in the `QSUB_scripts` folder inside `syconn` is used by calling the
+in the `batchjob_scripts` folder inside `syconn` is used by calling the
 script `generation.py` in `scripts/skeletons/`.
 
 ## Skeleton-based classification

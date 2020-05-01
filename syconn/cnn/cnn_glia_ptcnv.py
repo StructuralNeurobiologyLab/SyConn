@@ -29,8 +29,8 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=20000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=30000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=10000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument(
@@ -60,7 +60,7 @@ scale_norm = args.scale_norm
 save_root = args.sr
 
 lr = 5e-4
-lr_stepsize = 1000
+lr_stepsize = 200
 lr_dec = 0.995
 max_steps = 125000
 
@@ -68,7 +68,7 @@ max_steps = 125000
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
 use_syntype = False
-dr = 0.2
+dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
 num_classes = 2
@@ -132,11 +132,11 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-75, 75), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.05, distr='normal')])
+                                  clouds.RandomScale(distr_scale=0.075, distr='normal')])
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
@@ -158,9 +158,9 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 # )
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
-# lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
+# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,

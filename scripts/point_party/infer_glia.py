@@ -55,8 +55,9 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
         prediction = np.argmax(np.concatenate([el['t_l'].reshape(-1, 2) for el in out]), axis=1)[..., None]
         if not np.any(prediction == 1):
             continue
+        print(np.unique(prediction, return_counts=True)[1] / len(prediction))
         # 4 will be red in write_pts_ply
-        prediction = label_binarize(prediction * 4, classes=np.arange(4))
+        prediction = label_binarize(prediction * 4, classes=np.arange(5))
         fname = f'/wholebrain/scratch/pschuber/glia_test_{ix}_cellmesh.ply'
         cell_mesh = ssd.get_super_segmentation_object(ix).mesh[1].reshape(-1, 3)
         write_pts_ply(fname, cell_mesh, np.zeros((cell_mesh.shape[0], 1)))
@@ -76,6 +77,7 @@ if __name__ == '__main__':
     use_norm = False
     track_running_stats = False
     activation = 'relu'
+    use_bias = True
     if 'swish' in mdir:
         activation = 'swish'
     if '_noBN_' in mdir:
@@ -91,6 +93,6 @@ if __name__ == '__main__':
     print(scale_fact, npoints)
     log = config.initialize_logging(f'log_eval_sp{npoints}k', mdir)
     mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation,
-                   mpath=f'{mdir}/state_dict_minlr_step27999.pth')
+                   mpath=f'{mdir}/state_dict_minlr_step123999.pth', use_bias=use_bias)
     print(mkwargs)
     predict_glia_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, nloader=2, npredictor=1)
