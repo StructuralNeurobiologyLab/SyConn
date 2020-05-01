@@ -11,7 +11,6 @@ test:
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
     - pytest
-    - pytest --cache-clear
   except:
     - master
   tags:
@@ -25,7 +24,6 @@ test-full:
     - pip install --upgrade --no-deps -v -e .
     - pytest
     - pytest tests/test_run.py  # full example run
-    - pytest --cache-clear
   only:
     - master
   tags:
@@ -65,6 +63,7 @@ pylint:
   artifacts:
     paths:
       - ./pylint/
+    expire_in: 2 yrs
   tags:
     - default
   allow_failure: true
