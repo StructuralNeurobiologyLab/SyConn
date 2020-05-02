@@ -60,7 +60,7 @@ scale_norm = args.scale_norm
 save_root = args.sr
 
 lr = 5e-4
-lr_stepsize = 200
+lr_stepsize = 100
 lr_dec = 0.995
 max_steps = 125000
 
@@ -76,7 +76,7 @@ use_subcell = False
 act = 'swish'
 
 if name is None:
-    name = f'glia_pts_scale{scale_norm}_nb{npoints}_{act}'
+    name = f'glia_pts_scale{scale_norm}_nb{npoints}_{act}_v2'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:

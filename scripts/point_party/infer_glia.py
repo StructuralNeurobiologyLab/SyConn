@@ -43,7 +43,7 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
     """
     from sklearn.preprocessing import label_binarize
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    ssv_ids = np.random.choice(ssd.ssv_ids, 10, replace=False)
+    ssv_ids = np.random.choice(ssd.ssv_ids, 200, replace=False)
     ssv_params = [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids]
     out_dc = predict_pts_plain(ssv_params, model_loader, pts_loader_glia, pts_pred_glia, mkwargs=mkwargs,
                                npoints=npoints, scale_fact=scale_fact, ssv_ids=ssv_ids, **kwargs_add)
@@ -53,9 +53,9 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
 
         # el['t_l'] has shape (b, num_points, n_classes)
         prediction = np.argmax(np.concatenate([el['t_l'].reshape(-1, 2) for el in out]), axis=1)[..., None]
-        if not np.any(prediction == 1):
+        if not np.sum(prediction == 1) / len(prediction) > 0.05:
             continue
-        print(np.unique(prediction, return_counts=True)[1] / len(prediction))
+        print(ix, np.unique(prediction, return_counts=True)[1] / len(prediction))
         # 4 will be red in write_pts_ply
         prediction = label_binarize(prediction * 4, classes=np.arange(5))
         fname = f'/wholebrain/scratch/pschuber/glia_test_{ix}_cellmesh.ply'
@@ -73,11 +73,11 @@ if __name__ == '__main__':
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
     ssd_kwargs = dict(working_dir=wd)
-    mdir = base_dir + '/glia_pts_scale20000_nb25000_swish_moreAug_gn_eval0/'
+    mdir = base_dir + '/glia_pts_scale10000_nb30000_swish_gn_eval0/'
     use_norm = False
     track_running_stats = False
     activation = 'relu'
-    use_bias = True
+    use_bias = False
     if 'swish' in mdir:
         activation = 'swish'
     if '_noBN_' in mdir:
@@ -93,6 +93,6 @@ if __name__ == '__main__':
     print(scale_fact, npoints)
     log = config.initialize_logging(f'log_eval_sp{npoints}k', mdir)
     mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation,
-                   mpath=f'{mdir}/state_dict_minlr_step123999.pth', use_bias=use_bias)
+                   mpath=f'{mdir}/state_dict.pth', use_bias=use_bias)
     print(mkwargs)
     predict_glia_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, nloader=2, npredictor=1)

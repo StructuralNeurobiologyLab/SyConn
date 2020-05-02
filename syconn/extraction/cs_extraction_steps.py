@@ -154,7 +154,6 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     os.makedirs(cset.path_head_folder)
 
     multi_params = []
-    # TODO: currently pickles Chunk objects -> job submission might be slow
     if max_n_jobs > len(chunk_list) // 50:
         iter_params = basics.chunkify(chunk_list, max_n_jobs)
     else:
@@ -166,7 +165,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     # reduce step
     start = time.time()
     cs_worker_dc_fname = f'{global_params.config.temp_path}/cs_worker_dict.pkl'
-    dict_paths_tmp = [cs_worker_dc_fname]
+    dict_paths_tmp = [cs_worker_dc_fname, dir_props, cset.path_head_folder]
     syn_ids = []
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns

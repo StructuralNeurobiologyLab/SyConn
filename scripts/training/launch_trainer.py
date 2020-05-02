@@ -6,7 +6,8 @@ if __name__ == '__main__':
     cnn_script = '/wholebrain/u/pschuber/devel/SyConn-dev/syconn/cnn/cnn_celltype_ptcnv.py'
     base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
     params = []
-    for npoints in [5000, 25000, 50000, 75000, 100000]:
+    # for npoints in [5000, 25000, 50000, 75000, 100000]:
+    for npoints in [25000, ]:
         for run in range(1):
             for cval in range(10):
                 save_root = f'{base_dir}/celltype_eval{run}_sp{npoints//1000}k/'

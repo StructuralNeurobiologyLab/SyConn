@@ -28,7 +28,8 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
 # in nm, should be replaced by Poisson disk sampling
 pts_feat_ds_dict = dict(celltype=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
-                        glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
+                        glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
+                        compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 
 
 # TODO: move to handler.basics
@@ -51,11 +52,17 @@ def write_ply(fn, verts, colors):
         np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
 
 
-def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
+def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray,
+                  binarized=False):
     assert pts.ndim == 2
     assert feats.ndim == 2
+    pts = np.asarray(pts)
+    feats = np.asarray(feats)
     col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
-              4: [[250, 100, 100]], 2: [[100, 200, 100]]}
+              4: [[250, 100, 100]], 2: [[100, 200, 100]], 5: [[100, 200, 200]],
+              6: [0, 0, 0]}
+    if not binarized:
+        feats = label_binarize(feats, np.arange(np.max(feats)+1))
     cols = np.zeros(pts.shape, dtype=np.uint8)
     for k in range(feats.shape[1]):
         mask = feats[:, k] == 1
@@ -426,6 +433,62 @@ def _load_ssv_hc(args):
     return hc
 
 
+@functools.lru_cache(maxsize=128)
+def load_hc_pkl(path: str, gt_type: str) -> HybridCloud:
+    """
+    TODO: move pts_feat_dict and pts_feat_ds_dict to config.
+
+    Load HybridCloud from pkl file (cached via functools.lur_cache).
+    The following properties must be met:
+
+    * Vertex features are labeled according to ``pts_feat_dict`` in
+      handler.prediction_pts.
+    * Skeleton nodes require to have labels (0, 1) indicating whether they can
+      be used as source node for the context generation (1) or not (0).
+
+    Down sampling will be performed via open3d's ``voxel_down_sample`` with
+    voxel sizes defined in pts_feat_ds_dict (handler.prediction_pts)
+
+    Args:
+        path: Path to HybridCloud pickle file.
+        gt_type: See pts_feat_ds_dict in handler.prediction_pts.
+
+    Returns:
+        Populated HybridCloud.
+    """
+    feat_ds_dict = dict(pts_feat_ds_dict[gt_type])
+    # requires cloud keys to be in [vc, syn_ssv, mi, hybrid]
+    feat_ds_dict['hybrid'] = feat_ds_dict['sv']
+    hc = HybridCloud()
+    hc.load_from_pkl(path)
+    new_verts = []
+    new_labels = []
+    new_feats = []
+    for ident_str, feat_id in pts_feat_dict.items():
+        pcd = o3d.geometry.PointCloud()
+        m = (hc.features == feat_id).squeeze()
+        if np.sum(m) == 0:
+            continue
+        verts = hc.vertices[m]
+        labels = hc.labels[m]
+        feats = hc.features[m]
+        pcd.points = o3d.utility.Vector3dVector(verts)
+        pcd, idcs = pcd.voxel_down_sample_and_trace(
+            pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
+            pcd.get_max_bound())
+        idcs = np.max(idcs, axis=1)
+        new_verts.append(np.asarray(pcd.points))
+        new_labels.append(labels[idcs])
+        new_feats.append(feats[idcs])
+    hc._vertices = np.concatenate(new_verts)
+    hc._labels = np.concatenate(new_labels)
+    hc._features = np.concatenate(new_feats)
+    # reset verts2node mapping and cache it
+    hc._verts2node = None
+    _ = hc.verts2node
+    return hc
+
+
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                       batchsize: int, npoints: int,
                       transform: Optional[Callable] = None,
@@ -592,7 +655,7 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                     batchsize: Optional[int] = None, npoints: Optional[int] = None,
                     transform: Optional[Callable] = None,
                     n_out_pts: int = 100, train=False,
-                    base_node_dst: float = 5000,
+                    base_node_dst: float = 1000,
                     use_subcell: bool = False,
                     ssd_kwargs: Optional[dict] = None
                     ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
@@ -623,7 +686,6 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
     # TODO: support node attributes in hybrid cloud graph also
     if type(out_point_label) == str:
         raise NotImplementedError
-    # TODO: add noise on output points?
     feat_dc = dict(pts_feat_dict)
     # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
@@ -642,11 +704,21 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
             feat_dc.values()), 'glia'))
         npoints_ssv = min(len(hc.vertices), npoints)
-        # add a +-10% fluctuation in the number of input and output points
-        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-        n_out_pts_curr = n_out_pts + npoints_add
-        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-        npoints_ssv += npoints_add
+        # with 1/4 draw a small sample during training (only if sample has a minimum number of vertices - 0.75*npoints)
+        if train and np.random.randint(0, 4) == 1 and npoints_ssv / npoints > 0.75:
+            fluct = np.random.randint(-int(n_out_pts * 0.8), 0) / n_out_pts
+            npoints_add = int(fluct * n_out_pts)
+            n_out_pts_curr = n_out_pts + npoints_add
+            # randomize the fluctuation with +-std=0.1 and add those number of vertices
+            npoints_add = int((1 + np.random.randn(1)[0] * 0.1) * fluct * npoints_ssv)
+            # lower bound of 2k points due to non-truncated Gauss distribution
+            npoints_ssv = max(2000, npoints_ssv + npoints_add)
+        else:
+            # add a +-10% fluctuation in the number of input and output points
+            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+            n_out_pts_curr = n_out_pts + npoints_add
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
         if train:
             source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
                                             replace=len(hc.nodes) < batchsize)
@@ -679,7 +751,7 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                 np.random.shuffle(sample_ixs)
                 sample_pts = sample_pts[sample_ixs][:npoints_ssv]
                 sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add up to 10% of duplicated points before applying the transform if sample_pts
+                # add duplicate points before applying the transform if sample_pts
                 # has less points than npoints_ssv
                 npoints_add = npoints_ssv - len(sample_pts)
                 idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
@@ -743,8 +815,7 @@ def pts_loader_semseg(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                       draw_local_dist: int = 1000
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    semantic segmentation tasks, e.g. morphology embeddings.
+    Generator for SSV point cloud samples of size `npoints`.
 
     Args:
         ssd_kwargs: SuperSegmentationDataset keyword arguments specifying e.g.
@@ -764,3 +835,106 @@ def pts_loader_semseg(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
     raise NotImplementedError('TBD')
 
 
+def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
+                            npoints: int, transform: Optional[Callable] = None,
+                            use_subcell: bool = False,
+                            ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Generator for SSV point cloud samples of size `npoints`. Currently used for
+    semantic segmentation tasks, e.g. spine, bouton and functional compartment
+    prediction.
+
+    Args:
+        fnames_pkl:
+        batchsize:
+        npoints:
+        transform:
+        use_subcell:
+
+    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
+
+    """
+    feat_dc = dict(pts_feat_dict)
+    # TODO: add use_syntype
+    del feat_dc['syn_ssv_asym']
+    del feat_dc['syn_ssv_sym']
+    if not use_subcell:
+        del feat_dc['mi']
+        del feat_dc['vc']
+        del feat_dc['syn_ssv']
+
+    for pkl_f in fnames_pkl:
+        hc = load_hc_pkl(pkl_f, 'compartment')
+        npoints_ssv = min(len(hc.vertices), npoints)
+        # cell/sv vertices proportional to total npoints
+        n_out_pts = int(np.sum(hc.features == 0) / len(hc.vertices) * npoints_ssv)
+        # with 1/4 draw a small sample during training (only if sample has a minimum number of vertices - 0.75*npoints)
+        if np.random.randint(0, 4) == 1 and npoints_ssv / npoints > 0.75:
+            fluct = np.random.randint(-int(n_out_pts * 0.8), 0) / n_out_pts
+            npoints_add = int(fluct * n_out_pts)
+            n_out_pts_curr = n_out_pts + npoints_add
+            # randomize the fluctuation with +-std=0.1 and add those number of vertices
+            npoints_add = int((1 + np.random.randn(1)[0] * 0.1) * fluct * npoints_ssv)
+            # lower bound of 2k points due to non-truncated Gauss distribution
+            npoints_ssv = max(2000, npoints_ssv + npoints_add)
+        else:
+            # add a +-10% fluctuation in the number of input and output points
+            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+            n_out_pts_curr = n_out_pts + npoints_add
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
+        source_nodes = np.where(hc.node_labels == 1)[0]
+        source_nodes = np.random.choice(len(source_nodes), batchsize,
+                                        replace=len(source_nodes) < batchsize)
+        n_batches = int(np.ceil(len(source_nodes) / batchsize))
+        if len(source_nodes) % batchsize != 0:
+            source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
+        for ii in range(n_batches):
+            batch = np.zeros((batchsize, npoints_ssv, 3))
+            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+            batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
+            batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
+            cnt = 0
+            for source_node in source_nodes[ii::n_batches]:
+                # create local context
+                node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                sample_feats = hc_sub.features
+                sample_pts = hc_sub.vertices
+                sample_labels = hc_sub.labels
+
+                # sub-sample vertices
+                sample_ixs = np.arange(len(sample_pts))
+                np.random.shuffle(sample_ixs)
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                sample_labels = sample_labels[sample_ixs][:npoints_ssv]
+                # add duplicate points before applying the transform if sample_pts
+                # has less points than npoints_ssv
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                sample_labels = np.concatenate([sample_labels, sample_labels[idx]])
+
+                hc_sub._vertices = sample_pts
+                hc_sub._features = sample_feats
+                hc_sub._labels = sample_labels
+                # apply augmentations
+                if transform is not None:
+                    transform(hc_sub)
+                batch[cnt] = hc_sub.vertices
+                # one hot encoding
+                batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
+                # get target locations
+                out_pts_mask = (hc_sub.features == 0).squeeze()
+                n_out_pts_actual = np.sum(out_pts_mask)
+                idx = np.random.choice(n_out_pts_actual, n_out_pts_curr,
+                                       replace=n_out_pts_actual < n_out_pts_curr)
+                batch_out[cnt] = hc_sub.vertices[out_pts_mask][idx]
+                # TODO: currently only supports type(out_point_label) = int
+                batch_out_l[cnt] = hc_sub.labels[out_pts_mask][idx]
+                assert -1 not in batch_out_l[cnt]
+                cnt += 1
+            assert cnt == batchsize
+            yield (batch_f, batch), (batch_out, batch_out_l)

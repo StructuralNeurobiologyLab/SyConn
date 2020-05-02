@@ -8,20 +8,25 @@
 # ELEKTRONN2 architectures
 import open3d as o3d
 import matplotlib
+import re
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
+import functools
 from knossos_utils import KnossosDataset
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
-from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, pts_feat_dict, pts_loader_glia
+from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, \
+    pts_loader_glia, load_hc_pkl, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
+from morphx.preprocessing.voxel_down import voxel_down
+from morphx.classes.hybridcloud import HybridCloud
 try:
     from vigra.filters import boundaryVectorDistanceTransform
     import vigra
@@ -110,7 +115,6 @@ if elektronn3_avail:
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
-            self._feat_dc = pts_feat_dict
             if use_syntype:
                 self._num_obj_types = 5
             else:
@@ -296,7 +300,6 @@ if elektronn3_avail:
             self._curr_ssv_id = None
             self._curr_ssd_kwargs = None
             self._curr_ssv_label = None
-            self._feat_dc = pts_feat_dict
             self.transform = transform
 
         def __getitem__(self, item):
@@ -350,6 +353,64 @@ if elektronn3_avail:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:
                 return sample_pts, sample_feats, out_pts, out_labels
+
+
+    class CloudDataSemseg(Dataset):
+        def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
+                     train=True, batch_size=1, use_subcell=True):
+            if source_dir is None:
+                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt'
+                              '_2020/2020_05//hc_out/')
+            self.source_dir = source_dir
+            self.fnames = glob.glob(f'{source_dir}/*.pkl')
+            ssv_ids_proof = [491527, 2854913, 8339462, 10919937, 15933443, 15982592,
+                             16096256, 16113665, 18571264]
+            self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
+                           in ssv_ids_proof]
+            print(f'Using {len(self.fnames)} cells for training.')
+            if use_subcell:  # TODO: add syntype
+                self._num_obj_types = 4
+            else:
+                self._num_obj_types = 1
+            self.use_subcell = use_subcell
+            self.train = train
+            self.num_pts = npoints
+            self._batch_size = batch_size
+            self.transform = transform
+
+        def __getitem__(self, item):
+            item = np.random.randint(0, len(self.fnames))
+            sample_pts, sample_feats, out_pts, out_labels = self.load_sample(item)
+            pts = torch.from_numpy(sample_pts).float()
+            feats = torch.from_numpy(sample_feats).float()
+            out_pts = torch.from_numpy(out_pts).float()
+            lbs = torch.from_numpy(out_labels).long()
+            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': lbs}
+
+        def __len__(self):
+            if self.train:
+                # make use of the underlying LRU cache with high epoch size,
+                # worker instances of the pytorch loader will reset after each epoch
+                return len(self.fnames) * 15
+            else:
+                return max(len(self.fnames) // 10, 1)
+
+        def load_sample(self, item):
+            """
+            Deterministic data loader.
+
+            Args:
+                item: Index in `py:attr:~fnames`.
+
+            Returns:
+                Numpy arrays of points, point features, target points and target labels.
+            """
+            p = self.fnames[item]
+            (sample_feats, sample_pts), (out_pts, out_labels) = \
+                [*pts_loader_semseg_train([p], self._batch_size, self.num_pts,
+                                          transform=self.transform,
+                                          use_subcell=self.use_subcell)][0]
+            return sample_pts, sample_feats, out_pts, out_labels
 
 
     class MultiviewDataCached(Dataset):
