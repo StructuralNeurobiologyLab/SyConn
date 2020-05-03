@@ -48,7 +48,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         swapdata=False, prob_kd_path_dict=None,
                         membrane_filename=None, membrane_kd_path=None,
                         hdf5_name_membrane=None, fast_load=False, suffix="",
-                        nb_cpus=None, n_max_co_processes=None, transform_func=None,
+                        nb_cpus=None, transform_func=None,
                         transform_func_kwargs=None, transf_func_kd_overlay=None,
                         load_from_kd_overlaycubes=False, n_chunk_jobs=None):
     """
@@ -181,7 +181,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
 
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(transform_func, multi_params,
-                                             nb_cpus=n_max_co_processes, debug=debug)
+                                             nb_cpus=nb_cpus, debug=debug)
 
         results_as_list = []
         for result in results:
@@ -193,7 +193,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             "QSUB currently only supported for gaussian threshold CC."
         path_to_out = qu.batchjob_script(
             multi_params, "gauss_threshold_connected_components", n_cores=nb_cpus,
-            n_max_co_processes=n_chunk_jobs, use_dill=True, suffix=filename)
+            use_dill=True, suffix=filename)
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
@@ -334,7 +334,7 @@ def _gauss_threshold_connected_components_thread(args):
 
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                       chunk_translator, debug, suffix="", n_max_co_processes=100,
+                       chunk_translator, debug, suffix="",
                        n_chunk_jobs=None, nb_cpus=1):
     """
     Makes labels unique across chunks
@@ -382,14 +382,12 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_make_unique_labels_thread,
-                                         multi_params_glob, debug=debug,
-                                             nb_cpus=n_max_co_processes)
+                                       multi_params_glob, debug=debug)
 
     else:
         _ = qu.batchjob_script(
             multi_params_glob, "make_unique_labels", suffix=filename,
-            n_max_co_processes=n_max_co_processes, remove_jobfolder=True,
-            n_cores=nb_cpus)
+            remove_jobfolder=True, n_cores=nb_cpus)
 
 
 def _make_unique_labels_thread(func_args):
@@ -415,8 +413,7 @@ def _make_unique_labels_thread(func_args):
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
-                     overlap, debug, suffix="",
-                     n_max_co_processes=100, nb_cpus=None, n_erosion=0,
+                     overlap, debug, suffix="", nb_cpus=None, n_erosion=0,
                      overlap_thresh=0, n_chunk_jobs=None):
     """
     Creates a stitch list for the overlap region between chunks
@@ -442,8 +439,6 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    n_max_co_processes: int
-        Maximum number of parallel workers.
     nb_cpus: int
         Number of cores used per worker.
     n_chunk_jobs: int
@@ -471,8 +466,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
-                                             multi_params, debug=debug,
-                                             nb_cpus=n_max_co_processes,)
+                                             multi_params, debug=debug)
 
         stitch_list = {}
         for hdf5_name in hdf5names:
@@ -485,8 +479,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     else:
         path_to_out = qu.batchjob_script(multi_params, "make_stitch_list",
-                                         suffix=filename, n_cores=nb_cpus,
-                                         n_max_co_processes=n_max_co_processes)
+                                         suffix=filename, n_cores=nb_cpus)
 
         out_files = glob.glob(path_to_out + "/*")
 
@@ -656,8 +649,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                     debug, suffix="", n_max_co_processes=100,
-                     n_chunk_jobs=None, nb_cpus=1):
+                     debug, suffix="", n_chunk_jobs=None, nb_cpus=1):
     """
     Applies merge list to all chunks
 
@@ -679,10 +671,9 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    n_max_co_processes: int
-        Number of parallel workers.
     n_chunk_jobs: int
         Number of total jobs.
+    nb_cpus:
     """
 
     multi_params = []
@@ -700,13 +691,12 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                              filename, hdf5names, merge_list_dict_path, suffix])
 
     if not qu.batchjob_enabled():
-        sm.start_multiprocess_imap(_apply_merge_list_thread, multi_params,
-                                   debug=debug, nb_cpus=n_max_co_processes)
+        sm.start_multiprocess_imap(_apply_merge_list_thread, multi_params)
 
     else:
         qu.batchjob_script(
             multi_params, "apply_merge_list", suffix=filename, n_cores=nb_cpus,
-            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+            remove_jobfolder=True)
 
 
 def _apply_merge_list_thread(args):
@@ -742,7 +732,7 @@ def _apply_merge_list_thread(args):
 def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000, debug=False, workfolder=None,
                    overlaydataset_path=None, chunk_list=None, suffix="",
-                   n_chunk_jobs=2000, use_work_dir=True, n_max_co_processes=None,
+                   n_chunk_jobs=2000, use_work_dir=True,
                    nb_cpus=None, transform_func=None, transform_func_kwargs=None):
     """
     Extracts voxels for each component id
@@ -765,11 +755,10 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         Suffix for the intermediate results
     nb_cpus : int
         number of parallel jobs
+    transform_func: Callable
     transform_func_kwargs : dict
     n_chunk_jobs : int
         Total number of jobs
-    n_max_co_processes : int
-        Jobs run in parallel
     use_work_dir : bool
         Unclear what this is for
     workfolder : str
@@ -812,11 +801,10 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params, debug=debug,
-                                             nb_cpus=n_max_co_processes, verbose=debug)
+                                             verbose=debug)
     else:
         path_to_out = qu.batchjob_script(
-            multi_params, "extract_voxels", suffix=filename,
-            n_max_co_processes=n_max_co_processes, n_cores=nb_cpus)
+            multi_params, "extract_voxels", suffix=filename, n_cores=nb_cpus)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -934,9 +922,8 @@ def _extract_voxels_thread(args):
     return map_dict
 
 
-def combine_voxels(workfolder, hdf5names, dataset_names=None,
-                   n_folders_fs=10000, n_chunk_jobs=2000, nb_cpus=None, sd_version=0,
-                   n_max_co_processes=None):
+def combine_voxels(workfolder, hdf5names, dataset_names=None, n_folders_fs=10000,
+                   n_chunk_jobs=2000, nb_cpus=None, sd_version=0):
     """
     Extracts voxels for each component id and ceates a SegmentationDataset of type hdf5names.
     SegmentationDataset(s) will always have version 0!
@@ -947,11 +934,12 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
     hdf5names: List[str]
         Names/labels to be extracted and processed from the prediction
         file
+    dataset_names:
     sd_version : int or str
         0 by default
     n_folders_fs : int
     nb_cpus : int
-    n_max_co_processes : int
+    n_chunk_jobs : int
 
     """
     if dataset_names is None:
@@ -1005,13 +993,12 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
 
         if not qu.batchjob_enabled():
             _ = sm.start_multiprocess_imap(_combine_voxels_thread,
-                                           multi_params, nb_cpus=n_max_co_processes)
+                                           multi_params, nb_cpus=nb_cpus)
 
         else:
             _ = qu.batchjob_script(
                 multi_params, "combine_voxels", suffix=dataset_names[ii],
-                n_max_co_processes=n_max_co_processes, n_cores=nb_cpus,
-                remove_jobfolder=True)
+                n_cores=nb_cpus, remove_jobfolder=True)
         shutil.rmtree(dataset_temp_path)
 
 
@@ -1052,8 +1039,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                             n_folders_fs=10000, workfolder=None,
                             overlaydataset_path=None, chunk_list=None,
                             suffix="", n_chunk_jobs=2000, sd_version=0,
-                            use_work_dir=True, n_cores=1,
-                            n_max_co_processes=None):
+                            use_work_dir=True, n_cores=1):
     """
     Creates a SegmentationDataset of type dataset_names
 
@@ -1073,7 +1059,6 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
     n_chunk_jobs :
     use_work_dir :
     n_cores :
-    n_max_co_processes :
 
     Returns
     -------
@@ -1120,13 +1105,12 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
-                                       multi_params, nb_cpus=n_max_co_processes,
-                                       verbose=True)
+                                       multi_params, verbose=True)
 
     else:
         _ = qu.batchjob_script(
             multi_params, "extract_voxels_combined", suffix=filename, n_cores=n_cores,
-            max_iterations=10, n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+            max_iterations=10, remove_jobfolder=True)
 
 
 def _extract_voxels_combined_thread(args):
@@ -1268,10 +1252,9 @@ def _extract_voxels_combined_thread_OLD(args):
 
 
 def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1,
-                               offset=None, size=None, n_max_co_processes=None,
-                               stride=(4 * 128, 4 * 128, 4 * 128), overwrite=False,
-                               as_raw=False, fast_downsampling=False, n_max_job=None,
-                               unified_labels=False, orig_dtype=np.uint8, log=None):
+                               offset=None, size=None, stride=(4 * 128, 4 * 128, 4 * 128),
+                               overwrite=False, as_raw=False, fast_downsampling=False,
+                               n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None):
     """
     Batchjob version of :class:`knossos_utils.chunky.ChunkDataset.export_cset_to_kd`
     method, see ``knossos_utils.chunky`` for details.
@@ -1289,7 +1272,6 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
         n_cores:
         offset:
         size:
-        n_max_co_processes:
         stride:
         overwrite:
         as_raw:
@@ -1338,7 +1320,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
     job_suffix = "_" + "_".join(hdf5names)
     qu.batchjob_script(
         multi_params, "export_cset_to_kds", n_cores=n_cores, remove_jobfolder=True,
-        n_max_co_processes=n_max_co_processes, suffix=job_suffix, log=log)
+        suffix=job_suffix, log=log)
 
 
 def _export_cset_as_kds_thread(args):

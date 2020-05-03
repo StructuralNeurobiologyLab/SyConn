@@ -49,8 +49,7 @@ from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from .. import global_params
 
 
-def extract_contact_sites(n_max_co_processes: Optional[int] = None,
-                          chunk_size: Optional[Tuple[int, int, int]] = None,
+def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
                           log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None,
                           cube_of_interest_bb: Optional[np.ndarray] = None,
@@ -78,7 +77,6 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
           `syn_gen_via_cset`` and ``extract_synapse_type``.
 
     Args:
-        n_max_co_processes: Number of parallel workers.
         chunk_size: Sub-cube volume which is processed at a time.
         log: Logger.
         max_n_jobs: Maximum number of jobs, only used as a lower bound.
@@ -170,8 +168,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction",
-                                         n_max_co_processes=n_max_co_processes, log=log)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -183,10 +180,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
             cs_ids.append(cs_ids_curr)
             cs_worker_mapping[worker_nr] = cs_ids_curr
     else:
-        results = start_multiprocess_imap(
-            _contact_site_extraction_thread, multi_params, nb_cpus=n_max_co_processes,
-            verbose=False, debug=False)
-
+        results = start_multiprocess_imap(_contact_site_extraction_thread,
+                                          multi_params, verbose=False)
         for worker_nr, worker_res in tqdm.tqdm(results, leave=False):
             syn_ids_curr = np.array(worker_res['syn'], dtype=np.uint64)
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)
@@ -248,8 +243,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         export_cset_to_kd_batchjob({obj_type: path},
             cset, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
-            orig_dtype=np.uint64, unified_labels=False,
-            n_max_co_processes=n_max_co_processes, log=log)
+            orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
                   ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
 
@@ -279,8 +273,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                                 multi_params, nb_cpus=1, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=1, n_max_co_processes=max_n_jobs,
-                           remove_jobfolder=True)
+                           n_cores=1, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (currently only syn_ssv exist)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
@@ -693,7 +686,7 @@ def merge_type_dicts(type_dicts):
                 tot_map[cs_id] = cnt
 
 
-def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
+def find_contact_sites(cset, knossos_path, filename='cs',
                        size=None, offset=None):
     """
     # TODO: add additional chunk-chunking (less number of submitted jobs)
@@ -703,7 +696,6 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     cset :
     knossos_path :
     filename :
-    n_max_co_processes :
     size :
     offset :
 
@@ -726,11 +718,10 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
 
     if not qu.batchjob_enabled():
         _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-                                    debug=False, nb_cpus=n_max_co_processes)
+                                    debug=False)
     else:
         _ = qu.batchjob_script(
-            multi_params, "contact_site_detection",
-            n_max_co_processes=n_max_co_processes)
+            multi_params, "contact_site_detection")
     chunky.save_dataset(cset)
 
 
@@ -779,8 +770,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
 
 
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
-                              n_folders_fs=10000, suffix="",
-                              n_max_co_processes=None, n_chunk_jobs=2000, size=None,
+                              n_folders_fs=10000, suffix="", n_chunk_jobs=2000, size=None,
                               offset=None, log=None, cube_shape=None):
     """
 
@@ -792,7 +782,6 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     hdf5name :
     n_folders_fs :
     suffix :
-    n_max_co_processes :
     n_chunk_jobs :
     size :
     offset :
@@ -824,14 +813,12 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     export_cset_to_kd_batchjob({hdf5name: path},
         cset, '{}'.format(filename), [hdf5name],
         offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-        orig_dtype=np.uint64, unified_labels=False,
-        n_max_co_processes=n_max_co_processes)
+        orig_dtype=np.uint64, unified_labels=False)
     log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
         cset.path_head_folder, target_kd.knossos_path))
 
     # get CS SD
     from_ids_to_objects(cset, filename, overlaydataset_path=target_kd.conf_path,
-                        n_chunk_jobs=n_chunk_jobs, hdf5names=[hdf5name],
-                        n_max_co_processes=n_max_co_processes, workfolder=working_dir,
+                        n_chunk_jobs=n_chunk_jobs, hdf5names=[hdf5name], workfolder=working_dir,
                         n_folders_fs=n_folders_fs, use_combined_extraction=True, suffix=suffix,
                         size=size, offset=offset, log=log)

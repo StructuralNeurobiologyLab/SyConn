@@ -35,7 +35,6 @@ def qsub_glia_splitting():
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
                    global_params.config.ncore_total * 2)
     qu.batchjob_script(chs, "split_glia", n_cores=1,
-                       n_max_co_processes=global_params.config.ncore_total * 2,
                        remove_jobfolder=True)
 
 

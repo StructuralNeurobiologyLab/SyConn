@@ -70,7 +70,6 @@ def batchjob_script(params: list, name: str,
                     n_cores: int = 1, additional_flags: str = '',
                     suffix: str = "", job_name: str = "default",
                     script_folder: Optional[str] = None,
-                    n_max_co_processes: Optional[int] = None,
                     max_iterations: int = 5,
                     python_path: Optional[str] = None,
                     disable_batchjob: bool = False,
@@ -106,12 +105,12 @@ def batchjob_script(params: list, name: str,
             Defaults to a random string of 8 letters.
         script_folder: Directory where to look for the script which is executed.
             Looks for ``QSUB_{name}.py``.
-        n_max_co_processes: Not needed / not monitored anymore.
         max_iterations: Maximum number of retries of failed jobs.
         python_path: Path to python binary.
         disable_batchjob: Use single node multiprocessing.
         use_dill: Use dill to enable pickling of lambda expressions.
             remove_jobfolder: Remove `batchjob_folder` after successful termination.
+        remove_jobfolder:
         log: Logger.
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
@@ -136,12 +135,6 @@ def batchjob_script(params: list, name: str,
                                           log_dir=batchjob_folder)
     else:
         log_batchjob = log
-    if n_max_co_processes is None:
-        n_max_co_processes = np.min([global_params.config.ncore_total // n_cores,
-                                     len(params)])
-    else:
-        n_max_co_processes = np.min([n_max_co_processes, len(params)])
-    n_max_co_processes = np.max([n_max_co_processes, 1])
     if script_folder is not None:
         path_to_scripts = script_folder
     else:
@@ -174,8 +167,7 @@ def batchjob_script(params: list, name: str,
                                 np.random.randint(0, len(letters), 8)])
     log_batchjob.info(
         'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks using {} parallel jobs, each'
-        ' using {} core(s).'.format(name, job_name, suffix, len(params),
-                                    n_max_co_processes, n_cores))
+        ' using {} core(s).'.format(name, job_name, suffix, len(params), n_cores))
     if len(job_name) > 8:
         msg = "job_name is longer than 8 characters. This is untested."
         log_batchjob.error(msg)
@@ -389,8 +381,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
                       show_progress=True, log=None, overwrite=False, job_folder=None):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
-    Fallback method in case no batchjob submission system is available. Always uses
-    ``n_max_co_processes = cpu_count()``.
+    Fallback method in case no batchjob submission system is available.
 
     Parameters
     ----------
@@ -430,8 +421,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
     n_max_co_processes = np.min([cpu_count() // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
-    log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
-                       ' parallel jobs, each using {} core(s).'.format(name, len(params), n_max_co_processes, n_cores))
+    log_batchjob.debug(f'Started BatchJobFallback script "{name}" with {len(params)} tasks'
+                       f' using {n_max_co_processes} parallel jobs, each using {n_cores} core(s).')
     start = time.time()
 
     if script_folder is not None:
@@ -476,7 +467,6 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
     out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
-                                      nb_cpus=n_max_co_processes,
                                       show_progress=show_progress)
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):

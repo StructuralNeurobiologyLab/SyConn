@@ -37,8 +37,7 @@ from .meshes import mesh_area_calc, merge_meshes_incl_norm
 from zmesh import Mesher
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
-                     compute_meshprops=False):
+def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -53,9 +52,6 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     :param nb_cpus: int
         number of cores used for multithreading
         number of cores per worker for qsub jobs
-    :param n_max_co_processes: int
-        max number of workers running at the same time when using qsub
-    :param compute_meshprops: bool
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
@@ -77,8 +73,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     # Running workers
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=n_max_co_processes,
-                                             debug=False)
+                                             multi_params, debug=False)
         # Creating summaries
         attr_dict = {}
         for this_attr_dict in results:
@@ -117,7 +112,6 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
 
     else:
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-                                         n_max_co_processes=n_max_co_processes,
                                          suffix=sd.type)
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
@@ -311,7 +305,6 @@ def _cache_storage_paths(args):
 def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                               n_folders_fs: int = 1000, n_folders_fs_sc: int = 1000,
                               n_chunk_jobs: Optional[int] = None, n_cores: int = 1,
-                              n_max_co_processes: Optional[int] = None,
                               cube_of_interest_bb: Optional[tuple] = None,
                               chunk_size: Optional[Union[tuple, np.ndarray]] = None,
                               log: Logger = None, overwrite=False):
@@ -331,7 +324,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         n_folders_fs_sc:
         n_chunk_jobs:
         n_cores:
-        n_max_co_processes:
         cube_of_interest_bb:
         chunk_size:
         log:
@@ -419,8 +411,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     # TODO: refactor write-out (and read in batchjob_enabled)
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
-            multi_params, "map_subcell_extract_props", n_cores=n_cores,
-            n_max_co_processes=n_max_co_processes)
+            multi_params, "map_subcell_extract_props", n_cores=n_cores)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -470,7 +461,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
             dict_paths_tmp += [sc_prop_worker_dc]
     else:
         results = sm.start_multiprocess_imap(
-            _map_subcell_extract_props_thread, multi_params, nb_cpus=n_max_co_processes,
+            _map_subcell_extract_props_thread, multi_params,
             verbose=False, debug=False)
 
         for worker_nr, ref_mesh_dc in tqdm.tqdm(results, leave=False):
@@ -559,10 +550,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
-                           n_max_co_processes=global_params.config.ncore_total,
                            remove_jobfolder=True, n_cores=1)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
@@ -582,10 +572,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_sv",
-                           n_max_co_processes=global_params.config.ncore_total,
                            remove_jobfolder=True)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
@@ -1403,7 +1392,7 @@ def merge_map_dicts(map_dicts):
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
-                      nb_cpus=None, n_max_co_processes=None):
+                      nb_cpus=None):
     paths = cs_sd.so_dir_paths
 
     # Partitioning the work
@@ -1419,7 +1408,6 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
 
     else:
         qu.batchjob_script(multi_params, "binary_filling_cs", n_cores=nb_cpus,
-                           n_max_co_processes=n_max_co_processes,
                            remove_jobfolder=True)
 
 
@@ -1558,8 +1546,7 @@ def multi_probas_saver(args):
     so.save_attributes([key], [probas])
 
 
-def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10,
-                                n_max_co_processes=100):
+def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
 
     block_size = np.array([block_edge_length] * 3)
 
@@ -1604,7 +1591,6 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10,
 
     else:
         _ = qu.batchjob_script(multi_params, "export_sd_to_knossosdataset",
-                               n_max_co_processes=n_max_co_processes,
                                remove_jobfolder=True)
 
 

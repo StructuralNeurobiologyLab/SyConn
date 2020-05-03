@@ -9,10 +9,10 @@ try:
 except ImportError:
     import pickle as pkl
 from typing import Iterable, List, Tuple
-import glob
 import numpy as np
 from collections import Counter
-
+from typing import Optional, Union, Callable, List, Dict
+from logging import Logger
 from .. import global_params
 from . import log_proc
 from ..handler import basics
@@ -24,21 +24,19 @@ from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
 
 
-def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=None,
-                                           n_jobs=None, nb_cpus=None):
+def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
+                                           obj_types: List[str],
+                                           n_jobs: Optional[int] = None,
+                                           nb_cpus: Optional[int] = None):
     """
 
     Args:
         ssd: SuperSegmentationDataset
         obj_types: List[str]
-        n_max_co_processes: int
-            Number of parallel jobs
         n_jobs: int
         nb_cpus: int
-            cpus per job when using BatchJob
-
-    Returns:
-
+            cpus per job when using BatchJob or the total number
+            of jobs used if single node multiprocessing.
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -53,12 +51,12 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
-            multi_params, nb_cpus=n_max_co_processes, debug=False)
+            multi_params, debug=False, nb_cpus=nb_cpus)
 
     else:
         _ = qu.batchjob_script(
             multi_params, "aggregate_segmentation_object_mappings",
-            n_max_co_processes=n_max_co_processes, n_cores=nb_cpus, remove_jobfolder=True)
+            n_cores=nb_cpus, remove_jobfolder=True)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -96,19 +94,18 @@ def _aggregate_segmentation_object_mappings_thread(args):
         ssv.save_attr_dict()
 
 
-def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
-                            nb_cpus=None, n_max_co_processes=None):
+def apply_mapping_decisions(ssd: SuperSegmentationDataset,
+                            obj_types: List[str], n_jobs: Optional[int] = None,
+                            nb_cpus: Optional[int] = None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
+
     Args:
-        ssd: SuperSegmentationDataset
-        obj_types: List[str]
-        n_jobs: int
-        nb_cpus: int
-        n_max_co_processes: int
-
-    Returns:
-
+        ssd: SuperSegmentationDataset.
+        obj_types:
+        n_jobs:
+        nb_cpus: cpus per job when using BatchJob or the total number
+            of jobs used if single node multiprocessing.
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -120,17 +117,16 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                       multi_params, debug=False, nb_cpus=n_max_co_processes)
+                                       multi_params)
 
     else:
         _ = qu.batchjob_script(
             multi_params, "apply_mapping_decisions", n_cores=nb_cpus,
-            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+            remove_jobfolder=True)
 
 
 def _apply_mapping_decisions_thread(args):
-    # TODO: investigate `correct_for_background` when `obj_type=='sj'`
-    #  correct_for_background is not required anymore with the new mapping procedure
+    # TODO: correct_for_background is not required anymore with the new mapping procedure
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -227,41 +223,38 @@ def _apply_mapping_decisions_thread(args):
 
             ssv.attr_dict[obj_type] = []
             for candidate_id in candidate_ids:
-                obj = segmentation.SegmentationObject(candidate_id,
-                                                      obj_type=obj_type,
-                                                      version=
-                                                      ssv.version_dict[
-                                                          obj_type],
-                                                      working_dir=ssv.working_dir,
-                                                      config=ssv.config)
+                obj = segmentation.SegmentationObject(
+                    candidate_id, obj_type=obj_type, version=ssv.version_dict[obj_type],
+                    working_dir=ssv.working_dir, config=ssv.config)
                 if obj.size > sizethreshold:
                     ssv.attr_dict[obj_type].append(candidate_id)
             ssv.save_attr_dict()
 
 
-def map_synssv_objects(synssv_version=None, stride=100, log=None,
-                       nb_cpus=None, n_max_co_processes=global_params.config.ncore_total,
+def map_synssv_objects(synssv_version: Optional[str] = None,
+                       log: Optional[Logger] = None,
+                       nb_cpus=None, n_jobs=None,
                        syn_threshold=None):
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
 
     Args:
         synssv_version: str
-        stride: int
+        n_jobs: int
         log:
         nb_cpus: int
-        n_max_co_processes: int
         syn_threshold: float
 
     Returns:
 
     """
+    if n_jobs is None:
+        n_jobs = 4 * global_params.config.ncore_total
     if syn_threshold is None:
         syn_threshold = global_params.config['cell_objects']['thresh_synssv_proba']
     ssd = SuperSegmentationDataset(global_params.config.working_dir)
     multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in range(0, len(ssd.ssv_ids), stride)]:
+    for ssv_id_block in basics.chunkify(ssd.ssv_ids, n_jobs):
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, ssd.type, synssv_version,
                              syn_threshold])
@@ -272,9 +265,8 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
             multi_params, nb_cpus=nb_cpus)
 
     else:
-        _ = qu.batchjob_script(
-            multi_params, "map_synssv_objects", n_max_co_processes=n_max_co_processes,
-            remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(multi_params, "map_synssv_objects",
+                               remove_jobfolder=True, log=log)
 
 
 def map_synssv_objects_thread(args):
@@ -307,12 +299,14 @@ def map_synssv_objects_thread(args):
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
         # cache syn_ssv mesh and typed meshes if available
-        ssv.load_mesh('syn_ssv')
-        if global_params.config.syntype_available:
-            ssv.typedsyns2mesh()
+        # TODO: this takes long for large data sets
+        # ssv.load_mesh('syn_ssv')
+        # if global_params.config.syntype_available:
+        #     ssv.typedsyns2mesh()
 
 
-def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):
+def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,
+                  ssd_type: str = 'ssv', nb_cpus: Optional[int] = None):
     """
     Caches the SSV meshes locally with 20 cpus in parallel.
 
@@ -323,9 +317,9 @@ def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):
             version identifier, like 'spgt' for spine ground truth SSD. Defaults
             to the SSD of the cellular SSVs.
         ssd_type: str
-            Default is 'ssv'
+            Default is 'ssv'.
         nb_cpus: int
-            Default is 20.
+            Default is ``cpu_count()``.
 
     Returns:
 

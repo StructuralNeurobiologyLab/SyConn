@@ -542,7 +542,6 @@ class SuperSegmentationDataset(object):
                           attr_keys: Iterable[str] = (),
                           n_jobs: Optional[int] = None,
                           nb_cpus: Optional[int] = None, use_batchjob=True,
-                          n_max_co_processes: Optional[int] = None,
                           new_mapping: bool = True, overwrite=False):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
@@ -559,7 +558,6 @@ class SuperSegmentationDataset(object):
                 will be replaced by a global flag soon.
             nb_cpus: CPUs per worker.
             use_batchjob: Use batchjob processing instead of local multiprocessing.
-            n_max_co_processes: Number of parallel worker.
             new_mapping: Whether to apply new mapping (see :func:`~mapping_dict`).
             overwrite: Remove existing SSD folder, if Fals and a folder already
                 exists it raises FileExistsError.
@@ -570,7 +568,6 @@ class SuperSegmentationDataset(object):
         save_dataset_deep(self, extract_only=extract_only,
                           attr_keys=attr_keys, n_jobs=n_jobs,
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
-                          n_max_co_processes=n_max_co_processes,
                           overwrite=overwrite, use_batchjob=use_batchjob)
 
     def predict_cell_types_skelbased(self, stride: int = 1000,
@@ -655,7 +652,6 @@ class SuperSegmentationDataset(object):
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
                       attr_keys: Iterable = (), n_jobs: Optional[int] = None,
                       nb_cpus: Optional[int] = None, use_batchjob=True,
-                      n_max_co_processes: Optional[int] = None,
                       new_mapping: bool = True, overwrite=False):
     """
     Saves attributes of all SSVs within the given SSD and computes properties
@@ -679,7 +675,6 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             will be replaced by a global flag soon.
         nb_cpus: CPUs per worker.
         use_batchjob: Use batchjob processing instead of local multiprocessing.
-        n_max_co_processes: Number of parallel worker.
         new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`).
         overwrite: Remove existing SSD folder, if Fals and a folder already
             exists it raises FileExistsError.
@@ -708,8 +703,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
     else:
         path_to_out = qu.batchjob_script(multi_params,
                                          "write_super_segmentation_dataset",
-                                         n_cores=nb_cpus,
-                                         n_max_co_processes=n_max_co_processes)
+                                         n_cores=nb_cpus)
 
         out_files = glob.glob(path_to_out + "/*")
         results = []
