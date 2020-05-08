@@ -3116,7 +3116,7 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             largeFoV=False):
+                             onthefly_views=False):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3129,20 +3129,18 @@ class SuperSegmentationObject(object):
             view_props: Optional[dict]
                 Dictionary which contains view properties. If None, default defined in
                 `global_params.py` will be used.
-            largeFoV: bool
+            onthefly_views: bool
 
         Returns:
 
         """
-        if not largeFoV:
-            if view_props is None:
-                view_props = {}
+        if view_props is None:
+            view_props = {}
+        if not onthefly_views:
             # reuse small, local views via bootstrapping
             ssh.predict_sso_celltype(
                 self, model, pred_key_appendix=pred_key_appendix, **view_props)
         else:
-            if view_props is None:
-                view_props = global_params.config['celltype']['view_properties_large']
             ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
                                         overwrite=False, **view_props)
         if model_tnet is not None:
@@ -3389,25 +3387,19 @@ def celltype_predictor(args):
     Returns:
 
     """
-    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3
+    from ..handler.prediction import get_celltype_model_e3
     ssv_ids = args
     # randomly initialize gpu
     m = get_celltype_model_e3()
-    m_tnet = get_tripletnet_model_e3()
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
         ssv._view_caching = True
         try:
-            if global_params.config.use_large_fov_views_ct:
-                view_props = global_params.config['celltype']['view_properties_large']
-                ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
-                ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
-            else:
-                ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
+            ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
         except RuntimeError as e:
-            missing_ssvs.append((ssv.id, str(e)))
+            missing_ssvs.append(ssv.id)
             msg = 'ERROR during celltype prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
     return missing_ssvs

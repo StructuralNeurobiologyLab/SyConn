@@ -166,7 +166,7 @@ def batchjob_script(params: list, name: str,
             job_name = "".join([letters[l] for l in
                                 np.random.randint(0, len(letters), 8)])
     log_batchjob.info(
-        'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks using {} parallel jobs, each'
+        'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks, each'
         ' using {} core(s).'.format(name, job_name, suffix, len(params), n_cores))
     if len(job_name) > 8:
         msg = "job_name is longer than 8 characters. This is untested."

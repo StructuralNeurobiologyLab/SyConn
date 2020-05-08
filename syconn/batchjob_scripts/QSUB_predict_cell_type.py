@@ -30,10 +30,13 @@ with open(path_storage_file, 'rb') as f:
 ch = args[0]
 
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-n_worker = 4
+n_worker = 2
 params = basics.chunkify(ch, n_worker * 4)
 res = start_multiprocess_imap(celltype_predictor, params, nb_cpus=n_worker)
 missing = np.concatenate(res)
+missing = celltype_predictor(missing)
+if len(missing):
+    raise ValueError(f'Missing SSV IDs: {missing}')
 
 with open(path_out_file, "wb") as f:
     pkl.dump(missing, f)

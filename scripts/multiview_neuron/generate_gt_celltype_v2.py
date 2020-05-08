@@ -126,7 +126,6 @@ if __name__ == "__main__":
                 # ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix1,
                 #                          model_tnet=m_tnet)
                 ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2,
-                                         largeFoV=False,
                                          view_props={"overwrite": False, 'use_syntype': True,
                                                      'nb_views': 20, 'da_equals_tan': da_equals_tan})
                 ssv.load_attr_dict()

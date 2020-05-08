@@ -30,9 +30,10 @@ parser.add_argument('--na', type=str, help='Experiment name',
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=12, help='Batch size')
 parser.add_argument('--sp', type=int, default=30000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=10000, help='Scale factor for normalization')
+parser.add_argument('--scale_norm', type=int, default=1000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
+parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -58,11 +59,12 @@ batch_size = args.bs
 npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
+ctx = args.ctx
 
 lr = 5e-4
 lr_stepsize = 100
-lr_dec = 0.995
-max_steps = 125000
+lr_dec = 0.992
+max_steps = 300000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -76,7 +78,7 @@ use_subcell = False
 act = 'swish'
 
 if name is None:
-    name = f'glia_pts_scale{scale_norm}_nb{npoints}_{act}_v2'
+    name = f'glia_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -141,9 +143,9 @@ valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
 train_ds = CellCloudGlia(npoints=npoints, transform=train_transform,
-                         batch_size=batch_size)
+                         batch_size=batch_size, ctx_size=ctx)
 valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False,
-                         batch_size=batch_size)
+                         batch_size=batch_size, ctx_size=ctx)
 
 # PREPARE AND START TRAINING #
 

@@ -506,17 +506,17 @@ class DynConfig(Config):
             return True
 
     @property
-    def use_large_fov_views_ct(self) -> bool:
+    def use_onthefly_views_ct(self) -> bool:
         """
-        Use views with large field of view for cell type prediction.
+        Generate views for cell type prediction on the fly.
 
         Returns:
             Value stored at the config.yml file.
         """
         try:
-            if self.entries['views']['use_large_fov_views_ct'] is None:
+            if self.entries['views']['use_onthefly_views_ct'] is None:
                 raise KeyError
-            return self.entries['views']['use_large_fov_views_ct']
+            return self.entries['views']['use_onthefly_views_ct']
         except KeyError:
             return False
 
@@ -622,7 +622,7 @@ class DynConfig(Config):
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
-                          use_large_fov_views_ct: bool = False,
+                          use_onthefly_views_ct: bool = False,
                           allow_skel_gen: bool = True,
                           use_new_renderings_locs: bool = True,
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
@@ -815,7 +815,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
             spiness: 1000
 
         views:
-          use_large_fov_views_ct:
+          use_onthefly_views_ct:
           use_new_renderings_locs:
           nb_views: 2  # used for default view rendering (glia separation, spine detection)
 
@@ -894,7 +894,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         scaling: Voxel size in NM.
         syntype_avail: If True, synapse objects will contain additional type
             property (symmetric vs asymmetric).
-        use_large_fov_views_ct: If True, uses on-the-fly, large view renderings
+        use_onthefly_views_ct: If True, uses on-the-fly, large view renderings
             for predicting cell types.
         allow_skel_gen: If True, allow cell skeleton generation from rendering
             locations (inaccurate).
@@ -952,7 +952,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['skeleton']['allow_skel_gen'] = allow_skel_gen
 
-    entries['views']['use_large_fov_views_ct'] = use_large_fov_views_ct
+    entries['views']['use_onthefly_views_ct'] = use_onthefly_views_ct
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal

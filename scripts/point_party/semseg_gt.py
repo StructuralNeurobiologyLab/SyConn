@@ -33,17 +33,19 @@ def labels2mesh(args):
             out_path: path to folder where output should be saved.
     """
     kzip_path, out_path, version = args
+    sso_id = int(re.findall(r"/(\d+)\.", kzip_path)[0])
 
     # load annotation object
     a_obj = load_skeleton(kzip_path)
     if len(a_obj) == 1:
         a_obj = list(a_obj.values())[0]
+    elif str(sso_id) in a_obj:
+        a_obj = a_obj[str(sso_id)]
     else:
         a_obj = a_obj["skeleton"]
     a_nodes = list(a_obj.getNodes())
 
     # load and prepare sso
-    sso_id = int(re.findall(r"/(\d+)\.", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=version)
     sso.load_attr_dict()
     # load skeleton (skeletons were already generated before)
@@ -67,7 +69,7 @@ def labels2mesh(args):
     node_labels[dists < np.inf] = 1
 
     # load cell and cell organelles
-    _ = sso._load_obj_mesh('syn_ssv', rewrite=True)
+    # _ = sso._load_obj_mesh('syn_ssv', rewrite=True)
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
     feature_map = dict(pts_feat_dict)
 
@@ -123,6 +125,7 @@ def labels2mesh(args):
     # hm.set_types(types)
 
     # save generated hybrid cloud to pkl
+    sso.mesh2kzip(f'{out_path}/sso_{sso.id}.k.zip')
     hc.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
 
 
@@ -182,12 +185,12 @@ if __name__ == "__main__":
     # axon GT
     global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-    file_paths += glob.glob(data_path + '/sparse_gt/*.k.zip', recursive=False)
+    # file_paths += glob.glob(data_path + '/sparse_gt/*.k.zip', recursive=False)
 
     gt_generation(file_paths, destination)
-    #
+
     # # spine GT
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    # data_path = data_path + "/sparse_gt/sp_gt/"
+    # data_path = data_path + "/sparse_gt/spgt/"
     # file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # gt_generation(file_paths, destination, version='spgt')

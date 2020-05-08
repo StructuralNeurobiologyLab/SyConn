@@ -14,20 +14,22 @@ import time
 import tqdm
 import tqdm
 import torch
+from scipy import spatial
 import morphx.processing.clouds as clouds
 import functools
 from morphx.classes.hybridcloud import HybridCloud
 import networkx as nx
 from sklearn.preprocessing import label_binarize
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices
+from morphx.processing.objects import bfs_vertices, context_splitting, context_splitting_v2
 from morphx.processing.graphs import bfs_num
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.reps.super_segmentation_helper import sparsify_skeleton_fast
 
 # TODO: specify further, add to config
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
 # in nm, should be replaced by Poisson disk sampling
-pts_feat_ds_dict = dict(celltype=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
+pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 
@@ -146,27 +148,35 @@ def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue,
             time.sleep(0.5)
             continue
         pred_func(m, inp, q_out, q_cnt, device, bs)
+    print('Predicter done.')
     q_out.put('STOP')
 
 
-def worker_load(q: Queue, q_loader_sync: Queue, loader_func: Callable,
-                kwargs: dict):
+def worker_load(q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func: Callable):
     """
 
     Args:
-        q:
+        q_loader:
+        q_out:
         q_loader_sync:
         loader_func:
         kwargs:
     """
-    for el in loader_func(**kwargs):
-        while True:
-            if q.full():
-                time.sleep(1)
-            else:
-                break
-        q.put(el)
+    while True:
+        if q_loader.empty():
+            break
+        else:
+            kwargs = q_loader.get()
+        res = loader_func(**kwargs)
+        for el in res:
+            while True:
+                if q_out.full():
+                    time.sleep(1)
+                else:
+                    break
+            q_out.put(el)
     time.sleep(1)
+    print('Loader done.')
     q_loader_sync.put('DONE')
 
 
@@ -207,16 +217,20 @@ def listener(q_cnt: Queue, q_in: Queue, q_loader_sync: Queue,
 
 def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                       loader_func: Callable, pred_func: Callable,
-                      npoints: int, scale_fact: float, postproc_func: Optional[Callable] = None,
+                      npoints: int, scale_fact: float, ctx_size: int,
+                      postproc_func: Optional[Callable] = None,
                       postproc_kwargs: Optional[dict] = None,
                       output_func: Optional[Callable] = None,
                       mkwargs: Optional[dict] = None,
                       nloader: int = 4, npredictor: int = 2, npostptroc: int = 1,
                       ssv_ids: Optional[Union[list, np.ndarray]] = None,
                       use_test_aug: bool = False,
-                      device: str = 'cuda') -> dict:
+                      device: str = 'cuda', bs: int = 40,
+                      loader_kwargs: Optional[dict] = None) -> dict:
     """
-    # TODO: use batch size during inference to avoid memory issues
+    # TODO: Use 'mode' kwarg to switch between point2scalar, point2points for skel and surface classifaction.
+    # TODO: remove quick-fix with ssd_kwargs vs. ssv_ids kwargs
+
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions `npreds` per cell is calculated based on the
     fraction of the total number of vertices over `npoints` times two, but at least 5.
@@ -237,6 +251,7 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         loader_func: Loader function, used by `nloader` workers retrieving samples.
         pred_func: Predict function, used by `npredictor` workers performing the inference.
         npoints: Number of points used to generate a sample.
+        ctx_size: .
         scale_fact: Scale factor; used to normalize point clouds prior to model inference.
         postproc_kwargs: Keyword arguments for post-processing.
         postproc_func: Optional post-processing layer for the output of pred_func.
@@ -259,6 +274,8 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                 [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
 
         device: pytorch device.
+        bs: Batch size.
+        loader_kwargs: Optional keyword arguments for loader func.
 
     Examples:
 
@@ -288,6 +305,8 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
 
     """
+    if loader_kwargs is None:
+        loader_kwargs = dict()
     if output_func is None:
         def output_func(res_dc, ret):
             for ix, out in zip(*ret):
@@ -301,9 +320,10 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
     if use_test_aug:
         transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
     transform = clouds.Compose(transform)
-    bs = 40
-    kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs, transform=transform)
+
     if type(ssd_kwargs) is dict:
+        kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs,
+                      transform=transform, ctx_size=ctx_size, **loader_kwargs)
         ssd = SuperSegmentationDataset(**ssd_kwargs)
         if ssv_ids is None:
             ssv_ids = ssd.ssv_ids
@@ -314,22 +334,24 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                           ssd.get_super_segmentation_object(ssv_ids)]
         ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
                                   for ii in range(len(ssv_ids))])
-        params_in = [{**kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
-            ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
+        params_in = [{**kwargs, **dict(ssv_ids=[ch])} for ch in ssv_ids]
     else:
-        params_in = [{**kwargs, **dict(ssv_params=ch)} for ch in chunkify_successive(
-            ssd_kwargs, int(np.ceil(len(ssd_kwargs) / nloader)))]
+        kwargs = dict(batchsize=bs, npoints=npoints,
+                      transform=transform, ctx_size=ctx_size, **loader_kwargs)
+        params_in = [{**kwargs, **dict(ssv_params=[ch])} for ch in ssd_kwargs]
 
     # total samples:
     nsamples_tot = len(ssv_ids)
 
+    q_loader = Queue()
+    for el in params_in:
+        q_loader.put(el)
     q_in = Queue(maxsize=20*npredictor)
     q_cnt = Queue()
     q_out = Queue()
     q_postproc = Queue()
     q_loader_sync = Queue()
-    producers = [Process(target=worker_load, args=(q_in, q_loader_sync, loader_func, el))
-                 for el in params_in]
+    producers = [Process(target=worker_load, args=(q_loader, q_in, q_loader_sync, loader_func)) for _ in range(nloader)]
     for p in producers:
         p.start()
     consumers = [Process(target=worker_pred, args=(q_postproc, q_cnt, q_in, model_loader, pred_func,
@@ -412,7 +434,7 @@ def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
 
 @functools.lru_cache(256)
 def _load_ssv_hc(args):
-    ssv, feats, feat_labels, pt_type = args
+    ssv, feats, feat_labels, pt_type, radius = args
     vert_dc = dict()
     # TODO: replace by poisson disk sampling
     for k in feats:
@@ -430,11 +452,18 @@ def _load_ssv_hc(args):
     hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
     # cache verts2node
     _ = hc.verts2node
+    if radius is not None:
+        # add edges within radius
+        kdt = spatial.cKDTree(hc.nodes)
+        pairs = list(kdt.query_pairs(radius))
+        # remap to subset of indices
+        hc._edges = np.concatenate([hc._edges, pairs])
     return hc
 
 
 @functools.lru_cache(maxsize=128)
-def load_hc_pkl(path: str, gt_type: str) -> HybridCloud:
+def load_hc_pkl(path: str, gt_type: str,
+                radius: Optional[float] = None) -> HybridCloud:
     """
     TODO: move pts_feat_dict and pts_feat_ds_dict to config.
 
@@ -486,14 +515,20 @@ def load_hc_pkl(path: str, gt_type: str) -> HybridCloud:
     # reset verts2node mapping and cache it
     hc._verts2node = None
     _ = hc.verts2node
+    if radius is not None:
+        # add edges within radius
+        kdt = spatial.cKDTree(hc.nodes)
+        pairs = list(kdt.query_pairs(radius))
+        # remap to subset of indices
+        hc._edges = np.concatenate([hc._edges, pairs])
     return hc
 
 
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
-                      batchsize: int, npoints: int,
+                      batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None,
                       train: bool = False, draw_local: bool = False,
-                      draw_local_dist: int = 1000
+                      draw_local_dist: int = 1000,
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -505,6 +540,8 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
         ssv_ids: SuperSegmentationObject IDs for which samples are generated.
         batchsize: Only used during training.
         npoints: Number of points used to generate sample context.
+        ctx_size: Euclidean distance between the two most distant nodes in nm.
+            1/4 samples will fluctuate around factor 0.7+-0.2 (mean, s.d.) during training.
         transform: Transformation/agumentation applied to every sample.
         train: If false, eval mode -> batch size won't be used.
         draw_local: Will draw similar contexts from approx.
@@ -528,23 +565,25 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 raise ValueError(f'draw_local is set to True but the number of SSV samples is uneven.')
             ssv = ssd.get_super_segmentation_object(ssv_id)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values()), 'celltype'))
+                feat_dc.values()), 'celltype', None))
             npoints_ssv = min(len(hc.vertices), npoints)
             batch = np.zeros((occ, npoints_ssv, 3))
             batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
             ixs = np.ones((occ,), dtype=np.uint) * ssv_id
             cnt = 0
             # TODO: this should be deterministic during inference
-            nodes = hc.base_points(threshold=5000, source=len(hc.nodes) // 2)
+            # nodes = hc.base_points(threshold=5000, source=len(hc.nodes) // 2)
+            nodes = sparsify_skeleton_fast(hc.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=5000,
+                                           max_dist_thresh=5000, dot_prod_thresh=0).nodes()
             source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
             for source_node in source_nodes:
-                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                local_bfs = context_splitting_v2(hc, source_node, ctx_size)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                 sample_feats = pc.features
                 sample_pts = pc.vertices
                 # make sure there is always the same number of points within a batch
                 sample_ixs = np.arange(len(sample_pts))
-                # np.random.shuffle(sample_ixs)
                 sample_pts = sample_pts[sample_ixs][:npoints_ssv]
                 sample_feats = sample_feats[sample_ixs][:npoints_ssv]
                 npoints_add = npoints_ssv - len(sample_pts)
@@ -561,63 +600,70 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 batch_f[cnt] = pc.features
                 cnt += 1
             assert cnt == occ
-            yield (ixs, (batch_f, batch))
+            yield ixs, (batch_f, batch)
     else:
         ssv_ids = np.unique(ssv_ids)
-
-        for curr_ssvids in ssv_ids:
-            ssv = ssd.get_super_segmentation_object(curr_ssvids)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values()), 'celltype'))
-            npoints_ssv = min(len(hc.vertices), npoints)
-            # add a +-10% fluctuation in the number of input points
-            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-            npoints_ssv += npoints_add
-            batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
-            cnt = 0
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
-                                            replace=len(hc.nodes) < batchsize)
-            if draw_local:
-                # only use half of the nodes and choose a close-by node as root for similar context retrieval
-                source_nodes = source_nodes[::2]
-                sn_new = []
-                g = hc.graph(simple=False)
-                for n in source_nodes:
-                    sn_new.append(n)
-                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                    neighs = np.array(list(paths.keys()), dtype=np.int)
-                    sn_new.append(np.random.choice(neighs, 1)[0])
-                source_nodes = sn_new
-            for source_node in source_nodes:
-                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                sample_feats = pc.features
-                sample_pts = pc.vertices
-                # shuffling
-                sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add up to 10% of duplicated points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                pc._vertices = sample_pts
-                pc._features = sample_feats
-                if transform is not None:
-                    transform(pc)
-                batch[cnt] = pc.vertices
-                batch_f[cnt] = pc.features
-                cnt += 1
-            assert cnt == batchsize
-            yield (ixs, (batch_f, batch))
-
+        # fluctuate context size in 1/4 samples
+        try:
+            if np.random.randint(0, 4) == 0:
+                ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
+            else:
+                ctx_size_fluct = ctx_size
+            for curr_ssvids in ssv_ids:
+                ssv = ssd.get_super_segmentation_object(curr_ssvids)
+                hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+                    feat_dc.values()), 'celltype', None))
+                npoints_ssv = min(len(hc.vertices), npoints)
+                # add a +-10% fluctuation in the number of input points
+                npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+                npoints_ssv += npoints_add
+                batch = np.zeros((batchsize, npoints_ssv, 3))
+                batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+                ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+                cnt = 0
+                source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
+                                                replace=len(hc.nodes) < batchsize)
+                if draw_local:
+                    # only use half of the nodes and choose a close-by node as root for similar context retrieval
+                    source_nodes = source_nodes[::2]
+                    sn_new = []
+                    g = hc.graph(simple=False)
+                    for n in source_nodes:
+                        sn_new.append(n)
+                        paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                        neighs = np.array(list(paths.keys()), dtype=np.int)
+                        sn_new.append(np.random.choice(neighs, 1)[0])
+                    source_nodes = sn_new
+                for source_node in source_nodes:
+                    # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                    local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                    sample_feats = pc.features
+                    sample_pts = pc.vertices
+                    # shuffling
+                    sample_ixs = np.arange(len(sample_pts))
+                    np.random.shuffle(sample_ixs)
+                    sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                    sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                    # add duplicated points before applying the transform if sample_pts
+                    # has less points than npoints_ssv
+                    npoints_add = npoints_ssv - len(sample_pts)
+                    idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                    # one hot encoding
+                    sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                    pc._vertices = sample_pts
+                    pc._features = sample_feats
+                    if transform is not None:
+                        transform(pc)
+                    batch[cnt] = pc.vertices
+                    batch_f[cnt] = pc.features
+                    cnt += 1
+                assert cnt == batchsize
+                yield ixs, (batch_f, batch)
+        except:
+            raise()
 
 def pts_pred_scalar(m, inp, q_out, q_cnt, device, bs):
     """
@@ -653,9 +699,10 @@ def pts_pred_scalar(m, inp, q_out, q_cnt, device, bs):
 def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                     out_point_label: Optional[List[Union[str, int]]] = None,
                     batchsize: Optional[int] = None, npoints: Optional[int] = None,
+                    ctx_size: Optional[float] = None,
                     transform: Optional[Callable] = None,
                     n_out_pts: int = 100, train=False,
-                    base_node_dst: float = 1000,
+                    base_node_dst: float = 10000,
                     use_subcell: bool = False,
                     ssd_kwargs: Optional[dict] = None
                     ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
@@ -683,6 +730,8 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         the last batch will have output_label=1.
 
     """
+    if ctx_size is None:
+        ctx_size = 20000
     # TODO: support node attributes in hybrid cloud graph also
     if type(out_point_label) == str:
         raise NotImplementedError
@@ -698,36 +747,34 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         if ssd_kwargs is None:
             raise ValueError
         ssv_params = ssd_kwargs
+    if train and np.random.randint(0, 4) == 0:
+        ctx_size_fluct = (np.random.randn(1)[0] * 0.1 + 0.7) * ctx_size
+    else:
+        ctx_size_fluct = ctx_size
     for curr_ssv_params in ssv_params:
         ssd = SuperSegmentationDataset(**curr_ssv_params[1])
         ssv = ssd.get_super_segmentation_object(curr_ssv_params[0])
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-            feat_dc.values()), 'glia'))
+            feat_dc.values()), 'glia', None))
         npoints_ssv = min(len(hc.vertices), npoints)
-        # with 1/4 draw a small sample during training (only if sample has a minimum number of vertices - 0.75*npoints)
-        if train and np.random.randint(0, 4) == 1 and npoints_ssv / npoints > 0.75:
-            fluct = np.random.randint(-int(n_out_pts * 0.8), 0) / n_out_pts
-            npoints_add = int(fluct * n_out_pts)
-            n_out_pts_curr = n_out_pts + npoints_add
-            # randomize the fluctuation with +-std=0.1 and add those number of vertices
-            npoints_add = int((1 + np.random.randn(1)[0] * 0.1) * fluct * npoints_ssv)
-            # lower bound of 2k points due to non-truncated Gauss distribution
-            npoints_ssv = max(2000, npoints_ssv + npoints_add)
-        else:
-            # add a +-10% fluctuation in the number of input and output points
-            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-            n_out_pts_curr = n_out_pts + npoints_add
-            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-            npoints_ssv += npoints_add
+        # add a +-10% fluctuation in the number of input and output points
+        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+        n_out_pts_curr = n_out_pts + npoints_add
+        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+        npoints_ssv += npoints_add
         if train:
             source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
                                             replace=len(hc.nodes) < batchsize)
         else:
-            source_nodes = hc.base_points(threshold=base_node_dst, source=len(hc.nodes) // 2)
+            # source_nodes = hc.base_points(threshold=base_node_dst, source=len(hc.nodes) // 2)
+            source_nodes = np.array(list(sparsify_skeleton_fast(hc.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=base_node_dst,
+                                                  max_dist_thresh=base_node_dst, dot_prod_thresh=0).nodes()))
+            batchsize = min(len(source_nodes), batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
-            source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
+            source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize), source_nodes])
         for ii in range(n_batches):
+            print(len(source_nodes), batchsize, ssv)
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
@@ -737,12 +784,15 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
-                node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
                 # get target locations
-                base_points = hc_sub.base_points(threshold=1000)  # ~1um apart
+                # ~1um apart
+                base_points = sparsify_skeleton_fast(hc_sub.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=1000,
+                                                     max_dist_thresh=1000, dot_prod_thresh=0, verbose=False).nodes()
                 base_points = np.random.choice(base_points, n_out_pts_curr,
                                                replace=len(base_points) < n_out_pts_curr)
                 out_coords = hc_sub.nodes[base_points]
@@ -776,9 +826,9 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             assert cnt == batchsize
             if not train:
                 batch_process = (ii+1)/n_batches
-                yield (ssv.id, (batch_f, batch, batch_out), batch_out_orig, batch_process)
+                yield ssv.id, (batch_f, batch, batch_out), batch_out_orig, batch_process, n_batches
             else:
-                yield (ssv.id, (batch_f, batch), (batch_out, batch_out_l))
+                yield ssv.id, (batch_f, batch), (batch_out, batch_out_l)
 
 
 def pts_pred_glia(m, inp, q_out, q_cnt, device, bs):
@@ -796,7 +846,7 @@ def pts_pred_glia(m, inp, q_out, q_cnt, device, bs):
 
     """
     # TODO: is it possible to get 'device' directly from model 'm'?
-    ssv_id, model_inp,  out_pts_orig, batch_process = inp
+    ssv_id, model_inp,  out_pts_orig, batch_process, n_batches = inp
     with torch.no_grad():
         g_inp = [torch.from_numpy(i).to(device).float() for i
                  in model_inp]
@@ -804,7 +854,7 @@ def pts_pred_glia(m, inp, q_out, q_cnt, device, bs):
     res = dict(t_pts=out_pts_orig, t_l=out, b_process=batch_process)
 
     del inp
-    q_cnt.put(1)
+    q_cnt.put(1./n_batches)
     q_out.put(([ssv_id], [res]))
 
 
@@ -836,7 +886,8 @@ def pts_loader_semseg(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
 
 
 def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
-                            npoints: int, transform: Optional[Callable] = None,
+                            npoints: int, ctx_size: float,
+                            transform: Optional[Callable] = None,
                             use_subcell: bool = False,
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
@@ -848,6 +899,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         fnames_pkl:
         batchsize:
         npoints:
+        ctx_size:
         transform:
         use_subcell:
 
@@ -863,32 +915,38 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         del feat_dc['vc']
         del feat_dc['syn_ssv']
 
+    if np.random.randint(0, 4) == 0:
+        ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
+    else:
+        ctx_size_fluct = ctx_size
+
     for pkl_f in fnames_pkl:
         hc = load_hc_pkl(pkl_f, 'compartment')
         npoints_ssv = min(len(hc.vertices), npoints)
         # cell/sv vertices proportional to total npoints
         n_out_pts = int(np.sum(hc.features == 0) / len(hc.vertices) * npoints_ssv)
-        # with 1/4 draw a small sample during training (only if sample has a minimum number of vertices - 0.75*npoints)
-        if np.random.randint(0, 4) == 1 and npoints_ssv / npoints > 0.75:
-            fluct = np.random.randint(-int(n_out_pts * 0.8), 0) / n_out_pts
-            npoints_add = int(fluct * n_out_pts)
-            n_out_pts_curr = n_out_pts + npoints_add
-            # randomize the fluctuation with +-std=0.1 and add those number of vertices
-            npoints_add = int((1 + np.random.randn(1)[0] * 0.1) * fluct * npoints_ssv)
-            # lower bound of 2k points due to non-truncated Gauss distribution
-            npoints_ssv = max(2000, npoints_ssv + npoints_add)
-        else:
-            # add a +-10% fluctuation in the number of input and output points
-            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-            n_out_pts_curr = n_out_pts + npoints_add
-            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-            npoints_ssv += npoints_add
+        # # with 1/4 draw a small sample during training (only if sample has a minimum number of vertices - 0.75*npoints)
+        # if np.random.randint(0, 4) == 1 and npoints_ssv / npoints > 0.75:
+        #     fluct = np.random.randint(-int(n_out_pts * 0.8), 0) / n_out_pts
+        #     npoints_add = int(fluct * n_out_pts)
+        #     n_out_pts_curr = n_out_pts + npoints_add
+        #     # randomize the fluctuation with +-std=0.1 and add those number of vertices
+        #     npoints_add = int((1 + np.random.randn(1)[0] * 0.1) * fluct * npoints_ssv)
+        #     # lower bound of 2k points due to non-truncated Gauss distribution
+        #     npoints_ssv = max(2000, npoints_ssv + npoints_add)
+        # else:
+        # add a +-10% fluctuation in the number of input and output points
+        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+        n_out_pts_curr = n_out_pts + npoints_add
+        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+        npoints_ssv += npoints_add
         source_nodes = np.where(hc.node_labels == 1)[0]
         source_nodes = np.random.choice(len(source_nodes), batchsize,
                                         replace=len(source_nodes) < batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
             source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
+        dt_context = 0
         for ii in range(n_batches):
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
@@ -897,7 +955,11 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
-                node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                start = time.time()
+                node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                dt_context += time.time() - start
+                # print(f'DT context: {dt_context:.2f} s vs DT overall: {(time.time()-start_overall):.2f} s')
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices

@@ -38,7 +38,7 @@ if __name__ == '__main__':
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
         ('meshes', {'use_new_meshing': True}),
-        ('views', {'use_large_fov_views_ct': False,
+        ('views', {'use_onthefly_views_ct': False,
                    'use_new_renderings_locs': True,
                    'nb_views': 3}),
         ('cell_objects', {'sym_label': 1, 'asym_label': 2,

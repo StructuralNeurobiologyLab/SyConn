@@ -941,15 +941,16 @@ def from_netkx_to_arr(skel_nx: nx.Graph) -> Tuple[np.ndarray, np.ndarray, np.nda
     return skeleton['nodes'], skeleton['diameters'], skeleton['edges']
 
 
-def sparsify_skeleton_fast(skel_nx: nx.Graph, scal: Optional[np.ndarray] = None,
+def sparsify_skeleton_fast(g: nx.Graph, scal: Optional[np.ndarray] = None,
                            dot_prod_thresh: float = 0.8,
                            max_dist_thresh: Union[int, float] = 500,
-                           min_dist_thresh: Union[int, float] = 50) -> nx.Graph:
+                           min_dist_thresh: Union[int, float] = 50,
+                           verbose: bool = False) -> nx.Graph:
     """
     Reduces nodes in the skeleton.
 
     Args:
-        skel_nx: networkx graph of the sso skel
+        g: networkx graph of the sso skel
         scal: np.array
         dot_prod_thresh: float
             the 'straightness' of the edges
@@ -961,7 +962,9 @@ def sparsify_skeleton_fast(skel_nx: nx.Graph, scal: Optional[np.ndarray] = None,
     Returns: sso containing the sparsed skeleton
 
     """
+
     start = time.time()
+    skel_nx = nx.Graph(g)
     n_nodes_start = skel_nx.number_of_nodes()
     if scal is None:
         scal = global_params.config['scaling']
@@ -987,8 +990,9 @@ def sparsify_skeleton_fast(skel_nx: nx.Graph, scal: Optional[np.ndarray] = None,
                     skel_nx.remove_node(visiting_node)
                     skel_nx.add_edge(left_node, right_node)
                     change += 1
-    log_reps.debug(f'sparsening took {time.time() - start}. Reduced {n_nodes_start} to '
-                   f'{skel_nx.number_of_nodes()} nodes')
+    if verbose:
+        log_reps.debug(f'sparsening took {time.time() - start}. Reduced {n_nodes_start} to '
+                       f'{skel_nx.number_of_nodes()} nodes')
     return skel_nx
 
 
@@ -1889,7 +1893,7 @@ def pred_sv_chunk_semseg(args):
         sd = sos_dict_fact(svixs, **so_kwargs)
         svs = init_sos(sd)
         label_views = pred_svs_semseg(model, views, svs, return_pred=True,
-                                      verbose=True)
+                                      verbose=False)
         # choose any SV to get a path constructor for the v
         # iew storage (is the same for all SVs of this chunk)
         lview_dc_p = svs[0].view_path(woglia, view_key=pred_key)

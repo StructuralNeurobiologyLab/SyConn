@@ -30,10 +30,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=2500, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
+parser.add_argument('--ctx', default=20000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -63,14 +64,15 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 cval = args.cval
+ctx = args.ctx
 
 if cval is None:
     cval = 0
 
 lr = 5e-4
-lr_stepsize = 200
-lr_dec = 0.995
-max_steps = 125000
+lr_stepsize = 100
+lr_dec = 0.992
+max_steps = 150000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -84,7 +86,7 @@ onehot = True
 act = 'swish'
 
 if name is None:
-    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_{act}'
+    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -102,7 +104,7 @@ else:
     name += f'_{use_norm}'
 
 if use_cuda:
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 
@@ -120,7 +122,8 @@ model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act)
 
 name += f'_CV{cval}_eval{eval_nr}'
-model = nn.DataParallel(model)
+# # TODO: changed
+# model = nn.DataParallel(model)
 
 if use_cuda:
     model.to(device)
@@ -145,16 +148,17 @@ train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='norma
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.075, distr='normal')])
+                                  clouds.RandomScale(distr_scale=0.05, distr='normal')])
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
 train_ds = CellCloudData(npoints=npoints, transform=train_transform, cv_val=cval,
                          cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size)
+                         onehot=onehot, batch_size=batch_size, ctx_size=ctx)
 valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False,
                          cv_val=cval, cellshape_only=cellshape_only,
-                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size)
+                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+                         ctx_size=ctx)
 
 # PREPARE AND START TRAINING #
 

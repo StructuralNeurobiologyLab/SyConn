@@ -321,18 +321,17 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
     """
     Will store semantic spine labels inside``ssv.label_dict('vertex')['spiness]``.
 
-    Todo:
-        * run rendering chunk-wise instead of on-the-fly and then perform
-          prediction chunk-wise as well, adopt from spiness step.
+    TODO: Saving label views and mapping from labels views to vertices currently
+     have a high memory consumption
 
     Args:
         max_n_jobs_gpu: Number of parallel GPU jobs. Used for the inference.
         max_n_jobs : Number of parallel CPU jobs. Used for the mapping step.
     """
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
+        max_n_jobs = global_params.config.ncore_total * 20
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 2
+        max_n_jobs_gpu = global_params.config.ngpu_total * 20
     log = initialize_logging('spine_identification', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -354,7 +353,6 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
                        remove_jobfolder=True)
     log.info('Finished spine prediction.')
     # map semantic spine segmentation of multi views on SSV mesh
-    # TODO: CURRENTLY HIGH MEMORY CONSUMPTION
     if not ssd.mapping_dict_exists:
         raise ValueError('Mapping dict does not exist.')
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
@@ -370,7 +368,7 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
                      kwargs_semseg2mesh, kwargs_semsegforcoords) for ssv_ids in multi_params]
     log.info('Started mapping of spine predictions to neurite surfaces.')
     qu.batchjob_script(multi_params, "map_spiness",
-                       n_cores=4, suffix="", additional_flags="",
+                       n_cores=2, suffix="", additional_flags="",
                        remove_jobfolder=True, log=log)
     log.info('Finished spine mapping.')
 

@@ -54,12 +54,12 @@ if __name__ == '__main__':
     parser.add_argument('--na', type=str, help='Experiment name',
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
-    parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
-    parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
-    parser.add_argument('--cl', type=int, default=5, help='Number of classes')
+    parser.add_argument('--bs', type=int, default=12, help='Batch size')
+    parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
+    parser.add_argument('--scale_norm', type=int, default=10000, help='Scale factor for normalization')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
     parser.add_argument('--seed', default=0, help='Random seed')
+    parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
     parser.add_argument('--ana', default=0, help='Cloudset size of previous analysis')
     parser.add_argument(
         '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
@@ -87,13 +87,14 @@ if __name__ == '__main__':
     scale_norm = args.scale_norm
     size = args.ana
     save_root = args.sr
+    ctx = args.ctx
 
     lr = 5e-4
-    lr_stepsize = 1000
+    lr_stepsize = 250
     lr_dec = 0.995
     max_steps = 500000
     margin = 0.2
-    dr = 0.2
+    dr = 0.3
 
     # celltype specific
     cval = -1  # unsupervised learning -> use all available cells for training!
@@ -101,11 +102,11 @@ if __name__ == '__main__':
     use_syntype = True
     onehot = True
     track_running_stats = False
-    use_bn = False
+    use_norm = 'gn'
+    act = 'swish'
 
     if name is None:
-        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_expLR_' \
-               f'cv{cval}_nDim{Z_DIM}'
+        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}'
         if cellshape_only:
             name += '_cellshapeOnly'
         if not use_syntype:
@@ -117,14 +118,16 @@ if __name__ == '__main__':
         name += '_flatinp'
 
     if use_cuda:
-        device = torch.device('cuda')
+        device = torch.device('cuda:1')
     else:
         device = torch.device('cpu')
 
-    if not use_bn:
+    if use_norm is False:
         name += '_noBN'
-    if track_running_stats:
-        name += '_trackRunStats'
+        if track_running_stats:
+            name += '_trackRunStats'
+    else:
+        name += f'_{use_norm}'
 
     print(f'Running on device: {device}')
 
@@ -136,8 +139,8 @@ if __name__ == '__main__':
     # CREATE NETWORK AND PREPARE DATA SET #
 
     # # Model selection
-    model = ModelNet40(input_channels, Z_DIM, dropout=dr, use_bn=use_bn,
-                       track_running_stats=track_running_stats)
+    model = ModelNet40(input_channels, Z_DIM, dropout=dr, use_norm=use_norm,
+                       track_running_stats=track_running_stats, act=act)
     name += '_moreAug4'
 
     # model = ModelNetBig(input_channels, Z_DIM)
@@ -147,7 +150,7 @@ if __name__ == '__main__':
     # name += '_attention'
 
     model = TripletNet(model)
-    model = nn.DataParallel(model)
+    # model = nn.DataParallel(model)
 
     if use_cuda:
         model.to(device)
@@ -177,7 +180,7 @@ if __name__ == '__main__':
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype,
-                                    onehot=onehot, batch_size=batch_size)
+                                    onehot=onehot, batch_size=batch_size, ctx_size=ctx)
 
     # PREPARE AND START TRAINING #
 
@@ -190,9 +193,9 @@ if __name__ == '__main__':
     #     weight_decay=0.5e-4,
     # )
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
-    # lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+    lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-    lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
+    # lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,

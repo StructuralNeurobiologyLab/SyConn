@@ -3,10 +3,12 @@ import re
 from syconn.handler import basics, config
 from syconn.handler.prediction import certainty_estimate
 import numpy as np
+from collections import defaultdict, Counter
 from sklearn.metrics.classification import classification_report
 from syconn.handler.prediction_pts import predict_pts_plain, \
     pts_loader_glia, pts_pred_glia
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+import os
 
 
 def load_model(mkwargs, device):
@@ -41,7 +43,10 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
     Returns:
 
     """
+    tmp_dir = '/wholebrain/scratch/pschuber/tmp/glia_inference/'
+    os.makedirs(tmp_dir, exist_ok=True)
     from sklearn.preprocessing import label_binarize
+    from scipy.spatial import cKDTree
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     ssv_ids = np.random.choice(ssd.ssv_ids, 200, replace=False)
     ssv_params = [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids]
@@ -55,16 +60,28 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
         prediction = np.argmax(np.concatenate([el['t_l'].reshape(-1, 2) for el in out]), axis=1)[..., None]
         if not np.sum(prediction == 1) / len(prediction) > 0.05:
             continue
+        fname = f'{tmp_dir}/glia_test_{ix}_cellmesh.ply'
+        sso = ssd.get_super_segmentation_object(ix)
+        cell_mesh = sso.mesh[1].reshape(-1, 3)
+        write_pts_ply(fname, cell_mesh, np.zeros((cell_mesh.shape[0], 1)))
+        fname = f'{tmp_dir}/glia_test_{ix}_pred.ply'
+        # el['t_pts'] has shape (b, num_points, 3)
         print(ix, np.unique(prediction, return_counts=True)[1] / len(prediction))
         # 4 will be red in write_pts_ply
-        prediction = label_binarize(prediction * 4, classes=np.arange(5))
-        fname = f'/wholebrain/scratch/pschuber/glia_test_{ix}_cellmesh.ply'
-        cell_mesh = ssd.get_super_segmentation_object(ix).mesh[1].reshape(-1, 3)
-        write_pts_ply(fname, cell_mesh, np.zeros((cell_mesh.shape[0], 1)))
-        fname = f'/wholebrain/scratch/pschuber/glia_test_{ix}_pred.ply'
-        # el['t_pts'] has shape (b, num_points, 3)
         orig_coords = np.concatenate([el['t_pts'].reshape(-1, 3) for el in out])
-        write_pts_ply(fname, orig_coords, prediction)
+        sso.load_skeleton()
+        skel = sso.skeleton
+        kdt = cKDTree(orig_coords)
+        dists, ixs = kdt.query(skel['nodes'] * sso.scaling, k=10, distance_upper_bound=2000)
+        node_pred = np.ones(len(skel['nodes'])) * -1
+        for ii, nn_dists, nn_ixs in zip(np.arange(len(skel['nodes'])), dists, ixs):
+            nn_ixs = nn_ixs[nn_dists != np.inf]
+            preds = prediction[nn_ixs]
+            node_pred[ii] = Counter(preds).most_common(1)[0][0]
+        # every node has at least one prediction
+        assert np.sum(node_pred == -1) == 0
+        prediction = label_binarize(prediction * 4, classes=np.arange(5))
+        write_pts_ply(fname, orig_coords, prediction, binarized=True)
     raise()
     return out_dc
 
@@ -73,11 +90,12 @@ if __name__ == '__main__':
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
     ssd_kwargs = dict(working_dir=wd)
-    mdir = base_dir + '/glia_pts_scale10000_nb30000_swish_gn_eval0/'
+    mdir = base_dir + '/glia_pts_scale15000_nb30000_ctx15000_swish_gn_eval0/'
     use_norm = False
     track_running_stats = False
     activation = 'relu'
     use_bias = False
+    ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
     if 'swish' in mdir:
         activation = 'swish'
     if '_noBN_' in mdir:
@@ -90,9 +108,9 @@ if __name__ == '__main__':
             track_running_stats = True
     npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
     scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
-    print(scale_fact, npoints)
     log = config.initialize_logging(f'log_eval_sp{npoints}k', mdir)
+    assert os.path.isfile(f'{mdir}/state_dict_final.pth')
     mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation,
-                   mpath=f'{mdir}/state_dict.pth', use_bias=use_bias)
-    print(mkwargs)
-    predict_glia_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, nloader=2, npredictor=1)
+                   mpath=f'{mdir}/state_dict_final.pth', use_bias=use_bias)
+    predict_glia_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ctx_size=ctx,
+                    nloader=10, npredictor=4, bs=75, loader_kwargs=dict(n_out_pts=100, base_node_dst=ctx/2))
