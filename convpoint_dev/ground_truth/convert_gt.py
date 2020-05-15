@@ -20,6 +20,7 @@ from syconn.mp.mp_utils import start_multiprocess_imap
 from multiprocessing import cpu_count
 from morphx.classes.cloudensemble import CloudEnsemble
 from morphx.classes.hybridmesh import HybridMesh
+from morphx.classes.hybridcloud import HybridCloud
 from syconn.reps.super_segmentation import SuperSegmentationObject
 
 
@@ -38,7 +39,9 @@ def labels2mesh(args):
     sso.load_attr_dict()
 
     # load cell and cell organelles
-    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
+    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh]
+    # load new synapse version
+    meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=True))
     label_map = [-1, 7, 8, 9]
     hms = []
     for ix, mesh in enumerate(meshes):
@@ -49,40 +52,33 @@ def labels2mesh(args):
         hm = HybridMesh(vertices=vertices, faces=indices, labels=labels)
         hms.append(hm)
 
-    # load annotation object
+    # load annotation object and corresponding skeleton
     a_obj = load_skeleton(kzip_path)
     if len(a_obj) == 1:
         a_obj = list(a_obj.values())[0]
     else:
         a_obj = a_obj["skeleton"]
     a_nodes = list(a_obj.getNodes())
-
-    # extract node coordinates and labels and remove nodes with label -1
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
-    a_node_coords = a_node_coords[(a_node_labels != -1)]
-    a_node_labels = a_node_labels[(a_node_labels != -1)]
-
-    # load skeleton (skeletons were already generated before)
-    sso.load_skeleton()
-    skel = sso.skeleton
-    nodes = skel['nodes'] * sso.scaling
-    edges = skel['edges']
-    node_labels = np.ones((len(nodes), 1)) * -1
-
-    # create KD tree for mapping existing labels from annotation skeleton to real skeleton
-    tree = KDTree(nodes)
-    dist, ind = tree.query(a_node_coords, k=1)
-    node_labels[ind.reshape(len(ind))] = a_node_labels.reshape(-1, 1)
-
-    # nodes without label get label from nearest node with label
+    # generate graph from nodes in annotation object
+    a_edges = []
+    for node in a_nodes:
+        ix = a_nodes.index(node)
+        neighbors = node.getNeighbors()
+        for neighbor in neighbors:
+            nix = a_nodes.index(neighbor)
+            a_edges.append((ix, nix))
+    # propagate labels, nodes with no label get label from nearest node with label
     g = nx.Graph()
-    g.add_nodes_from([(i, dict(label=node_labels[i])) for i in range(len(nodes))])
-    g.add_edges_from([(edges[i][0], edges[i][1]) for i in range(len(edges))])
+    g.add_nodes_from([(i, dict(label=a_node_labels[i])) for i in range(len(a_nodes))])
+    g.add_edges_from(a_edges)
+    a_edges = np.array(g.edges)
+    cached_labels = a_node_labels.copy()
     for node in g.nodes:
         if g.nodes[node]['label'] == -1:
             ix = label_search(g, node)
-            node_labels[node] = node_labels[ix]
+            a_node_labels[node] = cached_labels[ix]
 
     # create cloud ensemble
     encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
@@ -92,27 +88,29 @@ def labels2mesh(args):
     for ix, cloud in enumerate(hms):
         if ix == 0:
             vertices = hms[0].vertices
-            hm = HybridMesh(vertices=vertices, labels=np.ones(len(vertices))*-1, faces=hms[0].faces, nodes=nodes,
-                            edges=edges, encoding=encoding, node_labels=node_labels)
+            hm = HybridMesh(vertices=vertices, labels=np.ones(len(vertices))*-1, faces=hms[0].faces,
+                            nodes=a_node_coords, edges=a_edges, encoding=encoding, node_labels=a_node_labels)
             hm.nodel2vertl()
         else:
             hms[ix].set_encoding({obj_names[ix]: label_map[ix]})
             clouds[obj_names[ix]] = hms[ix]
     ce = CloudEnsemble(clouds, hm, no_pred=['mi', 'vc', 'sy'])
 
-    # # add myelin (see docstring of map_myelin2coords)
-    # sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
-    # majorityvote_skeleton_property(sso, 'myelin')
-    # myelinated = sso.skeleton['myelin_avg10000']
-    # nodes_idcs = np.arange(len(hm.nodes))
-    # myel_nodes = nodes_idcs[myelinated.astype(bool)]
-    # myel_vertices = []
-    # for node in myel_nodes:
-    #     myel_vertices.extend(hm.verts2node[node])
-    # # myelinated vertices get type 1, not myelinated vertices get type 0
-    # types = np.zeros(len(hm.vertices))
-    # types[myel_vertices] = 1
-    # hm.set_types(types)
+    # add myelin (see docstring of map_myelin2coords)
+    sso.load_skeleton()
+    sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    majorityvote_skeleton_property(sso, 'myelin')
+    myelinated = sso.skeleton['myelin_avg10000']
+    hm_myelin = HybridCloud(vertices=hms[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
+    nodes_idcs = np.arange(len(hm_myelin.nodes))
+    myel_nodes = nodes_idcs[myelinated.astype(bool)]
+    myel_vertices = []
+    for node in myel_nodes:
+        myel_vertices.extend(hm_myelin.verts2node[node])
+    # myelinated vertices get type 1, not myelinated vertices get type 0
+    types = np.zeros(len(hm.vertices))
+    types[myel_vertices] = 1
+    hm.set_types(types)
 
     # save generated cloud ensemble to file
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
@@ -159,14 +157,14 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    # labels2mesh(params[1])
+    # labels2mesh(params[0])
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/gt/20_04_16/raw/new/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/annotations/sparse_gt/new/"
+    destination = "/wholebrain/u/jklimesch/thesis/tmp/"
+    data_path = "/wholebrain/u/jklimesch/thesis/tmp/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
