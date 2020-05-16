@@ -8,9 +8,11 @@ from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
     VoxelStorage, SkeletonStorage, VoxelStorageDyn
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
+from . import rep_helper as rh
 from . import log_reps
 from .. import global_params
 
+from collections import defaultdict
 import glob
 import numpy as np
 from scipy import ndimage
@@ -83,13 +85,14 @@ def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
     """
     Helper function to save SegmentationObject voxels.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    bin_arr : np.array
-        Binary mask array, 0: background, 1: supervoxel locations.
-    offset : np.array
-    overwrite : bool
+    Args:
+        so: SegmentationObject
+        bin_arr: np.array
+            Binary mask array, 0: background, 1: supervoxel locations.
+        offset: np.array
+        overwrite: bool
+
+    Returns:
 
     """
     assert bin_arr.dtype == bool
@@ -113,15 +116,13 @@ def load_voxels(so: 'segmentation.SegmentationObject',
     Todo:
         * Currently the attribute ``so._bounding_box`` is always resetred.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    voxel_dc : VoxelStorage
+    Args:
+        so: SegmentationObject
+        voxel_dc: VoxelStorage
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         3D binary mask array, 0: background, 1: supervoxel locations.
+
     """
     if voxel_dc is None:
         voxel_dc = VoxelStorage(so.voxel_path, read_only=True,
@@ -173,14 +174,12 @@ def load_voxel_list(so: 'segmentation.SegmentationObject'):
     """
     Helper function to load voxels of a SegmentationObject.
 
-    Parameters
-    ----------
-    so : SegmentationObject
+    Args:
+        so: SegmentationObject
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
         2D array of coordinates to all voxels in SegmentationObject.
+
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
@@ -201,13 +200,11 @@ def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
     """
     TODO: refactor, probably more efficient implementation possible.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    downsampling : Tuple[int]
+    Args:
+        so: SegmentationObject
+        downsampling: Tuple[int]
 
-    Returns
-    -------
+    Returns:
 
     """
     downsampling = np.array(downsampling)
@@ -238,22 +235,18 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so: 'segmentation.SegmentationObject',
-              recompute: bool = False)\
-        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) -> List[np.ndarray]:
     """
     Load mesh of SegmentationObject.
-    TODO: Currently ignores potential color/label array
+    TODO: Currently ignores potential color/label array.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    recompute : bool
+    Args:
+        so: SegmentationObject
+        recompute: bool
 
-    Returns
-    -------
-    Tuple[np.array]
+    Returns:
         indices, vertices, normals; all flattened
+
     """
     if not recompute and so.mesh_exists:
         try:
@@ -271,11 +264,11 @@ def load_mesh(so: 'segmentation.SegmentationObject',
             msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)"\
                   "with id %d.".format(e, so.type, so.id)
             log_reps.error(msg)
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
+            return [np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))]
     else:
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
-            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
+            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))]
         indices, vertices, normals = so._mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
@@ -287,22 +280,20 @@ def load_mesh(so: 'segmentation.SegmentationObject',
     indices = np.array(indices, dtype=np.int)
     normals = np.array(normals, dtype=np.float32)
     col = np.array(col, dtype=np.uint8)
-    return indices, vertices, normals
+    return [indices, vertices, normals]
 
 
 def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False) \
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    recompute : bool
+    Args:
+        so: SegmentationObject
+        recompute: bool
 
-    Returns
-    -------
-    Tuple[np.array]
+    Returns: Tuple[np.array]
         nodes, diameters, edges; all flattened
+
     """
     if not recompute and so.skeleton_exists:
         try:
@@ -407,14 +398,12 @@ def sv_attr_exists(args):
 def find_missing_sv_attributes(sd, attr_key, n_cores=20):
     """
 
-    Parameters
-    ----------
-    sd : SegmentationDataset
-    attr_key : str
-    n_cores : int
+    Args:
+        sd: SegmentationDataset
+        attr_key: str
+        n_cores: int
 
-    Returns
-    -------
+    Returns:
 
     """
     multi_params = chunkify(sd.so_dir_paths, 100)
@@ -422,3 +411,73 @@ def find_missing_sv_attributes(sd, attr_key, n_cores=20):
     res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
                                   debug=False)
     return np.concatenate(res)
+
+
+def load_so_meshes_bulk(sos: List['segmentation.SegmentationObject'],
+                        use_new_subfold: bool = True, cache_decomp=True):
+    """
+
+    Args:
+        sos:
+        use_new_subfold:
+        cache_decomp:
+
+    Returns:
+
+    """
+    md_out = MeshStorage(None)  # in-memory dict with compression
+    if len(sos) == 0:
+        return md_out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    cnt = 0
+    for subfold, ids in sub2ids.items():
+        mesh_path = f'{base_path}/{subfold}/mesh.pkl'
+        md = MeshStorage(mesh_path, disable_locking=True,
+                         cache_decomp=cache_decomp)
+        for so_id in ids:
+            cnt += 1
+            md_out._dc_intern[so_id] = md._dc_intern[so_id]
+    assert cnt == len(sos)
+    return md_out
+
+
+def load_so_voxels_bulk(sos: List['segmentation.SegmentationObject'],
+                        use_new_subfold: bool = True, cache_decomp=True):
+    """
+
+    Args:
+        sos:
+        use_new_subfold:
+        cache_decomp:
+
+    Returns:
+
+    """
+    raise NotImplementedError
+    vd_out = VoxelStorage(None, cache_decomp=cache_decomp)  # in-memory dict with compression
+    if len(sos) == 0:
+        return vd_out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    cnt = 0
+    for subfold, ids in sub2ids.items():
+        voxel_path = f'{base_path}/{subfold}/voxel.pkl'
+        vd = VoxelStorage(voxel_path, disable_locking=True)
+        for so_id in ids:
+            cnt += 1
+            vd_out._dc_intern[so_id] = vd._dc_intern[so_id]
+    assert cnt == len(sos)
+    return vd_out

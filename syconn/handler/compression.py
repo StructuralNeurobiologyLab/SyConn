@@ -166,15 +166,13 @@ def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
     Shape must be known in order to load (multi-dimensional) array from binary
     string. Due to overflow in python2 added recursive loading.
 
-    Parameters
-    ----------
-    p : path to lz4 file
-    shape : tuple
-    dtype : type
+    Args:
+        p: path to lz4 file
+        shape: tuple
+        dtype: type
 
-    Returns
-    -------
-    np.array
+    Returns: np.array
+
     """
     with open(p, "rb") as text_file:
         decomp_arr = lz4stringtoarr(text_file.read(), dtype=dtype, shape=shape)

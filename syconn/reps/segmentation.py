@@ -180,8 +180,8 @@ class SegmentationObject(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.id, self.type, self.version, self.segobj_dir)
+        return (f'{type(self).__name__}(obj_id={self.id}, obj_type="{self.type}", '
+                f'version="{self.version}", working_dir="{self.working_dir}")')
 
     def __reduce__(self):
         """
@@ -386,12 +386,12 @@ class SegmentationObject(object):
         """
         Path to the folder where the data of this supervoxel is stored.
         """
-        if os.path.exists("%s/%s/voxel.pkl" % (self.so_storage_path,
-                                      subfold_from_ix(self.id, self.n_folders_fs))):
-            return "%s/%s/" % (self.so_storage_path,
-                               subfold_from_ix(self.id, self.n_folders_fs))
+        base_path = f"{self.so_storage_path}/" \
+                    f"{subfold_from_ix(self.id, self.n_folders_fs)}/"
+        if os.path.exists(f"{base_path}/voxel.pkl"):
+            return base_path
         else:
-            # TODO: why True?
+            # use old folder scheme with leading 0s, e.g. '09'
             return "%s/%s/" % (self.so_storage_path, subfold_from_ix(
                 self.id, self.n_folders_fs, old_version=True))
 
@@ -660,8 +660,11 @@ class SegmentationObject(object):
         Returns:
             Mesh surface area in um^2
         """
-
-        return mesh_area_calc(self.mesh)
+        # TODO: decide if caching should be possible
+        mesh_area = self.lookup_in_attribute_dict('mesh_area')
+        if mesh_area is None:
+            mesh_area = mesh_area_calc(self.mesh)
+        return mesh_area
 
     @property
     def sample_locations_exist(self) -> bool:
@@ -762,7 +765,10 @@ class SegmentationObject(object):
         Returns:
             3D array of the all voxels which belong to this supervoxel.
         """
-        return load_voxels(self, voxel_dc=voxel_dc)
+        voxels = load_voxels(self, voxel_dc=voxel_dc)
+        if self.voxel_caching:
+            self._voxels = voxels
+        return voxels
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
         return load_voxels_downsampled(self, downsampling=downsampling)
@@ -880,7 +886,7 @@ class SegmentationObject(object):
             self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def _mesh_from_scratch(self, downsampling: Optional[Tuple[int, int, int]] = None,
-                           n_closings: Optional[int] = None, **kwargs):
+                           n_closings: Optional[int] = None, **kwargs) -> List[np.ndarray]:
         """
         Calculate the mesh based on :func:`~syconn.proc.meshes.get_object_mesh`.
 
@@ -1183,8 +1189,6 @@ class SegmentationObject(object):
             for i_bin_arr in range(len(bin_arrs)):
                 sizes.append(np.sum(bin_arrs[i_bin_arr]))
 
-            self._size = np.sum(sizes)
-
             sizes = np.array(sizes)
             center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
                                  np.mean(block_offsets[:, 1] * sizes) / self.size,
@@ -1467,10 +1471,6 @@ class SegmentationDataset(object):
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
               objects.
-            * 'sj_ids': Synaptic junction IDs associated with each 'syn_ssv' synapse.
-            * 'id_sj_ratio': Overlap ratio between synaptic junction (sj) and contact
-              site objects.
-
     """
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None,
                  working_dir: Optional[str] = None,
@@ -1576,8 +1576,8 @@ class SegmentationDataset(object):
             os.makedirs(self.so_storage_path)
 
     def __repr__(self):
-        return '{} of type: "{}", version: "{}", path: "{}"'.format(
-            type(self).__name__, self.type, self.version, self.path)
+        return (f'{type(self).__name__}(obj_type="{self.type}", version="{self.version}", '
+                f'working_dir="{self.working_dir}")')
 
     @property
     def type(self) -> str:
@@ -1718,14 +1718,12 @@ class SegmentationDataset(object):
     @property
     def so_dir_paths(self) -> List[str]:
         """
-        Paths to all supervoxel object directories in the directory tree
+        Sorted paths to all supervoxel object directories in the directory tree
         :py:attr:`~so_storage_path`.
         """
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
-        # TODO: do not perform a glob. all possible paths are determined by
-        #  'n_folders_fs' -> much faster, less IO
-        return glob.glob(p)
+        return sorted(glob.glob(p))
 
     @property
     def config(self) -> DynConfig:

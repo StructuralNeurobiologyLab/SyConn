@@ -4,18 +4,16 @@ import time
 from multiprocessing import Process, Queue
 from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
     VoxelStorage
-from syconn.handler.basics import write_txt2kzip,write_data2kzip,\
-    read_txt_from_zip, remove_from_zip
+from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
+     read_txt_from_zip, remove_from_zip
 import os
 import logging
 import traceback
 import zipfile
 import sys
 
-
+# TODO: use tempfile
 dir_path = os.path.dirname(os.path.realpath(__file__))
-logging.basicConfig(filename=dir_path + '/test_backend.log',
-                    level=logging.DEBUG, filemode='w')
 
 test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
@@ -45,7 +43,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 
     def create_LZ4Dict_wait_for_3s_then_close():
         # created and locked LZ4Dict for 3s
-        pkl1 = CompressedStorage(test_p, read_only=False)
+        pkl1 = CompressedStorage(test_p, read_only=False, disable_locking=False)
         pkl1[1] = np.ones((5, 5))
         time.sleep(3)
         pkl1.push()
@@ -55,7 +53,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         time.sleep(0)
         start = time.time()
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1,
+            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1, disable_locking=False,
                                      max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
             logging.warning('FAILED: create_fail_expected_runtime_error_at_1s' + str(e))
@@ -69,7 +67,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         time.sleep(0)
         start = time.time()
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=2)
+            pkl2 = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=2)
             logging.warning('FAILED: create_fail_expected_runtime_error_at_2s')
             q2.put(1)
         except RuntimeError as e:
@@ -81,7 +79,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         start = time.time()
 
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1)
+            pkl2 = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=1)
             logging.info('PASSED: create_success_expected')
             q3.put(0)
         except RuntimeError as e:
@@ -153,7 +151,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 def test_compression_and_decompression_for_mesh_dict():
 
     try:
-        md = MeshStorage(test_p, read_only=False)
+        md = MeshStorage(test_p, read_only=False, disable_locking=False)
         md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
                  np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
 
@@ -376,7 +374,7 @@ def test_basics_write_txt2kzip():
 
     try:
         txt = 'test'
-        write_txt2kzip(dir_path + '/test.kzip',txt, "test")
+        write_txt2kzip(dir_path + '/test.kzip', txt, "test")
 
         if os.path.isfile(dir_path + '/test.kzip'):
             os.remove(dir_path + '/test.kzip')

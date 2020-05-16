@@ -45,8 +45,7 @@ multi_params = [(ixs, so_kwargs, kwargs) for ixs in multi_params]
 # first SV should always be unique
 path_out = batchjob_script(
     multi_params, "render_views_partial_helper", suffix="_SSV{}".format(ch[0][0]),
-    n_cores=1, disable_batchjob=True, remove_jobfolder=True,
-    n_max_co_processes=n_parallel_jobs, show_progress=False)
+    n_cores=1, disable_batchjob=True, remove_jobfolder=True, show_progress=False)
 folder_del = os.path.abspath(path_out + "/../")
 shutil.rmtree(folder_del, ignore_errors=True)
 

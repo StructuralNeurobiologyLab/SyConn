@@ -346,7 +346,7 @@ class MeshStorage(StorageClass):
         self.load_colarr = load_colarr
         super(MeshStorage, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int) -> List[np.ndarray]:
         """
 
         Parameters
@@ -379,7 +379,7 @@ class MeshStorage(StorageClass):
             self._cache_dc[item] = decomp_arrs
         return decomp_arrs
 
-    def __setitem__(self, key, mesh):
+    def __setitem__(self, key: int, mesh: List[np.ndarray]):
         """
 
         Parameters

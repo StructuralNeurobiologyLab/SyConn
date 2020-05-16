@@ -109,13 +109,14 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
+    # create KDs and SDs for syn and cs
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
-    # # TODO: add check for SSD existence, which is required at this point
-    # # This creates an SD of type 'syn_ssv'
+    # TODO: add check for SSD existence, which is required at this point
+    # create SD of type 'syn_ssv'
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
@@ -123,13 +124,17 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
-    dataset_analysis(sd_syn_ssv, compute_meshprops=True)
+    # recompute=False: size, bounding box, rep_coord and mesh properties
+    # have already been processed in combine_and_split_syn
+    dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    n_sym = np.sum(syn_sign == -1)
+    n_asym = np.sum(syn_sign == 1)
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
-             f'objects, {np.sum(syn_sign == -1)} symmetric and '
-             f'{np.sum(syn_sign == 1)} asymmetric.')
+             f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
+    assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
-    cps.map_objects_to_synssv(global_params.config.working_dir, log=log)
+    cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
@@ -150,7 +155,7 @@ def run_spinehead_volume_calc():
     """
 
     """
-    log = initialize_logging('spinehead_calc', global_params.config.working_dir+ '/logs/',
+    log = initialize_logging('spinehead_calc', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     # shuffle SV IDs
@@ -168,7 +173,6 @@ def run_spinehead_volume_calc():
     multi_params = [(ixs, ) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
-                    n_max_co_processes=global_params.config.ncore_total,
                     remove_jobfolder=True)
     log.info('Finished processing of {} SSVs.'
              ''.format(len(ordering)))

@@ -13,8 +13,7 @@ Objects are mapped to supervoxels with
     from syconn.proc import sd_proc
     
     sd_proc.map_objects_to_sv(sd, obj_type, kd_path,
-                              nb_cpus=1,
-                              n_max_co_processes=200)
+                              nb_cpus=1)
 
 `sd` refers to the supervoxels `SegmentationDataset` which already owns the `SegmentationDatasets` from the other object types. `knossos_path` is the path to the `knossosdataset` containing the original segmentation.
 

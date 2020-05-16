@@ -35,7 +35,6 @@ def qsub_glia_splitting():
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
                    global_params.config.ncore_total * 2)
     qu.batchjob_script(chs, "split_glia", n_cores=1,
-                       n_max_co_processes=global_params.config.ncore_total * 2,
                        remove_jobfolder=True)
 
 
@@ -51,7 +50,7 @@ def collect_glia_sv():
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
     # get SSV glia splits
-    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'])
+    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node']*10)
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
                                                  nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")

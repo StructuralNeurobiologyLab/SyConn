@@ -61,7 +61,8 @@ class StackedConv2ScalarWithLatentAdd(nn.Module):
             nn.Linear(50, n_classes),
         )
 
-    def forward(self, x, scal):
+    def forward(self, args):
+        x, scal = args
         x = self.seq(x)
         x = x.view(x.size()[0], -1)  # AdaptiveAvgPool1d requires input of shape B C D
         x = torch.cat((x, scal), 1)

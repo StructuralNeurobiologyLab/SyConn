@@ -26,7 +26,7 @@ from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage, CompressedStorage
 from ..reps import segmentation, segmentation_helper
 from ..reps import rep_helper
 from ..handler import basics
@@ -37,9 +37,7 @@ from .meshes import mesh_area_calc, merge_meshes_incl_norm
 from zmesh import Mesher
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
-                     compute_meshprops=False):
-    # TODO: refactor s.t. jobs use more than 1 CPU, currently submission times are slow
+def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -54,12 +52,11 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     :param nb_cpus: int
         number of cores used for multithreading
         number of cores per worker for qsub jobs
-    :param n_max_co_processes: int
-        max number of workers running at the same time when using qsub
-    :param compute_meshprops: bool
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
+        if recompute or compute_meshprops:
+            n_jobs *= 4
     paths = sd.so_dir_paths
     if compute_meshprops:
         if not (sd.type in global_params.config['meshes']['downsampling'] and sd.type in
@@ -76,19 +73,28 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     # Running workers
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=n_max_co_processes,
-                                             debug=False)
+                                             multi_params, debug=False)
         # Creating summaries
-        # TODO: This is a potential bottleneck for very large datasets
-        # TODO: resulting cache-arrays might have different lengths if attribute is missing in
-        #  some dictionaries -> add checks!
         attr_dict = {}
         for this_attr_dict in results:
             for attribute in this_attr_dict:
-                if not attribute in attr_dict:
-                    attr_dict[attribute] = []
+                if len(this_attr_dict['id']) == 0:
+                    continue
+                value = this_attr_dict[attribute]
+                if attribute == 'id':
+                    value = np.array(value, np.uint)
+                if attribute not in attr_dict:
+                    if type(value) is not list:
+                        sh = list(value.shape)
+                        sh[0] = 0
+                        attr_dict[attribute] = np.empty(sh, dtype=value.dtype)
+                    else:
+                        attr_dict[attribute] = []
 
-                attr_dict[attribute] += this_attr_dict[attribute]
+                if type(value) is not list:  # assume numpy array
+                    attr_dict[attribute] = np.concatenate([attr_dict[attribute], value])
+                else:
+                    attr_dict[attribute] += value
 
         for attribute in attr_dict:
             try:
@@ -106,74 +112,105 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
 
     else:
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-                                         n_max_co_processes=n_max_co_processes,
                                          suffix=sd.type)
-        out_files = glob.glob(path_to_out + "/*")
-        with open(out_files[0], 'rb') as f:
-            res_keys = list(pkl.load(f).keys())
-        log_proc.info(f'Caching {len(res_keys)} attributes during '
-                      f'dataset_analysis:\n{res_keys}')
-        # TODO: spawn this as QSUB job!
-        for attribute in tqdm.tqdm(res_keys, leave=False):
-            attr_res = []
-            # start_multiprocess_imap obeys parameter order and therefore the
-            # collected attributes will share the same ordering.
-            params = list(basics.chunkify([(p, attribute) for p in out_files],
-                                          global_params.config['ncores_per_node'] * 2))
-            tmp_res = sm.start_multiprocess_imap(
-                load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
-            for ii in range(len(tmp_res)):
-                attr_res += tmp_res[ii]
-                tmp_res[ii] = []
-            try:
-                np.save(sd.path + "/%ss.npy" % attribute, attr_res)
-            except ValueError as e:
-                log_proc.warn('ValueError {} encountered when writing numpy '
-                              'array caches in "dataset_analysis", this is '
-                              'currently caught by using `dtype=object`'
-                              'which is not advised.'.format(e))
-                if 'setting an array element with a sequence' in str(e):
-                    np.save(sd.path + "/%ss.npy" % attribute,
-                            np.array(attr_res, dtype=np.object))
-                else:
-                    raise ValueError(e)
+        out_files = np.array(glob.glob(path_to_out + "/*"))
 
+        res_keys = []
+        # TODO: do this multi-processed
+        file_mask = np.zeros(len(out_files), dtype=np.int)
+        for ii, p in enumerate(out_files):
+            with open(p, 'rb') as f:
+                res_dc = pkl.load(f)
+                n_el = len(res_dc['id'])
+                if n_el > 0:
+                    file_mask[ii] = n_el
+                    if len(res_keys) == 0:
+                        res_keys = list(res_dc.keys())
+        if len(res_keys) == 0:
+            raise ValueError(f'No objects found during dataset_analysis of {sd}.')
+        n_ids = np.sum(file_mask)
+        log_proc.info(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
+                       f'dataset_analysis:\n{res_keys}')
+        out_files = out_files[file_mask > 0]
+        params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
+        qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
+                           remove_jobfolder=True)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
-def load_attr_helper(args):
+def _dataset_analysis_collect(args):
+    attribute, out_files, n_ids, sd_path = args
+    # start_multiprocess_imap obeys parameter order and therefore the
+    # collected attributes will share the same ordering.
+    params = list(basics.chunkify([(p, attribute) for p in out_files],
+                                  global_params.config['ncores_per_node'] * 2))
+    tmp_res = sm.start_multiprocess_imap(
+        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'])
+    try:
+        tmp_res = np.concatenate(tmp_res)
+        assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
+        np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
+    except ValueError as e:
+        # allow dtype=object only for the following attributes with ragged shape:
+        if attribute in ['sj_ids', 'cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios',
+                         'mapping_vc_ids', 'mapping_vc_ratios']:
+            tmp_res = np.array(tmp_res, dtype=np.object)
+            np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
+        else:
+            log_proc.error(
+                f'ValueError {e} encountered when writing numpy array '
+                f'cache of attribute {attribute} in "dataset_analysis",')
+            raise ValueError(e)
+
+
+def _load_attr_helper(args):
     res = []
     for arg in args:
         fname, attr = arg
         with open(fname, 'rb') as f:
-            res += pkl.load(f)[attr]
+            dc = pkl.load(f)
+            if len(dc['id']) == 0:
+                continue
+
+            value = dc[attr]
+            if attr == 'id':
+                value = np.array(value, np.uint)
+            if type(value) is not list:  # assume numpy array
+                if len(res) == 0:
+                    sh = list(value.shape)
+                    sh[0] = 0
+                    res = np.empty(sh, dtype=value.dtype)
+                res = np.concatenate([res, value])
+            else:
+                res += value
     return res
 
 
 def _dataset_analysis_thread(args):
     """ Worker of dataset_analysis """
-
+    # TODO: use arrays to store properties already during collection
     paths = args[0]
     obj_type = args[1]
     version = args[2]
     working_dir = args[3]
     recompute = args[4]
     compute_meshprops = args[5]
-    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
-                            mesh_area=[])
+    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[])
     for p in paths:
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
         else:
+            new_mesh_generated = False
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                          read_only=not recompute)
             if recompute:
                 this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
                                           disable_locking=True)
-                # e.g. isinstance(np.array([100, ], dtype=np.uint)[0], int) fails
                 so_ids = list(this_vx_dc.keys())
             else:
                 so_ids = list(this_attr_dc.keys())
+            if compute_meshprops:
+                this_mesh_dc = MeshStorage(p + "/mesh.pkl", read_only=True, disable_locking=True)
             for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
                 so = segmentation.SegmentationObject(so_id, obj_type,
@@ -181,17 +218,28 @@ def _dataset_analysis_thread(args):
                 so.attr_dict = this_attr_dc[so_id]
                 if recompute:
                     # prevent loading voxels in case we use VoxelStorageDyn
-                    if not isinstance(this_vx_dc, VoxelStorageDyn):  # use fall-back
+                    if not isinstance(this_vx_dc, VoxelStorageDyn):
+                        # use fall-back, so._voxels will be used for mesh computation but also
+                        # triggers the calculation of size and bounding box.
                         so.load_voxels(voxel_dc=this_vx_dc)
-                        so.calculate_rep_coord(voxel_dc=this_vx_dc)
                     else:
+                        # VoxelStorageDyn stores pre-computed bounding box, size and rep coord values.
                         so.calculate_bounding_box(this_vx_dc)
-                        so.calculate_rep_coord(this_vx_dc)
                         so.calculate_size(this_vx_dc)
+
+                    so.calculate_rep_coord(this_vx_dc)
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
                 if compute_meshprops:
+                    # make sure so._mesh is available prior to mesh_bb and mesh_area call (otherwise every unavailable
+                    # mesh will be generated from scratch and saved to so.mesh_path for every single object.
+                    if so.id in this_mesh_dc:
+                        so._mesh = this_mesh_dc[so.id]
+                    else:
+                        new_mesh_generated = True
+                        so._mesh = so._mesh_from_scratch()
+                        this_mesh_dc[so.id] = so._mesh
                     # if mesh does not exist beforehand, it will be generated
                     so.attr_dict["mesh_bb"] = so.mesh_bb
                     so.attr_dict["mesh_area"] = so.mesh_area
@@ -200,8 +248,18 @@ def _dataset_analysis_thread(args):
                         global_attr_dict[attribute] = []
                     global_attr_dict[attribute].append(so.attr_dict[attribute])
                 this_attr_dc[so_id] = so.attr_dict
-            if recompute:
+            if recompute or compute_meshprops:
                 this_attr_dc.push()
+                if new_mesh_generated:
+                    this_mesh_dc.push()
+    if 'bounding_box' in global_attr_dict:
+        global_attr_dict['bounding_box'] = np.array(global_attr_dict['bounding_box'], dtype=np.int32)
+    if 'rep_coord' in global_attr_dict:
+        global_attr_dict['rep_coord'] = np.array(global_attr_dict['rep_coord'], dtype=np.int32)
+    if 'size' in global_attr_dict:
+        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int)
+    if 'mesh_area' in global_attr_dict:
+        global_attr_dict['mesh_area'] = np.array(global_attr_dict['mesh_area'], dtype=np.float32)
     return global_attr_dict
 
 
@@ -228,8 +286,7 @@ def _write_mapping_to_sv_thread(args):
 
 def _cache_storage_paths(args):
     target_p, all_ids, n_folders_fs = args
-    # start = time.time()
-    # outputs target folder hierarchy for object storages
+    # outputs target folder hierarchy for object storage
     if global_params.config.use_new_subfold:
         target_dir_func = rep_helper.subfold_from_ix_new
     else:
@@ -239,19 +296,15 @@ def _cache_storage_paths(args):
         dest_dc_tmp[target_dir_func(
             obj_id, n_folders_fs)].append(obj_id)
     del all_ids
-    # dt = (time.time() - start) / 60
-    # log_proc.debug(f'Generated target directories for all objects after '
-    #                f'{dt:.2f} min.')
-    # start = time.time()
-    basics.write_obj2pkl(target_p, dest_dc_tmp)
-    # dt = (time.time() - start) / 60
-    # log_proc.debug(f'Wrote all targets to pkl in {dt:.2f} min.')
+    cd = CompressedStorage(target_p, disable_locking=True)
+    for k, v in dest_dc_tmp.items():
+        cd[k] = np.array(v, dtype=np.uint64)  # TODO: dtype needs to be configurable
+    cd.push()
 
 
 def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                               n_folders_fs: int = 1000, n_folders_fs_sc: int = 1000,
                               n_chunk_jobs: Optional[int] = None, n_cores: int = 1,
-                              n_max_co_processes: Optional[int] = None,
                               cube_of_interest_bb: Optional[tuple] = None,
                               chunk_size: Optional[Union[tuple, np.ndarray]] = None,
                               log: Logger = None, overwrite=False):
@@ -271,7 +324,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         n_folders_fs_sc:
         n_chunk_jobs:
         n_cores:
-        n_max_co_processes:
         cube_of_interest_bb:
         chunk_size:
         log:
@@ -334,6 +386,8 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
     all_times = []
     step_names = []
+    dict_paths_tmp = []
+
 
     # extract mapping
     start = time.time()
@@ -351,15 +405,13 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     cell_prop_worker = dict()
     subcell_mesh_workers = [dict() for _ in range(len(kd_organelle_paths))]
     subcell_prop_workers = [dict() for _ in range(len(kd_organelle_paths))]
-    dict_paths_tmp = []
     # needed for caching target storage folder for all objects
     all_ids = {k: [] for k in list(kd_organelle_paths.keys()) + ['sv']}
 
     # TODO: refactor write-out (and read in batchjob_enabled)
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
-            multi_params, "map_subcell_extract_props", n_cores=n_cores,
-            n_max_co_processes=n_max_co_processes)
+            multi_params, "map_subcell_extract_props", n_cores=n_cores)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -409,7 +461,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
             dict_paths_tmp += [sc_prop_worker_dc]
     else:
         results = sm.start_multiprocess_imap(
-            _map_subcell_extract_props_thread, multi_params, nb_cpus=n_max_co_processes,
+            _map_subcell_extract_props_thread, multi_params,
             verbose=False, debug=False)
 
         for worker_nr, ref_mesh_dc in tqdm.tqdm(results, leave=False):
@@ -498,10 +550,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
-                           n_max_co_processes=global_params.config.ncore_total,
                            remove_jobfolder=True, n_cores=1)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
@@ -521,10 +572,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_sv",
-                           n_max_co_processes=global_params.config.ncore_total,
                            remove_jobfolder=True)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
@@ -756,7 +806,7 @@ def _map_subcell_extract_props_thread(args):
     if global_params.config.use_new_meshing:
         dt_times_dc['overall'] = time.time() - start_all
         dt_str = ["{:<20}".format(f"{k}: {v:.2f}s") for k, v in dt_times_dc.items()]
-        log_proc.debug('{}'.format("".join(dt_str)))
+        # log_proc.debug('{}'.format("".join(dt_str)))
     return worker_nr, ref_mesh_dict
 
 
@@ -787,15 +837,18 @@ def _write_props_to_sc_thread(args):
             subcell_prop_workers_tmp = pkl.load(f)
 
         # load target storage folders for all objects in this chunk
-        dest_dc = defaultdict(list)
-        dest_dc_tmp = basics.load_pkl2obj(f'{global_tmp_path}/storage_targets_'
-                                          f'{organelle}.pkl')
+        dest_dc = dict()
+        dest_dc_tmp = CompressedStorage(f'{global_tmp_path}/storage_targets_'
+                                        f'{organelle}.pkl', disable_locking=True)
         all_obj_keys = set()
         for obj_id_mod in obj_id_chs:
-            all_obj_keys.update(set(dest_dc_tmp[target_dir_func(
-                obj_id_mod, n_folders_fs)]))
-            dest_dc[target_dir_func(
-                obj_id_mod, n_folders_fs)] = dest_dc_tmp[target_dir_func(obj_id_mod, n_folders_fs)]
+            k = target_dir_func(obj_id_mod, n_folders_fs)
+            if k not in dest_dc_tmp:
+                value = np.array([], dtype=np.uint64)  # TODO: dtype needs to be configurable
+            else:
+                value = dest_dc_tmp[k]
+            all_obj_keys.update(set(value))
+            dest_dc[k] = value
         del dest_dc_tmp
         if len(all_obj_keys) == 0:
             continue
@@ -804,14 +857,21 @@ def _write_props_to_sc_thread(args):
         prop_dict = [{}, defaultdict(list), {}]
         mapping_dict = dict()
         for worker_id, obj_ids in subcell_prop_workers_tmp.items():
-            if len(set(obj_ids).intersection(all_obj_keys)) > 0:
+            intersec = set(obj_ids).intersection(all_obj_keys)
+            if len(intersec) > 0:
                 worker_dir_props = f"{global_tmp_path}/tmp_props/props_{worker_id}/"
                 fname = f'{worker_dir_props}/scp_{organelle}_{worker_id}.pkl'
                 dc = basics.load_pkl2obj(fname)
-                for k in list(dc[0].keys()):
-                    if k not in all_obj_keys:
-                        del dc[0][k], dc[1][k], dc[2][k]
-                merge_prop_dicts([prop_dict, dc])
+
+                tmp_dcs = [dict(), defaultdict(list), dict()]
+                for k in intersec:
+                    tmp_dcs[0][k] = dc[0][k]
+                    tmp_dcs[1][k] = dc[1][k]
+                    tmp_dcs[2][k] = dc[2][k]
+                del dc
+                merge_prop_dicts([prop_dict, tmp_dcs])
+                del tmp_dcs
+                # TODO: optimize as above - by creating a temporary dictionary with the intersecting IDs only
                 fname = f'{worker_dir_props}/scm_{organelle}_{worker_id}.pkl'
                 dc = basics.load_pkl2obj(fname)
                 for k in list(dc.keys()):
@@ -972,13 +1032,19 @@ def _write_props_to_sv_thread(args):
         cell_prop_workers_tmp = pkl.load(f)
 
     # load target storage folders for all objects in this chunk
-    dest_dc = defaultdict(list)
-    dest_dc_tmp = basics.load_pkl2obj(f'{global_tmp_path}/storage_targets_sv.pkl')
+    dest_dc = dict()
+    dest_dc_tmp = CompressedStorage(f'{global_tmp_path}/storage_targets_sv.pkl',
+                                    disable_locking=True)
 
     all_obj_keys = set()
     for obj_id_mod in obj_id_chs:
-        all_obj_keys.update(set(dest_dc_tmp[target_dir_func(obj_id_mod, n_folders_fs)]))
-        dest_dc[target_dir_func(obj_id_mod, n_folders_fs)] = dest_dc_tmp[target_dir_func(obj_id_mod, n_folders_fs)]
+        k = target_dir_func(obj_id_mod, n_folders_fs)
+        if k not in dest_dc_tmp:
+            value = np.array([], dtype=np.uint64)  # TODO: dtype needs to be configurable
+        else:
+            value = dest_dc_tmp[k]
+        all_obj_keys.update(set(value))
+        dest_dc[k] = value
     if len(all_obj_keys) == 0:
         return
     del dest_dc_tmp
@@ -990,16 +1056,21 @@ def _write_props_to_sv_thread(args):
     # dictionaries -> when mapping decision is made on cell level non-existing organelles are
     # assumed to be below the size threshold.
     for worker_id, obj_ids in cell_prop_workers_tmp.items():
-        if len(set(obj_ids).intersection(all_obj_keys)) > 0:
+        intersec = set(obj_ids).intersection(all_obj_keys)
+        if len(intersec) > 0:
             worker_dir_props = f"{global_tmp_path}/tmp_props/props_{worker_id}/"
             fname = f'{worker_dir_props}/cp_{worker_id}.pkl'
             dc = basics.load_pkl2obj(fname)
-            for k in list(dc[0].keys()):
-                if k not in all_obj_keys:
-                    del dc[0][k], dc[1][k], dc[2][k]
-            merge_prop_dicts([prop_dict, dc])
+            tmp_dcs = [dict(), defaultdict(list), dict()]
+            for k in intersec:
+                tmp_dcs[0][k] = dc[0][k]
+                tmp_dcs[1][k] = dc[1][k]
+                tmp_dcs[2][k] = dc[2][k]
             del dc
+            merge_prop_dicts([prop_dict, tmp_dcs])
+            del tmp_dcs
 
+            # TODO: optimize as above - by creating a temporary dictionary with the intersecting IDs only
             for organelle in processsed_organelles:
                 fname = f'{worker_dir_props}/scm_{organelle}_{worker_id}.pkl'
                 dc = basics.load_pkl2obj(fname)
@@ -1114,10 +1185,12 @@ def _write_props_to_sv_thread(args):
             for k in processsed_organelles:
                 if sv_id not in mapping_dicts[k]:
                     # no object of this type mapped to current cell SV
+                    this_attr_dc[sv_id][f"mapping_{k}_ids"] = []
+                    this_attr_dc[sv_id][f"mapping_{k}_ratios"] = []
                     continue
-                this_attr_dc[sv_id]["mapping_%s_ids" % k] = \
+                this_attr_dc[sv_id][f"mapping_{k}_ids"] = \
                     list(mapping_dicts[k][sv_id].keys())
-                this_attr_dc[sv_id]["mapping_%s_ratios" % k] = \
+                this_attr_dc[sv_id][f"mapping_{k}_ratios"] = \
                     list(mapping_dicts[k][sv_id].values())
             rp = prop_dict[0][sv_id]
             bbs = np.concatenate(prop_dict[1][sv_id])
@@ -1239,7 +1312,7 @@ def merge_meshes_single(m_storage, obj_id, tmp_dict):
         m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[2]))
 
 
-def merge_prop_dicts(prop_dicts: List[dict],
+def merge_prop_dicts(prop_dicts: List[List[dict]],
                      offset: Optional[np.ndarray] = None):
     """Merge property dicts in-place. All values will be stored in the first dict."""
     tot_rc = prop_dicts[0][0]
@@ -1319,7 +1392,7 @@ def merge_map_dicts(map_dicts):
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
-                      nb_cpus=None, n_max_co_processes=None):
+                      nb_cpus=None):
     paths = cs_sd.so_dir_paths
 
     # Partitioning the work
@@ -1335,7 +1408,6 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
 
     else:
         qu.batchjob_script(multi_params, "binary_filling_cs", n_cores=nb_cpus,
-                           n_max_co_processes=n_max_co_processes,
                            remove_jobfolder=True)
 
 
@@ -1389,20 +1461,18 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       return_proba=False):
     """
 
-    Parameters
-    ----------
-    model :
-    sos :
-    pred_key :
-    nb_cpus :
-    woglia :
-    verbose :
-    raw_only :
-    single_cc_only :
-    return_proba :
+    Args:
+        model:
+        sos:
+        pred_key:
+        nb_cpus:
+        woglia:
+        verbose:
+        raw_only:
+        single_cc_only:
+        return_proba:
 
-    Returns
-    -------
+    Returns:
 
     """
     nb_chunks = np.max([1, len(sos) // 200])
@@ -1432,19 +1502,17 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
     """
     Will not be written to disk if return_proba is True.
 
-    Parameters
-    ----------
-    model : nn.Model
-    views : np.array
-    ch : List[SegmentationObject]
-    pred_key : str
-    single_cc_only : bool
-    verbose : bool
-    return_proba : bool
-    nb_cpus : int
+    Args:
+        model: nn.Model
+        views: np.array
+        ch: List[SegmentationObject]
+        pred_key: str
+        single_cc_only: bool
+        verbose: bool
+        return_proba: bool
+        nb_cpus: int
 
-    Returns
-    -------
+    Returns:
 
     """
     for kk in range(len(views)):
@@ -1478,8 +1546,7 @@ def multi_probas_saver(args):
     so.save_attributes([key], [probas])
 
 
-def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10,
-                                n_max_co_processes=100):
+def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
 
     block_size = np.array([block_edge_length] * 3)
 
@@ -1524,7 +1591,6 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10,
 
     else:
         _ = qu.batchjob_script(multi_params, "export_sd_to_knossosdataset",
-                               n_max_co_processes=n_max_co_processes,
                                remove_jobfolder=True)
 
 
@@ -1567,16 +1633,18 @@ def _export_sd_to_knossosdataset_thread(args):
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=None):
     """
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
-     with object type 'obj_type'.
+    with object type 'obj_type'.
 
-    Parameters
-    ----------
-    working_dir : str
-        Path to working directory
-    obj_type : str
-        Object type identifier, like 'sj', 'vc' or 'mi'
-    nb_cpus : int
-        Default is 20.
+    Args:
+        working_dir: str
+            Path to working directory
+        obj_type: str
+            Object type identifier, like 'sj', 'vc' or 'mi'
+        nb_cpus: int
+            Default is 20.
+
+    Returns:
+
     """
     if nb_cpus is None:
         nb_cpus = global_params.config['ncores_per_node']

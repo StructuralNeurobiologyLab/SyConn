@@ -84,8 +84,7 @@ if __name__ == "__main__":
 
     # --------------------------------------------------------------------------
     # TEST PREDICTIONS OF TRAIN AND VALIDATION DATA
-    from syconn.handler.prediction import get_celltype_model_large_e3, \
-        get_tripletnet_model_large_e3, get_celltype_model_e3
+    from syconn.handler.prediction import get_celltype_model_e3
     from syconn.proc.stats import cluster_summary, projection_tSNE, model_performance
     from elektronn3.models.base import InferenceModel
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
@@ -127,7 +126,6 @@ if __name__ == "__main__":
                 # ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix1,
                 #                          model_tnet=m_tnet)
                 ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2,
-                                         largeFoV=False,
                                          view_props={"overwrite": False, 'use_syntype': True,
                                                      'nb_views': 20, 'da_equals_tan': da_equals_tan})
                 ssv.load_attr_dict()

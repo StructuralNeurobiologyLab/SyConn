@@ -6,8 +6,8 @@ In order to run a QSUB script on the cluster one has to provide the path
  In the following example, the skeletons of all SSVs are precomputed
  (given the SV skeletons exist).
 For precomputing skeletons of all SSV use the QSUB script `QSUB_export_skeletons_new`,
-which can be found in the `QSUB_scripts` folder inside `syconn`.
-(identify the folder of `QSUB_export_skeletons_new`: FOLDER_OF_QSUB_SCRIPT):
+which can be found in the `batchjob_scripts` folder inside `syconn`.
+(identify the folder of `QSUB_export_skeletons_new`: PATH_TO_SCRIPT_DIR):
 ```
 import os
 from syconn.mp import batchjob_utils as qu
@@ -22,5 +22,5 @@ if __name__ == "__main__":
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 4000)
     path_to_out = qu.batchjob_script(multi_params, "export_skeletons_new",
-                                     script_folder=PATH_TO_QSUB_SCRIPT)
+                                     script_folder=PATH_TO_SCRIPT_DIR)
 ```

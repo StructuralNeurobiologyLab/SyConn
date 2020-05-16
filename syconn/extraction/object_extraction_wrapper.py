@@ -14,7 +14,6 @@ from logging import Logger
 
 from .. import global_params
 from ..extraction import log_extraction
-from ..reps.segmentation import SegmentationDataset
 from ..handler import basics
 from . import object_extraction_steps as oes
 
@@ -159,8 +158,7 @@ def from_probabilities_to_kd(
         sigmas: Optional[list] = None, thresholds: Optional[list] = None,
         debug: bool = False, swapdata: bool = False,
         offset: Optional[np.ndarray] = None, size: Optional[np.ndarray] = None,
-        suffix: str = "", n_max_co_processes: Optional[int] = None,
-        transform_func: Optional[Callable] = None,
+        suffix: str = "", transform_func: Optional[Callable] = None,
         func_kwargs: Optional[dict] = None, n_cores: Optional[int] = None,
         n_erosion: Optional[int] = 0, overlap_thresh: Optional[int] = 0,
         stitch_overlap: Optional[int] = None, membrane_filename: str = None,
@@ -208,7 +206,6 @@ def from_probabilities_to_kd(
         offset: Offset of the processed volume.
         size: Size of the processed volume of the dataset starting at `offset`.
         suffix: Suffix used for the intermediate processing steps.
-        n_max_co_processes: Number of parallel jobs if batch job is disabled.
         transform_func: [WIP] Segmentation method which is applied, currently
           only func:`~syconn.extraction.object_extraction_steps.
           _gauss_threshold_connected_components_thread`
@@ -278,7 +275,7 @@ def from_probabilities_to_kd(
         membrane_filename=membrane_filename, membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
         suffix=suffix, transform_func=transform_func,
-        transform_func_kwargs=func_kwargs, n_max_co_processes=n_max_co_processes,
+        transform_func_kwargs=func_kwargs,
         nb_cpus=n_cores, load_from_kd_overlaycubes=load_from_kd_overlaycubes,
         transf_func_kd_overlay=transf_func_kd_overlay, n_chunk_jobs=n_chunk_jobs)
     if stitch_overlap is None:
@@ -325,7 +322,6 @@ def from_probabilities_to_kd(
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
-                           n_max_co_processes=n_max_co_processes,
                            n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
@@ -340,7 +336,6 @@ def from_probabilities_to_kd(
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, n_erosion=n_erosion,
-                                       n_max_co_processes=n_max_co_processes,
                                        overlap_thresh=overlap_thresh,
                                        n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
@@ -363,7 +358,6 @@ def from_probabilities_to_kd(
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                          debug, suffix=suffix,
-                         n_max_co_processes=n_max_co_processes,
                          n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
@@ -374,8 +368,7 @@ def from_probabilities_to_kd(
         target_kd_paths, cset, '{}_stitched_components'.format(filename),
         hdf5names, offset=offset, size=size, stride=cset.chunk_size,
         as_raw=False, orig_dtype=np.uint64, unified_labels=False, log=log,
-        n_max_co_processes=n_max_co_processes, n_max_job=n_chunk_jobs,
-        n_cores=n_cores)
+        n_max_job=n_chunk_jobs, n_cores=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("export KD")
 
@@ -394,8 +387,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   offset=None, size=None, prob_kd_path_dict=None,
                                   membrane_filename=None, membrane_kd_path=None,
                                   hdf5_name_membrane=None, n_folders_fs=1000,
-                                  suffix="", n_max_co_processes=None,
-                                  transform_func=None, func_kwargs=None,
+                                  suffix="", transform_func=None, func_kwargs=None,
                                   nb_cpus=None, workfolder=None, n_erosion=0,
                                   overlap_thresh=0, stitch_overlap=None,
                                   load_from_kd_overlaycubes=False,
@@ -522,8 +514,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         swapdata=swapdata, prob_kd_path_dict=prob_kd_path_dict,
         membrane_filename=membrane_filename, membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
-        suffix=suffix, transform_func=transform_func,
-        transform_func_kwargs=func_kwargs, n_max_co_processes=n_max_co_processes,
+        suffix=suffix, transform_func=transform_func, transform_func_kwargs=func_kwargs,
         nb_cpus=nb_cpus, load_from_kd_overlaycubes=load_from_kd_overlaycubes,
         transf_func_kd_overlay=transf_func_kd_overlay)
     if stitch_overlap is None:
@@ -571,8 +562,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     #
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                           chunk_translator, debug, suffix=suffix,
-                           n_max_co_processes=n_max_co_processes)
+                           chunk_translator, debug, suffix=suffix)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     #
@@ -585,7 +575,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, n_erosion=n_erosion,
-                                       n_max_co_processes=n_max_co_processes,
                                        overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
@@ -606,8 +595,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
 
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                         debug, suffix=suffix,
-                         n_max_co_processes=n_max_co_processes)
+                         debug, suffix=suffix)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
 
@@ -619,23 +607,20 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         oes.export_cset_to_kd_batchjob({hdf5names[0]: target_kd.conf_path},
             cset, '{}_stitched_components'.format(filename), hdf5names,
             offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-            orig_dtype=np.uint64, unified_labels=False,
-            n_max_co_processes=n_max_co_processes)
+            orig_dtype=np.uint64, unified_labels=False)
         all_times.append(time.time() - time_start)
         step_names.append("export KD")
     # --------------------------------------------------------------------------
         time_start = time.time()
         oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
                                     chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
-                                    overlaydataset_path=target_kd.conf_path,
-                                    n_max_co_processes=n_max_co_processes)
+                                    overlaydataset_path=target_kd.conf_path)
         all_times.append(time.time() - time_start)
         step_names.append("extract and combine voxels")
     else:
         time_start = time.time()
         oes.extract_voxels(cset, filename, hdf5names, chunk_list=chunk_list, suffix=suffix,
-                           workfolder=global_params.config.working_dir, n_folders_fs=n_folders_fs,
-                           n_max_co_processes=n_max_co_processes)
+                           workfolder=global_params.config.working_dir, n_folders_fs=n_folders_fs)
         all_times.append(time.time() - time_start)
         step_names.append("extract voxels")
 
@@ -643,8 +628,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
 
         time_start = time.time()
         oes.combine_voxels(global_params.config.working_dir, hdf5names,
-                           n_folders_fs=n_folders_fs, n_chunk_jobs=5000,
-                           n_max_co_processes=n_max_co_processes)
+                           n_folders_fs=n_folders_fs, n_chunk_jobs=5000)
 
         all_times.append(time.time() - time_start)
         step_names.append("combine voxels")
@@ -748,7 +732,7 @@ def from_probabilities_to_objects_parameter_sweeping(
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
                         overlaydataset_path=None, chunk_list=None, offset=None, log=None,
                         size=None, suffix="", workfolder=None,
-                        n_max_co_processes=None, n_chunk_jobs=5000, use_combined_extraction=True):
+                        n_chunk_jobs=5000, use_combined_extraction=True):
     """
     # TODO: add SegmentationDataset initialization (-> `dataset_analysis` etc.)
     Main function for the object extraction step; combines all needed steps
@@ -775,8 +759,6 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     workfolder : str
         Directory in which to store results. By default this is set to
         `global_params.config.working_dir`.
-    n_max_co_processes: int or None
-        Total number of parallel processes that should be running on the cluster.
     n_chunk_jobs: int
     use_combined_extraction : bool
 
@@ -803,8 +785,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         oes.extract_voxels(cset, filename, hdf5names, dataset_names=dataset_names,
                            overlaydataset_path=overlaydataset_path,
                            chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
-                           n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
-                           n_max_co_processes=n_max_co_processes)
+                           n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs)
         all_times.append(time.time() - time_start)
         step_names.append("voxel extraction")
         #
@@ -813,8 +794,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         time_start = time.time()
         oes.combine_voxels(workfolder,
                            hdf5names, dataset_names=dataset_names,
-                           n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
-                           n_max_co_processes=n_max_co_processes)
+                           n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs)
         all_times.append(time.time() - time_start)
         step_names.append("combine voxels")
     else:
@@ -822,8 +802,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         oes.extract_voxels_combined(cset, filename, hdf5names, overlaydataset_path=overlaydataset_path,
                                     dataset_names=dataset_names, chunk_list=chunk_list, suffix=suffix,
                                     workfolder=workfolder, n_folders_fs=n_folders_fs,
-                                    n_chunk_jobs=n_chunk_jobs,
-                                    n_max_co_processes=n_max_co_processes)
+                                    n_chunk_jobs=n_chunk_jobs)
         all_times.append(time.time() - time_start)
         step_names.append("extract voxels combined")
 

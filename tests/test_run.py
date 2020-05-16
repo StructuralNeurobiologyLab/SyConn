@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
-# Authors: Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert
 
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
@@ -22,9 +22,8 @@ def test_full_run():
     example_cube_id = 1
     working_dir = "~/SyConn/tests/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(working_dir) + "/"
-    if os.path.isdir(example_wd):
-        shutil.rmtree(example_wd)
-
+    shutil.rmtree(example_wd, ignore_errors=True)
+    # set up basic parameter, log, working directory and config file
     # set up basic parameter, log, working directory and config file
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
     experiment_name = 'j0126_example'
@@ -37,14 +36,32 @@ def test_full_run():
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),
+        # # these will be created during synapse type prediction (
+        # # exec_dense_prediction.predict_synapsetype())
+        # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
+        #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
+        # ('cell_objects', {'asym_label': 1, 'sym_label': 2})
     ]
-    chunk_size = (256, 256, 256)
+    if example_cube_id == 1:
+        chunk_size = (256, 256, 128)
+    elif example_cube_id == 2:
+        chunk_size = (256, 256, 256)
+    else:
+        chunk_size = (512, 512, 256)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
-    curr_dir = os.path.expanduser('~/SyConn//')
-    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
-
+    for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
+                     os.path.abspath(os.path.curdir) + '/',
+                     os.path.expanduser('~/SyConn/')]:
+        h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+        if os.path.isdir(h5_dir):
+            break
+    if not os.path.isdir(h5_dir):
+        raise FileNotFoundError(f'Example data folder could not be found'
+                                f' at "{curr_dir}".')
+    if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
+            or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
+        raise FileNotFoundError(f'Incomplete example data in folder "{h5_dir}".')
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 
@@ -55,13 +72,13 @@ def test_full_run():
     if global_params.wd is not None:
         log.critical('Example run started. Working directory was overwritten and set'
                      ' to "{}".'.format(example_wd))
+
+    os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
-    os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
     from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
-    from syconn.handler.prediction import parse_movement_area_from_zip
     from syconn.handler.compression import load_from_h5py
 
     # PREPARE TOY DATA
@@ -73,13 +90,6 @@ def test_full_run():
     # copy models to working directory
     if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
         shutil.copytree(curr_dir + '/models', example_wd + '/models/')
-
-    if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
-        raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
-    if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
-            or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
-        raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
-
     os.makedirs(example_wd + '/glia/', exist_ok=True)
 
     # check model existence
@@ -97,55 +107,51 @@ def test_full_run():
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
-    # TODO: get from h5 file
-    bb = parse_movement_area_from_zip(kzip_p)
+    tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
     offset = np.array([0, 0, 0])
-    bd = bb[1] - bb[0]
+    bd = np.array(tmp.shape)
+    del tmp
 
     # INITIALIZE DATA
     # TODO: switch to streaming confs instead of h5 files
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
-                              offset=offset, boundary=bd, fast_downsampling=True,
-                              data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'],
-                              force_overwrite=True)
-
-    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-    kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
-                            fast_downsampling=True, as_raw=False)
-
-    kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
-                                 offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'],
-                                 force_overwrite=True)
-
-    kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
-                                 offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'],
-                                 force_overwrite=True)
-
-    kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
-                                 offset=offset, boundary=bd, fast_downsampling=True,
-                                 data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'],
-                                 force_overwrite=True)
-
-    kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
+    if not os.path.isdir(global_params.config.kd_sj_path):
+        kd = knossosdataset.KnossosDataset()
+        kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                                   offset=offset, boundary=bd, fast_downsampling=True,
-                                  data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'],
-                                  force_overwrite=True)
+                                  data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
-    kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
-                                   experiment_name, offset=offset, boundary=bd,
-                                   fast_downsampling=True, data_path=h5_dir + 'asym.h5',
-                                   mags=[1, 2], hdf5_names=['asym'],
-                                   force_overwrite=True)
-    time_stamps.append(time.time())
-    step_idents.append('Preparation')
+        seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
+        kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
+                                fast_downsampling=False, as_raw=False)
+        del kd, seg_d
+        kd_sym = knossosdataset.KnossosDataset()
+        kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
+                                      offset=offset, boundary=bd, fast_downsampling=True,
+                                      data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
+        del kd_sym
+        kd_asym = knossosdataset.KnossosDataset()
+        kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
+                                       experiment_name, offset=offset, boundary=bd,
+                                       fast_downsampling=True, data_path=h5_dir + 'asym.h5',
+                                       mags=[1, 2], hdf5_names=['asym'])
+        del kd_asym
+        kd_mi = knossosdataset.KnossosDataset()
+        kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
+                                     offset=offset, boundary=bd, fast_downsampling=True,
+                                     data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
+        del kd_mi
+        kd_vc = knossosdataset.KnossosDataset()
+        kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
+                                     offset=offset, boundary=bd, fast_downsampling=True,
+                                     data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+        del kd_vc
+        kd_sj = knossosdataset.KnossosDataset()
+        kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
+                                     offset=offset, boundary=bd, fast_downsampling=True,
+                                     data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+        del kd_sj
+        time_stamps.append(time.time())
+        step_idents.append('Preparation')
 
     log.info('Finished example cube initialization (shape: {}). Starting'
              ' SyConn pipeline.'.format(bd))
@@ -154,14 +160,13 @@ def test_full_run():
     # # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
     # TODO: launch all inferences in parallel
-    # exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+    exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
-    #  TODO: might require also require adaptions in init_cell_subcell_sds
+    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
     # exec_dense_prediction.predict_synapsetype()
-    # time_stamps.append(time.time())
-    # step_idents.append('Dense predictions')
+    time_stamps.append(time.time())
+    step_idents.append('Dense predictions')
 
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
@@ -174,7 +179,7 @@ def test_full_run():
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction(e3=True)
+        exec_multiview.run_glia_prediction()
         exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
@@ -185,6 +190,7 @@ def test_full_run():
     step_idents.append('SSD generation')
 
     # TODO: launch steps 3 and 4 in parallel
+    # TODO: use syn_ssv for rendering
     log.info('Step 3/8 - Neuron rendering')
     exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())
@@ -204,6 +210,7 @@ def test_full_run():
 
     log.info('Step 6/8 - Spine prediction')
     exec_multiview.run_spiness_prediction()
+    exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
@@ -232,8 +239,8 @@ def test_full_run():
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
         step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
-            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
+        step_str = "{:<10}{:<25}{:<20}{:<4s}\n".format(
+            f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_perc}%')
         time_summary_str += step_str
     log.info(time_summary_str)
     shutil.rmtree(example_wd)
