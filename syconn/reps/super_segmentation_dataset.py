@@ -333,7 +333,6 @@ class SuperSegmentationDataset(object):
                 self._mapping_dict = {}
         return self._mapping_dict
 
-
     @property
     def mapping_dict_reversed(self) -> Dict[int, int]:
         """
@@ -350,7 +349,6 @@ class SuperSegmentationDataset(object):
                         self._mapping_dict_reversed[ix] = k
                 self.save_mapping_dict_reversed()
         return self._mapping_dict_reversed
-
 
     @property
     def ssv_ids(self) -> np.ndarray:
