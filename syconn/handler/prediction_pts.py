@@ -944,7 +944,6 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
             source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
-        dt_context = 0
         for ii in range(n_batches):
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
@@ -954,12 +953,14 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
                 # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                start = time.time()
-                node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
-                dt_context += time.time() - start
-                # print(f'DT context: {dt_context:.2f} s vs DT overall: {(time.time()-start_overall):.2f} s')
-                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                sample_feats = hc_sub.features
+                while True:
+                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    sample_feats = hc_sub.features
+                    if len(sample_feats) > 0:
+                        break
+                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc_sub.nodes[source_node]} IN "{pkl_f}".')
+                    source_node = np.random.choice(source_nodes)
                 sample_pts = hc_sub.vertices
                 sample_labels = hc_sub.labels
 
