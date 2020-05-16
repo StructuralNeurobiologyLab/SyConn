@@ -11,6 +11,8 @@ import re
 import numpy as np
 import networkx as nx
 from collections import deque
+from syconn.proc.meshes import write_mesh2kzip
+from syconn.handler.basics import load_pkl2obj
 from sklearn.neighbors import KDTree
 from scipy.spatial import cKDTree
 from knossos_utils.skeleton_utils import load_skeleton
@@ -60,14 +62,14 @@ def labels2mesh(args):
     a_node_coords = a_node_coords[(a_node_labels != -1)]
     a_node_labels = a_node_labels[(a_node_labels != -1)]
 
-    kdt = cKDTree(a_node_coords)
-
     # get sso skeleton nodes which are close to GT nodes
     # 0: not close to a labeled GT node, 1: close to an annotated node
+    kdt = cKDTree(a_node_coords[a_node_labels != 33])
     node_labels = np.zeros((len(nodes), 1))
     dists, ixs = kdt.query(nodes, distance_upper_bound=1000)
-    node_labels[dists < np.inf] = 1
+    node_labels[(dists < np.inf)] = 1
 
+    kdt = cKDTree(a_node_coords)
     # load cell and cell organelles
     # _ = sso._load_obj_mesh('syn_ssv', rewrite=True)
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
@@ -88,6 +90,17 @@ def labels2mesh(args):
         # remove ignore and glia vertices
         _, ixs = kdt.query(vertices)
         vert_l = a_node_labels[ixs]
+
+        if ix == 0:
+            # save colored mesh
+            col_lookup = {0: (125, 125, 125, 255), 1: (255, 125, 125, 255), 2: (125, 255, 125, 255),
+                          3: (125, 125, 255, 255),
+                          4: (255, 255, 125, 255), 5: (125, 255, 255, 255), 6: (255, 125, 255, 255), 7: (0, 0, 0, 255),
+                          8: (255, 0, 0, 255), 33: (238, 238, 0, 255)}
+            cols = np.array([col_lookup[el] for el in vert_l.squeeze()], dtype=np.uint8)
+            write_mesh2kzip(f'{out_path}/sso_{sso.id}.k.zip', indices.astype(np.float32),
+                            vertices.astype(np.float32), None, cols, f'{sso_id}.ply')
+
         vertices = vertices[vert_l != 33]
         feats = feats[vert_l != 33]
         # only set labels for cell surface points -> subcellular structures will have label -1
@@ -104,8 +117,8 @@ def labels2mesh(args):
     feats_tot = np.concatenate(feats_tot).astype(np.uint8)
     # labels contain negative integer
     labels_tot = np.concatenate(labels_tot).astype(np.int16)
-    print(sso_id, np.unique(labels_tot, return_counts=True), labels_tot.shape, verts_tot.shape, feats_tot.shape)
-    print(sso_id, node_labels.shape, np.unique(node_labels, return_counts=True))
+    # print(sso_id, np.unique(labels_tot, return_counts=True), labels_tot.shape, verts_tot.shape, feats_tot.shape)
+    print(sso_id, np.unique(node_labels, return_counts=True))
 
     hc = HybridCloud(vertices=verts_tot, features=feats_tot, labels=labels_tot,
                      nodes=nodes, node_labels=node_labels, edges=edges)
@@ -125,7 +138,6 @@ def labels2mesh(args):
     # hm.set_types(types)
 
     # save generated hybrid cloud to pkl
-    sso.mesh2kzip(f'{out_path}/sso_{sso.id}.k.zip')
     hc.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
 
 
@@ -174,7 +186,7 @@ def gt_generation(kzip_paths, out_path, version: str = None):
     params = [(p, out_path, version) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=True)
 
 
 if __name__ == "__main__":

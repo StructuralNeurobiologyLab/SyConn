@@ -597,7 +597,7 @@ class main_class(QtGui.QDialog):
 
         self.direct_ssv_id_input = QtGui.QLineEdit()
         self.direct_ssv_id_input.setValidator(QtGui.QIntValidator())
-        self.direct_ssv_id_input.setMaxLength(8)
+        #self.direct_ssv_id_input.setMaxLength(8)
 
         self.direct_syn_id_input = QtGui.QLineEdit()
         self.direct_syn_id_input.setValidator(QtGui.QIntValidator())

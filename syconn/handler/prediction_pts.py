@@ -604,66 +604,64 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
     else:
         ssv_ids = np.unique(ssv_ids)
         # fluctuate context size in 1/4 samples
-        try:
-            if np.random.randint(0, 4) == 0:
-                ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
-            else:
-                ctx_size_fluct = ctx_size
-            for curr_ssvids in ssv_ids:
-                ssv = ssd.get_super_segmentation_object(curr_ssvids)
-                hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                    feat_dc.values()), 'celltype', None))
-                npoints_ssv = min(len(hc.vertices), npoints)
-                # add a +-10% fluctuation in the number of input points
-                npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-                npoints_ssv += npoints_add
-                batch = np.zeros((batchsize, npoints_ssv, 3))
-                batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-                ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
-                cnt = 0
-                source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
-                                                replace=len(hc.nodes) < batchsize)
-                if draw_local:
-                    # only use half of the nodes and choose a close-by node as root for similar context retrieval
-                    source_nodes = source_nodes[::2]
-                    sn_new = []
-                    g = hc.graph(simple=False)
-                    for n in source_nodes:
-                        sn_new.append(n)
-                        paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                        neighs = np.array(list(paths.keys()), dtype=np.int)
-                        sn_new.append(np.random.choice(neighs, 1)[0])
-                    source_nodes = sn_new
-                for source_node in source_nodes:
-                    # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                    local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
-                    pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                    sample_feats = pc.features
-                    sample_pts = pc.vertices
-                    # shuffling
-                    sample_ixs = np.arange(len(sample_pts))
-                    np.random.shuffle(sample_ixs)
-                    sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                    sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                    # add duplicated points before applying the transform if sample_pts
-                    # has less points than npoints_ssv
-                    npoints_add = npoints_ssv - len(sample_pts)
-                    idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
-                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                    # one hot encoding
-                    sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                    pc._vertices = sample_pts
-                    pc._features = sample_feats
-                    if transform is not None:
-                        transform(pc)
-                    batch[cnt] = pc.vertices
-                    batch_f[cnt] = pc.features
-                    cnt += 1
-                assert cnt == batchsize
-                yield ixs, (batch_f, batch)
-        except:
-            raise()
+        if np.random.randint(0, 4) == 0:
+            ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
+        else:
+            ctx_size_fluct = ctx_size
+        for curr_ssvid in ssv_ids:
+            ssv = ssd.get_super_segmentation_object(curr_ssvid)
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+                feat_dc.values()), 'celltype', None))
+            npoints_ssv = min(len(hc.vertices), npoints)
+            # add a +-10% fluctuation in the number of input points
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
+            batch = np.zeros((batchsize, npoints_ssv, 3))
+            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+            cnt = 0
+            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
+                                            replace=len(hc.nodes) < batchsize)
+            if draw_local:
+                # only use half of the nodes and choose a close-by node as root for similar context retrieval
+                source_nodes = source_nodes[::2]
+                sn_new = []
+                g = hc.graph(simple=False)
+                for n in source_nodes:
+                    sn_new.append(n)
+                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                    neighs = np.array(list(paths.keys()), dtype=np.int)
+                    sn_new.append(np.random.choice(neighs, 1)[0])
+                source_nodes = sn_new
+            for source_node in source_nodes:
+                # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
+                sample_feats = pc.features
+                sample_pts = pc.vertices
+                # shuffling
+                sample_ixs = np.arange(len(sample_pts))
+                np.random.shuffle(sample_ixs)
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                # add duplicated points before applying the transform if sample_pts
+                # has less points than npoints_ssv
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                # one hot encoding
+                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                pc._vertices = sample_pts
+                pc._features = sample_feats
+                if transform is not None:
+                    transform(pc)
+                batch[cnt] = pc.vertices
+                batch_f[cnt] = pc.features
+                cnt += 1
+            assert cnt == batchsize
+            yield ixs, (batch_f, batch)
+
 
 def pts_pred_scalar(m, inp, q_out, q_cnt, device, bs):
     """
@@ -946,7 +944,6 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
             source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
-        dt_context = 0
         for ii in range(n_batches):
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
@@ -956,12 +953,14 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
                 # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                start = time.time()
-                node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
-                dt_context += time.time() - start
-                # print(f'DT context: {dt_context:.2f} s vs DT overall: {(time.time()-start_overall):.2f} s')
-                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                sample_feats = hc_sub.features
+                while True:
+                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    sample_feats = hc_sub.features
+                    if len(sample_feats) > 0:
+                        break
+                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc_sub.nodes[source_node]} IN "{pkl_f}".')
+                    source_node = np.random.choice(source_nodes)
                 sample_pts = hc_sub.vertices
                 sample_labels = hc_sub.labels
 
