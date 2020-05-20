@@ -4,6 +4,11 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+from ..handler import log_handler
+import os
+from typing import List, Tuple, Optional, Iterable, Union, Dict
+import h5py
+import numpy as np
 try:
     from lz4.block import compress, decompress
 except ImportError:
@@ -16,12 +21,7 @@ except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
-from typing import List, Tuple, Optional, Iterable, Union, Dict
-import numpy as np
-import h5py
-import os
 
-from ..handler import log_handler
 __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
            'save_lz4_compressed', 'load_from_h5py',
            'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']

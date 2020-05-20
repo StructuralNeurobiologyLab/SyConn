@@ -4,15 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from typing import Iterable, List, Tuple
-import numpy as np
-from collections import Counter
-from typing import Optional, Union, Callable, List, Dict
-from logging import Logger
 from .. import global_params
 from . import log_proc
 from ..handler import basics
@@ -22,6 +13,16 @@ from ..reps.super_segmentation import SuperSegmentationObject, \
     SuperSegmentationDataset
 from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
+
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+from typing import Iterable, Tuple
+import numpy as np
+from collections import Counter
+from typing import Optional, List
+from logging import Logger
 
 
 def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,

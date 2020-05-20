@@ -4,25 +4,21 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from ..reps import segmentation
+from . import log_reps
+from .. import global_params
+from ..handler.multiviews import int2str_converter
 
 import time
 import numpy as np
 import networkx as nx
-import pandas as pd
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-import itertools
 from collections import defaultdict
 from scipy import ndimage
-
-from ..reps import super_segmentation as ss
-from ..reps import segmentation
-from . import log_reps
-from .. import global_params
-from ..handler.multiviews import int2str_converter
 
 
 def sv_id_to_partner_ids_vec(cs_ids):
@@ -178,7 +174,7 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
     wiring = np.zeros((n_cells, n_cells))
     celltypes = np.unique([cd_dict['neuron_partner_ct_0'], cd_dict['neuron_partner_ct_1']])
     ssvs_flattened = []
-    boarders = []
+    borders = []
     np.random.seed(0)
     # create list of cells used for celltype-sorted x and y axis
     for ct in celltypes:
@@ -189,9 +185,9 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
         np.random.shuffle(curr_ct_ssvs)
         curr_ct_ssvs = curr_ct_ssvs.tolist()
         ssvs_flattened += curr_ct_ssvs
-        boarders.append(len(curr_ct_ssvs))
-    boarders = np.cumsum(boarders)
-    assert boarders[-1] == len(wiring)
+        borders.append(len(curr_ct_ssvs))
+    borders = np.cumsum(borders)
+    assert borders[-1] == len(wiring)
     # sum per cell-pair synaptic connections multiplied by synaptic sign (-1 or 1)
     cumul_syn_dc = defaultdict(list)
     # synapse size: in um2, mesh area of the overlap between cs and sj divided by 2
@@ -214,11 +210,11 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
         syns_neg = np.abs(np.sum([syn for syn in syns if syn < 0]))
         sign = -1 if syns_neg > syns_pos else 1
         wiring[post_ix, pre_ix] = sign * (syns_pos + syns_neg)
-    ct_boarders = [(int2str_converter(celltypes[ii], gt_type='ctgt_v2'), boarders[ii]) for ii in
+    ct_borders = [(int2str_converter(celltypes[ii], gt_type='ctgt_v2'), borders[ii]) for ii in
                    range(len(celltypes))]
     log_reps.info(f'Found the following cell types (label, starting index in '
-                  f'wiring diagram: {ct_boarders}')
-    return wiring, boarders[:-1]
+                  f'wiring diagram: {ct_borders}')
+    return wiring, borders[:-1]
 
 
 def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0):
@@ -235,9 +231,9 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
         quadratic 2D array of size #cells x #cells, x-axis: dendrite partners,
          y: axon partners.
     den_borders:
-    cell type boarders on post synaptic site
+        cell type borders on post synaptic site
     ax_borders:
-        cell type boarders on pre synaptic site
+        cell type borders on pre synaptic site
     """
     if cumul:
         entry_width = 1
@@ -352,13 +348,13 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
     # TODO: refine summary log
     sum_str = f"Cut value negative: {int_cut_neg}\n"
     sum_str += f"Cut value positive: {int_cut_pos}\n"
-    sum_str += f"Post-synaptic boarders: {den_borders}\n"
-    sum_str += f"Pre-synaptic boarders: {ax_borders}\n"
+    sum_str += f"Post-synaptic borders: {den_borders}\n"
+    sum_str += f"Pre-synaptic borders: {ax_borders}\n"
     with open(path + mat_name + '.txt', 'w') as f:
         f.write(sum_str)
 
 
-def plot_cumul_wiring(path, wiring, boarders, min_cumul_synarea=1):
+def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0):
     """
     Synaptic area between cell type pairs. Synaptic areas are summed and then
     divided by the number of cell pairs to compute the average cumulated synaptic area
@@ -371,14 +367,15 @@ def plot_cumul_wiring(path, wiring, boarders, min_cumul_synarea=1):
     Args:
         path:
         wiring:
-        boarders:
+        borders:
+        min_cumul_synarea:
 
     Returns:
 
     """
-    cumul_matrix = np.zeros([len(boarders) + 1, len(boarders) + 1])
+    cumul_matrix = np.zeros([len(borders) + 1, len(borders) + 1])
 
-    borders = [0] + list(boarders) + [wiring.shape[1]]
+    borders = [0] + list(borders) + [wiring.shape[1]]
 
     for i_ax_border in range(1, len(borders)):
         for i_de_border in range(1, len(borders)):
@@ -397,7 +394,7 @@ def plot_cumul_wiring(path, wiring, boarders, min_cumul_synarea=1):
                 # convert to density (average cumul. synaptic area between cell pairs)
                 cumul /= (ax_end - ax_start) * (de_end - de_start)
             cumul_matrix[i_de_border-1, i_ax_border-1] = cumul
-    plot_wiring(path, cumul_matrix, range(1, len(boarders)+1), range(1, len(boarders)+1),
+    plot_wiring(path, cumul_matrix, list(range(1, len(borders)+1)), list(range(1, len(borders)+1)),
                 cumul=True, cumul_size=wiring.shape[0])
 
 

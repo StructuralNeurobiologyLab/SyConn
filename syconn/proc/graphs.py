@@ -3,20 +3,18 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
-from scipy import spatial
-from typing import List, Optional, Dict, Any
-import networkx as nx
-import numpy as np
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
-import tqdm
-import itertools
-
-from ..mp.mp_utils import start_multiprocess_obj
+# Authors: Philipp Schubert, Joergen Kornfeld
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from . import log_proc
+
+from typing import List, Any
+import networkx as nx
+import numpy as np
+from scipy import spatial
+from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+import tqdm
+import itertools
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
@@ -170,8 +168,7 @@ def merge_nodes(G, nodes, new_node):
         G.remove_node(n)
 
 
-def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
-                     nb_cpus=1, pred_key_appendix="", verbose=False):
+def split_glia_graph(nx_g, thresh, clahe=False, nb_cpus=1, pred_key_appendix=""):
     """
     Split graph into glia and non-glua CC's.
 
@@ -179,9 +176,6 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
         nx_g: nx.Graph
         thresh: float
         clahe: bool
-        shortest_paths_dest_dir: str
-            None (default), else path to directory to write shortest paths
-            between neuron type SV end nodes
         nb_cpus: int
         pred_key_appendix: str
         verbose: bool
@@ -196,12 +190,10 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     glia_key += pred_key_appendix
     glianess, size = get_glianess_dict(list(nx_g.nodes()), thresh, glia_key,
                                        nb_cpus=nb_cpus)
-    return remove_glia_nodes(nx_g, size, glianess, return_removed_nodes=True,
-                             shortest_paths_dest_dir=shortest_paths_dest_dir)
+    return remove_glia_nodes(nx_g, size, glianess, return_removed_nodes=True)
 
 
-def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
-               pred_key_appendix="", verbose=False):
+def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     """
     Split SuperSegmentationObject into glia and non glia
     SegmentationObjects.
@@ -210,9 +202,6 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
         sso: SuperSegmentationObject
         thresh: float
         clahe: bool
-        shortest_paths_dest_dir: str
-            None (default), else path to directory to write shortest paths
-            between neuron type SV end nodes
         pred_key_appendix: str
             Defines type of glia predictions
         verbose: bool
@@ -223,9 +212,7 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     """
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
-                            nb_cpus=sso.nb_cpus, shortest_paths_dest_dir=
-                            shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix,
-                                             verbose=verbose)
+                            nb_cpus=sso.nb_cpus, pred_key_appendix=pred_key_appendix)
     return nonglia_ccs, glia_ccs
 
 
@@ -236,7 +223,8 @@ def create_ccsize_dict(g, sizes, is_connected_components=False):
         ccs = g
     node2cssize_dict = {}
     for cc in ccs:
-        mesh_bbs = np.concatenate([sizes[n] for n in cc])
+        # if ID is not in sizes, then i
+        mesh_bbs = np.concatenate([sizes[n] for n in cc if n in sizes])
         cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0) -
                                  np.min(mesh_bbs, axis=0), ord=2)
         for n in cc:
@@ -270,8 +258,7 @@ def glia_loader_helper(args):
     return curr_glianess, curr_size
 
 
-def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
-                      shortest_paths_dest_dir=None):
+def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
     """
     Calculate distance weights for shortest path analysis or similar, based on
     glia and size vertex properties and removes unsupporting glia nodes.
@@ -281,7 +268,6 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         size_dict:
         glia_dict:
         return_removed_nodes: bool
-        shortest_paths_dest_dir:
 
     Returns: list of list of nodes
         Remaining connected components of type neuron
@@ -306,9 +292,8 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     if np.all(np.array(list(neuron2ccsize_dict.values())) <=
-              global_params.config['glia']['min_cc_size_ssv']): # no
-    # significant
-        # neuron SV
+              global_params.config['glia']['min_cc_size_ssv']):
+        # no significant neuron SV
         if return_removed_nodes:
             return [], [list(g.nodes())]
         return []
@@ -320,7 +305,8 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
     if np.all(np.array(list(glia2ccsize_dict.values())) <=
-              global_params.config['glia']['min_cc_size_ssv']): # no significant glia SV
+              global_params.config['glia']['min_cc_size_ssv']):
+        # no significant glia SV
         if return_removed_nodes:
             return [list(g.nodes())], []
         return [list(g.nodes())]

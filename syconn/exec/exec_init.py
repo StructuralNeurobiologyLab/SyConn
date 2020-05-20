@@ -5,15 +5,14 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from knossos_utils import knossosdataset
 import time
-from logging import Logger
 import os
-from multiprocessing import Process
 import shutil
+from logging import Logger
+from typing import Optional, Callable, Tuple, Dict, Any
+from multiprocessing import Process
 import networkx as nx
 import numpy as np
-from typing import Optional, Callable, Tuple, Dict, Any
 from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
@@ -22,7 +21,6 @@ from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
-knossosdataset._set_noprint(True)
 
 
 def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
@@ -42,11 +40,12 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     multi_params = [[par, so_kwargs] for par in multi_params]
 
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
-            global_params.config.allow_mesh_gen_cells)):
+       global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
             multi_params, "mesh_caching", suffix=co, remove_jobfolder=False, log=log)
 
-    if co == "sv":
+    # TODO: add as soon as glia separation supports on the fly view generation
+    if co == "sv":  # and not global_params.config.use_onthefly_views:
         _ = qu.batchjob_script(
             multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True,
             log=log)
@@ -111,7 +110,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
                           cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
-                          n_cores: int = 1, overwrite=False):
+                          overwrite=False):
     """
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
@@ -131,7 +130,6 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
             which is processed (minimum and maximum coordinates in mag1 voxels,
             XYZ).
-        n_cores: Cores used within :func:`~map_subcell_extract_props`.
         overwrite: If True, will overwrite existing data.
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
@@ -159,7 +157,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
         cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
-        n_cores=n_cores, overwrite=overwrite)
+        overwrite=overwrite)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -169,7 +167,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
         cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log,
-        n_cores=n_cores, overwrite=overwrite)
+        overwrite=overwrite)
     log.info('Finished extraction and mapping after {:.2f}s.'
              ''.format(time.time() - start))
 

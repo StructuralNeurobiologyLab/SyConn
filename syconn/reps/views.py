@@ -4,11 +4,10 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import numpy as np
-import os
-
 from ..handler.compression import load_lz4_compressed, save_lz4_compressed
+
+import os
+import numpy as np
 
 
 class ViewContainer(object):

@@ -4,35 +4,34 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import numpy as np
-import re
-import glob
-from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
-import os
-import shutil
-from multiprocessing.pool import ThreadPool
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
-try:
-    from knossos_utils import mergelist_tools
-except ImportError:
-    from knossos_utils import mergelist_tools_fallback as mergelist_tools
-from multiprocessing import cpu_count
 from .segmentation import SegmentationDataset, SegmentationObject
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
-from .super_segmentation_helper import create_sso_skeleton, associate_objs_with_skel_nodes
+from .super_segmentation_helper import associate_objs_with_skel_nodes
+from .super_segmentation_helper import view_embedding_of_sso_nocache
 from .super_segmentation_helper import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm
 from .. import global_params
 from . import log_reps
+
+import re
+import glob
+from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
+import os
+import shutil
+import numpy as np
+from multiprocessing.pool import ThreadPool
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+from knossos_utils import knossosdataset
+try:
+    from knossos_utils import mergelist_tools
+except ImportError:
+    from knossos_utils import mergelist_tools_fallback as mergelist_tools
 
 
 class SuperSegmentationDataset(object):
@@ -1290,51 +1289,6 @@ def preproc_sso_skelfeature_thread(args: Tuple):
                                ssv.id, feat_ctx_nm, e))
 
 
-def map_ssv_semseg(args: Union[tuple, list]):
-    """
-    # TODO: Use also for axoness?
-    Helper function to map predicted vertex labels on the cell reconstruction
-    mesh and its skeleton.
-    See :py:func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-    .semseg2mesh` (vertex predictions to mesh) and
-    :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-    .semseg_for_coords` (mesh labels to skeleton nodes) for details.
-
-    Args:
-        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
-            initialize the :class:`~syconn.reps.super_segmentation_dataset
-            .SuperSegmentationDataset`, `kwargs_semseg2mesh`: kwargs used in
-            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.semseg2mesh`,
-            `kwargs_semsegforcoords`: kwargs used in
-            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-            .semseg_for_coords`.
-    """
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    kwargs_semseg2mesh = args[4]
-    kwargs_semsegforcoords = args[5]
-    global_params.wd = working_dir
-
-    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
-                                   version_dict=version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.semseg2mesh(**kwargs_semseg2mesh)
-        ssv.load_skeleton()
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
-            log_reps.warning(f"Skeleton of SSV {ssv_id} has < 2 nodes.")
-            continue
-        # vertex predictions
-        node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
-                                           kwargs_semseg2mesh['semseg_key'],
-                                           **kwargs_semsegforcoords)
-        ssv.skeleton[kwargs_semseg2mesh['semseg_key']] = node_preds
-        ssv.save_skeleton()
-
-
 def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
     """
     Helper function to infer local morphology embeddings of a cell
@@ -1348,17 +1302,24 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
             key for storing the embeddings.
     """
     ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
+    nb_cpus = args[1]
+    version = args[2]
+    version_dict = args[3]
     pred_key_appendix = args[4]
-    global_params.wd = working_dir
+    use_onthefly_views = global_params.config.use_onthefly_views
+    view_props = global_params.config['views']['view_properties']
 
-    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+    ssd = SuperSegmentationDataset(version=version,
                                    version_dict=version_dict)
     from ..handler.prediction import get_tripletnet_model_e3
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         m = get_tripletnet_model_e3()
-        ssv.predict_views_embedding(m, pred_key_appendix)
+        ssv.nb_cpus = nb_cpus
+        ssv._view_caching = True
+        if use_onthefly_views:
+            view_embedding_of_sso_nocache(ssv, m, pred_key_appendix=pred_key_appendix,
+                                          overwrite=True, **view_props)
+        else:
+            ssv.predict_views_embedding(m, pred_key_appendix)
 

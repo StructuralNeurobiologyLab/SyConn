@@ -4,14 +4,15 @@
 
 # import here, otherwise it might fail if it is imported after importing torch
 # see https://github.com/pytorch/pytorch/issues/19739
-import open3d as o3d
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 import collections
 from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
 from multiprocessing import Process, Queue
-from syconn.handler.basics import chunkify_successive
 import numpy as np
 import time
-import tqdm
 import tqdm
 import torch
 from scipy import spatial
@@ -22,7 +23,6 @@ import networkx as nx
 from sklearn.preprocessing import label_binarize
 from morphx.processing.hybrids import extract_subset
 from morphx.processing.objects import bfs_vertices, context_splitting, context_splitting_v2
-from morphx.processing.graphs import bfs_num
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import sparsify_skeleton_fast
 
@@ -148,7 +148,6 @@ def worker_pred(q_out: Queue, q_cnt: Queue, q_in: Queue,
             time.sleep(0.5)
             continue
         pred_func(m, inp, q_out, q_cnt, device, bs)
-    print('Predicter done.')
     q_out.put('STOP')
 
 
@@ -176,7 +175,6 @@ def worker_load(q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func
                     break
             q_out.put(el)
     time.sleep(1)
-    print('Loader done.')
     q_loader_sync.put('DONE')
 
 
@@ -578,6 +576,14 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
             for source_node in source_nodes:
                 # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                while True:
+                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    sample_feats = hc_sub.features
+                    if len(sample_feats) > 0:
+                        break
+                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
+                    source_node = np.random.choice(source_nodes)
                 local_bfs = context_splitting_v2(hc, source_node, ctx_size)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                 sample_feats = pc.features
@@ -635,6 +641,14 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 source_nodes = sn_new
             for source_node in source_nodes:
                 # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                while True:
+                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    sample_feats = hc_sub.features
+                    if len(sample_feats) > 0:
+                        break
+                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
+                    source_node = np.random.choice(source_nodes)
                 local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                 sample_feats = pc.features
@@ -772,7 +786,6 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         if len(source_nodes) % batchsize != 0:
             source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize), source_nodes])
         for ii in range(n_batches):
-            print(len(source_nodes), batchsize, ssv)
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
@@ -959,7 +972,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
-                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc_sub.nodes[source_node]} IN "{pkl_f}".')
+                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{pkl_f}".')
                     source_node = np.random.choice(source_nodes)
                 sample_pts = hc_sub.vertices
                 sample_labels = hc_sub.labels

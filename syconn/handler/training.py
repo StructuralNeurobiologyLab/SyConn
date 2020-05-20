@@ -1,6 +1,4 @@
-import sys
 import subprocess
-from syconn.handler import basics
 from multiprocessing import Process, Queue
 
 

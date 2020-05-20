@@ -4,27 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import glob
-import networkx as nx
-import numpy as np
-import os
-import re
-import scipy.spatial
-import shutil
-import time
-import tqdm
-from collections import Counter, defaultdict
-from scipy import spatial
-from typing import Optional, Dict, List, Tuple, Any, Union, TYPE_CHECKING, Iterable
-from knossos_utils import skeleton
-from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
-from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-try:
-    from knossos_utils import mergelist_tools
-except ImportError:
-    from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
 from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
@@ -44,6 +23,26 @@ from ..mp import mp_utils as sm
 from ..reps import log_reps
 from ..handler.config import DynConfig
 from .. import global_params
+
+import glob
+import os
+import re
+import shutil
+import time
+from collections import Counter, defaultdict
+import scipy.spatial
+import networkx as nx
+import numpy as np
+from scipy import spatial
+from typing import Optional, Dict, List, Tuple, Any, Union, Iterable
+from knossos_utils import skeleton
+from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
+from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
+try:
+    from knossos_utils import mergelist_tools
+except ImportError:
+    from knossos_utils import mergelist_tools_fallback as mergelist_tools
+
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
@@ -55,7 +54,7 @@ class SuperSegmentationObject(object):
 
     Examples:
         This class can be used to create a cell reconstruction object after successful executing
-        :func:`syconn.exec.exec_multiview.run_create_neuron_ssd` as follows::
+        :func:`~syconn.exec.exec_multiview.run_create_neuron_ssd` as follows::
 
             from syconn import global_params
             # import SuperSegmentationObject and SuperSegmentationDataset
@@ -1864,8 +1863,7 @@ class SuperSegmentationObject(object):
 
     def render_views(self, add_cellobjects: bool = False, verbose: bool = False,
                      overwrite: bool = True, cellobjects_only: bool =False,
-                     woglia: bool = True, skip_indexviews: bool = False,
-                     qsub_co_jobs: int = 300):
+                     woglia: bool = True, skip_indexviews: bool = False):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -1885,7 +1883,6 @@ class SuperSegmentationObject(object):
             woglia: If True, will load the views render from the glia-free agglomeration.
             skip_indexviews: Index views will not be generated, used for initial SSV
                 glia-removal rendering.
-            qsub_co_jobs: Number of parallel jobs if batchjob is used.
         """
         # TODO: partial rendering currently does not support index view generation (-> vertex
         #  indices will be different for each partial mesh)
@@ -2058,10 +2055,11 @@ class SuperSegmentationObject(object):
         comp_window : float
             Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
         """
+        view_props_default = global_params.config['views']['view_properties']
         if (nb_views is not None) or (raw_view_key is not None):
             # treat as special view rendering
             if nb_views is None:
-                nb_views = global_params.config['views']['nb_views']
+                nb_views = view_props_default['nb_views']
             if raw_view_key is None:
                 raw_view_key = 'raw{}'.format(nb_views)
             if raw_view_key in self.view_dict:
@@ -2696,26 +2694,19 @@ class SuperSegmentationObject(object):
                                     comments=glia_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def gliasplit(self, dest_path=None, recompute=False, thresh=None,
-                  write_shortest_paths=False, verbose=False,
-                  pred_key_appendix=""):
+    def gliasplit(self, recompute=False, thresh=None, verbose=False, pred_key_appendix=""):
         glia_svs_key = "glia_svs" + pred_key_appendix
         nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if thresh is None:
             thresh = global_params.config['glia']['glia_thresh']
         if recompute or not (self.attr_exists(glia_svs_key) and
                              self.attr_exists(nonglia_svs_key)):
-            if write_shortest_paths:
-                shortest_paths_dir = os.path.split(dest_path)[0]
-            else:
-                shortest_paths_dir = None
             if verbose:
                 log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(
                     self.id, len(self.svs)))
                 start = time.time()
             nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
-                                               pred_key_appendix=pred_key_appendix, verbose=verbose,
-                                               shortest_paths_dest_dir=shortest_paths_dir)
+                                               pred_key_appendix=pred_key_appendix)
             if verbose:
                 log_reps.debug("Splitting glia in SSV %d with %d SV's finished "
                                "after %.4gs." % (self.id, len(self.svs),
@@ -3116,7 +3107,7 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             onthefly_views=False):
+                             onthefly_views=False, overwrite=True, model_props=None):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3130,19 +3121,20 @@ class SuperSegmentationObject(object):
                 Dictionary which contains view properties. If None, default defined in
                 `global_params.py` will be used.
             onthefly_views: bool
-
-        Returns:
+            overwrite:
+            model_props: Model properties. See config.yml for an example.
 
         """
+        if model_props is None:
+            model_props = {}
         if view_props is None:
             view_props = {}
         if not onthefly_views:
-            # reuse small, local views via bootstrapping
-            ssh.predict_sso_celltype(
-                self, model, pred_key_appendix=pred_key_appendix, **view_props)
+            ssh.predict_sso_celltype(self, model, pred_key_appendix=pred_key_appendix,
+                                     overwrite=overwrite, **model_props)
         else:
             ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
-                                        overwrite=False, **view_props)
+                                        overwrite=overwrite, **view_props, **model_props)
         if model_tnet is not None:
             view_props = dict(view_props)  # create copy
             if 'use_syntype' in view_props:
@@ -3388,16 +3380,18 @@ def celltype_predictor(args):
 
     """
     from ..handler.prediction import get_celltype_model_e3
-    ssv_ids = args
-    # randomly initialize gpu
+    ssv_ids, nb_cpus, model_props = args
+    use_onthefly_views = global_params.config.use_onthefly_views
+    view_props = global_params.config['views']['view_properties']
     m = get_celltype_model_e3()
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
-        ssv.nb_cpus = 1
+        ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
-            ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
+            ssv.predict_celltype_cnn(m, pred_key_appendix="", onthefly_views=use_onthefly_views,
+                                     overwrite=True, view_props=view_props, model_props=model_props)
         except RuntimeError as e:
             missing_ssvs.append(ssv.id)
             msg = 'ERROR during celltype prediction of SSV {}. {}'.format(ssv.id, repr(e))
@@ -3416,19 +3410,111 @@ def semsegaxoness_predictor(args):
 
     """
     from ..handler.prediction import get_semseg_axon_model
+    ssv_ids, view_props, nb_cpus, map_properties, pred_key, max_dist = args
     m = get_semseg_axon_model()
-    ssv_ids, nb_cpus = args
     missing_ssvs = []
-    view_props = global_params.config['compartments']['view_properties_semsegax']
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
             ssh.semseg_of_sso_nocache(ssv, m, **view_props)
+            semsegaxoness2skel(ssv, map_properties, pred_key, max_dist)
         except RuntimeError as e:
             missing_ssvs.append((ssv.id, str(e)))
             msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
     return missing_ssvs
+
+
+def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
+                       pred_key: str, max_dist: int):
+    """
+
+    Args:
+        sso: SuperSegmentationObject.
+        map_properties: Properties used to map the vertex predictions to the skeleton nodes.
+        pred_key: Used for retrieving vertex labels and to store the mapped node labels in the skeleton.
+        max_dist: Distance used for majority vote in ``majorityvote_skeleton_property``.
+
+    Returns:
+
+    """
+    if sso.skeleton is None:
+        sso.load_skeleton()
+    if sso.skeleton is None or len(sso.skeleton["nodes"]) < 2:
+        print(f"Skeleton of {sso} has < 2 nodes.")
+        return
+    # vertex predictions
+    node_preds = sso.semseg_for_coords(
+        sso.skeleton['nodes'], semseg_key=pred_key,
+        **map_properties)
+
+    # perform average only on axon dendrite and soma predictions
+    nodes_ax_den_so = np.array(node_preds, dtype=np.int)
+    # set en-passant and terminal boutons to axon class for averaging
+    # bouton labels are stored in node_preds
+    nodes_ax_den_so[nodes_ax_den_so == 3] = 1
+    nodes_ax_den_so[nodes_ax_den_so == 4] = 1
+    sso.skeleton[pred_key] = nodes_ax_den_so
+
+    # average along skeleton, stored as: "{}_avg{}".format(pred_key, max_dist)
+    ssh.majorityvote_skeleton_property(sso, prop_key=pred_key,
+                                       max_dist=max_dist)
+    # suffix '_avg{}' is added by `_average_node_axoness_views`
+    nodes_ax_den_so = sso.skeleton["{}_avg{}".format(pred_key, max_dist)]
+    # recover bouton predictions within axons and store smoothed result
+    nodes_ax_den_so[(node_preds == 3) & (nodes_ax_den_so == 1)] = 3
+    nodes_ax_den_so[(node_preds == 4) & (nodes_ax_den_so == 1)] = 4
+    sso.skeleton["{}_avg{}".format(pred_key, max_dist)] = nodes_ax_den_so
+
+    # will create a compartment majority voting after removing all soma nodes
+    # the restul will be written to: ``ax_pred_key + "_comp_maj"``
+    ssh.majority_vote_compartments(sso, "{}_avg{}".format(pred_key, max_dist))
+    nodes_ax_den_so = sso.skeleton["{}_avg{}_comp_maj".format(pred_key, max_dist)]
+    # recover bouton predictions within axons and store majority result
+    nodes_ax_den_so[(node_preds == 3) & (nodes_ax_den_so == 1)] = 3
+    nodes_ax_den_so[(node_preds == 4) & (nodes_ax_den_so == 1)] = 4
+    sso.skeleton["{}_avg{}_comp_maj".format(pred_key, max_dist)] = nodes_ax_den_so
+    sso.save_skeleton()
+
+
+def semsegspiness_predictor(args):
+    """
+    Predicts spiness and stores resulting labels at vertex dictionary.
+
+    Args:
+        args:
+
+    Returns:
+
+    """
+    from ..handler.prediction import get_semseg_axon_model
+    m = get_semseg_axon_model()
+    ssv_ids, view_props, nb_cpus, kwargs_semseg2mesh, kwargs_semsegforcoords = args
+    missing_ssvs = []
+
+    for ix in ssv_ids:
+        ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
+        ssv.nb_cpus = nb_cpus
+        ssv._view_caching = True
+        try:
+            ssh.semseg_of_sso_nocache(ssv, m, **view_props, **kwargs_semseg2mesh)
+            # map to skeleton
+            ssv.load_skeleton()
+            if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
+                log_reps.warning(f"Skeleton of SSV {ssv.id} has < 2 nodes.")
+                continue
+            # vertex predictions
+            node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
+                                               kwargs_semseg2mesh['semseg_key'],
+                                               **kwargs_semsegforcoords)
+            ssv.skeleton[kwargs_semseg2mesh['semseg_key']] = node_preds
+            ssv.save_skeleton()
+        except RuntimeError as e:
+            missing_ssvs.append((ssv.id, str(e)))
+            msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
+            log_reps.error(msg)
+    return missing_ssvs
+
 

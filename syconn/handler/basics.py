@@ -5,31 +5,31 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from collections import defaultdict
+from . import log_handler
+from .. import global_params
+
 import collections
-import numpy as np
-import h5py
 import os
 import shutil
 import tempfile
 import zipfile
+from collections import defaultdict
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
-from knossos_utils import KnossosDataset
 import re
 import gc
 import signal
-import networkx as nx
 import contextlib
 import glob
 import tqdm
+import numpy as np
+import networkx as nx
 from typing import List, Union
 from plyfile import PlyData
-from . import log_handler
-from .. import global_params
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
+from knossos_utils import KnossosDataset
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):
@@ -534,7 +534,8 @@ def chunkify(lst: Union[list, np.ndarray], n: int) -> List[list]:
 
 def chunkify_weighted(lst, n, weights):
     """
-    splits list into n-subists according to weights
+    splits list into n sub-lists according to weights.
+
     Args:
         lst: list
         n: int
@@ -545,7 +546,7 @@ def chunkify_weighted(lst, n, weights):
     """
     if len(lst) < n:
         n = len(lst)
-        return [lst[i::n] for i in range(n)] #no weighting needed
+        return [lst[i::n] for i in range(n)]  # no weighting needed
     ordered = np.argsort(weights)
     lst = lst[ordered[::-1]]
     return [lst[i::n] for i in range(n)]

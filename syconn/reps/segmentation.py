@@ -4,17 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import errno
-import re
-import networkx as nx
-from scipy import spatial
-from knossos_utils import knossosdataset
-from typing import Union, Tuple, List, Optional, Dict, Generator, Any
-knossosdataset._set_noprint(True)
 from ..proc.meshes import mesh_area_calc
-
-from .. import global_params
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from ..handler.config import DynConfig
@@ -23,6 +13,14 @@ from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
+
+import errno
+import re
+import networkx as nx
+from scipy import spatial
+from knossos_utils import knossosdataset
+from typing import Union, Tuple, List, Optional, Dict, Generator, Any
+
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
@@ -456,7 +454,7 @@ class SegmentationObject(object):
             None if object is not of type 'cs', else return the IDs to the two
             supervoxels which are part of the contact site.
         """
-        if "cs" in self.type:
+        if self.type in ['cs', 'syn']:
             partner = [self.id >> 32]
             partner.append(self.id - (partner[0] << 32))
             return partner

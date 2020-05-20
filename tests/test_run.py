@@ -5,15 +5,13 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
-import numpy as np
 import os
 import glob
 import shutil
 import sys
 import time
-
+from knossos_utils import knossosdataset
+import numpy as np
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
 
@@ -121,8 +119,7 @@ def test_full_run():
                                   data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
         seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-        kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
-                                fast_downsampling=False, as_raw=False)
+        kd.save_seg(offset=offset, mags=[1, 2, 4], data=seg_d, data_mag=1)
         del kd, seg_d
         kd_sym = knossosdataset.KnossosDataset()
         kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,

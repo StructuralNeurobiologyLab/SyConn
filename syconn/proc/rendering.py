@@ -5,11 +5,6 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import time
-import os
-import numpy as np
-import sys
-
 from ..mp.mp_utils import start_multiprocess_imap
 from . import log_proc
 from .. import global_params
@@ -19,6 +14,11 @@ from ..backend.storage import CompressedStorage
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, rgba2id_array, id2rgba_array_contiguous
 from .meshes import MeshObject, calc_rot_matrices
+
+import time
+import os
+import sys
+import numpy as np
 
 __all__ = ['load_rendering_func', 'render_mesh', 'render_mesh_coords',
            'render_sso_coords_multiprocessing', 'render_sso_coords',
@@ -224,16 +224,17 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         Output shape: len(coords), 4 [cell outline + number of cell objects], nb_views, y, x
 
     """
+    view_props_default = global_params.config['views']['view_properties']
     if comp_window is None:
-        comp_window = 8e3
+        comp_window = view_props_default['comp_window']
     if ws is None:
-        ws = (256, 128)
+        ws = view_props_default['ws']
     if verbose:
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, global_params.config['pyopengl_platform']))
         start = time.time()
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
     mesh = sso.mesh
     if verbose:
         log_proc.debug(f'Loaded cell mesh after {time.time() - start} s.')
@@ -326,17 +327,18 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         array of views after rendering of locations.
 
     """
+    view_props_default = global_params.config['views']['view_properties']
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     if comp_window is None:
-        comp_window = 8e3
+        comp_window = view_props_default['comp_window']
     if ws is None:
-        ws = (256, 128)
+        ws = view_props_default['ws']
     if verbose:
         log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
                        'PyOpenGL platform "{}".'.format(len(coords), sso.id,
                                                         global_params.config['pyopengl_platform']))
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
     # tim = time.time()
     ind, vert, norm = sso.mesh
     # tim1 = time.time()
@@ -429,13 +431,14 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     Returns:
 
     """
+    view_props_default = global_params.config['views']['view_properties']
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     if comp_window is None:
-        comp_window = 8e3
+        comp_window = view_props_default['comp_window']
     if ws is None:
-        ws = (256, 128)
+        ws = view_props_default['ws']
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
     ind, vert, _ = sso.mesh
     if len(vertex_labels) != len(vert) // 3:
         raise ValueError("Length of vertex labels and vertices "
@@ -544,7 +547,7 @@ def render_sso_coords_multiprocessing(ssv, n_jobs, rendering_locations=None,
         log_proc.critical('No rendering locations found for SSV {}.'.format(ssv.id))
         # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
         #  `global_params`
-        return np.ones((0, global_params.config['views']['nb_views'], 256, 128),
+        return np.ones((0, global_params.config['views']['view_properties']['nb_views'], 256, 128),
                        dtype=np.uint8) * 255
     params = np.array_split(rendering_locations, n_jobs)
 

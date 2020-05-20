@@ -4,18 +4,16 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-import numpy as np
-from scipy import spatial
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
-from knossos_utils.knossosdataset import KnossosDataset
-from skimage.segmentation import find_boundaries
-
 from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 from ..reps.segmentation import SegmentationDataset, SegmentationObject
 from ..reps.super_segmentation import SuperSegmentationObject
 from . import log_proc
 from .. import global_params
+
+import numpy as np
+from scipy import spatial
+from knossos_utils.knossosdataset import KnossosDataset
+from skimage.segmentation import find_boundaries
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):

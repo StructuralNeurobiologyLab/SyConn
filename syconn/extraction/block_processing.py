@@ -11,8 +11,6 @@ try:
 except ImportError:
     import pickle as pkl
 import numpy as np
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
 
 
 def kernel(chunk, center_id):

@@ -12,11 +12,11 @@ from . import rep_helper as rh
 from . import log_reps
 from .. import global_params
 
-from collections import defaultdict
 import glob
+import os
+from collections import defaultdict
 import numpy as np
 from scipy import ndimage
-import os
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
 if TYPE_CHECKING:
     from ..reps import segmentation

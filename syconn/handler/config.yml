@@ -97,6 +97,7 @@ cell_objects:
 
   # Hook for morphological operations from scipy.ndimage applied during object extraction.
   # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
+  # if erosion is applied last, use watershed to form segmentation on original mask data, seeds are generated from the eroded mask via ndimage.label
   extract_morph_op:
     mi: []
     sj: []
@@ -137,7 +138,7 @@ meshes:
     sv: [4, 4, 2]
     sj: [2, 2, 1]
     vc: [4, 4, 2]
-    mi: [8, 8, 4]
+    mi: [4, 4, 2]
     cs: [2, 2, 1]
     syn_ssv: [2, 2, 1]
 
@@ -152,8 +153,8 @@ meshes:
   mesh_min_obj_vx: 100  # adapt to size threshold
 
   meshing_props:
-    normals: False  # True
-    simplification_factor: 300
+    normals: False
+    simplification_factor: 500
     max_simplification_error: 40  # in nm
 
 skeleton:
@@ -162,12 +163,36 @@ skeleton:
     axoness: 8000
     spiness: 1000
 
-views:
-  use_onthefly_views_ct: False
-  use_new_renderings_locs:
-  # TODO: move all default view parameters here
-  nb_views: 2  # used for default view rendering (glia separation, spine detection)
+use_point_models: False
 
+points:
+  compartments:
+    point_properties:
+      nb_points:
+      ctx_size:  # in nm
+  celltype:
+    point_properties:
+      nb_points:
+      ctx_size:  # in nm
+  glia:
+    point_properties:
+      nb_points:
+      ctx_size:  # in nm
+  morphology:
+    point_properties:
+      nb_points:
+      ctx_size:  # in nm
+
+views:
+  use_onthefly_views: True  # TODO: does not yet apply for glia
+  use_new_renderings_locs:
+  # used for default view rendering (glia separation, spine detection, cell type prediction)
+  view_properties:
+    comp_window: 8000  # in nm
+    ws: [256, 128]  # in pixel (x, y)
+    nb_views: 2
+
+# --------- GLIA PARAMETERS
 glia:
   prior_glia_removal: True
   # min. connected component size of glia nodes/SV after thresholding glia proba
@@ -186,15 +211,14 @@ glia:
 spines:
   min_spine_cc_size: 10
   min_edge_dist_spine_graph: 110
-  gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
 
-  # TODO: add view properties for spine prediction
+  # view inference
+  gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
   # mapping parameters of the semantic segmentation prediction to the cell mesh
-  # Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
+  # Note: ``k>0`` means that the predictions are propagated to unpredicted and background labels
   # via nearest neighbors.
   semseg2mesh_spines:
     semseg_key: "spiness"
-    force_recompute: True
     k: 0
 
   # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
@@ -202,9 +226,9 @@ spines:
   semseg2coords_spines:
     k: 50
     ds_vertices: 1
-    ignore_labels: [4, 5]
+    ignore_labels: [4, 5]  # background, unpredicted
 
-
+# --------- COMPARTMENT PARAMETERS
 compartments:
   dist_axoness_averaging: 10000  # also used for myelin averaging
   gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'
@@ -223,16 +247,11 @@ compartments:
   map_properties_semsegax:
     k: 50
     ds_vertices: 1
-    ignore_labels: [5, 6]
+    ignore_labels: [5, 6]  # background, unpredicted
 
-
-celltype:
-  view_properties_large:
-    verbose: False
-    ws: [512, 512]
-    nb_views_render: 6
-    comp_window: 40960
-    nb_views_model: 4
+# --------- CELLTYPES
+celltypes:
+  nb_views_model: 20
 
 # --------- MORPHOLOGY EMBEDDING
 tcmn:

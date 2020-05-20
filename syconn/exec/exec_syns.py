@@ -5,7 +5,6 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from knossos_utils import knossosdataset
 import numpy as np
 from typing import Tuple, Optional
 from syconn.mp.batchjob_utils import batchjob_script
@@ -18,7 +17,6 @@ from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.config import initialize_logging
 from syconn.handler.basics import kd_factory, chunkify
-knossosdataset._set_noprint(True)
 
 
 def run_matrix_export():

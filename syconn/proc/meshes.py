@@ -5,6 +5,13 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+from ..proc import log_proc
+from ..handler.basics import write_data2kzip, data2kzip
+from .image import apply_pca
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from .. import global_params
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+
 import itertools
 import numpy as np
 from collections import Counter
@@ -23,12 +30,6 @@ except ImportError:
     __vtk_avail__ = False
 
 from skimage.measure import mesh_surface_area
-from ..proc import log_proc
-from ..handler.basics import write_data2kzip, data2kzip
-from .image import apply_pca
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from .. import global_params
-from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
     # set matplotlib backend to offscreen
     import matplotlib
@@ -864,7 +865,7 @@ def make_ply_string_wocolor(dest_path, indices, vertices,
 
 
 def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
-                    force_overwrite=False, invert_vertex_order=True):
+                    force_overwrite=False, invert_vertex_order=False):
     """
     Writes mesh as .ply's to k.zip file.
 

@@ -4,11 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-import os
-import networkx as nx
-import numpy as np
-
-from ..backend.storage import AttributeDict
 from .. import global_params
 from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
@@ -19,6 +14,10 @@ from ..reps.segmentation import SegmentationDataset
 from ..reps.super_segmentation_object import SuperSegmentationObject
 from .graphs import create_ccsize_dict
 from . import log_proc
+
+import os
+import networkx as nx
+import numpy as np
 
 
 def qsub_glia_splitting():

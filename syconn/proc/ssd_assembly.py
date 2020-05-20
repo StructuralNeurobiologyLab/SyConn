@@ -4,16 +4,16 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-import numpy as np
-import zipfile
-import os
-import shutil
-import re
-import pickle as pkl
 from ..handler.basics import read_mesh_from_zip
 from ..reps.super_segmentation import SuperSegmentationObject
 from .. import global_params
+
+import os
+import re
+import pickle as pkl
 import networkx as nx
+import numpy as np
+import zipfile
 
 
 def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):

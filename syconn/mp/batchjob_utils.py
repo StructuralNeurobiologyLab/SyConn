@@ -4,6 +4,12 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
+from ..handler.basics import temp_seed, str_delta_sec
+from ..handler.config import initialize_logging
+from .. import global_params
+from .mp_utils import start_multiprocess_imap
+from . import log_mp
+
 import dill  # supports pickling of lambda expressions
 try:
     import cPickle as pkl
@@ -11,7 +17,6 @@ except ImportError:
     import pickle as pkl
 import getpass
 import glob
-import numpy as np
 import os
 import io
 import re
@@ -23,14 +28,9 @@ import subprocess
 import tqdm
 import sys
 import time
+import numpy as np
 from multiprocessing import cpu_count
 from logging import Logger
-
-from ..handler.basics import temp_seed, str_delta_sec
-from ..handler.config import initialize_logging
-from .. import global_params
-from .mp_utils import start_multiprocess_imap
-from . import log_mp
 
 
 def batchjob_enabled():
@@ -139,6 +139,12 @@ def batchjob_script(params: list, name: str,
         path_to_scripts = script_folder
     else:
         path_to_scripts = path_to_scripts_default
+    path_to_script = f'{path_to_scripts}/QSUB_{name}.py'
+    if not os.path.exists(path_to_script):
+        if os.path.exists(f'{path_to_scripts}/batchjob_{name}.py'):
+            path_to_script = f'{path_to_scripts}/batchjob_{name}.py'
+        else:
+            raise FileNotFoundError(f'Specified script does not exist: {path_to_script}')
 
     # Check if fallback is required
     if disable_batchjob or not batchjob_enabled():
@@ -174,7 +180,6 @@ def batchjob_script(params: list, name: str,
         raise ValueError(msg)
 
     # Create folder structure
-    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
     path_to_storage = "%s/storage/" % batchjob_folder
     path_to_sh = "%s/sh/" % batchjob_folder
     path_to_log = "%s/log/" % batchjob_folder
@@ -421,8 +426,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
     n_max_co_processes = np.min([cpu_count() // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
-    log_batchjob.debug(f'Started BatchJobFallback script "{name}" with {len(params)} tasks'
-                       f' using {n_max_co_processes} parallel jobs, each using {n_cores} core(s).')
+    log_batchjob.info(f'Started BatchJobFallback script "{name}" with {len(params)} tasks'
+                      f' using {n_max_co_processes} parallel jobs, each using {n_cores} core(s).')
     start = time.time()
 
     if script_folder is not None:
@@ -467,7 +472,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
     out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
-                                      show_progress=show_progress)
+                                      show_progress=show_progress, nb_cpus=n_max_co_processes)
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
         # report errors

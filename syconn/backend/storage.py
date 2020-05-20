@@ -5,18 +5,19 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
-import numpy as np
-from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, Dict, List
 from ..backend import log_backend
+from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+from ..handler.basics import kd_factory
+from ..backend import StorageClass
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
 
-from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
-from ..handler.basics import kd_factory
-from ..backend import StorageClass
+from collections import defaultdict
+from typing import Any, Tuple, Optional, Union, Dict, List
+
+import numpy as np
 
 
 class AttributeDict(StorageClass):
@@ -96,7 +97,7 @@ class VoxelStorageL(StorageClass):
         """
 
         Args:
-            item ():
+            item:
 
         Returns:
             Decompressed voxel masks with corresponding offsets.

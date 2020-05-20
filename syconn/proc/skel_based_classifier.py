@@ -5,21 +5,6 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-import glob
-import numpy as np
-import os
-import re
-from collections import Counter
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-import joblib
-import matplotlib
-matplotlib.use("Agg", warn=False, force=True)
-from matplotlib import pyplot as plt
-
 from . import skel_based_classifier_helper as sbch
 from ..handler.basics import load_pkl2obj
 from ..handler.config import initialize_logging
@@ -27,6 +12,24 @@ from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
+
+import glob
+import os
+import re
+from collections import Counter
+
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+import joblib
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
+from matplotlib import pyplot as plt
+
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
@@ -54,8 +57,18 @@ comment_converter = {"axgt": {"soma": 2, "axon": 1, "dendrite": 0},
                      "ctgt": {}}
 
 
-class SkelClassifier(object):
+class SkelClassifier():
+    """
+
+    """
     def __init__(self, target_type, working_dir=None, create=False):
+        """
+
+        Args:
+            target_type:
+            working_dir:
+            create:
+        """
         assert target_type in ["axoness", "spiness"]
         if target_type == "axoness":
             ssd_version = "axgt"

@@ -6,7 +6,10 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
-import open3d as o3d
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 import matplotlib
 import re
 matplotlib.use("agg", warn=False, force=True)

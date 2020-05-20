@@ -8,7 +8,7 @@ from syconn.handler.prediction import predict_dense_to_kd
 
 
 def predict_myelin(kd_raw_path: str = None,
-        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
+                   cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Generates a probability map for myelinated neuron voxels at
     ``global_params.config.working_dir + '/knossosdatasets/myelin/'`` stored

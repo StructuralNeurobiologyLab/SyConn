@@ -4,24 +4,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-import glob
-import numpy as np
-import os
-import tqdm
-import time
-import sys
-from logging import Logger
-import shutil
-from collections import defaultdict
-from knossos_utils import knossosdataset
-from knossos_utils import chunky
-from typing import Optional, List, Tuple, Dict, Union
-import gc
-knossosdataset._set_noprint(True)
+
 from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
@@ -34,6 +17,25 @@ from ..proc.meshes import mesh_chunk
 from . import log_proc
 from ..extraction import object_extraction_wrapper as oew
 from .meshes import mesh_area_calc, merge_meshes_incl_norm
+
+import glob
+import os
+import tqdm
+import time
+import sys
+import gc
+
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+import numpy as np
+from logging import Logger
+import shutil
+from collections import defaultdict
+from scipy.ndimage import zoom
+from knossos_utils import chunky
+from typing import Optional, List, Tuple, Dict, Union
 from zmesh import Mesher
 
 
@@ -737,7 +739,7 @@ def _map_subcell_extract_props_thread(args):
                         ch_cache_exists = True
                 if not ch_cache_exists:
                     start = time.time()
-                    tmp_subcell_meshes = find_meshes(subcell_d[ii], offset, pad=1)
+                    tmp_subcell_meshes = find_meshes(subcell_d[ii], offset, pad=1, obj_type=organelle)
                     dt_times_dc['find_mesh'] += time.time() - start
                     start = time.time()
                     output_worker = open(p, 'wb')
@@ -746,7 +748,8 @@ def _map_subcell_extract_props_thread(args):
                     dt_times_dc['mesh_io'] += time.time() - start
                     if min_obj_vx[organelle] > 1:
                         for ix in small_obj_ids_inside[organelle]:
-                            del tmp_subcell_meshes[ix]
+                            if ix in tmp_subcell_meshes:
+                                del tmp_subcell_meshes[ix]
                     # store reference to partial results of each object
                     ref_mesh_dict[organelle][ch_id] = list(tmp_subcell_meshes.keys())
                     del tmp_subcell_meshes
@@ -778,7 +781,7 @@ def _map_subcell_extract_props_thread(args):
                     ch_cache_exists = True
             if not ch_cache_exists:
                 start = time.time()
-                tmp_cell_mesh = find_meshes(cell_d, offset, pad=1)
+                tmp_cell_mesh = find_meshes(cell_d, offset, pad=1, obj_type='sv')
                 dt_times_dc['find_mesh'] += time.time() - start
                 start = time.time()
                 output_worker = open(p, 'wb')
@@ -787,7 +790,8 @@ def _map_subcell_extract_props_thread(args):
                 dt_times_dc['mesh_io'] += time.time() - start
                 if min_obj_vx['sv'] > 1:
                     for ix in small_obj_ids_inside['sv']:
-                        del tmp_cell_mesh[ix]
+                        if ix in tmp_cell_mesh:
+                            del tmp_cell_mesh[ix]
                 # store reference to partial results of each object
                 ref_mesh_dict['sv'][ch_id] = list(tmp_cell_mesh.keys())
                 del tmp_cell_mesh
@@ -1242,8 +1246,8 @@ def _write_props_to_sv_thread(args):
                        f'{dt_mesh_merge_io:.2f}s')
 
 
-def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0)\
-        -> Dict[int, List[np.ndarray]]:
+def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
+                obj_type: Optional[str] = None) -> Dict[int, List[np.ndarray]]:
     """
     Find meshes within a segmented cube. The offset is given in voxels. Mesh
     vertices are scaled according to
@@ -1252,31 +1256,42 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0)\
     Args:
         chunk: Cube which is processed.
         offset: Offset of the cube in voxels.
-        pad: Pad chunk array with mode 'edge'
+        pad: Pad chunk array with mode 'edge'.
+        obj_type: Object type identifier. Used to get the downsampling factor from global_params.
+            Default: No downsampling.
 
     Returns:
         The mesh of each segmentation ID in the input `chunk`.
     """
     scaling = np.array(global_params.config['scaling'])
-    mesher = Mesher(scaling[::-1])  # xyz -> zyx
+    meshing_props = global_params.config['meshes']['meshing_props']
+    offset = offset * scaling
+    # keep small segmentation objects
+    seg_objs = set(np.unique(chunk))
+    if 0 in seg_objs:
+        seg_objs.remove(0)
+    meshes = {ix: [np.zeros(0, dtype=np.uint32), np.zeros(0, dtype=np.float32),
+                   np.zeros((0, ), dtype=np.float32)] for ix in seg_objs}
+    downsampling_dc = global_params.config['meshes']['downsampling']
+    if obj_type in downsampling_dc:
+        ds_fact = np.array(downsampling_dc[obj_type])
+        chunk = zoom(chunk, 1 / ds_fact, order=0)
+        scaling *= ds_fact
     if pad > 0:
         chunk = np.pad(chunk, 1, mode='edge')
-        offset -= pad
-    mesher.mesh(chunk)
-    offset = offset * scaling
-    meshes = {}
+        offset -= pad * scaling
+    mesher = Mesher(scaling)
+    mesher.mesh(chunk.swapaxes(0, 2))  # xyz -> zyx
     for obj_id in mesher.ids():
-        # in nm (after scaling, see top)
-        tmp = mesher.get_mesh(obj_id, **global_params.config['meshes']['meshing_props'])
-        # the values of simplification_factor & max_simplification_error are random
-
-        tmp.vertices[:] = (tmp.vertices[:, ::-1] + offset)  # zyx -> xyz
-        meshes[obj_id] = [tmp.faces[:, ::-1].flatten().astype(np.uint32),
+        # vertices are xyz in nm (after scaling)
+        tmp = mesher.get_mesh(obj_id, **meshing_props)
+        tmp.vertices[:] = (tmp.vertices + offset)
+        meshes[obj_id] = [tmp.faces.flatten().astype(np.uint32),
                           tmp.vertices.flatten().astype(np.float32)]
         if tmp.normals is not None:
             meshes[obj_id].append(tmp.normals.flatten().astype(np.float32))
         else:
-            meshes[obj_id].append(np.zeros((0, 3), dtype=np.float32))
+            meshes[obj_id].append(np.zeros((0, ), dtype=np.float32))
         mesher.erase(obj_id)
 
     mesher.clear()
