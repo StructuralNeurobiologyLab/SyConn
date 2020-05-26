@@ -111,7 +111,6 @@ def group_ids_to_so_storage(ids, params, significant_digits=5):
         for i_param in range(len(params)):
             param_dicts[i_param][this_id_str[-significant_digits:]].\
                 append(params[i_param][i_id])
-
     return [id_dict] + param_dicts
 
 

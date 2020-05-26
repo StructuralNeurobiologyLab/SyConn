@@ -7,6 +7,7 @@
 
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
+from ..reps.segmentation_helper import load_so_meshes_bulk
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from .. import global_params
@@ -517,23 +518,21 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     return [all_ind, all_vert, all_norm]
 
 
-def mesh_loader(so):
+def _mesh_loader(so):
     return so.mesh
 
 
-def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
-                   cmap=None, alpha=1.0):
+def merge_someshes(sos: Iterable['SegmentationObject'], nb_simplices: int = 3,
+                   nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
+                   cmap: Optional = None, alpha: float = 1.0):
     """
     Merge meshes of SegmentationObjects.
 
     Args:
-        sos: iterable of SegmentationObject
-            SegmentationObjects are used to get .mesh, N x 1
-        nb_simplices: int
-            Number of simplices, e.g. for triangles nb_simplices=3
+        sos: SegmentationObjects are used to get .mesh, N x 1
+        nb_simplices: Number of simplices, e.g. for triangles nb_simplices=3
         nb_cpus: int
-        color_vals: iterable of float
-            color values for every mesh, N x 4 (rgba). No normalization!
+        color_vals: Color values for every mesh, N x 4 (rgba). No normalization!
         cmap: matplotlib colormap
         alpha: float
 
@@ -541,11 +540,13 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
         indices, vertices (scaled) [, colors]
 
     """
-    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
-                                     show_progress=False)
+    if nb_cpus > 1:
+        meshes = start_multiprocess_imap(_mesh_loader, sos, nb_cpus=nb_cpus, show_progress=False)
+    else:
+        meshes = load_so_meshes_bulk(sos)
+        meshes = [meshes[so.id] for so in sos]
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
-
     ind_lst = []
     vert_lst = []
     norm_lst = []
@@ -576,8 +577,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     else:
         all_ind = np.concatenate(ind_lst)
         # store index and vertex offset of every partial mesh
-        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
-            np.uint)
+        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(np.uint)
         ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
         for i in range(0, len(vert_lst)):
             start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]

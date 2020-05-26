@@ -25,13 +25,13 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
         Args:
             array (array-like): An array to iterate over.
             function (function): A python function to apply to the elements of
-            array n_jobs (int, default=16): The number of cores to use
+                array n_jobs (int, default=16): The number of cores to use
             use_kwargs (boolean, default=False): Whether to consider the
-            elements of array as dictionaries of keyword arguments to function
+                elements of array as dictionaries of keyword arguments to function
             front_num (int, default=3): The number of iterations to run
-            serially before kicking off the parallel job.
-             Useful for catching bugs
-             show_progress:
+                serially before kicking off the parallel job.
+                Useful for catching bugs.
+             n_jobs:
         Returns:
             [function(array[0]), function(array[1]), ...]
     """

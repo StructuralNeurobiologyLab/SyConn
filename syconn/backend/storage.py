@@ -385,7 +385,7 @@ class MeshStorage(StorageClass):
         self.load_colarr = load_colarr
         super(MeshStorage, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item: int) -> List[np.ndarray]:
+    def __getitem__(self, item: Union[int, str]) -> List[np.ndarray]:
         """
 
         Parameters

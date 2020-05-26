@@ -94,8 +94,7 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     # catch Value error which is thrown in py3 lz4 version
     except (OverflowError, ValueError, LZ4BlockError):
         half_ix = len(arr) // 2
-        str_lst = arrtolz4string_list(arr[:half_ix]) + \
-                  arrtolz4string_list(arr[half_ix:])
+        str_lst = arrtolz4string_list(arr[:half_ix]) + arrtolz4string_list(arr[half_ix:])
     return str_lst
 
 

@@ -22,13 +22,14 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ct
     Args:
         ssd_kwargs:
         model_loader:
-        mkwargs:
+        mpath:
         npoints:
         scale_fact:
         nloader:
         npredictor:
         ssv_ids:
         use_test_aug:
+        device:
 
     Returns:
 
@@ -57,11 +58,11 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp0k/'
-    for run in range(3):
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval0_sp50k/'
+    for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale2000_nb500_ctx10000_swish_gn_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval0/'
         mkwargs, loader_kwargs = get_pt_kwargs(mdir)
         npoints = loader_kwargs['npoints']
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)

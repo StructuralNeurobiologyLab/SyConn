@@ -615,6 +615,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             yield ixs, (batch_f, batch)
     else:
         ssv_ids = np.unique(ssv_ids)
+        np.random.seed(0)
         # fluctuate context size in 1/4 samples
         if np.random.randint(0, 4) == 0:
             ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
@@ -1050,7 +1051,6 @@ def get_pt_kwargs(mdir: str) -> Tuple[dict, dict]:
 def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'InferenceModel':
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
-    from elektronn3.models.base import InferenceModel
     from elektronn3.models.convpoint import SegSmall
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     m = SegSmall(1, 2, **mkwargs).to(device)
@@ -1062,7 +1062,6 @@ def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'In
 def get_compartment_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
     if mpath is None:
         mpath = global_params.config.mpath_comp_pts
-    from elektronn3.models.base import InferenceModel
     from elektronn3.models.convpoint import SegSmall2
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     m = SegSmall2(5, 7, **mkwargs).to(device)
@@ -1074,7 +1073,6 @@ def get_compartment_model_pts(mpath: Optional[str] = None, device='cuda') -> 'In
 def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
-    from elektronn3.models.base import InferenceModel
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     try:
@@ -1090,7 +1088,6 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
 def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
-    from elektronn3.models.base import InferenceModel
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     m = ModelNet40(5, 10, **mkwargs).to(device)

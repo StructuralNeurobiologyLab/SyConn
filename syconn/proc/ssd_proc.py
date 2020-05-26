@@ -290,13 +290,13 @@ def map_synssv_objects_thread(args):
     ssv_partners = ssv_partners[syn_prob > syn_threshold]
 
     for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, False)
+        # enable of SegmentationObjects, including their meshes -> reuse in typedsyns2mesh call
+        ssv = ssd.get_super_segmentation_object(ssv_id, caching=True)
         ssv.load_attr_dict()
 
         curr_synssv_ids = synssv_ids[np.in1d(ssv_partners[:, 0], ssv.id)]
         curr_synssv_ids = np.concatenate([curr_synssv_ids,
                                           synssv_ids[np.in1d(ssv_partners[:, 1], ssv.id)]])
-        # key has to be the same as the SegmentationDataset name to enable automatic mesh retrieval in syconn/gate/server.py
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
         # cache syn_ssv mesh and typed meshes if available

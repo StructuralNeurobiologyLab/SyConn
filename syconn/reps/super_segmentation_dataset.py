@@ -1012,57 +1012,6 @@ def predict_cell_type_skelbased_thread(args):
                 pass
 
 
-def export_skeletons_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-    apply_mapping = args[5]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    no_skel_cnt = 0
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        try:
-            ssv.load_skeleton()
-            skeleton_avail = True
-        except:
-            skeleton_avail = False
-            no_skel_cnt += 1
-
-        if not skeleton_avail:
-            continue
-
-        if ssv.size == 0:
-            continue
-
-        if len(ssv.skeleton["nodes"]) == 0:
-            continue
-
-        try:
-            ssv.save_skeleton_to_kzip()
-
-            for obj_type in obj_types:
-                if apply_mapping:
-                    if obj_type == "sj":
-                        correct_for_background = True
-                    else:
-                        correct_for_background = False
-                    ssv.apply_mapping_decision(obj_type,
-                                               correct_for_background=correct_for_background)
-
-            ssv.save_objects_to_kzip_sparse(obj_types)
-
-        except:
-            pass
-
-    return no_skel_cnt
-
-
 def export_to_knossosdataset_thread(args):
     ssv_obj_ids = args[0]
     version = args[1]

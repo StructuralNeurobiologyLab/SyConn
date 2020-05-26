@@ -2552,7 +2552,7 @@ def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):
         dest_path: Path to k.zip.
         sso: Cell object.
     """
-    sv_edges = sso.load_edgelist()
+    sv_edges = sso.load_sv_edgelist()
     anno = SkeletonAnnotation()
     anno.scaling = sso.scaling
     sd = sso.get_seg_dataset('sv')

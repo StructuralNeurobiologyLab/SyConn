@@ -899,16 +899,16 @@ class main_class(QtGui.QDialog):
         # create a 'fake' knossos tree for each obj mesh category;
         # this is very hacky since it can generate nasty ID collisions.
         mi_id = self.obj_id_offs + ssv_id + 1
-        sj_id = self.obj_id_offs + ssv_id + 2
-        sym_id = self.obj_id_offs + ssv_id + 2
-        asym_id = self.obj_id_offs + ssv_id + 3
-        vc_id = self.obj_id_offs + ssv_id + 4
-        neuron_id = self.obj_id_offs + ssv_id + 5
+        syn_id = self.obj_id_offs + ssv_id + 2
+        sym_id = self.obj_id_offs + ssv_id + 3
+        asym_id = self.obj_id_offs + ssv_id + 4
+        vc_id = self.obj_id_offs + ssv_id + 5
+        neuron_id = self.obj_id_offs + ssv_id + 6
 
         params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
                   (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
                   (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
-                  (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
+                  (self, ssv_id, syn_id, 'syn_ssv', (240, 50, 50, 255)),]
                   # (self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
                   # (self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
         start = time.time()

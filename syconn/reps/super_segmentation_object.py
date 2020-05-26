@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject, SegmentationDataset
+from .segmentation_helper import load_so_attr_bulk
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
@@ -155,7 +156,7 @@ class SuperSegmentationObject(object):
     def __init__(self, ssv_id: int, version: Optional[str] = None,
                  version_dict: Optional[Dict[str, str]] = None,
                  working_dir: Optional[str] = None, create: bool = True,
-                 sv_ids: Optional[np.ndarray] = None,
+                 sv_ids: Optional[Union[np.ndarray, List[int]]] = None,
                  scaling: Optional[np.ndarray] = None,
                  object_caching: bool = True, voxel_caching: bool = True,
                  mesh_caching: bool = True, view_caching: bool = False,
@@ -557,9 +558,10 @@ class SuperSegmentationObject(object):
     @property
     def syn_ssv(self) -> List[SegmentationObject]:
         """
-        All inter-neuron synapse (syn_ssv) :class:`~syconn.reps.segmentation.SegmentationObject`
-        objects which are assigned to this cell reconstruction. These objects are generated
-        as a combination of synaptic junction (sj) and contact site (cs) objects.
+        All synaptic junctions :class:`~syconn.reps.segmentation.SegmentationObject`
+        objects which are between super-supervoxels (syn_ssv) and assigned to this cell reconstruction.
+        These objects are generated as an agglomeration of 'syn' objects, which themselves have been generation as a
+        combination of synaptic junction (sj) and contact site (cs) objects to remove merges in the sj objects.
         """
         return self.get_seg_objects("syn_ssv")
 
@@ -653,62 +655,6 @@ class SuperSegmentationObject(object):
                              ''.format(data_type))
 
     # PROPERTIES
-    def celltype(self, key: Optional[str] = None) -> int:
-        """
-        Returns the cell type classification result. Default: CMN model, if
-        `key` is specified returns the corresponding value loaded
-        by :func:`~lookup_in_attribute_dict`.
-        Args:
-            key: Key where classification result is stored.
-
-        Returns:
-            Cell type classification.
-        """
-        if key is None:
-            key = 'celltype_cnn_e3'
-        return self.lookup_in_attribute_dict(key)
-
-    def weighted_graph(self, add_node_attr: Iterable[str] = ()) -> nx.Graph:
-        """
-        Creates a Euclidean distance (in nanometers) weighted graph representation of the
-        skeleton of this SSV object. The node IDs represent the index in
-        the ``'node'`` array part of :py:attr:`~skeleton`. Weights are stored
-        as 'weight' in the graph, this allows to use e.g.
-        ``nx.single_source_dijkstra_path(..)``.
-
-        Args:
-            add_node_attr: To-be-added node attributes. Must exist in
-            :py:attr`~skeleton`.
-
-        Returns:
-            The skeleton of this SSV object as a networkx graph.
-        """
-        if self._weighted_graph is None or np.any([len(nx.get_node_attributes(
-                self._weighted_graph, k)) == 0 for k in add_node_attr]):
-            if self.skeleton is None:
-                self.load_skeleton()
-
-            node_scaled = self.skeleton["nodes"] * self.scaling
-
-            edges = np.array(self.skeleton["edges"], dtype=np.uint)
-            edge_coords = node_scaled[edges]
-            weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1],
-                                     axis=1)
-            self._weighted_graph = nx.Graph()
-            self._weighted_graph.add_nodes_from(
-                [(ix, dict(position=coord)) for ix, coord in
-                 enumerate(self.skeleton['nodes'])])
-            self._weighted_graph.add_weighted_edges_from(
-                [(edges[ii][0], edges[ii][1], weights[ii]) for
-                 ii in range(len(weights))])
-
-            for k in add_node_attr:
-                dc = {}
-                for n in self._weighted_graph.nodes():
-                    dc[n] = self.skeleton[k][n]
-                nx.set_node_attributes(self._weighted_graph, dc, k)
-        return self._weighted_graph
-
     @property
     def config(self) -> DynConfig:
         """
@@ -948,7 +894,9 @@ class SuperSegmentationObject(object):
                                   version=self.version_dict[obj_type],
                                   working_dir=self.working_dir, create=False,
                                   scaling=self.scaling, config=self.config,
-                                  enable_locking=self.enable_locking_so)
+                                  enable_locking=self.enable_locking_so,
+                                  mesh_caching=self.mesh_caching,
+                                  voxel_caching=self.voxel_caching)
 
     def get_seg_dataset(self, obj_type: str) -> SegmentationDataset:
         """
@@ -1019,10 +967,8 @@ class SuperSegmentationObject(object):
                            self.get_seg_obj("sv", e[1]))
         return new_G
 
-    def load_edgelist(self) -> List[Tuple[int, int]]:
+    def load_sv_edgelist(self) -> List[Tuple[int, int]]:
         """
-        # TODO: rename
-
         Load the edges within the supervoxel graph.
 
         Returns:
@@ -1031,13 +977,10 @@ class SuperSegmentationObject(object):
         g = self.load_sv_graph()
         return list(g.edges())
 
-    def _load_obj_mesh(self, obj_type: str = "sv",
-                       rewrite: bool = False) -> MeshType:
+    def _load_obj_mesh(self, obj_type: str = "sv", rewrite: bool = False) -> MeshType:
         """
         Load the mesh of a given `obj_type`. If :func:`~mesh_exists` is False,
-        loads the meshes from the underlying sueprvoxel objects.
-        TODO: Currently does not support color array!
-        TODO: add support for sym. asym synapse type
+        loads the meshes from the underlying supervoxel objects.
 
         Parameters
         ----------
@@ -1059,15 +1002,12 @@ class SuperSegmentationObject(object):
                 ind, vert = mesh_dc[obj_type]
                 normals = np.zeros((0,), dtype=np.float32)
         else:
-            ind, vert, normals = merge_someshes(self.get_seg_objects(obj_type),
-                                                nb_cpus=self.nb_cpus)
+            ind, vert, normals = merge_someshes(self.get_seg_objects(obj_type), nb_cpus=self.nb_cpus)
             if not self.version == "tmp":
-                mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
-                                      disable_locking=not self.enable_locking)
+                mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False, disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
                 mesh_dc.push()
-        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.float32), \
-               np.array(normals, dtype=np.float32)
+        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.float32), np.array(normals, dtype=np.float32)
 
     def _load_obj_mesh_compr(self, obj_type: str = "sv") -> MeshType:
         """
@@ -1433,14 +1373,69 @@ class SuperSegmentationObject(object):
         """
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
-            # nodes are stored as uint32, TODO: look into that and change if possible.
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
-        except:
+        except KeyError:
             if global_params.config.allow_skel_gen:
                 self.calculate_skeleton()
                 return True
             return False
+
+    def celltype(self, key: Optional[str] = None) -> int:
+        """
+        Returns the cell type classification result. Default: CMN model, if
+        `key` is specified returns the corresponding value loaded
+        by :func:`~lookup_in_attribute_dict`.
+        Args:
+            key: Key where classification result is stored.
+
+        Returns:
+            Cell type classification.
+        """
+        if key is None:
+            key = 'celltype_cnn_e3'
+        return self.lookup_in_attribute_dict(key)
+
+    def weighted_graph(self, add_node_attr: Iterable[str] = ()) -> nx.Graph:
+        """
+        Creates a Euclidean distance (in nanometers) weighted graph representation of the
+        skeleton of this SSV object. The node IDs represent the index in
+        the ``'node'`` array part of :py:attr:`~skeleton`. Weights are stored
+        as 'weight' in the graph, this allows to use e.g.
+        ``nx.single_source_dijkstra_path(..)``.
+
+        Args:
+            add_node_attr: To-be-added node attributes. Must exist in
+            :py:attr`~skeleton`.
+
+        Returns:
+            The skeleton of this SSV object as a networkx graph.
+        """
+        if self._weighted_graph is None or np.any([len(nx.get_node_attributes(
+                self._weighted_graph, k)) == 0 for k in add_node_attr]):
+            if self.skeleton is None:
+                self.load_skeleton()
+
+            node_scaled = self.skeleton["nodes"] * self.scaling
+
+            edges = np.array(self.skeleton["edges"], dtype=np.uint)
+            edge_coords = node_scaled[edges]
+            weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1],
+                                     axis=1)
+            self._weighted_graph = nx.Graph()
+            self._weighted_graph.add_nodes_from(
+                [(ix, dict(position=coord)) for ix, coord in
+                 enumerate(self.skeleton['nodes'])])
+            self._weighted_graph.add_weighted_edges_from(
+                [(edges[ii][0], edges[ii][1], weights[ii]) for
+                 ii in range(len(weights))])
+
+            for k in add_node_attr:
+                dc = {}
+                for n in self._weighted_graph.nodes():
+                    dc[n] = self.skeleton[k][n]
+                nx.set_node_attributes(self._weighted_graph, dc, k)
+        return self._weighted_graph
 
     def syn_sign_ratio(self, weighted: bool = True,
                        recompute: bool = True,
@@ -1538,10 +1533,8 @@ class SuperSegmentationObject(object):
 
         for obj_type in obj_types:
             if obj_type in mappings:
-                self.attr_dict["mapping_%s_ids" % obj_type] = \
-                    list(mappings[obj_type].keys())
-                self.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    list(mappings[obj_type].values())
+                self.attr_dict["mapping_%s_ids" % obj_type] = list(mappings[obj_type].keys())
+                self.attr_dict["mapping_%s_ratios" % obj_type] = list(mappings[obj_type].values())
 
         if save:
             self.save_attr_dict()
@@ -1553,7 +1546,6 @@ class SuperSegmentationObject(object):
                                sizethreshold: Optional[float] = None,
                                save: bool = True):
         """
-        # TODO: duplicate of ssd_proc._apply_mapping_decisions_thread
         Applies mapping decision of cellular organelles to this SSV object. A
         :class:`~syconn.reps.segmentation.SegmentationObject` in question is
         assigned to this :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
@@ -1573,6 +1565,7 @@ class SuperSegmentationObject(object):
         Todo:
             * check what ``correct_for_background`` was for. Any usecase for
             ``correct_for_background=False``?
+            * duplicate of ssd_proc._apply_mapping_decisions_thread, implement common-use method
 
         Returns:
 
@@ -1693,16 +1686,12 @@ class SuperSegmentationObject(object):
         """
         Process object mapping (requires the prior assignment of object
         candidates), cache object meshes and calculate the SSV skeleton.
-
-        Todo:
-            * Check what the ``clear_cache()`` call was for.
         """
         self.load_attr_dict()
         self._map_cellobjects()
         for sv_type in global_params.config['existing_cell_organelles'] + ["sv", "syn_ssv"]:
             _ = self._load_obj_mesh(obj_type=sv_type, rewrite=False)
         self.calculate_skeleton()
-        self.clear_cache()
 
     def copy2dir(self, dest_dir: str, safe: bool = True):
         """
@@ -2548,22 +2537,31 @@ class SuperSegmentationObject(object):
         and writes it to `dest_path` (if given).
         Accessed with the respective keys via :py:attr:`~load_mesh`.
 
-        Args:
-            dest_path:
-            rewrite:
+        Synapse types are looked up in the 'syn_ssv' AttributeDicts and treated as follows:
+            * excitatory / asymmetric: 1
+            * inhibitory / symmetric: -1
 
-        Returns:
-            None
+        Args:
+            dest_path: Optional output path for the synapse meshes.
+            rewrite: Ignore existing meshes in :py:attr:`~_meshes` or at :py:attr:`~mesh_dc_path`.
         """
         if not rewrite and self.mesh_exists('syn_ssv_sym') and self.mesh_exists('syn_ssv_asym') \
                 and not self.version == "tmp":
             return
-        sym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
-                                       syn.lookup_in_attribute_dict("syn_sign") == -1])
-        asym_syn_mesh = merge_someshes([syn for syn in self.syn_ssv if
-                                        syn.lookup_in_attribute_dict("syn_sign") == 1])
-        sym_syn_mesh = list(sym_syn_mesh)
-        asym_syn_mesh = list(asym_syn_mesh)
+
+        syn_signs = load_so_attr_bulk(self.syn_ssv, 'syn_sign')
+        sym_syns = []
+        asym_syns = []
+        for syn in self.syn_ssv:
+            syn_sign = syn_signs[syn.id]
+            if syn_sign == -1:
+                sym_syns.append(syn)
+            elif syn_sign == 1:
+                asym_syns.append(syn)
+            else:
+                raise ValueError(f'Unknown synapse sign {syn_sign}.')
+        sym_syn_mesh = list(merge_someshes(sym_syns))
+        asym_syn_mesh = list(merge_someshes(asym_syns))
         if not self.version == "tmp":
             mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
                                   disable_locking=not self.enable_locking)
