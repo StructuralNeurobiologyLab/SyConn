@@ -44,7 +44,8 @@ if __name__ == '__main__':
          {'sym_label': 1, 'asym_label': 2,
           'min_obj_vx': {'sv': 100},  # flattened RAG contains only on SV per cell
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
-          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion'],
+          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
+                                      'binary_erosion'],
                                'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }

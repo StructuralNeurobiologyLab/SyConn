@@ -20,6 +20,8 @@ from scipy import ndimage
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
 if TYPE_CHECKING:
     from ..reps import segmentation
+MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
+                 Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
 
 def glia_pred_so(so: 'segmentation.SegmentationObject', thresh: float,
@@ -108,13 +110,10 @@ def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
     voxel_dc.push(so.voxel_path)
 
 
-def load_voxels(so: 'segmentation.SegmentationObject',
-                voxel_dc: Optional[Dict] = None) -> np.ndarray:
+def load_voxels_depr(so: 'segmentation.SegmentationObject',
+                     voxel_dc: Optional[VoxelStorage] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
-
-    Todo:
-        * Currently the attribute ``so._bounding_box`` is always resetred.
 
     Args:
         so: SegmentationObject
@@ -130,9 +129,9 @@ def load_voxels(so: 'segmentation.SegmentationObject',
 
     so._size = 0
     if so.id not in voxel_dc:
-        log_reps.error("Voxels for SO object %d of type %s do not exist"
-                       "" % (so.id, so.type))
-        return -1
+        msg = f"Voxels of {so} do not exist!"
+        log_reps.error(msg)
+        raise KeyError(msg)
 
     bin_arrs, block_offsets = voxel_dc[so.id]
     block_extents = []
@@ -170,12 +169,12 @@ def load_voxels_downsampled(
     return so.voxels[::downsampling[0], ::downsampling[1], ::downsampling[2]]
 
 
-def load_voxel_list(so: 'segmentation.SegmentationObject'):
+def load_voxel_list(so: 'segmentation.SegmentationObject') -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject.
 
     Args:
-        so: SegmentationObject
+        so: SegmentationObject.
 
     Returns: np.array
         2D array of coordinates to all voxels in SegmentationObject.
@@ -235,7 +234,7 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) -> List[np.ndarray]:
+def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) -> MeshType:
     """
     Load mesh of SegmentationObject.
     TODO: Currently ignores potential color/label array.
@@ -269,7 +268,7 @@ def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) ->
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
             return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))]
-        indices, vertices, normals = so._mesh_from_scratch()
+        indices, vertices, normals = so.mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
             so._save_mesh(indices, vertices, normals)

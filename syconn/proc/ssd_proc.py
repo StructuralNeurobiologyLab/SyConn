@@ -300,10 +300,9 @@ def map_synssv_objects_thread(args):
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
         # cache syn_ssv mesh and typed meshes if available
-        # TODO: this takes long for large data sets
-        # ssv.load_mesh('syn_ssv')
-        # if global_params.config.syntype_available:
-        #     ssv.typedsyns2mesh()
+        ssv.load_mesh('syn_ssv')
+        if global_params.config.syntype_available:
+            ssv.typedsyns2mesh()
 
 
 def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,

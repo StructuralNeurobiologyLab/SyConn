@@ -42,7 +42,7 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
        global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
-            multi_params, "mesh_caching", suffix=co, remove_jobfolder=False, log=log)
+            multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
 
     # TODO: add as soon as glia separation supports on the fly view generation
     if co == "sv":  # and not global_params.config.use_onthefly_views:

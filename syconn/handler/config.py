@@ -821,9 +821,6 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
               thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
 
               # --------- CONTACT SITE AND SYNAPSE PARAMETERS
-              # Synaptic junction bounding box diagonal threshold in nm; objects above will
-              # not be used during `syn_gen_via_cset`
-              thresh_sj_bbd_syngen: 25000  # bounding box diagonal in NM
               # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
               # into 'syn_ssv'
               cs_gap_nm: 250

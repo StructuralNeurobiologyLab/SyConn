@@ -344,9 +344,10 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
                     syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for
                     ii in range(n_used_paths)]
+    # TODO: changed!
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
-                                       multi_params, nb_cpus=nb_cpus, debug=False)
+                                       multi_params, nb_cpus=nb_cpus, debug=True)
     else:
         _ = qu.batchjob_script(
             multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log)
@@ -378,6 +379,8 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
+    if base_id == 0:
+        base_id = 1
     next_id = base_id
 
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
@@ -393,13 +396,13 @@ def _combine_and_split_syn_thread(args):
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
         voxel_list = [syn.voxel_list]
         # store index of syn. objects for attribute dict retrieval
-        synix_list = [0] * len(syn.voxel_list)
+        synix_list = [0] * len(voxel_list[0])
         for syn_ix, syn_id in enumerate(item[1][1:]):
-            syn_object = sd_syn.get_segmentation_object(syn_id)
-            syn_object.load_attr_dict()
-            syn_attr_list.append(syn_object.attr_dict)
-            voxel_list.append(syn_object.voxel_list)
-            synix_list += [syn_ix] * len(syn_object.voxel_list)
+            syn = sd_syn.get_segmentation_object(syn_id)
+            syn.load_attr_dict()
+            syn_attr_list.append(syn.attr_dict)
+            voxel_list.append(syn.voxel_list)
+            synix_list += [syn_ix] * len(voxel_list[-1])
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
 
@@ -434,13 +437,15 @@ def _combine_and_split_syn_thread(args):
             this_attr_dc = dict(neuron_partners=ssv_ids)
             try:
                 voxel_dc[next_id] = [id_mask], [abs_offset]
+                # TODO: ceck if both calls of calculate are required as the
+                #  used voxel dict is probably not VoxelStorageDyn - change!
                 syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
                 syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
                 syn_ssv.calculate_bounding_box(voxel_dc=voxel_dc)
                 this_attr_dc["rep_coord"] = syn_ssv.rep_coord
                 this_attr_dc["bounding_box"] = syn_ssv.bounding_box
                 this_attr_dc["size"] = syn_ssv.size
-                ind, vert, normals = syn_ssv._mesh_from_scratch()
+                ind, vert, normals = syn_ssv.mesh_from_scratch()
                 mesh_dc[syn_ssv.id] = [ind, vert, normals]
                 this_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
                 this_attr_dc["mesh_area"] = syn_ssv.mesh_area
@@ -448,8 +453,7 @@ def _combine_and_split_syn_thread(args):
                 debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
                     sd_syn_ssv.so_storage_path, next_id, abs_offset[0],
                     abs_offset[1], abs_offset[2])
-                msg = f"Saving {syn_ssv} failed with {e}. Debug file at " \
-                      f"{debug_out_fname}."
+                msg = f"Saving {syn_ssv} failed with '{type(e)}: {e}'. Debug file at {debug_out_fname}."
                 log_extraction.error(msg)
                 np.save(debug_out_fname, this_vx)
                 raise ValueError(msg)
@@ -1081,6 +1085,7 @@ def _extract_synapse_type_thread(args):
         for so_id in this_attr_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
+            # this is inefficient. Pass pre-loaded VoxelStorage instead.
             so.load_voxel_list()
 
             vxl = so.voxel_list

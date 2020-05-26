@@ -27,10 +27,6 @@ to the constructor (kwarg: 'sv_mapping'). The `version` kwarg is used to disting
     ssd.save_dataset_deep()
     # alternatively for small datasets: ssd.save_dataset_deep(nb_cpus=20)
 
-It is recommended to cache the SSV meshes, which means that they are copied together from the meshes of the underlying SVs. For this use:
-
-    syconn.proc.ssd_proc.mesh_proc_ssv(WD, VERSION, ssd_type="ssv", nb_cpus=20)
-
 A summary script for the initial SSD generation, called `create_ssd.py`, can be found at `SyConn/scripts/`.
 It combines the above procedures, the [mapping of cellular organelles](object_mapping.md) and saves a SV-graph for every SSV.
 

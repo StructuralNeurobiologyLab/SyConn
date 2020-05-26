@@ -64,7 +64,10 @@ versions:
 
 # Cell object properties
 cell_objects:
-  # threshold applied during object extraction
+  # threshold applied during object extraction .
+  # if object segmentation is generated from probability map or a binary mask and extract_morph_op (see below) contains
+  # binary_erosion, this thresholding will also delete objects bigger than min_obj_vx as it is performed on the
+  # segmentation calculated from the mask after the application of binary erosion!
   min_obj_vx:
     mi: 100
     sj: 100
@@ -97,7 +100,8 @@ cell_objects:
 
   # Hook for morphological operations from scipy.ndimage applied during object extraction.
   # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
-  # if erosion is applied last, use watershed to form segmentation on original mask data, seeds are generated from the eroded mask via ndimage.label
+  # if erosion is applied last, use watershed to form segmentation on original mask data, seeds are generated
+  # from the eroded mask via ndimage.label
   extract_morph_op:
     mi: []
     sj: []
@@ -108,9 +112,6 @@ cell_objects:
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
 
   # --------- CONTACT SITE AND SYNAPSE PARAMETERS
-  # Synaptic junction bounding box diagonal threshold in nm; objects above will
-  # not be used during `syn_gen_via_cset`
-  thresh_sj_bbd_syngen: 25000  # bounding box diagonal in NM
   # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
   # into 'syn_ssv'
   cs_gap_nm: 250
@@ -141,14 +142,6 @@ meshes:
     mi: [4, 4, 2]
     cs: [2, 2, 1]
     syn_ssv: [2, 2, 1]
-
-  closings:
-    sv: 0
-    s: 0
-    vc: 0
-    mi: 0
-    cs: 0
-    syn_ssv: 0
 
   mesh_min_obj_vx: 100  # adapt to size threshold
 

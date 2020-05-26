@@ -952,16 +952,14 @@ def sparsify_skeleton_fast(g: nx.Graph, scal: Optional[np.ndarray] = None,
     Reduces nodes in the skeleton.
 
     Args:
-        g: networkx graph of the sso skel
-        scal: np.array
-        dot_prod_thresh: float
-            the 'straightness' of the edges
-        max_dist_thresh: int
-            maximum distance desired between every node
-        min_dist_thresh: int
-            minimum distance desired between every node
+        g: networkx graph of the sso skel.
+        scal: Scale factor; equal to the physical voxel size (nm).
+        dot_prod_thresh: the 'straightness' of the edges.
+        max_dist_thresh: Maximum distance desired between every node.
+        min_dist_thresh: Minimum distance desired between every node.
+        verbose: Log additional output.
 
-    Returns: sso containing the sparsed skeleton
+    Returns: sso containing the sparse skeleton.
 
     """
 
@@ -2516,13 +2514,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
-        labels[labels != 1] = 0
+        labels[labels != 1] = 0  # only keep spine head locations
         labels, nb_obj = ndimage.label(labels)
         c = c - offset
         max_id = 1
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0]-10):(c[0]+11), (c[1]-10):(c[1]+11),
+            ls = labels[(c[0]-20):(c[0]+21), (c[1]-20):(c[1]+21),
                  (c[2]-10):(c[2]+11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
@@ -2538,12 +2536,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 nn_kdt = spatial.cKDTree(coords * sso.scaling)
                 _, nn_id = nn_kdt.query([(c + offset) * sso.scaling])
                 max_id = ids[nn_id[0]]
-                log_reps.warn(f'SSO {sso.id} contained erroneous volume'
-                              f' to spine head assignment. Found no spine head '
-                              f'cluster within 10x10x10 voxel subcube at '
-                              f'{c + offset} of syn_ssv with ID={ssv_id}, expected 1. '
-                              f'Fall-back is using the volume of the closest spine head cluster '
-                              f'via nearest-neighbor.')
             else:
                 max_id = ids[np.argmax(cnts)]
 

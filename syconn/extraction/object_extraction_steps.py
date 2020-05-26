@@ -10,7 +10,7 @@ from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics, log_handler, compression
 from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
-from ..proc.image import apply_morphological_operations
+from ..proc.image import apply_morphological_operations, get_aniso_struct
 from .. import global_params
 from ..handler.basics import kd_factory
 from ..reps.rep_helper import find_object_properties
@@ -27,12 +27,14 @@ except ImportError:
 import networkx as nx
 import scipy.ndimage
 import numpy as np
-import skimage
+import skimage.segmentation
 from scipy import ndimage
 from knossos_utils import knossosdataset, chunky
 
 try:
+    import vigra
     from vigra.filters import gaussianSmoothing, distanceTransform
+    from vigra.analysis import watershedsNew
 except ImportError as e:
     gaussianSmoothing = None
     log_handler.error('ImportError. Could not import VIGRA. '
@@ -158,21 +160,23 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     chunk_list = np.array(chunk_list)[rand_ixs]
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
-    stitch_overlap = np.array([1, 1, 1])
     if overlap is "auto":
         if sigmas is None:
             max_sigma = np.zeros(3)
         else:
             max_sigma = np.array([np.max(sigmas)] * 3)
-        overlap = np.ceil(max_sigma * 4) + stitch_overlap
+        overlap = np.ceil(max_sigma * 4)
         morph_ops = global_params.config['cell_objects']['extract_morph_op']
         scaling = global_params.config['scaling']
         aniso = scaling[2] // scaling[0]
         n_erosions = 0
         for k, v in morph_ops.items():
             v = np.array(v)
-            n_erosions = max(n_erosions, 2 * np.sum(v == 'binary_erosion'))
+            # factor 2: erodes both sides; aniso: morphology operation kernel is laterally increased by this factor
+            n_erosions = max(n_erosions, 2 * aniso * np.sum(v == 'binary_erosion'))
         overlap = np.max([overlap, [n_erosions, n_erosions, n_erosions // aniso]], axis=0).astype(np.int)
+
+    stitch_overlap = np.max([overlap.copy(), [1, 1, 1]], axis=0)
 
     multi_params = []
     for chunk_sub in chunk_blocks:
@@ -247,17 +251,10 @@ def _gauss_threshold_connected_components_thread(args):
     transf_func_kd_overlay = args[16]
 
     # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'cell': []}
-    scaling = global_params.config['scaling']
     morph_ops = global_params.config['cell_objects']['extract_morph_op']
-    # get kernel for mops; cross-like with aniso dilations in the xy plane
-    struct = np.zeros((5, 5))
-    struct[2, 2] = 1
-    aniso = scaling[2] // scaling[0]
-    assert scaling[1] // scaling[0] == 1
-    assert aniso >= 1
-    struct2d = ndimage.binary_dilation(struct, iterations=aniso)
-    struct = np.concatenate([struct[..., None], struct2d[..., None], struct[..., None]])
-
+    min_obj_vx = global_params.config['cell_objects']['min_obj_vx']
+    scaling = np.array(global_params.config['scaling'])
+    struct = get_aniso_struct(scaling)
     nb_cc_list = []
 
     for chunk in chunks:
@@ -338,10 +335,20 @@ def _gauss_threshold_connected_components_thread(args):
                 mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
                                                           mop_kwargs=dict(structure=struct))
                 if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1]:
-                    distance = distanceTransform(tmp_data.astype(np.uint32), background=False)
-                    markers = scipy.ndimage.label(mop_data)[0]
+                    distance = distanceTransform(tmp_data.astype(np.uint32), background=False,
+                                                 pixel_pitch=scaling.astype(np.uint32))
+                    # combine remaining fragments
+                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0], ['binary_closing']).astype(np.uint32)
+                    # remove small fragments and 0; this will also delete objects bigger than min_size as
+                    # this threshold is applied after X binary erosion!
+                    if hdf5_name in min_obj_vx:
+                        min_size = min_obj_vx[hdf5_name]
+                        ixs, cnt = np.unique(markers, return_counts=True)
+                        ixs_del = ixs[(ixs != 0) & (cnt < min_size)]
+                        # TODO: could be optimized into a single XYZ loop
+                        for ix in ixs_del:
+                            markers[markers == ix] = 0
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
-
                     nb_cc = len(np.unique(this_labels_data))
                 else:
                     this_labels_data, nb_cc = scipy.ndimage.label(mop_data)
@@ -385,6 +392,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         Suffix for the intermediate results
     n_chunk_jobs: int
         Number of total jobs.
+    nb_cpus: int
     """
 
     if n_chunk_jobs is None:

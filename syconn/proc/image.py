@@ -19,7 +19,7 @@ except ImportError as e:
 from sklearn.decomposition import PCA
 from scipy import spatial, sparse, ndimage
 import tqdm
-from typing import List, Optional
+from typing import List, Optional, Union
 
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
@@ -547,3 +547,23 @@ def _count_subsequent_mops(mops: List[str]) -> tuple:
             mops_new.append(m)
             mops_cnt.append(1)
     return mops_new, mops_cnt
+
+
+def get_aniso_struct(scaling: Union[tuple, np.ndarray]):
+    """
+    Get kernel for morphology operations; cross-like with aniso dilations in the xy plane.
+
+    Args:
+        scaling: Voxel size in nm.
+
+    Returns:
+        Kernel taking into account the voxel size.
+    """
+    struct = np.zeros((5, 5))
+    struct[2, 2] = 1
+    aniso = scaling[2] // scaling[0]
+    assert scaling[1] // scaling[0] == 1
+    assert aniso >= 1
+    struct2d = ndimage.binary_dilation(struct, iterations=aniso)
+    struct = np.concatenate([struct[..., None], struct2d[..., None], struct[..., None]], axis=2)
+    return struct
