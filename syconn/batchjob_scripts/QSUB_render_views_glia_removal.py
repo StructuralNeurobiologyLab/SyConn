@@ -69,7 +69,6 @@ render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
 sso_kwargs = dict(version=version, create=False, working_dir=wd)
 if len(ssvs_small) != 0:
     multi_params = [[ssv.id, ssv.sv_ids] for ssv in ssvs_small]
-    print([len(el[1]) for el in multi_params])
     multi_params = chunkify(multi_params, n_parallel_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]

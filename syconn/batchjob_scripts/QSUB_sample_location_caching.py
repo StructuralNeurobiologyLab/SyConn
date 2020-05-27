@@ -51,12 +51,12 @@ for p in so_chunk_paths:
     for so in sos:
         try:
             ix = so.id
-            if not ix in md.keys():
+            if ix not in md.keys():
                 verts = so.mesh[1].reshape(-1, 3)
             else:
                 verts = md[ix][1].reshape(-1, 3)
             if len(verts) == 0:
-                coords = np.array([so.rep_coord, ], dtype=np.float32)
+                coords = np.array([so.rep_coord, ], dtype=np.float32) * so.scaling
             else:
                 if global_params.config.use_new_renderings_locs:
                     coords = generate_rendering_locs(verts, 2000).astype(np.float32, copy=False)
