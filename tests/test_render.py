@@ -12,8 +12,8 @@ fname = f'{os.path.dirname(__file__)}/../data/renderexample.k.zip'
 def test_multiprocessed_vs_serial_rendering():
     from syconn.proc.ssd_assembly import init_sso_from_kzip
     import numpy as np
-    from syconn.proc.rendering import render_sso_coords, \
-        render_sso_coords_multiprocessing, render_sso_coords_index_views
+    from syconn.proc.rendering import render_sso_coords, render_sso_coords_multiprocessing, \
+        render_sso_coords_index_views
     from multiprocessing import cpu_count
     render_indexview = True
 
@@ -22,8 +22,8 @@ def test_multiprocessed_vs_serial_rendering():
     exlocs = np.concatenate(ssv.sample_locations())
     exlocs = exlocs
     views = render_sso_coords_multiprocessing(
-        ssv, rendering_locations=exlocs,
-        render_indexviews=render_indexview, n_jobs=10, verbose=True)
+        ssv, rendering_locations=exlocs, render_indexviews=render_indexview, n_jobs=10, verbose=True,
+        render_kwargs=dict(add_cellobjects=('mi', 'vc', 'sj')))
 
     # overwrite any precomputed caches by re-initialization of SSV
     del ssv
@@ -34,7 +34,7 @@ def test_multiprocessed_vs_serial_rendering():
     if render_indexview:
         views2 = render_sso_coords_index_views(ssv, exlocs, verbose=True)
     else:
-        views2 = render_sso_coords(ssv, exlocs, verbose=True)
+        views2 = render_sso_coords(ssv, exlocs, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))
 
     print('Fraction of different index values in index-views: {:.4f}'
           ''.format(np.sum(views != views2) / np.prod(views.shape)))
@@ -46,14 +46,12 @@ def test_raw_and_index_rendering_osmesa():
     from syconn import global_params
     global_params.config['pyopengl_platform'] = 'osmesa'
     from syconn.proc.ssd_assembly import init_sso_from_kzip
-    from syconn.proc.rendering import render_sso_coords, \
-        render_sso_coords_index_views
+    from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
     rendering_locations = np.concatenate(ssv.sample_locations())
-    index_views = render_sso_coords_index_views(ssv, rendering_locations,
-                                                verbose=True)
-    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True)
+    index_views = render_sso_coords_index_views(ssv, rendering_locations, verbose=True)
+    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))
     assert len(index_views) == len(raw_views)
     # TODO: add further property tests, e.g. dtype, value range ...
 
@@ -63,14 +61,12 @@ def test_raw_and_index_rendering_egl():
     from syconn import global_params
     global_params.config['pyopengl_platform'] = 'egl'
     from syconn.proc.ssd_assembly import init_sso_from_kzip
-    from syconn.proc.rendering import render_sso_coords, \
-        render_sso_coords_index_views
+    from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
     rendering_locations = np.concatenate(ssv.sample_locations())
-    index_views = render_sso_coords_index_views(ssv, rendering_locations,
-                                                verbose=True)
-    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True)
+    index_views = render_sso_coords_index_views(ssv, rendering_locations, verbose=True)
+    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))
     assert len(index_views) == len(raw_views)
     # TODO: add further property tests, e.g. dtype, value range ...
 
@@ -85,14 +81,12 @@ def test_egl_and_osmesa_swap_and_equivalence():
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
     rendering_locations = np.concatenate(ssv.sample_locations())
-    index_views = render_sso_coords_index_views(ssv, rendering_locations,
-                                                verbose=True)
-    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True)
+    index_views = render_sso_coords_index_views(ssv, rendering_locations, verbose=True)
+    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))
 
     global_params.config['pyopengl_platform'] = 'osmesa'
-    index_views_osmesa = render_sso_coords_index_views(ssv, rendering_locations,
-                                                       verbose=True)
-    raw_views_osmesa = render_sso_coords(ssv, rendering_locations, verbose=True)
+    index_views_osmesa = render_sso_coords_index_views(ssv, rendering_locations, verbose=True)
+    raw_views_osmesa = render_sso_coords(ssv, rendering_locations, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))
     nb_of_pixels = np.prod(raw_views.shape)
     # fraction of different vertex indices must be below 1 out of 100k
     frac_verts_diff = np.sum(index_views != index_views_osmesa) / nb_of_pixels

@@ -117,7 +117,7 @@ def render_mesh_coords(coords: np.ndarray, ind: np.ndarray, vert: np.ndarray,
 # SSO rendering code
 def render_sampled_sso(sso: 'SuperSegmentationObject', ws: Optional[Tuple[int, int]] = None, verbose: bool = False,
                        woglia: bool = True, return_rot_mat: bool = False, overwrite: bool = True,
-                       add_cellobjects: Optional[Union[bool, List[str]]] = None, index_views: bool = False,
+                       add_cellobjects: Optional[Union[bool, Iterable[str]]] = None, index_views: bool = False,
                        return_views: bool = False, cellobjects_only: bool = False, rot_mat: Optional[np.ndarray] = None,
                        view_key: Optional[str] = None) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray], None]:
     """
@@ -149,8 +149,8 @@ def render_sampled_sso(sso: 'SuperSegmentationObject', ws: Optional[Tuple[int, i
         ws = view_props_default['ws']
     if add_cellobjects is None or add_cellobjects is True:
         add_cellobjects = view_cfg['subcell_objects']
-        if not view_cfg['use_onthefly_views'] and 'syn_ssv' in add_cellobjects:
-            add_cellobjects[add_cellobjects.index('syn_ssv')] = 'sj'
+        if view_cfg['use_onthefly_views'] and 'sj' in add_cellobjects:
+            add_cellobjects[add_cellobjects.index('sj')] = 'syn_ssv'
 
     # get coordinates for N SV's in SSO
     coords = sso.sample_locations(cache=False)
@@ -201,7 +201,7 @@ def render_sampled_sso(sso: 'SuperSegmentationObject', ws: Optional[Tuple[int, i
 
 
 def render_sso_coords(sso: 'SuperSegmentationObject', coords: np.ndarray,
-                      add_cellobjects: Optional[Union[bool, List[str]]] = None,
+                      add_cellobjects: Optional[Union[bool, Iterable[str]]] = None,
                       verbose: bool = False, clahe: bool = False, ws: Optional[Tuple[int]] = None,
                       cellobjects_only: bool = False, wire_frame: bool = False, nb_views: Optional[int] = None,
                       comp_window: Optional[float] = None, rot_mat: Optional[np.ndarray] = None,
@@ -238,8 +238,8 @@ def render_sso_coords(sso: 'SuperSegmentationObject', coords: np.ndarray,
         ws = view_props_default['ws']
     if add_cellobjects is None or add_cellobjects is True:
         add_cellobjects = view_cfg['subcell_objects']
-        if not view_cfg['use_onthefly_views'] and 'syn_ssv' in add_cellobjects:
-            add_cellobjects[add_cellobjects.index('syn_ssv')] = 'sj'
+        if view_cfg['use_onthefly_views'] and 'sj' in add_cellobjects:
+            add_cellobjects[add_cellobjects.index('sj')] = 'syn_ssv'
 
     if verbose:
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'

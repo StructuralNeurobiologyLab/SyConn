@@ -187,8 +187,8 @@ points:
 views:
   use_onthefly_views: True  # TODO: does not yet apply for glia
   use_new_renderings_locs:
-  # ordering sensitive; 'syn_ssv' will be replaced by 'sj' if use_onthefly_views == False
-  subcell_objects: ['mi' ,'vc', 'syn_ssv']
+  # ordering sensitive; 'sj' will be replaced by 'syn_ssv' if use_onthefly_views == True
+  subcell_objects: ['mi', 'vc', 'sj']
   # used for default view rendering (glia separation, spine detection, cell type prediction)
   view_properties:
     comp_window: 8000  # in nm
