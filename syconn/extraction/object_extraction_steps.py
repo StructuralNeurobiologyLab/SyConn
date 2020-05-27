@@ -14,21 +14,17 @@ from ..proc.image import apply_morphological_operations, get_aniso_struct
 from .. import global_params
 from ..handler.basics import kd_factory
 from ..reps.rep_helper import find_object_properties
+from .block_processing_C import extract_cs_syntype, relabel_vol
 import glob
-import time
 import os
 import itertools
 import shutil
 from collections import defaultdict
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 import networkx as nx
 import scipy.ndimage
 import numpy as np
 import skimage.segmentation
-from scipy import ndimage
 from knossos_utils import knossosdataset, chunky
 
 try:
@@ -252,7 +248,7 @@ def _gauss_threshold_connected_components_thread(args):
 
     # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'cell': []}
     morph_ops = global_params.config['cell_objects']['extract_morph_op']
-    min_obj_vx = global_params.config['cell_objects']['min_obj_vx']
+    min_seed_vx = global_params.config['cell_objects']['min_seed_vx']
     scaling = np.array(global_params.config['scaling'])
     struct = get_aniso_struct(scaling)
     nb_cc_list = []
@@ -340,21 +336,32 @@ def _gauss_threshold_connected_components_thread(args):
                     # combine remaining fragments
                     markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0], ['binary_closing']).astype(np.uint32)
                     # remove small fragments and 0; this will also delete objects bigger than min_size as
-                    # this threshold is applied after X binary erosion!
-                    if hdf5_name in min_obj_vx:
-                        min_size = min_obj_vx[hdf5_name]
+                    # this threshold is applied after N binary erosion!
+                    if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
+                        min_size = min_seed_vx[hdf5_name]
                         ixs, cnt = np.unique(markers, return_counts=True)
-                        ixs_del = ixs[(ixs != 0) & (cnt < min_size)]
-                        # TODO: could be optimized into a single XYZ loop
-                        for ix in ixs_del:
-                            markers[markers == ix] = 0
+                        m = (ixs != 0) & (cnt < min_size)
+                        ixs_del = np.sort(ixs[m])
+                        ixs_keep = np.sort(ixs[~m])
+                        # set small objects to 0
+                        label_m = {ix_del: 0 for ix_del in ixs_del}
+                        # fill "holes" in ID space with to-be-kept object IDs
+                        ii = len(ixs_keep) - 1
+                        for ix_del in ixs_del:
+                            if (ix_del > ixs_keep[ii]) or (ixs_keep[ii] == 0) or (ii < 0):
+                                break
+                            label_m[ixs_keep[ii]] = ix_del
+                            ii -= 1
+                        # in-place modification of markers array
+                        relabel_vol(markers, label_m)
+
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
-                    nb_cc = len(np.unique(this_labels_data))
+                    max_label = np.max(this_labels_data)
                 else:
-                    this_labels_data, nb_cc = scipy.ndimage.label(mop_data)
+                    this_labels_data, max_label = scipy.ndimage.label(mop_data)
             else:
-                this_labels_data, nb_cc = scipy.ndimage.label(tmp_data)
-            nb_cc_list.append([chunk.number, hdf5_name, nb_cc])
+                this_labels_data, max_label = scipy.ndimage.label(tmp_data)
+            nb_cc_list.append([chunk.number, hdf5_name, max_label])
             labels_data.append(this_labels_data)
 
         h5_fname = chunk.folder + filename + "_connected_components%s.h5" % suffix

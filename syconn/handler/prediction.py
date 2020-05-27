@@ -585,7 +585,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
                         overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
-                        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
+                        cube_of_interest: Optional[Tuple[np.ndarray]] = None,
+                        overwrite: bool = False):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -630,6 +631,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
+        overwrite: Overwrite existing KDs.
 
     """
     # TODO: switch to pyk confs
@@ -668,10 +670,14 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                   box_coords=cube_of_interest[0], list_of_coords=[],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
-    # init target KnossosDatasets:
+    # init target KnossosDatasets
     target_kd_path_list = [target_path+'/{}/'.format(tn) for tn in target_names]
     for path in target_kd_path_list:
         if os.path.isdir(path):
+            if not overwrite:
+                msg = f'Found existing KD at "{path}" but overwrite is set to False.'
+                log.error(msg)
+                raise ValueError(msg)
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
     for path in target_kd_path_list:

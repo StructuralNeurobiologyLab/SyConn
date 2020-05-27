@@ -306,10 +306,8 @@ def from_probabilities_to_kd(
         max_nb_dict[hdf5_name][0] = 0
         for nb_chunk in range(1, len(chunk_list)):
             max_nb_dict[hdf5_name][nb_chunk] = \
-                max_nb_dict[hdf5_name][nb_chunk - 1] + \
-                nb_cc_dict[hdf5_name][nb_chunk - 1]
-        max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + \
-                                    nb_cc_dict[hdf5_name][-1])
+                max_nb_dict[hdf5_name][nb_chunk - 1] + nb_cc_dict[hdf5_name][nb_chunk - 1]
+        max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("max labels")
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",

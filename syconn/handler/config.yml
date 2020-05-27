@@ -52,7 +52,7 @@ paths:
 
 # (Super-)SegmentationDataset versions
 versions:
-  sv: 0
+  sv: 0   # these are the cell supervoxels
   vc: 0
   sj: 0
   syn: 0
@@ -64,12 +64,9 @@ versions:
 
 # Cell object properties
 cell_objects:
-  # threshold applied during object extraction .
-  # if object segmentation is generated from probability map or a binary mask and extract_morph_op (see below) contains
-  # binary_erosion, this thresholding will also delete objects bigger than min_obj_vx as it is performed on the
-  # segmentation calculated from the mask after the application of binary erosion!
+  # size threshold applied during object extraction
   min_obj_vx:
-    mi: 100
+    mi: 500
     sj: 100
     vc: 100
     sv: 1  # all cell supervoxels are extracted
@@ -98,15 +95,26 @@ cell_objects:
     sj: 0.19047619
     vc: 0.285714286
 
+  # if object segmentation is generated from probability map or a binary mask and extract_morph_op (see below) contains
+  # binary_erosion, then the segmentation is computed via watershed. The seeds are computed via connected compontents
+  # on the eroded binary mask (as many erosion as defined in extract_morph_op).
+  # The thresholds below will also delete objects bigger than min_seed_vx as it is performed on segmentation seeds.
+  min_seed_vx:
+    mi: 50
+    sj: 10
+    vc: 10
+
   # Hook for morphological operations from scipy.ndimage applied during object extraction.
   # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
   # if erosion is applied last, use watershed to form segmentation on original mask data, seeds are generated
   # from the eroded mask via ndimage.label
   extract_morph_op:
-    mi: []
-    sj: []
-    vc: []
-    sv: []  # these are the cell supervoxels
+    # remove small fragments, close existing holes, then erode to trigger watershed segmentation
+    # all morphology operations will take the voxel size into account by using an X times dilated structure
+    # in the xy plane (where X is the ratio of Z/X) as kernel in the morphology operations.
+    mi: ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion', 'binary_erosion', 'binary_erosion']
+    sj: ['binary_opening', 'binary_closing', 'binary_erosion']
+    vc: ['binary_opening', 'binary_closing', 'binary_erosion']
 
   # bounding box criteria for mapping mitochondria objects
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
@@ -179,6 +187,8 @@ points:
 views:
   use_onthefly_views: True  # TODO: does not yet apply for glia
   use_new_renderings_locs:
+  # ordering sensitive; 'syn_ssv' will be replaced by 'sj' if use_onthefly_views == False
+  subcell_objects: ['mi' ,'vc', 'syn_ssv']
   # used for default view rendering (glia separation, spine detection, cell type prediction)
   view_properties:
     comp_window: 8000  # in nm

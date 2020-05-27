@@ -260,11 +260,15 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
     intensity_plot_pos = intensity_plot[intensity_plot > 0]
 
     int_cut_pos = np.mean(intensity_plot_pos) + np.std(intensity_plot_pos)
+    if np.isnan(int_cut_pos):
+        int_cut_pos = 1
     int_cut_neg = np.abs(np.mean(intensity_plot_neg)) + np.std(intensity_plot_neg)
+    if np.isnan(int_cut_neg):
+        int_cut_neg = 1
 
     # balance max values
     intensity_plot[intensity_plot > 0] = intensity_plot[intensity_plot > 0] / int_cut_pos
-    intensity_plot[intensity_plot < 0] = intensity_plot[intensity_plot < 0] / np.abs(int_cut_neg)
+    intensity_plot[intensity_plot < 0] = intensity_plot[intensity_plot < 0] / int_cut_neg
     log_reps.info(f'1-sigma cut-off for excitatory cells: {int_cut_pos}')
     log_reps.info(f'1-sigma cut-off for inhibitory cells: {int_cut_neg}')
     log_reps.debug(f'Initial wiring diagram shape: {intensity_plot.shape}')

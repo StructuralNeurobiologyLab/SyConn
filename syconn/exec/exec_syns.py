@@ -107,15 +107,13 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    # # TODO: changed!
-    # # create KDs and SDs for syn and cs
-    # ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-    #                           cube_of_interest_bb=cube_of_interest_bb,
-    #                           n_folders_fs=n_folders_fs)
-    # log.info('SegmentationDataset of type "cs" and "syn" was generated.')
+    # create KDs and SDs for syn and cs
+    ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                              cube_of_interest_bb=cube_of_interest_bb,
+                              n_folders_fs=n_folders_fs)
+    log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
     # create SD of type 'syn_ssv'
-    # TODO: do this dense
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
@@ -123,10 +121,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
-    # # generate syn_ssv KD and meshes
-    # sd_syn_ssv.load_cached_data('cs_ids')
-    #
-    # # generate the skipped meshes of objects at chunk boundaries sparsely
+    # generate the skipped meshes of objects at chunk boundaries sparsely
 
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn

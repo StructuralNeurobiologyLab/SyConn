@@ -344,10 +344,9 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
                     syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for
                     ii in range(n_used_paths)]
-    # TODO: changed!
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
-                                       multi_params, nb_cpus=nb_cpus, debug=True)
+                                       multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(
             multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log)

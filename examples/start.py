@@ -54,13 +54,6 @@ if __name__ == '__main__':
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
         ('cell_objects', {
           # 'sym_label': 1, 'asym_label': 2,
-          # remove small fragments, close existing holes, then erode to trigger watershed segmentation
-          # all morphology operations will take the voxel size into account by using an X times dilated structure
-          # in the xy plane (where X is the ratio of Z/X).
-          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
-                                      'binary_erosion', 'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
-                               'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           })
     ]
     if example_cube_id == 1:
@@ -86,7 +79,7 @@ if __name__ == '__main__':
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 
-    # generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf, force_overwrite=False)
+    generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf, force_overwrite=False)
 
     if global_params.config.working_dir is not None and global_params.config.working_dir != example_wd:
         msg = f'Active working directory is already set to "{example_wd}". Aborting.'
@@ -172,47 +165,48 @@ if __name__ == '__main__':
         time_stamps.append(time.time())
         step_idents.append('Preparation')
 
-    # log.info('Finished example cube initialization (shape: {}). Starting'
-    #          ' SyConn pipeline.'.format(bd))
-    #
-    # # START SyConn
-    # log.info('Example data will be processed in "{}".'.format(example_wd))
-    # log.info('Step 1/9 - Predicting sub-cellular structures')
-    # # TODO: launch all inferences in parallel
+    log.info('Finished example cube initialization (shape: {}). Starting'
+             ' SyConn pipeline.'.format(bd))
+
+    # START SyConn
+    log.info('Example data will be processed in "{}".'.format(example_wd))
+    log.info('Step 1/9 - Predicting sub-cellular structures')
+    # TODO: launch all inferences in parallel
+    # TODO: changed!
     # exec_dense_prediction.predict_myelin()
-    # # TODO: if performed, work-in paths of the resulting KDs to the config
-    # # TODO: might also require adaptions in init_cell_subcell_sds
-    # # exec_dense_prediction.predict_cellorganelles()
-    # # exec_dense_prediction.predict_synapsetype()
-    # time_stamps.append(time.time())
-    # step_idents.append('Dense predictions')
-    #
-    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-    #                                 n_folders_fs_sc=n_folders_fs_sc)
-    # exec_init.run_create_rag()
-    #
-    # time_stamps.append(time.time())
-    # step_idents.append('SD generation')
-    #
-    # if global_params.config.prior_glia_removal:
-    #     log.info('Step 2.5/9 - Glia separation')
-    #     exec_multiview.run_glia_rendering()
-    #     exec_multiview.run_glia_prediction()
-    #     exec_multiview.run_glia_splitting()
-    #     time_stamps.append(time.time())
-    #     step_idents.append('Glia separation')
-    #
-    # log.info('Step 3/9 - Creating SuperSegmentationDataset')
-    # exec_multiview.run_create_neuron_ssd()
-    # time_stamps.append(time.time())
-    # step_idents.append('SSD generation')
-    #
-    # if not global_params.config.use_onthefly_views:
-    #     log.info('Step 3.5/9 - Neuron rendering')
-    #     exec_multiview.run_neuron_rendering()
-    #     time_stamps.append(time.time())
-    #     step_idents.append('Neuron rendering')
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    # TODO: might also require adaptions in init_cell_subcell_sds
+    # exec_dense_prediction.predict_cellorganelles()
+    # exec_dense_prediction.predict_synapsetype()
+    time_stamps.append(time.time())
+    step_idents.append('Dense predictions')
+
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                    n_folders_fs_sc=n_folders_fs_sc)
+    exec_init.run_create_rag()
+
+    time_stamps.append(time.time())
+    step_idents.append('SD generation')
+
+    if global_params.config.prior_glia_removal:
+        log.info('Step 2.5/9 - Glia separation')
+        exec_multiview.run_glia_rendering()
+        exec_multiview.run_glia_prediction()
+        exec_multiview.run_glia_splitting()
+        time_stamps.append(time.time())
+        step_idents.append('Glia separation')
+
+    log.info('Step 3/9 - Creating SuperSegmentationDataset')
+    exec_multiview.run_create_neuron_ssd()
+    time_stamps.append(time.time())
+    step_idents.append('SSD generation')
+
+    if not global_params.config.use_onthefly_views:
+        log.info('Step 3.5/9 - Neuron rendering')
+        exec_multiview.run_neuron_rendering()
+        time_stamps.append(time.time())
+        step_idents.append('Neuron rendering')
 
     log.info('Step 4/9 - Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size,

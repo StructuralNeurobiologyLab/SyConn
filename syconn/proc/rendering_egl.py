@@ -577,7 +577,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                 if len(np.unique(cv)) == 1:
                     n_empty_views += 1
                     continue  # check at most one occurrence
-    if n_empty_views / len(res) > 0.1:  # more than 10% locations contain at least one empty view
+    if n_empty_views / len(res) > 0.5:  # more than 10% locations contain at least one empty view
         log_proc.critical(
             "WARNING: Found {}/{} locations with empty views.\t'{}'-mesh with "
             "{} vertices. Example location: {}".format(n_empty_views, len(coords), views_key,

@@ -18,28 +18,15 @@ from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from .. import global_params
-try:
-    from .block_processing_C import process_block_nonzero as process_block_nonzero_C
-    from .block_processing_C import extract_cs_syntype
-
-    def process_block_nonzero(*args):
-        return np.asarray(process_block_nonzero_C(*args))
-
-except ImportError as e:
-    extract_cs_syntype = None
-    log_extraction.warning('Could not import cython version of `block_processing`. {}'.format(
-        str(e)))
-    from .block_processing import process_block_nonzero
+from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
+from .block_processing_C import extract_cs_syntype
 
 import os
 import time
 import shutil
 import tqdm
 from collections import defaultdict
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from typing import Optional, Dict, List, Tuple, Union
 from logging import Logger
 import glob
@@ -47,6 +34,10 @@ import numpy as np
 import scipy.ndimage
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
+
+
+def process_block_nonzero(*args):
+    return np.asarray(process_block_nonzero_cpp(*args))
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
