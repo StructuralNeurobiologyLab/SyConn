@@ -7,6 +7,7 @@ channels:
   - conda-forge
   - defaults
   - menpo
+  - open3d-admin
 dependencies:
   # From -c pytorch
   - pytorch =1.3  # (provides backwards compat. to trained models)
@@ -53,6 +54,9 @@ dependencies:
   # From -c menpo
   - osmesa
 
+  # From -c open3d-admin; 0.10.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
+  - open3d =0.9.0
+
   # For tests (optional):
   - pytest
   - pytest-runner
@@ -68,7 +72,6 @@ dependencies:
   - pip:
     - zmesh
     - plyfile
-    - open3d
     # For importing the latest cell type model.
     - adabound
 

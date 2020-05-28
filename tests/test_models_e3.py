@@ -5,6 +5,8 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 from syconn.handler.prediction import *
+import pytest
+pytest.mark.filterwarnings("ignore:Initialized working directory without existing config file at")
 
 
 def _setup_working_dir():

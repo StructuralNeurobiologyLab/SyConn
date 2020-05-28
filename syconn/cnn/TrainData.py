@@ -14,8 +14,6 @@ import matplotlib
 import re
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
-import functools
-from knossos_utils import KnossosDataset
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
@@ -28,8 +26,6 @@ from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
-from morphx.preprocessing.voxel_down import voxel_down
-from morphx.classes.hybridcloud import HybridCloud
 try:
     from vigra.filters import boundaryVectorDistanceTransform
     import vigra

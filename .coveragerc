@@ -6,6 +6,9 @@ omit =
     syconn/batchjob_scripts/batch_*
     knossos_utils/*
     tests/*
-    syconn/ui/*
     syconn/cnn/*
+    syconn/analysis/reconnect_proofreading.py
+    syconn/analysis/syconn_knossos_viewer.py
+    syconn/analysis/syconn_graphwalker.py
+    syconn/analysis/server.py
     */__init__.py
