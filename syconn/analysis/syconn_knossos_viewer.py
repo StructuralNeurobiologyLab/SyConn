@@ -518,8 +518,9 @@ class main_class(QtGui.QDialog):
         syn_id = self.all_syns['ids'][ix]
         self._currently_active_syn = syn_id
         # TODO: pull_so_attr and writing its results to `synapsetype_label_text` should run as a thread
-        syn_gt_syntype = self.syconn_gate.pull_so_attr(so_id=syn_id, so_type='syn_ssv',
-                                                       attr_key='gt_syntype')
+        syn_gt_syntype = ""
+        # syn_gt_syntype = self.syconn_gate.pull_so_attr(so_id=syn_id, so_type='syn_ssv',
+        #                                                attr_key='gt_syntype')
         if len(syn_gt_syntype) == 0:
             self.synapsetype_label_text.clear()
         else:
@@ -531,8 +532,7 @@ class main_class(QtGui.QDialog):
         if k_tree is None:
             k_tree = KnossosModule.skeleton.add_tree(tree_id)
         # add synapse location
-        kn = KnossosModule.skeleton.add_node([c[0] + 1, c[1] + 1, c[2] + 1],
-                                            k_tree, {})
+        kn = KnossosModule.skeleton.add_node([c[0] + 1, c[1] + 1, c[2] + 1], k_tree, {})
         KnossosModule.skeleton.jump_to_node(kn)
 
         # syn properties
@@ -597,11 +597,9 @@ class main_class(QtGui.QDialog):
 
         self.direct_ssv_id_input = QtGui.QLineEdit()
         self.direct_ssv_id_input.setValidator(QtGui.QIntValidator())
-        self.direct_ssv_id_input.setMaxLength(8)
 
         self.direct_syn_id_input = QtGui.QLineEdit()
         self.direct_syn_id_input.setValidator(QtGui.QIntValidator())
-        self.direct_syn_id_input.setMaxLength(8)
 
         # celltype
         self.celltype_field = QtGui.QLabel("CellType:      ", self)
@@ -859,9 +857,10 @@ class main_class(QtGui.QDialog):
         else:
             # TODO: parse syn_ssv ID from currently clicked synapse
             curr_syn_id = self._currently_active_syn
-            r = self.syconn_gate.push_so_attr(so_id=str(curr_syn_id), so_type='syn_ssv',
-                                              attr_key='gt_syntype_viewer',
-                                              attr_value=syntype_label)
+            r = ""
+            # r = self.syconn_gate.push_so_attr(so_id=str(curr_syn_id), so_type='syn_ssv',
+            #                                   attr_key='gt_syntype_viewer',
+            #                                   attr_value=syntype_label)
             if len(r) == 0:
                 r = "push successful."
             self.send_button_response_label.setText(r)
@@ -900,17 +899,18 @@ class main_class(QtGui.QDialog):
         # create a 'fake' knossos tree for each obj mesh category;
         # this is very hacky since it can generate nasty ID collisions.
         mi_id = self.obj_id_offs + ssv_id + 1
-        sym_id = self.obj_id_offs + ssv_id + 2
-        asym_id = self.obj_id_offs + ssv_id + 3
-        vc_id = self.obj_id_offs + ssv_id + 4
-        neuron_id = self.obj_id_offs + ssv_id + 5
+        syn_id = self.obj_id_offs + ssv_id + 2
+        sym_id = self.obj_id_offs + ssv_id + 3
+        asym_id = self.obj_id_offs + ssv_id + 4
+        vc_id = self.obj_id_offs + ssv_id + 5
+        neuron_id = self.obj_id_offs + ssv_id + 6
 
         params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
                   (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
                   (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
-                  # (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
-                  (self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
-                  (self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
+                  (self, ssv_id, syn_id, 'syn_ssv', (240, 50, 50, 255)),]
+                  # (self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
+                  # (self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
         start = time.time()
 
         # add all meshes to download queue
@@ -933,40 +933,42 @@ class main_class(QtGui.QDialog):
         if signal_block:
             signalsBlocked = KnossosModule.knossos_global_skeletonizer.blockSignals(
                 True)
-        k_tree = KnossosModule.skeleton.find_tree_by_id(ssv_id)
-        if k_tree is None:
-            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-        skel = self.syconn_gate.get_ssv_skel(ssv_id)
-        #skel = None
-        if skel is None:
-            print("Loaded skeleton is None.")
-            return
-        # add nodes
-        nx_knossos_id_map = dict()
-        for ii, n_coord in enumerate(skel["nodes"]):
-            # newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
-            n_proeprties = {}
-            for k in skel:
-                if k in ["nodes", "edges", "diameters"]:
-                    continue
-                n_proeprties[k] = float(skel[k][ii])
-            k_node = KnossosModule.skeleton.add_node(
-                [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree,
-                n_proeprties)
-            KnossosModule.skeleton.set_radius(k_node.node_id(),
-                                              skel["diameters"][ii] / 2)
-            nx_knossos_id_map[ii] = k_node.node_id()
+        try:
+            k_tree = KnossosModule.skeleton.find_tree_by_id(ssv_id)
+            if k_tree is None:
+                k_tree = KnossosModule.skeleton.add_tree(ssv_id)
+            skel = self.syconn_gate.get_ssv_skel(ssv_id)
+            #skel = None
+            if skel is None:
+                print("Loaded skeleton is None.")
+                return
+            # add nodes
+            nx_knossos_id_map = dict()
+            for ii, n_coord in enumerate(skel["nodes"]):
+                # newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
+                n_proeprties = {}
+                for k in skel:
+                    if k in ["nodes", "edges", "diameters"]:
+                        continue
+                    n_proeprties[k] = float(skel[k][ii])
+                k_node = KnossosModule.skeleton.add_node(
+                    [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree,
+                    n_proeprties)
+                KnossosModule.skeleton.set_radius(k_node.node_id(),
+                                                  skel["diameters"][ii] / 2)
+                nx_knossos_id_map[ii] = k_node.node_id()
 
-        # add edges
-        for nx_src, nx_tgt in skel["edges"]:
-            KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src],
-                                               nx_knossos_id_map[nx_tgt])
+            # add edges
+            for nx_src, nx_tgt in skel["edges"]:
+                KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src],
+                                                   nx_knossos_id_map[nx_tgt])
+        finally:
 
-        # enable signals again
-        if signal_block:
-            KnossosModule.knossos_global_skeletonizer.blockSignals(
-                signalsBlocked)
-            KnossosModule.knossos_global_skeletonizer.resetData()
+            # enable signals again
+            if signal_block:
+                KnossosModule.knossos_global_skeletonizer.blockSignals(
+                    signalsBlocked)
+                KnossosModule.knossos_global_skeletonizer.resetData()
         print('Skel down and to K took {}'.format(time.time()-start))
         return
 

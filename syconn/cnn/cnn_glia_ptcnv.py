@@ -29,11 +29,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=30000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=1000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=1500, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -95,7 +95,7 @@ if track_running_stats:
     name += '_trackRunStats'
 
 if use_cuda:
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 

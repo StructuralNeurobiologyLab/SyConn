@@ -6,23 +6,6 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from collections import defaultdict
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from typing import Optional, Dict, List, Tuple, Union
-import time
-import shutil
-import tqdm
-from logging import Logger
-import glob
-import numpy as np
-import scipy.ndimage
-from knossos_utils import knossosdataset
-from knossos_utils import chunky
-knossosdataset._set_noprint(True)
-import os
 from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage, CompressedStorage
 from ..reps import rep_helper
 from ..mp import batchjob_utils as qu
@@ -33,20 +16,28 @@ from . import log_extraction
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
-try:
-    from .block_processing_C import process_block_nonzero as process_block_nonzero_C
-    from .block_processing_C import extract_cs_syntype
-
-    def process_block_nonzero(*args):
-        return np.asarray(process_block_nonzero_C(*args))
-
-except ImportError as e:
-    extract_cs_syntype = None
-    log_extraction.warning('Could not import cython version of `block_processing`. {}'.format(
-        str(e)))
-    from .block_processing import process_block_nonzero
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from .. import global_params
+from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
+from .block_processing_C import extract_cs_syntype
+
+import os
+import time
+import shutil
+import tqdm
+from collections import defaultdict
+import pickle as pkl
+from typing import Optional, Dict, List, Tuple, Union
+from logging import Logger
+import glob
+import numpy as np
+import scipy.ndimage
+from knossos_utils import knossosdataset
+from knossos_utils import chunky
+
+
+def process_block_nonzero(*args):
+    return np.asarray(process_block_nonzero_cpp(*args))
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
@@ -283,7 +274,10 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info(f'Identified {n_cs} contact sites and {n_syn} synapses within size threshold.')
     dataset_analysis(sd_cs, recompute=True, compute_meshprops=False)
     for p in dict_paths_tmp:
-        os.remove(p)
+        if os.path.isfile(p):
+            os.remove(p)
+        elif os.path.isdir(p):
+            shutil.rmtree(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
     if qu.batchjob_enabled():
         shutil.rmtree(path_to_out + '/../', ignore_errors=True)

@@ -4,14 +4,13 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import numpy as np
-from scipy import spatial
-from collections import Counter
-from typing import Tuple, Optional, Union, List, Dict, Any
-
 from ..reps import log_reps
 from .. import global_params
+
+from collections import Counter
+from typing import Tuple, Optional, Union, List, Dict, Any
+import numpy as np
+from scipy import spatial
 
 
 def knossos_ml_from_svixs(sv_ixs: Union[np.ndarray, List],

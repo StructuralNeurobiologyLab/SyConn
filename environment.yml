@@ -69,7 +69,7 @@ dependencies:
     - zmesh
     - plyfile
     - open3d
-    # For importing the latest cell type model. TODO: transition to .pts models
+    # For importing the latest cell type model.
     - adabound
 
     # For running a tensorboard server (optional):
@@ -81,3 +81,4 @@ dependencies:
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil_convpoint#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
+    - git+https://github.com/StructuralNeurobiologyLab/MorphX

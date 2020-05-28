@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall, SegSmall2
+from elektronn3.models.convpoint import SegSmall, SegSmall2, SegSmall3
 from elektronn3.training import Trainer3d, Backup, metrics
 try:
     from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -72,14 +72,14 @@ cellshape_only = False
 use_syntype = False
 dr = 0.2
 track_running_stats = False
-use_norm = 'gn'
+use_norm = 'bn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
 act = 'swish'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights_SegSmall3'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -110,7 +110,7 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall2(input_channels, num_classes, dropout=dr, use_norm=use_norm,
+model = SegSmall3(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                   track_running_stats=track_running_stats, act=act, use_bias=False)
 
 name += f'_eval{eval_nr}'

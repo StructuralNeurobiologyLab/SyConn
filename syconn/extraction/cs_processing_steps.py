@@ -4,24 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-from collections import defaultdict
-import numpy as np
-from logging import Logger
-import os
-from scipy import spatial
-from sklearn import ensemble
-from sklearn.model_selection import cross_val_score
-from knossos_utils import knossosdataset, skeleton_utils, skeleton
-from typing import Union, Optional, Dict, List, Callable, TYPE_CHECKING, Tuple
-knossosdataset._set_noprint(True)
-import time
-import joblib
-import datetime
-import tqdm
-import shutil
-import pickle as pkl
-
 from ..handler.basics import kd_factory, chunkify
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -32,6 +14,23 @@ from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage, Me
 from ..handler.config import initialize_logging
 from . import log_extraction
 from .. import global_params
+from ..reps.connectivity_helper import generate_wiring_array, plot_wiring, plot_cumul_wiring
+
+import os
+import time
+import joblib
+import datetime
+import tqdm
+import shutil
+import pickle as pkl
+from collections import defaultdict
+from typing import Optional, Dict, List, Tuple
+import numpy as np
+from logging import Logger
+from scipy import spatial
+from sklearn import ensemble
+from sklearn.model_selection import cross_val_score
+from knossos_utils import knossosdataset, skeleton_utils, skeleton
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
@@ -93,7 +92,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             multi_params, "from_cell_to_syn_dict", remove_jobfolder=True)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    sm.start_multiprocess_imap(_delete_all_cache_dc, (ssd.ssv_ids, ssd.working_dir),
+    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.working_dir) for ssv_id in ssd.ssv_ids],
                                nb_cpus=global_params.config['ncores_per_node'])
     log_extraction.debug('Deleted all cache dictionaries.')
 
@@ -205,7 +204,6 @@ def _from_cell_to_syn_dict(args):
 
             for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                ssv_o.load_attr_dict()
                 cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] ==
@@ -380,6 +378,8 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
+    if base_id == 0:
+        base_id = 1
     next_id = base_id
 
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
@@ -395,13 +395,13 @@ def _combine_and_split_syn_thread(args):
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
         voxel_list = [syn.voxel_list]
         # store index of syn. objects for attribute dict retrieval
-        synix_list = [0] * len(syn.voxel_list)
+        synix_list = [0] * len(voxel_list[0])
         for syn_ix, syn_id in enumerate(item[1][1:]):
-            syn_object = sd_syn.get_segmentation_object(syn_id)
-            syn_object.load_attr_dict()
-            syn_attr_list.append(syn_object.attr_dict)
-            voxel_list.append(syn_object.voxel_list)
-            synix_list += [syn_ix] * len(syn_object.voxel_list)
+            syn = sd_syn.get_segmentation_object(syn_id)
+            syn.load_attr_dict()
+            syn_attr_list.append(syn.attr_dict)
+            voxel_list.append(syn.voxel_list)
+            synix_list += [syn_ix] * len(voxel_list[-1])
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
 
@@ -436,13 +436,15 @@ def _combine_and_split_syn_thread(args):
             this_attr_dc = dict(neuron_partners=ssv_ids)
             try:
                 voxel_dc[next_id] = [id_mask], [abs_offset]
+                # TODO: ceck if both calls of calculate are required as the
+                #  used voxel dict is probably not VoxelStorageDyn - change!
                 syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
                 syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
                 syn_ssv.calculate_bounding_box(voxel_dc=voxel_dc)
                 this_attr_dc["rep_coord"] = syn_ssv.rep_coord
                 this_attr_dc["bounding_box"] = syn_ssv.bounding_box
                 this_attr_dc["size"] = syn_ssv.size
-                ind, vert, normals = syn_ssv._mesh_from_scratch()
+                ind, vert, normals = syn_ssv.mesh_from_scratch()
                 mesh_dc[syn_ssv.id] = [ind, vert, normals]
                 this_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
                 this_attr_dc["mesh_area"] = syn_ssv.mesh_area
@@ -450,8 +452,7 @@ def _combine_and_split_syn_thread(args):
                 debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
                     sd_syn_ssv.so_storage_path, next_id, abs_offset[0],
                     abs_offset[1], abs_offset[2])
-                msg = f"Saving {syn_ssv} failed with {e}. Debug file at " \
-                      f"{debug_out_fname}."
+                msg = f"Saving {syn_ssv} failed with '{type(e)}: {e}'. Debug file at {debug_out_fname}."
                 log_extraction.error(msg)
                 np.save(debug_out_fname, this_vx)
                 raise ValueError(msg)
@@ -1083,6 +1084,7 @@ def _extract_synapse_type_thread(args):
         for so_id in this_attr_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
+            # this is inefficient. Pass pre-loaded VoxelStorage instead.
             so.load_voxel_list()
 
             vxl = so.voxel_list
@@ -1189,7 +1191,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
         log = log_extraction
     log.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
+    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.working_dir) for ssv_id in ssd.ssv_ids],
                                nb_cpus=global_params.config['ncores_per_node'])
     log.debug('Deleted all cache dictionaries.')
 
@@ -1222,7 +1224,6 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
 
         # start = time.time()
-        ssv_o.load_attr_dict()
         if overwrite and os.path.isfile(ssv_o.ssv_dir + "/cache_syn.pkl"):
             os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
         cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
@@ -1253,8 +1254,6 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         # dts['id_mask'] += time.time() - start
         vc_ids = sd_vc.ids[vc_mask]
         mi_ids = sd_mi.ids[mi_mask]
-        if len(vc_ids) < 2 and len(mi_ids) < 2:
-            continue
         vc_sizes = sd_vc.sizes[vc_mask]
         mi_sizes = sd_mi.sizes[mi_mask]
 
@@ -1644,7 +1643,7 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject):
     features = [synssv_o.size, synssv_o.mesh_area,
                 synssv_o.attr_dict["id_cs_ratio"]]
 
-    partner_ids = synssv_o.attr_dict("neuron_partners")
+    partner_ids = synssv_o.attr_dict["neuron_partners"]
     for i_partner_id, partner_id in enumerate(partner_ids):
         features.append(synssv_o.attr_dict["n_mi_objs_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_mi_vxs_%d" % i_partner_id])
@@ -1660,17 +1659,17 @@ def synssv_o_featurenames():
             'n_vc_vxs_neuron2']
 
 
-def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
+def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None, export_kzip=False):
     """
-    Writes .csv and .kzip summary file of connectivity matrix.
+    Writes .csv and optionally .kzip (large memory consumption) summary file of connectivity matrix.
 
     Parameters
     ----------
-    wd : str
     obj_version : str
     dest_folder : str
         Path to csv file
     threshold_syn : float
+    export_kzip: bool
     """
     if threshold_syn is None:
         threshold_syn = global_params.config['cell_objects']['thresh_synssv_proba']
@@ -1721,55 +1720,59 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])])
                )
+    wiring, borders = generate_wiring_array(thresh_syn_prob=threshold_syn, syn_version=obj_version)
+    plot_wiring(f'{dest_folder}', wiring, borders, borders)
+    plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0)
 
-    ax_labels = np.array(["N/A", "D", "A", "S"])   # TODO: this is already defined in handler.multiviews!
-    ax_label_ids = np.array([-1, 0, 1, 2])
-    # Documentation of prediction labels, maybe add somewhere to .k.zip or .csv
-    ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']   # TODO: this is already defined in handler.multiviews!
-    ct_label_ids = np.array([-1, 0, 1, 2, 3])
-    sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']  # TODO: this is already defined in handler.multiviews!
-    sp_label_ids = np.array([-1, 0, 1, 2, 3])
+    if export_kzip:
+        ax_labels = np.array(["N/A", "D", "A", "S"])   # TODO: this is already defined in handler.multiviews!
+        ax_label_ids = np.array([-1, 0, 1, 2])
+        # Documentation of prediction labels, maybe add somewhere to .k.zip or .csv
+        ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']   # TODO: this is already defined in handler.multiviews!
+        ct_label_ids = np.array([-1, 0, 1, 2, 3])
+        sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']  # TODO: this is already defined in handler.multiviews!
+        sp_label_ids = np.array([-1, 0, 1, 2, 3])
 
-    annotations = []
-    m_sizes = np.abs(m_sizes)
+        annotations = []
+        m_sizes = np.abs(m_sizes)
 
-    ms_axs = np.sort(m_axs, axis=1)
-    # transform labels 3 and 4 to 1 (bouton and terminal to axon to apply correct filter)
-    ms_axs[ms_axs == 3] = 1
-    ms_axs[ms_axs == 4] = 1
-    # vigra currently requires numpy==1.11.1
-    try:
-        u_axs = np.unique(ms_axs, axis=0)
-    except TypeError:  # in case numpy < 1.13
-        u_axs = np.vstack({tuple(row) for row in ms_axs})
-    for u_ax in u_axs:
-        anno = skeleton.SkeletonAnnotation()
-        anno.scaling = sd_syn_ssv.scaling
-        cmt = "{} - {}".format(ax_labels[ax_label_ids == u_ax[0]][0],
-                               ax_labels[ax_label_ids == u_ax[1]][0])
-        anno.comment = cmt
-        for i_syn in np.where(np.sum(np.abs(ms_axs - u_ax), axis=1) == 0)[0]:
-            c = m_coords[i_syn]
-            # somewhat approximated from sphere volume:
-            r = np.power(m_sizes[i_syn] / 3., 1 / 3.)
-            #    r = m_sizes[i_syn]
-            skel_node = skeleton.SkeletonNode(). \
-            from_scratch(anno, c[0], c[1], c[2], radius=r)
-            skel_node.data["ids"] = m_ssv_partners[i_syn]
-            skel_node.data["size"] = m_sizes[i_syn]
-            skel_node.data["syn_prob"] = m_syn_prob[i_syn]
-            skel_node.data["sign"] = m_syn_sign[i_syn]
-            skel_node.data["in_ex_frac"] = m_syn_asym_ratio[i_syn]
-            skel_node.data['sp'] = m_sp[i_syn]
-            skel_node.data['ct'] = m_cts[i_syn]
-            skel_node.data['ax'] = m_axs[i_syn]
-            skel_node.data['latent_morph'] = m_latent_morph[i_syn]
-            anno.addNode(skel_node)
-        annotations.append(anno)
+        ms_axs = np.sort(m_axs, axis=1)
+        # transform labels 3 and 4 to 1 (bouton and terminal to axon to apply correct filter)
+        ms_axs[ms_axs == 3] = 1
+        ms_axs[ms_axs == 4] = 1
+        # vigra currently requires numpy==1.11.1
+        try:
+            u_axs = np.unique(ms_axs, axis=0)
+        except TypeError:  # in case numpy < 1.13
+            u_axs = np.vstack({tuple(row) for row in ms_axs})
+        for u_ax in u_axs:
+            anno = skeleton.SkeletonAnnotation()
+            anno.scaling = sd_syn_ssv.scaling
+            cmt = "{} - {}".format(ax_labels[ax_label_ids == u_ax[0]][0],
+                                   ax_labels[ax_label_ids == u_ax[1]][0])
+            anno.comment = cmt
+            for i_syn in np.where(np.sum(np.abs(ms_axs - u_ax), axis=1) == 0)[0]:
+                c = m_coords[i_syn]
+                # somewhat approximated from sphere volume:
+                r = np.power(m_sizes[i_syn] / 3., 1 / 3.)
+                #    r = m_sizes[i_syn]
+                skel_node = skeleton.SkeletonNode().from_scratch(anno, c[0], c[1], c[2],
+                                                                 radius=r)
+                skel_node.data["ids"] = m_ssv_partners[i_syn]
+                skel_node.data["size"] = m_sizes[i_syn]
+                skel_node.data["syn_prob"] = m_syn_prob[i_syn]
+                skel_node.data["sign"] = m_syn_sign[i_syn]
+                skel_node.data["in_ex_frac"] = m_syn_asym_ratio[i_syn]
+                skel_node.data['sp'] = m_sp[i_syn]
+                skel_node.data['ct'] = m_cts[i_syn]
+                skel_node.data['ax'] = m_axs[i_syn]
+                skel_node.data['latent_morph'] = m_latent_morph[i_syn]
+                anno.addNode(skel_node)
+            annotations.append(anno)
 
-    # do not overwrite previous files
-    if os.path.isfile(dest_name + '.k.zip'):
-        st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-        os.rename(dest_name + '.k.zip', '{}_{}.k.zip'.format(dest_name, st))
-    skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
+        # do not overwrite previous files
+        if os.path.isfile(dest_name + '.k.zip'):
+            st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            os.rename(dest_name + '.k.zip', '{}_{}.k.zip'.format(dest_name, st))
+        skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
 

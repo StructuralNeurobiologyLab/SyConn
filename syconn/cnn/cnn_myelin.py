@@ -16,10 +16,15 @@ import torch
 from torch import nn
 from torch import optim
 import numpy as np
-
+"""
+Used the following to create the GT:
+    create_h5_from_kzip('/wholebrain/songbird/j0126/GT/myeling_gt/myelin_3_0_8.010.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
+    create_h5_from_kzip('/wholebrain/songbird/j0126/GT/myeling_gt/myelin_2_4_1.007.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
+    create_h5_from_kzip('/wholebrain/songbird/j0126/GT/myeling_gt/myelin_0_0_1.007.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
+"""
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='myelin_unet_gtv3_GN',
+parser.add_argument('-n', '--exp-name', default='myelin_unet_gtv3_BN_smaller',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
@@ -79,7 +84,7 @@ from elektronn3.models.unet import UNet
 
 
 if not args.disable_cuda and torch.cuda.is_available():
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 logger.info(f'Running on device: {device}')
@@ -87,11 +92,11 @@ logger.info(f'Running on device: {device}')
 out_channels = 2
 model = UNet(
     out_channels=out_channels,
-    n_blocks=5,
-    start_filts=48,
-    planar_blocks=(0, 3),
+    n_blocks=4,
+    start_filts=32,
+    planar_blocks=(0, 2),
     activation='relu',
-    normalization='group8',
+    normalization='batch',
 ).to(device)
 
 # Example for a model-compatible input.
@@ -230,10 +235,10 @@ valid_metrics = {
     'val_IoU': metrics.bin_iou,
 }
 
-weight=torch.tensor((0.3, 0.7))
-crossentropy = nn.CrossEntropyLoss(weight)
-dice = DiceLoss(weight=weight)
-criterion = CombinedLoss([crossentropy, dice], weight=[0.5, 0.5], device=device)
+weight = torch.tensor((1, 2))
+# crossentropy = nn.CrossEntropyLoss(weight)
+criterion = DiceLoss(weight=weight)
+# criterion = CombinedLoss([crossentropy, dice], weight=[0.5, 0.5], device=device)
 
 # Create trainer
 trainer = Trainer(
@@ -244,7 +249,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=2,
-    num_workers=2,
+    num_workers=4,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,

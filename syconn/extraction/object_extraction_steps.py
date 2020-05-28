@@ -4,34 +4,33 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-import glob
-import networkx as nx
-import numpy as np
-import os
-import scipy.ndimage
-import shutil
-import itertools
-from collections import defaultdict
-from knossos_utils import knossosdataset, chunky
-
-knossosdataset._set_noprint(True)
 
 from ..mp import batchjob_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics, log_handler, compression
 from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
-from ..proc.image import multi_mop, apply_morphological_operations
+from ..proc.image import apply_morphological_operations, get_aniso_struct
 from .. import global_params
 from ..handler.basics import kd_factory
 from ..reps.rep_helper import find_object_properties
+from .block_processing_C import extract_cs_syntype, relabel_vol
+import glob
+import os
+import itertools
+import shutil
+from collections import defaultdict
+import pickle as pkl
+import networkx as nx
+import scipy.ndimage
+import numpy as np
+import skimage.segmentation
+from knossos_utils import knossosdataset, chunky
 
 try:
-    from vigra.filters import gaussianSmoothing
+    import vigra
+    from vigra.filters import gaussianSmoothing, distanceTransform
+    from vigra.analysis import watershedsNew
 except ImportError as e:
     gaussianSmoothing = None
     log_handler.error('ImportError. Could not import VIGRA. '
@@ -71,18 +70,19 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     ----------
     cset : chunkdataset instance
     filename : str
-        Filename of the prediction in the chunkdataset
+        Filename of the prediction in the ChunkDataset.
     hdf5names: list of str
         List of names/ labels to be extracted and processed from the prediction
-        file
+        file.
     overlap: str or np.array
         Defines the overlap with neighbouring chunks that is left for later
         processing steps; if 'auto' the overlap is calculated from the sigma and
-        the stitch_overlap (here: [1., 1., 1.])
+        the stitch_overlap (here: [1., 1., 1.]) and the number of binary erosion
+        in global_params.config['cell_objects']['extract_morph_op'].
     sigmas: list of lists or None
         Defines the sigmas of the gaussian filters applied to the probability
         maps. Has to be the same length as hdf5names. If None no gaussian filter
-        is applied
+        is applied.
     thresholds: list of float or np.ndarray
         Threshold for cutting the probability map. Has to be the same length as
         hdf5names. If None zeros are used instead (not recommended!)
@@ -91,9 +91,10 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         all chunks are used.
     debug: boolean
         If true multiprocessed steps only operate on one core using 'map' which
-        allows for better error messages
+        allows for better error messages.
     swapdata: boolean
-        If true an x-z swap is applied to the data prior to processing
+        If true an x-z swap is applied to the data prior to processing.
+    prob_kd_path_dict:
     membrane_filename: str
         One way to allow access to a membrane segmentation when processing
         vesicle clouds. Filename of the prediction in the chunkdataset. The
@@ -104,16 +105,17 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         segmentation. The threshold is currently set at 0.4.
     hdf5_name_membrane: str
         When using the membrane_filename this key has to be given to access the
-        data in the saved chunk
+        data in the saved chunk.
     fast_load: boolean
         If true the data of chunk is blindly loaded without checking for enough
         offset to compute the overlap area. Faster, because no neighbouring
         chunk has to be accessed since the default case loads th overlap area
         from them.
     suffix: str
-        Suffix for the intermediate results
+        Suffix for the intermediate results.
+    nb_cpus:
     transform_func: callable
-        Segmentation method which is applied
+        Segmentation method which is applied.
     transform_func_kwargs : dict
         key word arguments for transform_func
     load_from_kd_overlaycubes : bool
@@ -121,6 +123,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     transf_func_kd_overlay :
         Method which is to applied to cube data if `load_from_kd_overlaycubes`
         is True.
+    n_chunk_jobs:
+
 
     Returns
     -------
@@ -152,23 +156,24 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     chunk_list = np.array(chunk_list)[rand_ixs]
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
-    stitch_overlap = np.array([1, 1, 1])
     if overlap is "auto":
-        # # TODO: Check if overlap kwarg can actually be set independent of cset.overlap
-        # if np.any(np.array(overlap) > np.array(cset.overlap)):
-        #     msg = "Untested behavior for overlap kwarg being bigger than cset.overlap." \
-        #           " This might lead to stitching failures."
-        #     log_handler.critical(msg)
-        #     raise ValueError(msg)
-        # Truncation of gaussian kernel is 4 per standard deviation
-        # (per default). One overlap for matching of connected components
         if sigmas is None:
             max_sigma = np.zeros(3)
         else:
             max_sigma = np.array([np.max(sigmas)] * 3)
-        overlap = np.ceil(max_sigma * 4) + stitch_overlap
+        overlap = np.ceil(max_sigma * 4)
+        morph_ops = global_params.config['cell_objects']['extract_morph_op']
+        scaling = global_params.config['scaling']
+        aniso = scaling[2] // scaling[0]
+        n_erosions = 0
+        for k, v in morph_ops.items():
+            v = np.array(v)
+            # factor 2: erodes both sides; aniso: morphology operation kernel is laterally increased by this factor
+            n_erosions = max(n_erosions, 2 * aniso * np.sum(v == 'binary_erosion'))
+        overlap = np.max([overlap, [n_erosions, n_erosions, n_erosions // aniso]], axis=0).astype(np.int)
 
-    # TODO: use chunk IDs instead ob Chunk objects... -> faster submission
+    stitch_overlap = np.max([overlap.copy(), [1, 1, 1]], axis=0)
+
     multi_params = []
     for chunk_sub in chunk_blocks:
         multi_params.append(
@@ -243,8 +248,11 @@ def _gauss_threshold_connected_components_thread(args):
 
     # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'cell': []}
     morph_ops = global_params.config['cell_objects']['extract_morph_op']
-
+    min_seed_vx = global_params.config['cell_objects']['min_seed_vx']
+    scaling = np.array(global_params.config['scaling'])
+    struct = get_aniso_struct(scaling)
     nb_cc_list = []
+
     for chunk in chunks:
         box_offset = np.array(chunk.coordinates) - np.array(overlap)
         size = np.array(chunk.size) + 2*np.array(overlap)
@@ -299,7 +307,6 @@ def _gauss_threshold_connected_components_thread(args):
 
             if np.sum(sigmas[nb_hdf5_name]) != 0:
                 tmp_data = gaussianSmoothing(tmp_data, sigmas[nb_hdf5_name])
-                # tmp_data = scipy.ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
 
             if hdf5_name in ["p4", "vc"] and membrane_filename is not None and hdf5_name_membrane is not None:
                 membrane_data = compression.load_from_h5py(chunk.folder + membrane_filename + ".h5",
@@ -321,10 +328,40 @@ def _gauss_threshold_connected_components_thread(args):
                                     dtype=np.uint8)
 
             if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
-                tmp_data = apply_morphological_operations(tmp_data, morph_ops[hdf5_name])
+                mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
+                                                          mop_kwargs=dict(structure=struct))
+                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1]:
+                    distance = distanceTransform(tmp_data.astype(np.uint32), background=False,
+                                                 pixel_pitch=scaling.astype(np.uint32))
+                    # combine remaining fragments
+                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0], ['binary_closing']).astype(np.uint32)
+                    # remove small fragments and 0; this will also delete objects bigger than min_size as
+                    # this threshold is applied after N binary erosion!
+                    if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
+                        min_size = min_seed_vx[hdf5_name]
+                        ixs, cnt = np.unique(markers, return_counts=True)
+                        m = (ixs != 0) & (cnt < min_size)
+                        ixs_del = np.sort(ixs[m])
+                        ixs_keep = np.sort(ixs[~m])
+                        # set small objects to 0
+                        label_m = {ix_del: 0 for ix_del in ixs_del}
+                        # fill "holes" in ID space with to-be-kept object IDs
+                        ii = len(ixs_keep) - 1
+                        for ix_del in ixs_del:
+                            if (ix_del > ixs_keep[ii]) or (ixs_keep[ii] == 0) or (ii < 0):
+                                break
+                            label_m[ixs_keep[ii]] = ix_del
+                            ii -= 1
+                        # in-place modification of markers array
+                        relabel_vol(markers, label_m)
 
-            this_labels_data, nb_cc = scipy.ndimage.label(tmp_data)
-            nb_cc_list.append([chunk.number, hdf5_name, nb_cc])
+                    this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
+                    max_label = np.max(this_labels_data)
+                else:
+                    this_labels_data, max_label = scipy.ndimage.label(mop_data)
+            else:
+                this_labels_data, max_label = scipy.ndimage.label(tmp_data)
+            nb_cc_list.append([chunk.number, hdf5_name, max_label])
             labels_data.append(this_labels_data)
 
         h5_fname = chunk.folder + filename + "_connected_components%s.h5" % suffix
@@ -362,6 +399,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         Suffix for the intermediate results
     n_chunk_jobs: int
         Number of total jobs.
+    nb_cpus: int
     """
 
     if n_chunk_jobs is None:
@@ -413,7 +451,7 @@ def _make_unique_labels_thread(func_args):
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
-                     overlap, debug, suffix="", nb_cpus=None, n_erosion=0,
+                     overlap, debug, suffix="", nb_cpus=None,
                      overlap_thresh=0, n_chunk_jobs=None):
     """
     Creates a stitch list for the overlap region between chunks
@@ -443,9 +481,6 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         Number of cores used per worker.
     n_chunk_jobs: int
         Number of total jobs.
-    n_erosion : int
-        Number of erosions applied to the segmentation of unique_components0 to avoid
-        segmentation artefacts caused by start location dependency in chunk data array.
     overlap_thresh : float
                 Overlap fraction of object in different chunks to be considered stitched.
                 If zero this behavior is disabled.
@@ -461,8 +496,9 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
     multi_params = []
 
     for i_job in range(len(chunk_blocks)):
-        multi_params.append([cset.path_head_folder, chunk_blocks[i_job], filename, hdf5names, stitch_overlap, overlap,
-                             suffix, chunk_list, n_erosion, overlap_thresh])
+        multi_params.append([cset.path_head_folder, chunk_blocks[i_job], filename, hdf5names,
+                             stitch_overlap, overlap,
+                             suffix, chunk_list, overlap_thresh])
 
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
@@ -508,8 +544,7 @@ def _make_stitch_list_thread(args):
     overlap = args[5]
     suffix = args[6]
     chunk_list = args[7]
-    n_erosion = args[8]
-    overlap_thresh = args[9]
+    overlap_thresh = args[8]
 
     map_dict = {}
     for nb_hdf5_name in range(len(hdf5names)):
@@ -520,16 +555,6 @@ def _make_stitch_list_thread(args):
         cc_data_list = compression.load_from_h5py(chunk.folder + filename +
                                                   "_unique_components%s.h5" % suffix, hdf5names)
 
-        if n_erosion > 0:
-            # erode segmentation once to avoid start location dependent segmentation artifacts
-            struct = np.zeros((3, 3, 3), dtype=np.bool)
-            mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]], dtype=np.bool)
-            struct[:, :, 1] = mask  # only perform erosion in xy plane
-            for kk in range(len(cc_data_list)):
-                cc_data_list[kk] = multi_mop(scipy.ndimage.binary_erosion,
-                                             cc_data_list[kk], n_iters=n_erosion,
-                                             background_only=True, use_find_objects=True,
-                                             mop_kwargs={'structure': struct}, verbose=False)
         # TODO: optimize get_neighbouring_chunks
         neighbours, pos = cset.get_neighbouring_chunks(chunk, chunklist=chunk_list,
                                                        con_mode=7)
@@ -546,12 +571,6 @@ def _make_stitch_list_thread(args):
                 cc_data_list_to_compare = \
                     compression.load_from_h5py(
                         compare_chunk.folder + filename + "_unique_components%s.h5" % suffix, hdf5names)
-                if n_erosion > 0:
-                    # erode segmentation once to avoid start location dependent segmentation artifacts
-                    for kk in range(len(cc_data_list_to_compare)):
-                        cc_data_list_to_compare[kk] = multi_mop(scipy.ndimage.binary_erosion, cc_data_list_to_compare[kk],
-                                                                n_iters=n_erosion, use_find_objects=True,
-                                                                mop_kwargs={'structure': struct}, verbose=False)
 
                 cc_area = {}
                 cc_area_to_compare = {}
@@ -598,9 +617,6 @@ def _make_stitch_list_thread(args):
                                     map_dict[hdf5_name].add(pair)
                                 else:
                                     ignore_ids.add(pair)
-                                # msg = "(stitch ID 1, stitch ID 2), stitch location 1, stitch location 2:" \
-                                #       " {}. Matching vx {} (abs:) {:.2f}%".format((pair, c1[0], c2[0]), match_vx, match_vx_rel)
-                                # log_handler.debug(msg)
                             else:
                                 map_dict[hdf5_name].add(pair)
     for k, v in map_dict.items():

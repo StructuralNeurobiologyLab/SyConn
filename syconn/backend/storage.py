@@ -5,18 +5,19 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
-import numpy as np
-from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, Dict, List
 from ..backend import log_backend
+from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+from ..handler.basics import kd_factory
+from ..backend import StorageClass
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
 
-from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
-from ..handler.basics import kd_factory
-from ..backend import StorageClass
+from collections import defaultdict
+from typing import Any, Tuple, Optional, Union, Dict, List
+
+import numpy as np
 
 
 class AttributeDict(StorageClass):
@@ -96,7 +97,7 @@ class VoxelStorageL(StorageClass):
         """
 
         Args:
-            item ():
+            item:
 
         Returns:
             Decompressed voxel masks with corresponding offsets.
@@ -212,7 +213,7 @@ class VoxelStorageDyn(CompressedStorage):
     object ID in the segmentation.
 
     Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
-    manipulation of the object's bounding box. In this case `voxeldata_path`
+    manipulation of the object's bounding boxes. In this case `voxeldata_path`
     has to be given or already be existent in loaded dictionary. Expects the
     source path of a KnossoDataset (see knossos_utils), like:
 
@@ -235,12 +236,12 @@ class VoxelStorageDyn(CompressedStorage):
                  voxeldata_path: Optional[str] = None, **kwargs):
         super().__init__(inp, **kwargs)
         self.voxel_mode = voxel_mode
-        if not 'meta' in self._dc_intern:
+        if 'meta' not in self._dc_intern:
             # add meta information about underlying voxel data set to internal dictionary
             self._dc_intern['meta'] = dict(voxeldata_path=voxeldata_path)
-        if not 'size' in self._dc_intern:
+        if 'size' not in self._dc_intern:
             self._dc_intern['size'] = defaultdict(int)
-        if not 'rep_coord' in self._dc_intern:
+        if 'rep_coord' not in self._dc_intern:
             self._dc_intern['rep_coord'] = dict()
         if voxeldata_path is not None:
             old_p = self._dc_intern['meta']['voxeldata_path']
@@ -277,7 +278,7 @@ class VoxelStorageDyn(CompressedStorage):
                 curr_mask = self.voxeldata.load_seg(
                     size=size, offset=off, mag=1) == item
                 res.append(curr_mask.swapaxes(0, 2))
-            return res, bbs[:, 0]  # N, 3 --> all offset
+            return res, bbs[:, 0]  # (N, 3 --> all offset
         else:
             return super().__getitem__(item)
 
@@ -305,7 +306,17 @@ class VoxelStorageDyn(CompressedStorage):
             log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
         self._dc_intern['rep_coord'][item] = value
 
-    def get_voxeldata(self, item):
+    def get_voxeldata(self, item: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        """
+        Get the object binary mask as list of 3D cubes with the respective offsets
+        (in voxels). All in xyz.
+
+        Args:
+            item: Object ID.
+
+        Returns:
+            List of 3D binary masks and offsets (in voxels; xyz).
+        """
         old_vx_mode = self.voxel_mode
         self.voxel_mode = True
         if self._dc_intern['meta']['voxeldata_path'] is None:
@@ -319,7 +330,35 @@ class VoxelStorageDyn(CompressedStorage):
         self.voxel_mode = old_vx_mode
         return res
 
-    def get_boundingdata(self, item):
+    def get_voxel_data_cubed(self, item: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Get the object binary mask as dense 3D array (xyz).
+
+        Args:
+            item: Object ID.
+
+        Returns:
+            3D mask, cube offset in voxels (xyz).
+        """
+        bin_arrs, block_offsets = self[item]
+        min_off = np.min(block_offsets, axis=0)
+        size = np.max(block_offsets, axis=0) - min_off
+        block_offsets -= min_off
+        voxel_arr = np.zeros(size, dtype=np.uint8)
+        for bin_arr, off in zip(bin_arrs, block_offsets):
+            sh = bin_arr.shape
+            voxel_arr[off[0]:sh[0], off[1]:sh[1], off[2]:sh[2]] = bin_arr
+        return voxel_arr, min_off
+
+    def get_boundingdata(self, item: int) -> List[np.ndarray]:
+        """
+        Get the object bounding boxes.
+        Args:
+            item: Object ID.
+
+        Returns:
+            List of bounding boxes (in voxels; xyz).
+        """
         old_vx_mode = self.voxel_mode
         self.voxel_mode = False
         res = self[item]
@@ -328,7 +367,7 @@ class VoxelStorageDyn(CompressedStorage):
 
     def keys(self):
         # do not return 'meta' and other helper items in self._dc_intern, only object IDs
-        # TODO: make this a generator
+        # TODO: make this a generator, check usages beforehand!
         obj_elements = list([k for k in self._dc_intern.keys() if (type(k) is str and k.isdigit())
                              or (type(k) is not str)])
         return obj_elements
@@ -346,7 +385,7 @@ class MeshStorage(StorageClass):
         self.load_colarr = load_colarr
         super(MeshStorage, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item: int) -> List[np.ndarray]:
+    def __getitem__(self, item: Union[int, str]) -> List[np.ndarray]:
         """
 
         Parameters

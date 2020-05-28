@@ -4,6 +4,16 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+
+from ..extraction import log_extraction
+from ..handler.basics import write_obj2pkl, load_pkl2obj
+from .. import global_params
+
+import os
+import time
+import shutil
+from pickle import UnpicklingError
+
 try:
     from lz4.block import compress, decompress
 except ImportError:
@@ -16,14 +26,6 @@ except ImportError:
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
 
-import os
-import time
-import shutil
-from pickle import UnpicklingError
-
-from ..extraction import log_extraction
-from ..handler.basics import write_obj2pkl, load_pkl2obj
-from .. import global_params
 __all__ = ['FSBase', 'BTBase']
 # TODO: adapt to new class interface all-over syconn
 

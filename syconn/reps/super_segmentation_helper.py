@@ -4,28 +4,9 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
-from typing import Dict, List, Union, Iterable, Optional, Tuple, TYPE_CHECKING
 import copy
 import os
-from collections import Counter
-from multiprocessing.pool import ThreadPool
-import networkx as nx
-from numba import jit
-import numpy as np
-import scipy
 import time
-import tqdm
-import scipy.ndimage
-from scipy import spatial
-from knossos_utils.knossosdataset import KnossosDataset
-from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
-    load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
-from collections.abc import Iterable
-try:
-    from knossos_utils import mergelist_tools
-except ImportError:
-    from knossos_utils import mergelist_tools_fallback as mergelist_tool
 
 from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
 from . import segmentation
@@ -40,13 +21,31 @@ from .. import global_params
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
 from ..proc.graphs import create_graph_from_coords
-if TYPE_CHECKING:
-    from . import super_segmentation
-    from torch.nn import Module
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
+from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING
+if TYPE_CHECKING:
+    from . import super_segmentation
+    from torch.nn import Module
+
+from collections import Counter
+from multiprocessing.pool import ThreadPool
+import networkx as nx
+from numba import jit
+import numpy as np
+import scipy
+import scipy.ndimage
+from scipy import spatial
+from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
+    load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
+from collections.abc import Iterable
+try:
+    from knossos_utils import mergelist_tools
+except ImportError:
+    from knossos_utils import mergelist_tools_fallback as mergelist_tool
+
 from skimage.morphology import watershed
 from skimage.feature import peak_local_max
 from scipy import ndimage
@@ -114,7 +113,7 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
-                         model: 'Module', nb_views: int = 20, use_syntype=True,
+                         model: 'Module', nb_views_model: int = 20, use_syntype=True,
                          overwrite: bool = False, pred_key_appendix="",
                          da_equals_tan=True):
     """
@@ -128,7 +127,7 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     Args:
         sso: SuperSegmentationObject
         model: nn.Module
-        nb_views: int
+        nb_views_model: int
         use_syntype: bool
         overwrite:  bool
              Use the type of the pre-synapses.
@@ -143,7 +142,7 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     if not overwrite and pred_key in sso.attr_dict:
         return
     from ..handler.prediction import naive_view_normalization_new
-    inp_d = sso_views_to_modelinput(sso, nb_views)
+    inp_d = sso_views_to_modelinput(sso, nb_views_model)
     inp_d = naive_view_normalization_new(inp_d)
     if global_params.config.syntype_available and use_syntype:
         synsign_ratio = np.array([[syn_sign_ratio_celltype(sso, comp_types=[1, ]),
@@ -153,7 +152,7 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     else:
         res = model.predict_proba(inp_d)
 
-    # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`
+    # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`, `celltype_of_sso_nocache`
     if da_equals_tan:
         # accumulate evidence for DA and TAN
         res[:, 1] += res[:, 6]
@@ -162,7 +161,7 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
         # INT is now at index 6 -> label 6 is INT
 
     clf = np.argmax(res, axis=1)
-    if np.max(clf) > 7:
+    if np.max(clf) >= 7:
         raise ValueError('Unknown cell type predicted.')
     major_dec = np.zeros(7)
     for ii in range(len(major_dec)):
@@ -842,8 +841,11 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
             ssv.skeleton["edges"] = edge_list
             ssv.skeleton["diameters"] = np.ones(len(locs))
         if map_myelin:
-            ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
-            majorityvote_skeleton_property(ssv, prop_key='myelin')
+            try:
+                ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
+                majorityvote_skeleton_property(ssv, prop_key='myelin')
+            except:
+                raise()
         ssv.save_skeleton()
         if dest_path is not None:
             ssv.save_skeleton_to_kzip(dest_path=dest_path)
@@ -950,16 +952,14 @@ def sparsify_skeleton_fast(g: nx.Graph, scal: Optional[np.ndarray] = None,
     Reduces nodes in the skeleton.
 
     Args:
-        g: networkx graph of the sso skel
-        scal: np.array
-        dot_prod_thresh: float
-            the 'straightness' of the edges
-        max_dist_thresh: int
-            maximum distance desired between every node
-        min_dist_thresh: int
-            minimum distance desired between every node
+        g: networkx graph of the sso skel.
+        scal: Scale factor; equal to the physical voxel size (nm).
+        dot_prod_thresh: the 'straightness' of the edges.
+        max_dist_thresh: Maximum distance desired between every node.
+        min_dist_thresh: Minimum distance desired between every node.
+        verbose: Log additional output.
 
-    Returns: sso containing the sparsed skeleton
+    Returns: sso containing the sparse skeleton.
 
     """
 
@@ -2045,9 +2045,10 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
 
 
-def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
-                            comp_window, pred_key_appendix="", verbose=False,
-                            overwrite=True, use_syntype=True):
+def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_model=20,
+                            pred_key_appendix="", verbose=False,
+                            overwrite=True, use_syntype=True,
+                            da_equals_tan=True):
     """
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file
@@ -2058,31 +2059,25 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     Args:
         sso:
         model:
-        ws: Tuple[int]
-            Window size in pixels [y, x]
-        nb_views_render: int
-            Number of views rendered at each rendering location.
-        nb_views_model: int
-            bootstrap sample size of view locations for model prediction
-        comp_window: float
-            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
-        pred_key_appendix: str
-        verbose: bool
-            Adds progress bars for view generation.
-        overwrite: bool
-        use_syntype: bool
-            Use type of presynaptic synapses.
+        ws: Window size in pixels [y, x]
+        nb_views: Number of views rendered at each rendering location.
+        nb_views_model: bootstrap sample size of view locations for model prediction
+        comp_window: Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        pred_key_appendix:
+        verbose: Adds progress bars for view generation.
+        overwrite:
+        use_syntype: Use type of presynaptic synapses.
+        da_equals_tan:
 
     Returns:
 
     """
-    # TODO: add new cell type labels
     sso.load_attr_dict()
-    pred_key = "celltype_cnn_e3" + pred_key_appendix  # TODO: add appendix functionality also to `predict_celltype_sso`
+    pred_key = "celltype_cnn_e3" + pred_key_appendix
     if not overwrite and pred_key in sso.attr_dict:
         return
 
-    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views_render,
+    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
@@ -2094,12 +2089,14 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'celltype_of_sso_nocache'.".format(sso)
 
-    tmp_view_key = 'tmp_views' + pred_key_appendix # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
+    tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
         views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
 
     from ..handler.prediction import naive_view_normalization_new
+    if verbose:
+        log_reps.debug('Finished rendering. Starting cell type prediction.')
     inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
     inp_d = naive_view_normalization_new(inp_d)
     if use_syntype:
@@ -2109,17 +2106,33 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
         res = model.predict_proba((inp_d, synsign_ratio), bs=40)
     else:
         res = model.predict_proba(inp_d, bs=40)
+    if verbose:
+        log_reps.debug('Finished prediction.')
+    # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`, `predict_sso_celltype`
+    if da_equals_tan:
+        # accumulate evidence for DA and TAN
+        res[:, 1] += res[:, 6]
+        # remove TAN in proba array
+        res = np.delete(res, [6], axis=1)
+        # INT is now at index 6 -> label 6 is INT
+
     clf = np.argmax(res, axis=1)
-    ls, cnts = np.unique(clf, return_counts=True)
-    pred = ls[np.argmax(cnts)]
-    # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
+    if np.max(clf) >= 7:
+        raise ValueError('Unknown cell type predicted.')
+    major_dec = np.zeros(7)
+    for ii in range(len(major_dec)):
+        major_dec[ii] = np.sum(clf == ii)
+    major_dec /= np.sum(major_dec)
+    pred = np.argmax(major_dec)
+    sso.attr_dict[pred_key] = pred
+    sso.attr_dict[f"{pred_key}_probas"] = res
     sso.save_attributes([pred_key], [pred])
-    sso.save_attributes([pred_key + '_probas'], [res])
+    sso.save_attributes([f"{pred_key}_probas"], [res])
 
 
-def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
-                                  comp_window, pred_key_appendix="", verbose=False,
-                                  overwrite=True):
+def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],
+                                  nb_views: int, comp_window: int, pred_key_appendix: str = "",
+                                  verbose: bool = False, overwrite: bool = True):
     """
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -2132,9 +2145,7 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
         sso:
         model:
         ws: Window size in pixels [y, x]
-        nb_views_render: Number of views rendered at each rendering location.
-        nb_views_model: bootstrap sample size of view locations for model
-            prediction.
+        nb_views: Number of views rendered at each rendering location.
         comp_window: Physical extent in nm of the view-window along y (see `ws`
             to infer pixel size).
         pred_key_appendix:
@@ -2146,14 +2157,13 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     sso.load_attr_dict()
     if not overwrite and pred_key in sso.attr_dict:
         return
-    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views_render,
+    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
     # this cache is only in-memory, and not file system cache
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
-    # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
         rendering_locs = generate_rendering_locs(verts,
@@ -2391,13 +2401,13 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
                                     global_params.config['compartments']['dist_axoness_averaging'])
     if len(ssv.syn_ssv) == 0:
         return -1
-    syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv],
-                                   attr_keys=[pred_key_ax, ])[0]
+    syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv], attr_keys=[pred_key_ax, ])[0]
     # convert boutons to axon class
     syn_axs[syn_axs == 3] = 1
     syn_axs[syn_axs == 4] = 1
     syn_signs = []
     syn_sizes = []
+    # TODO: extend load_so_attr_bulk to arbitrary attributes and use that here, also include rep_coord (see above)
     for syn_ix, syn in enumerate(ssv.syn_ssv):
         if syn_axs[syn_ix] not in comp_types:
             continue
@@ -2507,13 +2517,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
-        labels[labels != 1] = 0
+        labels[labels != 1] = 0  # only keep spine head locations
         labels, nb_obj = ndimage.label(labels)
         c = c - offset
         max_id = 1
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0]-10):(c[0]+11), (c[1]-10):(c[1]+11),
+            ls = labels[(c[0]-20):(c[0]+21), (c[1]-20):(c[1]+21),
                  (c[2]-10):(c[2]+11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
@@ -2529,12 +2539,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 nn_kdt = spatial.cKDTree(coords * sso.scaling)
                 _, nn_id = nn_kdt.query([(c + offset) * sso.scaling])
                 max_id = ids[nn_id[0]]
-                log_reps.warn(f'SSO {sso.id} contained erroneous volume'
-                              f' to spine head assignment. Found no spine head '
-                              f'cluster within 10x10x10 voxel subcube at '
-                              f'{c + offset} of syn_ssv with ID={ssv_id}, expected 1. '
-                              f'Fall-back is using the volume of the closest spine head cluster '
-                              f'via nearest-neighbor.')
             else:
                 max_id = ids[np.argmax(cnts)]
 
@@ -2551,7 +2555,7 @@ def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):
         dest_path: Path to k.zip.
         sso: Cell object.
     """
-    sv_edges = sso.load_edgelist()
+    sv_edges = sso.load_sv_edgelist()
     anno = SkeletonAnnotation()
     anno.scaling = sso.scaling
     sd = sso.get_seg_dataset('sv')

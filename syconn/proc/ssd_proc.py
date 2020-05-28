@@ -4,15 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from typing import Iterable, List, Tuple
-import numpy as np
-from collections import Counter
-from typing import Optional, Union, Callable, List, Dict
-from logging import Logger
 from .. import global_params
 from . import log_proc
 from ..handler import basics
@@ -22,6 +13,16 @@ from ..reps.super_segmentation import SuperSegmentationObject, \
     SuperSegmentationDataset
 from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
+
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+from typing import Iterable, Tuple
+import numpy as np
+from collections import Counter
+from typing import Optional, List
+from logging import Logger
 
 
 def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
@@ -289,20 +290,19 @@ def map_synssv_objects_thread(args):
     ssv_partners = ssv_partners[syn_prob > syn_threshold]
 
     for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, False)
+        # enable of SegmentationObjects, including their meshes -> reuse in typedsyns2mesh call
+        ssv = ssd.get_super_segmentation_object(ssv_id, caching=True)
         ssv.load_attr_dict()
 
         curr_synssv_ids = synssv_ids[np.in1d(ssv_partners[:, 0], ssv.id)]
         curr_synssv_ids = np.concatenate([curr_synssv_ids,
                                           synssv_ids[np.in1d(ssv_partners[:, 1], ssv.id)]])
-        # key has to be the same as the SegmentationDataset name to enable automatic mesh retrieval in syconn/gate/server.py
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
         # cache syn_ssv mesh and typed meshes if available
-        # TODO: this takes long for large data sets
-        # ssv.load_mesh('syn_ssv')
-        # if global_params.config.syntype_available:
-        #     ssv.typedsyns2mesh()
+        ssv.load_mesh('syn_ssv')
+        if global_params.config.syntype_available:
+            ssv.typedsyns2mesh()
 
 
 def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,

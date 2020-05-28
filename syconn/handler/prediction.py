@@ -7,12 +7,16 @@
 
 # import here, otherwise it might fail if it is imported after importing torch
 # see https://github.com/pytorch/pytorch/issues/19739
-import open3d as o3d
+
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 from ..handler.config import initialize_logging
 from ..reps import log_reps
+from ..proc.image import apply_morphological_operations
 from ..mp import batchjob_utils as qu
 from ..handler.basics import chunkify
-
 from ..handler import log_handler, log_main, basics
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
@@ -20,14 +24,14 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
 from .. import global_params
 
 import re
-import numpy as np
 import os
 import sys
 import time
 import tqdm
 from logging import Logger
 import shutil
-from typing import Iterable, Union, Optional, Any, Tuple, Callable
+import numpy as np
+from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -36,7 +40,6 @@ from scipy.stats import entropy
 from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
 import torch
 
 
@@ -44,7 +47,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
                       mag=1):
     """
     Loads ground truth from zip file, generated with Knossos. Corresponding
-    dataset config file is locatet at kd_p.
+    dataset config file is located at kd_p.
 
     Args:
         zip_fname: str
@@ -58,18 +61,19 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         verbose: bool
         mag: int
             Data mag. level.
+
     Returns: np.array, np.array
         raw data (float32) (multiplied with 1/255.), label data (uint16)
 
     """
     if type(kd_p) is str or type(kd_p) is bytes:
         kd_p = [kd_p]
-    bb = parse_movement_area_from_zip(zip_fname)
-    offset, size = bb[0], bb[1] - bb[0]
     raw_data = []
     label_data = []
     for curr_p in kd_p:
         kd = basics.kd_factory(curr_p)
+        bb = kd.get_movement_area(zip_fname)
+        offset, size = bb[0], bb[1] - bb[0]
         scaling = np.array(kd.scale, dtype=np.int)
         if np.isscalar(raw_data_offset):
             raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
@@ -84,8 +88,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
                           offset=(offset // mag - raw_data_offset) * mag,
                           mag=mag).swapaxes(0, 2)
         raw_data.append(raw[None, ])
-        # TODO: use load_kzip_seg
-        label = kd._load_kzip_seg(zip_fname, offset, size, mag=mag, apply_mergelist=False).swapaxes(0, 2)
+        label = kd.load_kzip_seg(zip_fname, mag=mag).swapaxes(0, 2)
         label = label
         label_data.append(label[None, ])
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
@@ -305,8 +308,9 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
                         foreground_ids: Optional[Iterable[int]] = None,
                         overwrite: bool = True, raw_data_offset: int = 75,
                         debug: bool = False, mag: int = 1,
-                        squeeze_data: int = False,
-                        target_labels: Optional[Iterable[int]] = None):
+                        squeeze_data: int = True,
+                        target_labels: Optional[Iterable[int]] = None,
+                        apply_mops_seg: Optional[List[str]] = None):
     """
     Create .h5 files for ELEKTRONN (zyx) input. Only supports binary labels
     (0=background, 1=foreground).
@@ -344,7 +348,10 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
         target_labels: If set, `foreground_ids` must also be set. Each ID in
             `foreground_ids` will be mapped to the corresponding label in
             `target_labels`.
+        apply_mops_seg: List of string identifiers for ndimage morphological operations.
     """
+    if not squeeze_data and apply_mops_seg is not None:
+        raise ValueError('Data might have axis with length one if squeeze_data=False.')
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
     fname, ext = os.path.splitext(zip_fname)
@@ -373,13 +380,14 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
         print("Foreground IDs not assigned. Inferring from "
               "'mergelist.txt' in k.zip.:", foreground_ids)
     create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug,
-                      target_labels=target_labels)
+                      target_labels=target_labels, apply_mops_seg=apply_mops_seg)
 
 
 def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
                       foreground_ids: Optional[Iterable[int]] = None,
                       target_labels: Optional[Iterable[int]] = None,
-                      debug: bool = False):
+                      debug: bool = False,
+                      apply_mops_seg: Optional[List[str]] = None):
     """
     Create .h5 files for ELEKTRONN input from two arrays.
     Only supports binary labels (0=background, 1=foreground). E.g. for creating
@@ -400,9 +408,7 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
             be mapped to the corresponding label in `target_labels`.
         debug: bool
             will store labels and raw as uint8 ranging from 0 to 255
-
-    Returns:
-
+        apply_mops_seg: List of string identifiers for ndimage morphological operations.
     """
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
@@ -411,9 +417,12 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     label = binarize_labels(label, foreground_ids, target_labels=target_labels)
     label = xyz2zxy(label)
     raw = xyz2zxy(raw)
+    if apply_mops_seg is not None:
+        label = apply_morphological_operations(label, morph_ops=apply_mops_seg)
+    label = label.astype(np.uint16)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label (after mapping):", label.shape, label.dtype, label.min(), label.max())
-    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
+    print("-----------------\nGT Summary:\n%s\n" % str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
     if debug:
@@ -544,8 +553,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         chunks = ch_dc.values()[i::n]
     else:
         chunks = ch_dc.values()
-    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks),
-                                                            gpu_id))
+    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks), gpu_id))
 
     if not overwrite:
         for chunk in chunks:
@@ -576,8 +584,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        #overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
-                        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
+                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        cube_of_interest: Optional[Tuple[np.ndarray]] = None,
+                        overwrite: bool = False):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -622,6 +631,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
+        overwrite: Overwrite existing KDs.
 
     """
     # TODO: switch to pyk confs
@@ -660,10 +670,14 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                   box_coords=cube_of_interest[0], list_of_coords=[],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
-    # init target KnossosDatasets:
+    # init target KnossosDatasets
     target_kd_path_list = [target_path+'/{}/'.format(tn) for tn in target_names]
     for path in target_kd_path_list:
         if os.path.isdir(path):
+            if not overwrite:
+                msg = f'Found existing KD at "{path}" but overwrite is set to False.'
+                log.error(msg)
+                raise ValueError(msg)
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
     for path in target_kd_path_list:
@@ -681,8 +695,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                     for ch_ids in multi_params]
     log.info('Started dense prediction of {} in {:d} chunk(s).'.format(
         ", ".join(target_names), len(chunk_ids)))
-    n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
-        'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
+    n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if\
+        qu.batchjob_enabled() else global_params.config['ncores_per_node']
+
     qu.batchjob_script(multi_params, "predict_dense",
                        n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
                        additional_flags="--gres=gpu:1")
@@ -763,8 +778,7 @@ def dense_predictor(args):
                           f'{tile_shape} to reduce memory requirements.')
             ix = (ix + 1) % 3  # permute spatial dimension which is reduced
 
-    # predict Chunks:
-    print(f'Starting prediction of {len(chunk_ids)} Chunks with size {chunk_size}.')
+    # predict Chunks
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
@@ -774,21 +788,13 @@ def dense_predictor(args):
 
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
-        start = time.time()
         raw = kd.load_raw(size=size*mag, offset=coords*mag, mag=mag)
-        print(f'loading took {time.time()-start}. {raw.shape}')
 
-        start = time.time()
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
                                       is_zyx=True, return_zyx=True)
 
-        dt = time.time() - start
-        print(f'Finished prediction after {dt}s, That is'
-              f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s. {pred.shape}')
-
         # slice out the original input volume along ZYX, i.e. the last three axes
         pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
-        # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
@@ -820,8 +826,6 @@ def dense_predictor(args):
                     offset=ch.coordinates * mag, data=data, data_mag=mag,
                     mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
-        # dt = time.time() - start
-        # print(f'Finished writing data after {dt}s.')
 
 
 def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False,
@@ -831,6 +835,8 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False
     Args:
         raw: The input data array in CXYZ.
         predictor: The model which performs the inference. Requires ``predictor.predict``.
+        is_zyx:
+        return_zyx:
 
     Returns:
         The inference result in CXYZ as uint8 between 0..255.
@@ -839,7 +845,7 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False
     if not is_zyx:
         raw = xyz2zyx(raw)
     # predict: pred of the form (N, C, [D,], H, W)
-    pred = predictor.predict(raw[None, None])
+    pred = predictor.predict(raw[None, None]).numpy()
     pred = np.array(pred[0]) * 255  # remove N-axis
     pred = pred.astype(np.uint8)
     if not return_zyx:
@@ -946,101 +952,12 @@ def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
         ch.save_chunk(raw, "pred", "raw", overwrite=False)
 
 
-class NeuralNetworkInterface(object):
-    """
-    Inference class for elektronn2 models, support will end at some point.
-    Switching to 'InferenceModel' in elektronn3.model.base in the long run.
-    """
-    def __init__(self, model_path, arch='', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
-                 normalize_data=False, normalize_func=None, init_gpu=None):
-        self.imposed_batch_size = imposed_batch_size
-        self.channels_to_load = channels_to_load
-        self.arch = arch
-        self._path = model_path
-        self._fname = os.path.split(model_path)[1]
-        self.nb_labels = nb_labels
-        self.normal = normal
-        self.normalize_data = normalize_data
-        self.normalize_func = normalize_func
-
-        if init_gpu is None:
-            init_gpu = 'auto'
-        from elektronn2.config import config as e2config
-        if e2config.device is None:
-            from elektronn2.utils.gpu import initgpu
-            initgpu(init_gpu)
-        import elektronn2
-        elektronn2.logger.setLevel("ERROR")
-        from elektronn2.neuromancer.model import modelload
-        self.model = modelload(model_path, replace_bn='const',
-                               imposed_batch_size=imposed_batch_size)
-        self.original_do_rates = self.model.dropout_rates
-        self.model.dropout_rates = ([0.0, ] * len(self.original_do_rates))
-
-    def predict_proba(self, x, verbose=False):
-        x = x.astype(np.float32)
-        if self.normalize_data:
-            if self.normalize_func is not None:
-                x = self.normalize_func(x)
-            else:
-                x = naive_view_normalization(x)
-        bs = self.imposed_batch_size
-        # using floor now and remaining samples are treated later
-        if self.arch == "rec_view":
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(int(np.floor(x.shape[1] / bs)))]
-            proba = np.ones((x.shape[1], 4, self.nb_labels))
-        elif self.arch == "triplet":
-            x = views2tripletinput(x)
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(int(np.floor(len(x) / bs)))]
-            # nb_labels represents latent space dim.; 3 -> view triplet
-            proba = np.ones((len(x), self.nb_labels, 3))
-        else:
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(int(np.floor(len(x) / bs)))]
-            proba = np.ones((len(x), self.nb_labels))
-        if verbose:
-            cnt = 0
-            start = time.time()
-            pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
-                             unit='it', unit_scale=True, dynamic_ncols=False)
-        for b in batches:
-            if verbose:
-                sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
-                sys.stdout.flush()
-                cnt += 1
-                pbar.update()
-            x_b = x[b]
-            proba[b] = self.model.predict(x_b)[None, ]
-        overhead = len(x) % bs
-        # TODO: add proper axis handling, maybe introduce axistags
-        if overhead != 0:
-            new_x_b = x[-overhead:]
-            if len(new_x_b) < bs:
-                add_shape = list(new_x_b.shape)
-                add_shape[0] = bs - len(new_x_b)
-                new_x_b = np.concatenate((np.zeros((add_shape),
-                                                   dtype=np.float32), new_x_b))
-            proba[-overhead:] = self.model.predict(new_x_b)[-overhead:]
-        if verbose:
-            end = time.time()
-            sys.stdout.write("\r%0.2f\n" % 1.0)
-            sys.stdout.flush()
-            print("Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
-                  (len(x), end-start, (end-start)/len(x)))
-            pbar.close()
-        if self.arch == "triplet":
-            return proba[..., 0]
-        return proba
-
-
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
-    m = torch.jit.load(global_params.config.mpath_glia_e3)
-    m = InferenceModel(m, normalize_func=naive_view_normalization_new)
+    # m = torch.jit.load(global_params.config.mpath_glia_e3)
+    # m = InferenceModel(m, normalize_func=naive_view_normalization_new)
+    m = InferenceModel(global_params.config.mpath_glia_e3, normalize_func=naive_view_normalization_new)
     return m
 
 
@@ -1058,7 +975,15 @@ def get_celltype_model_e3():
         log_main.error(msg)
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_celltype_e3)
-    m = InferenceModel(m, bs=40, multi_gpu=False)
+    m = InferenceModel(m, bs=40, multi_gpu=True)
+    # m = InferenceModel(global_params.config.mpath_celltype_e3, bs=40)
+    return m
+
+
+def get_semseg_spiness_model_pts():
+    from elektronn3.models.base import InferenceModel
+    m = torch.jit.load(global_params.config.mpath_glia_e3)
+    m = InferenceModel(m)
     return m
 
 
@@ -1073,6 +998,7 @@ def get_semseg_spiness_model():
     path = global_params.config.mpath_spiness
     m = torch.jit.load(path)
     m = InferenceModel(m)
+    # m = InferenceModel(path)
     m._path = path
     return m
 
@@ -1088,6 +1014,7 @@ def get_semseg_axon_model():
     path = global_params.config.mpath_axonsem
     m = torch.jit.load(path)
     m = InferenceModel(m)
+    # m = InferenceModel(path)
     m._path = path
     return m
 
@@ -1103,6 +1030,7 @@ def get_tripletnet_model_e3():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_tnet)
     m = InferenceModel(m)
+    # m = InferenceModel(global_params.config.mpath_tnet)
     return m
 
 
@@ -1122,6 +1050,7 @@ def get_myelin_cnn():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_myelin)
     m = Predictor(m)
+    # m = Predictor(global_params.config.mpath_myelin)
     return m
 
 

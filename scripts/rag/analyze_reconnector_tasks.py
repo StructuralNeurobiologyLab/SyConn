@@ -10,7 +10,8 @@ from knossos_utils import skeleton
 from matplotlib import pyplot as plt
 from collections import defaultdict
 
-from syconn.proc import reconnect_proofreading as repro
+from syconn.analysis import reconnect_proofreading as repro
+
 
 def analyze_all_j0126_reconnector_tasks():
     path_to_final_tasks = 'D:/j0126_analysis/reconnect_tasks_batch_1_2_done/j0126_reconnect_tc/'

@@ -48,8 +48,10 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
     from sklearn.preprocessing import label_binarize
     from scipy.spatial import cKDTree
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    ssv_ids = np.random.choice(ssd.ssv_ids, 200, replace=False)
-    ssv_params = [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids]
+    ixs = np.random.choice(len(ssd.ssv_ids), 1000, replace=False)
+    ssv_ids = ssd.ssv_ids[ixs]
+    sizes = ssd.load_cached_data('size')[ixs]
+    ssv_params = [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids[np.argsort(sizes)[::-1]]]
     out_dc = predict_pts_plain(ssv_params, model_loader, pts_loader_glia, pts_pred_glia, mkwargs=mkwargs,
                                npoints=npoints, scale_fact=scale_fact, ssv_ids=ssv_ids, **kwargs_add)
     from syconn.handler.prediction_pts import write_pts_ply
@@ -76,7 +78,7 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
         node_pred = np.ones(len(skel['nodes'])) * -1
         for ii, nn_dists, nn_ixs in zip(np.arange(len(skel['nodes'])), dists, ixs):
             nn_ixs = nn_ixs[nn_dists != np.inf]
-            preds = prediction[nn_ixs]
+            preds = prediction[nn_ixs].squeeze()
             node_pred[ii] = Counter(preds).most_common(1)[0][0]
         # every node has at least one prediction
         assert np.sum(node_pred == -1) == 0
@@ -90,7 +92,7 @@ if __name__ == '__main__':
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
     ssd_kwargs = dict(working_dir=wd)
-    mdir = base_dir + '/glia_pts_scale15000_nb30000_ctx15000_swish_gn_eval0/'
+    mdir = base_dir + '/glia_pts_scale1500_nb30000_ctx15000_swish_gn_eval0/'
     use_norm = False
     track_running_stats = False
     activation = 'relu'
@@ -113,4 +115,4 @@ if __name__ == '__main__':
     mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation,
                    mpath=f'{mdir}/state_dict_final.pth', use_bias=use_bias)
     predict_glia_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ctx_size=ctx,
-                    nloader=10, npredictor=4, bs=75, loader_kwargs=dict(n_out_pts=100, base_node_dst=ctx/2))
+                    nloader=10, npredictor=5, bs=25, loader_kwargs=dict(n_out_pts=100, base_node_dst=ctx/2))

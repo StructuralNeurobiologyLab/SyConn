@@ -12,17 +12,19 @@ from . import rep_helper as rh
 from . import log_reps
 from .. import global_params
 
-from collections import defaultdict
 import glob
+import os
+from collections import defaultdict
 import numpy as np
 from scipy import ndimage
-import os
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable
 if TYPE_CHECKING:
-    from ..reps import segmentation
+    from ..reps.segmentation import SegmentationObject
+MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
+                 Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
 
-def glia_pred_so(so: 'segmentation.SegmentationObject', thresh: float,
+def glia_pred_so(so: 'SegmentationObject', thresh: float,
                  pred_key_appendix: str) -> int:
     """
     Perform the glia classification of a cell supervoxel (0: neuron, 1: glia).
@@ -80,7 +82,7 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
         np.save(sd.path_ids, sd._ids)
 
 
-def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
+def save_voxels(so: 'SegmentationObject', bin_arr: np.ndarray,
                 offset: np.ndarray, overwrite: bool = False):
     """
     Helper function to save SegmentationObject voxels.
@@ -108,13 +110,10 @@ def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
     voxel_dc.push(so.voxel_path)
 
 
-def load_voxels(so: 'segmentation.SegmentationObject',
-                voxel_dc: Optional[Dict] = None) -> np.ndarray:
+def load_voxels_depr(so: 'SegmentationObject',
+                     voxel_dc: Optional[VoxelStorage] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
-
-    Todo:
-        * Currently the attribute ``so._bounding_box`` is always resetred.
 
     Args:
         so: SegmentationObject
@@ -130,9 +129,9 @@ def load_voxels(so: 'segmentation.SegmentationObject',
 
     so._size = 0
     if so.id not in voxel_dc:
-        log_reps.error("Voxels for SO object %d of type %s do not exist"
-                       "" % (so.id, so.type))
-        return -1
+        msg = f"Voxels of {so} do not exist!"
+        log_reps.error(msg)
+        raise KeyError(msg)
 
     bin_arrs, block_offsets = voxel_dc[so.id]
     block_extents = []
@@ -161,21 +160,20 @@ def load_voxels(so: 'segmentation.SegmentationObject',
     return voxels
 
 
-def load_voxels_downsampled(
-        so: 'segmentation.SegmentationObject',
-        downsampling: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
+def load_voxels_downsampled(so: 'SegmentationObject',
+                            ds: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
     if isinstance(so.voxels, int):
         return []
 
-    return so.voxels[::downsampling[0], ::downsampling[1], ::downsampling[2]]
+    return so.voxels[::ds[0], ::ds[1], ::ds[2]]
 
 
-def load_voxel_list(so: 'segmentation.SegmentationObject'):
+def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject.
 
     Args:
-        so: SegmentationObject
+        so: SegmentationObject.
 
     Returns: np.array
         2D array of coordinates to all voxels in SegmentationObject.
@@ -235,7 +233,7 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) -> List[np.ndarray]:
+def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
     """
     Load mesh of SegmentationObject.
     TODO: Currently ignores potential color/label array.
@@ -269,7 +267,7 @@ def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) ->
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
             return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))]
-        indices, vertices, normals = so._mesh_from_scratch()
+        indices, vertices, normals = so.mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
             so._save_mesh(indices, vertices, normals)
@@ -283,7 +281,7 @@ def load_mesh(so: 'segmentation.SegmentationObject', recompute: bool = False) ->
     return [indices, vertices, normals]
 
 
-def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False) \
+def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
 
@@ -324,7 +322,7 @@ def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False
     return nodes, diameters, edges
 
 
-def save_skeleton(so: 'segmentation.SegmentationObject', overwrite: bool = False):
+def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
     skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
                                   disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:
@@ -413,17 +411,18 @@ def find_missing_sv_attributes(sd, attr_key, n_cores=20):
     return np.concatenate(res)
 
 
-def load_so_meshes_bulk(sos: List['segmentation.SegmentationObject'],
-                        use_new_subfold: bool = True, cache_decomp=True):
+def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['SegmentationObject']],
+                        use_new_subfold: bool = True, cache_decomp=True) -> MeshStorage:
     """
+    Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
 
     Args:
-        sos:
-        use_new_subfold:
-        cache_decomp:
+        sos: SegmentationObjects
+        use_new_subfold: Use new sub-folder structure
+        cache_decomp: Cache decompressed meshes.
 
     Returns:
-
+        Dictionary, key: ID, value: mesh
     """
     md_out = MeshStorage(None)  # in-memory dict with compression
     if len(sos) == 0:
@@ -448,7 +447,42 @@ def load_so_meshes_bulk(sos: List['segmentation.SegmentationObject'],
     return md_out
 
 
-def load_so_voxels_bulk(sos: List['segmentation.SegmentationObject'],
+def load_so_attr_bulk(sos: List['SegmentationObject'], attr_key: str,
+                      use_new_subfold: bool = True) -> dict:
+    """
+    Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
+
+    Args:
+        sos: SegmentationObjects
+        attr_key: Attribute key.
+        use_new_subfold: Use new sub-folder structure
+
+    Returns:
+        Dictionary, key: ID, value: mesh
+    """
+    out = dict()
+    if len(sos) == 0:
+        return out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    cnt = 0
+    for subfold, ids in sub2ids.items():
+        attr_p = f'{base_path}/{subfold}/attr_dict.pkl'
+        ad = AttributeDict(attr_p, disable_locking=True)
+        for so_id in ids:
+            cnt += 1
+            out[so_id] = ad[so_id][attr_key]
+    assert cnt == len(sos)
+    return out
+
+
+def load_so_voxels_bulk(sos: List['SegmentationObject'],
                         use_new_subfold: bool = True, cache_decomp=True):
     """
 
@@ -460,7 +494,7 @@ def load_so_voxels_bulk(sos: List['segmentation.SegmentationObject'],
     Returns:
 
     """
-    raise NotImplementedError
+    raise NotImplementedError('WIP')
     vd_out = VoxelStorage(None, cache_decomp=cache_decomp)  # in-memory dict with compression
     if len(sos) == 0:
         return vd_out
@@ -481,3 +515,31 @@ def load_so_voxels_bulk(sos: List['segmentation.SegmentationObject'],
             vd_out._dc_intern[so_id] = vd._dc_intern[so_id]
     assert cnt == len(sos)
     return vd_out
+
+
+def _helper_func(args):
+    ps, use_vxsize = args
+    out = []
+    for p in ps:
+        if not use_vxsize:
+            w = len(AttributeDict(p + '/attr_dict.pkl', disable_locking=True))
+        else:
+            w = np.sum([v['size'] for v in AttributeDict(p + '/attr_dict.pkl', disable_locking=True).values()])
+        out.append(w)
+    return out
+
+
+def get_sd_load_distribution(sd: 'SegmentationDataset', use_vxsize: bool = True) -> np.ndarray:
+    """
+    Get the load distribution (number of objects per storage) of the SegmentationDataset's AttributeDicts.
+
+    Args:
+        sd: SegmentationDataset
+        use_vxsize:
+
+    Returns:
+        Load array.
+    """
+    n_objects = start_multiprocess_imap(_helper_func, [(ch, use_vxsize) for ch in chunkify(sd.so_dir_paths, 1000)],
+                                        nb_cpus=None)
+    return np.concatenate(n_objects).astype(np.int)

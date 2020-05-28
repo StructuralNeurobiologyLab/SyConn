@@ -4,19 +4,18 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
-from ctypes import sizeof, c_float, c_void_p, c_uint
-from PIL import Image
-import time
-import os
-import tqdm
-import numpy as np
-from scipy.ndimage.filters import gaussian_filter
-
 from .image import rgb2gray, apply_clahe
 from . import log_proc
 from .. import global_params
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
+
+import time
+import os
+import tqdm
+from ctypes import sizeof, c_float, c_void_p, c_uint
+from PIL import Image
+import numpy as np
+from scipy.ndimage.filters import gaussian_filter
 
 if os.environ['PYOPENGL_PLATFORM'] != 'osmesa':
     raise EnvironmentError(f'PyOpenGL backened should be "osmesa". '
@@ -389,7 +388,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
 
 
 def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
-                           ws=(256, 128), views_key="raw", nb_simplices=3,
+                           ws=None, views_key="raw", nb_simplices=3,
                            depth_map=True, clahe=False, smooth_shade=True,
                            verbose=False, wire_frame=False, egl_args=None,
                            nb_views=None, triangulation=True):
@@ -427,8 +426,11 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
 
     """
     egl_args = None
+    view_props_default = global_params.config['views']['view_properties']
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
+    if ws is None:
+        ws = view_props_default['ws']
     # center data
     assert isinstance(edge_lengths, np.ndarray)
     assert nb_simplices in [3, 4]
@@ -509,7 +511,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                 if len(np.unique(cv)) == 1:
                     n_empty_views += 1
                     continue  # check at most one occurrence
-    if n_empty_views / len(res) > 0.1:  # more than 10% locations contain at least one empty view
+    if n_empty_views / len(res) > 0.5:  # more than 10% locations contain at least one empty view
         log_proc.critical(
             "WARNING: Found {}/{} locations with empty views.\t'{}'-mesh with "
             "{} vertices. Example location: {}".format(n_empty_views, len(coords), views_key,
@@ -537,7 +539,7 @@ def draw_scale(size):
     glEnd()
 
 
-def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
+def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=None,
                         rot_matrices=None, views_key="raw",
                         return_rot_matrices=False, depth_map=True,
                         smooth_shade=True, wire_frame=False, nb_views=None,
@@ -569,8 +571,11 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         views at each coordinate
 
     """
+    view_props_default = global_params.config['views']['view_properties']
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
+    if ws is None:
+        ws = view_props_default['ws']
     if np.isscalar(comp_window):
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:

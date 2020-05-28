@@ -4,35 +4,34 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+from . import log_mp
+import time
+import tqdm
+from typing import Callable, List, Dict, Union
+import numpy as np
 from multiprocessing import cpu_count
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing.pool
-import time
-import tqdm
-from . import log_mp
+
 
 MyPool = multiprocessing.Pool
 
 
-def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
+def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs: int,
+                     use_kwargs: bool = False, front_num: int = 0) -> list:
     """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
         A parallel version of the map function with a progress bar.
 
         Args:
             array (array-like): An array to iterate over.
             function (function): A python function to apply to the elements of
-            array n_jobs (int, default=16): The number of cores to use
+                array n_jobs (int, default=16): The number of cores to use
             use_kwargs (boolean, default=False): Whether to consider the
-            elements of array as dictionaries of keyword arguments to function
+                elements of array as dictionaries of keyword arguments to function
             front_num (int, default=3): The number of iterations to run
-            serially before kicking off the parallel job.
-             Useful for catching bugs
-             show_progress:
+                serially before kicking off the parallel job.
+                Useful for catching bugs.
+             n_jobs:
         Returns:
             [function(array[0]), function(array[1]), ...]
     """
@@ -78,7 +77,8 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
     return front + out
 
 
-def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
+def start_multiprocess(func: Callable, params: list, debug: bool = False,
+                       verbose: bool = False, nb_cpus: int = None):
     """
 
     Parameters
@@ -124,27 +124,22 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     return result
 
 
-def start_multiprocess_imap(func, params, debug=False, verbose=False,
+def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True,
                             ignore_cpu_cnt=False):
     """
-    # TODO: support generator params; currently length is required for pbar.
-    Multiprocessing method with progress bar.
 
-    Parameters
-    ----------
-    func : function
-    params : Iterable
-        function parameters
-    debug : boolean
-    verbose : bool
-    nb_cpus : int
-    show_progress : bool
+    Args:
+        func:
+        params:
+        debug:
+        verbose:
+        nb_cpus:
+        show_progress:
+        ignore_cpu_cnt:
 
-    Returns
-    -------
-    result: list
-        list of function returns
+    Returns:
+        list of function returns.
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()

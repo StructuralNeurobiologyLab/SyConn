@@ -4,17 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import errno
-import re
-import networkx as nx
-from scipy import spatial
-from knossos_utils import knossosdataset
-from typing import Union, Tuple, List, Optional, Dict, Generator, Any
-knossosdataset._set_noprint(True)
 from ..proc.meshes import mesh_area_calc
-
-from .. import global_params
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from ..handler.config import DynConfig
@@ -23,7 +13,15 @@ from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
-MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray],
+
+import re
+import errno
+import networkx as nx
+from scipy import spatial
+from knossos_utils import knossosdataset
+from typing import Union, Tuple, List, Optional, Dict, Generator, Any
+
+MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
 
@@ -456,7 +454,7 @@ class SegmentationObject(object):
             None if object is not of type 'cs', else return the IDs to the two
             supervoxels which are part of the contact site.
         """
-        if "cs" in self.type:
+        if self.type in ['cs', 'syn']:
             partner = [self.id >> 32]
             partner.append(self.id - (partner[0] << 32))
             return partner
@@ -534,7 +532,6 @@ class SegmentationObject(object):
                                 disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in voxel_dc
 
-
     @property
     def voxels(self) -> np.ndarray:
         """
@@ -544,11 +541,7 @@ class SegmentationObject(object):
             3D binary array indicating voxel locations.
         """
         if self._voxels is None:
-            if self.voxel_caching:
-                self._voxels = load_voxels(self)
-                return self._voxels
-            else:
-                return load_voxels(self)
+            return self.load_voxels()
         else:
             return self._voxels
 
@@ -561,11 +554,10 @@ class SegmentationObject(object):
             2D array with sparse voxel coordinates.
         """
         if self._voxel_list is None:
+            voxel_list = load_voxel_list(self)
             if self.voxel_caching:
-                self._voxel_list = load_voxel_list(self)
-                return self._voxel_list
-            else:
-                return load_voxel_list(self)
+                self._voxel_list = voxel_list
+            return voxel_list
         else:
             return self._voxel_list
 
@@ -664,6 +656,8 @@ class SegmentationObject(object):
         mesh_area = self.lookup_in_attribute_dict('mesh_area')
         if mesh_area is None:
             mesh_area = mesh_area_calc(self.mesh)
+            if np.isnan(mesh_area) or np.isinf(mesh_area):
+                raise()
         return mesh_area
 
     @property
@@ -755,7 +749,7 @@ class SegmentationObject(object):
                 loc_dc.push()
             return coords.astype(np.float32)
 
-    def load_voxels(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
+    def load_voxels(self, voxel_dc: Optional[Union[VoxelStorageDyn, VoxelStorage]] = None) -> np.ndarray:
         """
         Loader method of :py:attr:`~voxels`.
 
@@ -765,7 +759,12 @@ class SegmentationObject(object):
         Returns:
             3D array of the all voxels which belong to this supervoxel.
         """
-        voxels = load_voxels(self, voxel_dc=voxel_dc)
+        if voxel_dc is None:
+            voxel_dc = VoxelStorage(self.voxel_path, read_only=True, disable_locking=True)
+        if not isinstance(voxel_dc, VoxelStorageDyn):
+            voxels = load_voxels_depr(self, voxel_dc=voxel_dc)
+        else:
+            voxels = voxel_dc.get_voxel_data_cubed(self.id)[0]
         if self.voxel_caching:
             self._voxels = voxels
         return voxels
@@ -793,7 +792,7 @@ class SegmentationObject(object):
         Loader method of :py:attr:`~mesh`.
 
         Args:
-            recompute: Recompute the mesh via :func:`_mesh_from_scratch`.
+            recompute: Recompute the mesh via :func:`~mesh_from_scratch`.
 
         Returns:
             Flat arrays of indices, vertices, normals.
@@ -879,36 +878,26 @@ class SegmentationObject(object):
         """
         if self.skeleton is None:
             self.load_skeleton()
-        #  TODO: change interface to match SSV interface, i.e. change to dictionary
-        nodes = self.skeleton[0].reshape(-1, 3).astype(np.float32)
+        nodes = self.skleton[0].reshape(-1, 3).astype(np.float32)
         edges = self.skeleton[2].reshape(-1, 2)
         return np.sum([np.linalg.norm(
             self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
-    def _mesh_from_scratch(self, downsampling: Optional[Tuple[int, int, int]] = None,
-                           n_closings: Optional[int] = None, **kwargs) -> List[np.ndarray]:
+    def mesh_from_scratch(self, ds: Optional[Tuple[int, int, int]] = None,
+                          **kwargs: dict) -> List[np.ndarray]:
         """
         Calculate the mesh based on :func:`~syconn.proc.meshes.get_object_mesh`.
 
         Args:
-            downsampling: Downsampling of the object's voxel data.
-            n_closings: Number of closings before Marching cubes is applied.
+            ds: Downsampling of the object's voxel data.
             **kwargs: Key word arguments passed to :func:`~syconn.proc.meshes.triangulation`.
 
         Returns:
 
         """
-        if n_closings is None:
-            n_closings = global_params.config['meshes']['closings'][self.type]
-        if downsampling is None:
-            downsampling = global_params.config['meshes']['downsampling'][self.type]
-        # Set 'force_single_cc' to True in case of syn_ssv objects!
-        if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
-            kwargs['force_single_cc'] = True
-        if (self.type == 'sv') and ('decimate_mesh' not in kwargs):
-            kwargs['decimate_mesh'] = 0.3  # remove 30% of the verties  # TODO: add to global params
-        return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
-                                      triangulation_kwargs=kwargs)
+        if ds is None:
+            ds = global_params.config['meshes']['downsampling'][self.type]
+        return meshes.get_object_mesh(self, ds, mesher_kwargs=kwargs)
 
     def _save_mesh(self, ind: np.ndarray, vert: np.ndarray,
                    normals: np.ndarray):
@@ -1228,7 +1217,7 @@ class SegmentationObject(object):
 
     def calculate_bounding_box(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
-        Calculate supervoxel bounding box.
+        Calculate supervoxel :py:attr:`~bounding_box`.
 
         Args:
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
@@ -1237,15 +1226,15 @@ class SegmentationObject(object):
             voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
                                     disable_locking=True)
         if not isinstance(voxel_dc, VoxelStorageDyn):
-            _ = load_voxels(self, voxel_dc=voxel_dc)
+            _ = self.load_voxels(voxel_dc=voxel_dc)
         else:
             bbs = voxel_dc.get_boundingdata(self.id)
             bb = np.array([bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
             self._bounding_box = bb
 
-    def calculate_size(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
+    def calculate_size(self, voxel_dc: Optional[Union[VoxelStorageDyn, VoxelStorage]] = None):
         """
-        Calculate supervoxel size.
+        Calculate supervoxel object :py:attr:`~size`.
 
         Args:
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
@@ -1254,7 +1243,7 @@ class SegmentationObject(object):
             voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
                                     disable_locking=True)
         if not isinstance(voxel_dc, VoxelStorageDyn):
-            _ = load_voxels(self, voxel_dc=voxel_dc)
+            _ = self.load_voxels(voxel_dc=voxel_dc)
         else:
             size = voxel_dc.object_size(self.id)
             self._size = size
@@ -1823,7 +1812,7 @@ class SegmentationDataset(object):
             numpy array of property `prop_name`.
         """
         if os.path.exists(self.path + prop_name + "s.npy"):
-            return np.load(self.path + prop_name + "s.npy")
+            return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
             log_reps.warning(f'Requested data cache "{prop_name}" '
                              f'did not exist.')

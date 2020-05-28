@@ -4,6 +4,8 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+from ..proc import log_proc
+
 import numpy as np
 __cv2__ = True
 try:
@@ -17,8 +19,7 @@ except ImportError as e:
 from sklearn.decomposition import PCA
 from scipy import spatial, sparse, ndimage
 import tqdm
-from typing import List
-from ..proc import log_proc
+from typing import List, Optional, Union
 
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
@@ -325,7 +326,7 @@ def normalize_vol(sv, edge_size, center_coord):
     translation = np.ones(3) * edge_size / 2. - center_coord
     assert isinstance(edge_size, np.int)
     sv = sv.astype(np.float32)
-    sv = sv + translation    # centralize
+    sv = sv + translation    # center
     sv = remove_outlier(sv, edge_size)
     return sv.astype(np.uint)
 
@@ -351,7 +352,7 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False,
 
 
 def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
-              background_only=True, mop_kwargs=None, verbose=False):
+              mop_kwargs=None, verbose=False):
     """
     Generic function for binary morphological image operations with multi-label
     content.
@@ -366,8 +367,6 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     overlay
     n_iters
     use_find_objects
-    background_only : bool
-        only works in combination with 'use_find_objects'
     mop_kwargs
     verbose
 
@@ -381,13 +380,14 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     if n_iters == 0:
         return overlay
     if use_find_objects:
-        return _multi_mop_findobjects(mop_func, overlay, n_iters, background_only,
-                                      mop_kwargs=mop_kwargs, verbose=verbose)
+        return _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=verbose,
+                                      mop_kwargs=mop_kwargs)
     unique_ixs = np.unique(overlay)
     for ix in unique_ixs:
         if ix == 0:
             continue
         binary_mask = (overlay == ix).astype(np.int)
+        # TODO: use padding
         binary_mask = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
         overlay[binary_mask == 1] = ix
     return overlay
@@ -404,9 +404,6 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
           ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
-    Todo:
-        * Does not increase subvolume when dilation is applied.
-
     Args:
         mop_func:
         overlay:
@@ -417,8 +414,11 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
     Returns:
 
     """
+    # TODO: use mask kwarg of morphology operations to ommit subvol copies
     if mop_kwargs is None:
         mop_kwargs = {}
+    if 'iterations' in mop_kwargs:
+        n_iters = mop_kwargs['iterations']
     # TODO: Currently mop_kwargs are not generic because of explicit 'iterations' kwarg in mop_func call
     objslices = ndimage.find_objects(overlay)
     unique_ixs = np.unique(overlay[overlay != 0])
@@ -430,7 +430,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         obj_slice = objslices[int(ix-1)]
         sub_vol = overlay[obj_slice]
         # pad with zeros to prevent boundary artifacts in the original data array
-        if "closing" in mop_func.__name__:
+        if "closing" in mop_func.__name__ or "dilation" in mop_func.__name__:
             sub_vol = np.pad(sub_vol, n_iters)
         binary_mask = (sub_vol == ix).astype(np.int)
         if verbose:
@@ -440,7 +440,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         else:
             res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
         # remove overlap
-        if "closing" in mop_func.__name__:
+        if "closing" in mop_func.__name__ or "dilation" in mop_func.__name__ :
             res = res[n_iters:-n_iters, n_iters:-n_iters,
                       n_iters:-n_iters]
             binary_mask = binary_mask[n_iters:-n_iters, n_iters:-n_iters,
@@ -448,14 +448,14 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
             sub_vol = sub_vol[n_iters:-n_iters, n_iters:-n_iters,
                               n_iters:-n_iters]
         # only dilate/erode background/the objects itself
-        if "erosion" in mop_func.__name__:
+        if "erosion" in mop_func.__name__ or "binary_opening" in mop_func.__name__:
             if verbose:
                 if np.sum(binary_mask) == 0 and nb_occ != 0:
                     log_proc.debug("Object with ID={} and size={} is not present after"
                                    " erosion with N={}.".format(ix, nb_occ, n_iters))
             overlay[obj_slice][binary_mask == 1] = res[binary_mask == 1] * ix
         elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__) or\
-            ("fill_holes" in mop_func.__name__):
+             ("fill_holes" in mop_func.__name__):
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
             overlay[obj_slice][proc_mask] = res[proc_mask] * ix
         else:
@@ -495,9 +495,7 @@ def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
 
     Notes:
         * For ``binary_closing`` it is advised to pass ``structure=np.ones((2, 2, 2))``
-          in order to fill gaps at the array boundaries. See https://docs.scip
-          y.org/doc/scipy-0.14.0/reference/generated/scipy.ndimage.morphology
-          .binary_closing.html for an example.
+          in order to fill gaps at the array boundaries. See https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.ndimage.morphology.binary_closing.html for an example.
 
     Args:
         mop_func: One of ``binary_closing``, ``binary_dilation``,
@@ -514,7 +512,8 @@ def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
                                   mop_kwargs=mop_kwargs)
 
 
-def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str])\
+def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str],
+                                   mop_kwargs: Optional[dict] = None)\
         -> np.ndarray:
     """
     Applies morphological operations on the input volume. String identifier in
@@ -523,13 +522,48 @@ def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str])\
     Args:
         vol: Input array (3D).
         morph_ops: List with string identifier.
+        mop_kwargs: Keyword arguments for the called morphological operation(s).
 
     Returns:
         Processed volume.
     """
     if len(morph_ops) == 0:
         return vol
-    for mop in morph_ops:
+    # count zusammenhaengende, gleiche operationen und erhoehe n_iters entsprechend.
+    morph_ops, morph_cnt = _count_subsequent_mops(morph_ops)
+    for mop, mop_cnt in zip(morph_ops, morph_cnt):
         func = getattr(ndimage, mop)
-        vol = func(vol)
+        vol = _multi_mop_findobjects(func, vol, n_iters=mop_cnt, mop_kwargs=mop_kwargs)
     return vol
+
+
+def _count_subsequent_mops(mops: List[str]) -> tuple:
+    mops_new = [mops[0]]
+    mops_cnt = [1]
+    for m in mops[1:]:
+        if m == mops_new[-1]:
+            mops_cnt[-1] += 1
+        else:
+            mops_new.append(m)
+            mops_cnt.append(1)
+    return mops_new, mops_cnt
+
+
+def get_aniso_struct(scaling: Union[tuple, np.ndarray]):
+    """
+    Get kernel for morphology operations; cross-like with aniso dilations in the xy plane.
+
+    Args:
+        scaling: Voxel size in nm.
+
+    Returns:
+        Kernel taking into account the voxel size.
+    """
+    struct = np.zeros((5, 5))
+    struct[2, 2] = 1
+    aniso = scaling[2] // scaling[0]
+    assert scaling[1] // scaling[0] == 1
+    assert aniso >= 1
+    struct2d = ndimage.binary_dilation(struct, iterations=aniso)
+    struct = np.concatenate([struct[..., None], struct2d[..., None], struct[..., None]], axis=2)
+    return struct

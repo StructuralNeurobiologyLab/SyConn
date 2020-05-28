@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+# Authors: Philipp Schubert, Jörgen Kornfeld
 
 import sys
 from syconn.reps.super_segmentation_object import semsegaxoness_predictor
@@ -28,9 +28,14 @@ with open(path_storage_file, 'rb') as f:
             break
 
 ch = args[0]
+map_properties = global_params.config['compartments']['map_properties_semsegax']
+pred_key = global_params.config['compartments']['view_properties_semsegax']['semseg_key']
+max_dist = global_params.config['compartments']['dist_axoness_averaging']
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
+view_props = global_params.config['compartments']['view_properties_semsegax']
 n_worker = 4
-params = [(ch_sub, ncpus) for ch_sub in basics.chunkify(ch, n_worker * 4)]
+params = [(ch_sub, view_props, ncpus, map_properties,
+           pred_key, max_dist) for ch_sub in basics.chunkify(ch, n_worker * 2)]
 res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker)
 missing = np.concatenate(res)
 if len(missing) > 0:

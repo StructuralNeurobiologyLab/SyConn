@@ -5,7 +5,6 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from knossos_utils import knossosdataset
 import numpy as np
 from typing import Tuple, Optional
 from syconn.mp.batchjob_utils import batchjob_script
@@ -18,7 +17,6 @@ from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.config import initialize_logging
 from syconn.handler.basics import kd_factory, chunkify
-knossosdataset._set_noprint(True)
 
 
 def run_matrix_export():
@@ -115,7 +113,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
                               n_folders_fs=n_folders_fs)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
-    # TODO: add check for SSD existence, which is required at this point
     # create SD of type 'syn_ssv'
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
@@ -123,6 +120,8 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
+
+    # generate the skipped meshes of objects at chunk boundaries sparsely
 
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
@@ -146,7 +145,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
     # just collect new data: ``recompute=False``
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
-    # TODO: decide whether this should happen after prob thresholding or not
     map_synssv_objects(log=log)
     log.info('Finished.')
 

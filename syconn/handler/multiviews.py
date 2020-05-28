@@ -4,19 +4,20 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from knossos_utils.skeleton_utils import load_skeleton
+
 from ..proc.graphs import bfs_smoothing
-import numpy as np
-from numba import jit
-from scipy import spatial
-from typing import Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from ..reps import super_segmentation
 
+from knossos_utils.skeleton_utils import load_skeleton
+import numpy as np
+from numba import jit
+from scipy import spatial
 
-def parse_skelnodes_labels_to_mesh(kzip_path: str,
-                                   sso: 'super_segmentation.SuperSegmentationObject',
-                                   gt_type: str,  n_voting: int = 40):
+
+def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.SuperSegmentationObject',
+                                   gt_type: str,  n_voting: int = 40) -> np.ndarray:
     """
 
     Args:
@@ -31,7 +32,7 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str,
 
 
     Returns:
-
+        Vertex label array.
     """
     # # Load mesh
     indices, vertices, normals = sso.mesh
@@ -81,8 +82,7 @@ def generate_palette(nr_classes: int, return_rgba: bool = True) -> np.ndarray:
 
 
 @jit
-def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) \
-        -> np.ndarray:
+def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) -> np.ndarray:
     """
 
     Args:
@@ -191,8 +191,7 @@ def int2str_converter(label: int, gt_type: str):
         else:
             return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
     elif gt_type == 'ctgt_v2':
-        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`,
-        # `predict_celltype_sso
+        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`
         l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
         l_dc = {v: k for k, v in l_dc_inv.items()}
         try:

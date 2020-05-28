@@ -5,24 +5,11 @@ from syconn.handler.prediction import certainty_estimate
 import numpy as np
 from sklearn.metrics.classification import classification_report
 from syconn.handler.prediction_pts import predict_pts_plain, \
-    pts_loader_scalar, pts_pred_scalar
+    pts_loader_scalar, pts_pred_scalar, get_celltype_model_pts, get_pt_kwargs
 import os
 
 
-def load_model(mkwargs, device):
-    from elektronn3.models.convpoint import ModelNet40
-    from elektronn3.models.base import InferenceModel
-    import torch
-    mpath = mkwargs['mpath']
-    del mkwargs['mpath']
-    m = ModelNet40(5, 8, **mkwargs).to(device)
-    m.load_state_dict(torch.load(mpath)['model_state_dict'])
-    # pts_pred_scalar (pred_func used in predict_pts_plain) requires the model object to have a .predict method
-    m = torch.nn.DataParallel(m)
-    return m
-
-
-def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ctx_size, nloader=4, npredictor=2,
+def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ctx_size, nloader=4, npredictor=2,
                         ssv_ids=None, use_test_aug=False, device='cuda'):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
@@ -35,18 +22,19 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
     Args:
         ssd_kwargs:
         model_loader:
-        mkwargs:
+        mpath:
         npoints:
         scale_fact:
         nloader:
         npredictor:
         ssv_ids:
         use_test_aug:
+        device:
 
     Returns:
 
     """
-    out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mkwargs=mkwargs,
+    out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
                                npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
                                ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size)
     out_dc = dict(out_dc)
@@ -65,37 +53,19 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
 
 
 if __name__ == '__main__':
-    """
-    
-celltype_eval0_sp25k/celltype_pts_scale30000_nb25000_swish_gn_moreAug4_CV7_eval0 """
     ncv_min = 0
     n_cv = 10
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval0_sp25k/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval0_sp50k/'
     for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb25000_swish_gn_moreAug4_CV{}_eval{}/'
-        use_norm = False
-        track_running_stats = False
-        activation = 'relu'
-        ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
-        if 'swish' in mdir:
-            activation = 'swish'
-        if '_noBN_' in mdir:
-            use_norm = False
-        if '_gn_' in mdir:
-            use_norm = 'gn'
-        elif '_bn_' in mdir:
-            use_norm = 'bn'
-            if 'trackRunStats' in mdir:
-                track_running_stats = True
-        npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
-        scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
+        mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval0/'
+        mkwargs, loader_kwargs = get_pt_kwargs(mdir)
+        npoints = loader_kwargs['npoints']
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)
-        mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation)
         log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
                  f'model_kwargs={mkwargs} and da_equals_tan={da_equals_tan}.\n'
                  f'GT: version={gt_version} at wd={wd}\n')
@@ -108,8 +78,8 @@ celltype_eval0_sp25k/celltype_pts_scale30000_nb25000_swish_gn_moreAug4_CV7_eval0
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
             assert os.path.isfile(mpath)
 
-            res_dc = predict_celltype_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ssv_ids=split_dc['valid'],
-                                         nloader=2, npredictor=1, use_test_aug=True, ctx_size=ctx)
+            res_dc = predict_celltype_wd(ssd_kwargs, get_celltype_model_pts, mpath, ssv_ids=split_dc['valid'],
+                                         nloader=10, npredictor=5, use_test_aug=True, **loader_kwargs)
             basics.write_obj2pkl(fname_pred, res_dc)
 
         # compare to GT
@@ -160,8 +130,7 @@ celltype_eval0_sp25k/celltype_pts_scale30000_nb25000_swish_gn_moreAug4_CV7_eval0
             valid_preds.extend(valid_preds_local)
             valid_ids.extend(valid_ids_local)
 
-        log.info(f'Final prediction result for run {run} with npoints={npoints}, '
-                 f'track_running_stats={track_running_stats}, use_norm={use_norm}.')
+        log.info(f'Final prediction result for run {run} with {loader_kwargs} and {mkwargs}.')
         log.info(classification_report(valid_ls, valid_preds, labels=np.arange(7),
                                        target_names=target_names))
         log.info('-------------------------------')

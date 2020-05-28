@@ -5,8 +5,8 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-import numpy as np
 import os
+import numpy as np
 from typing import Optional
 from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset

@@ -5,8 +5,6 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
 import numpy as np
 import os
 import subprocess
@@ -16,6 +14,7 @@ import sys
 import time
 import argparse
 import networkx as nx
+from knossos_utils import knossosdataset
 
 from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.config import generate_default_conf, initialize_logging
@@ -38,11 +37,20 @@ if __name__ == '__main__':
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
         ('meshes', {'use_new_meshing': True}),
-        ('views', {'use_onthefly_views_ct': False,
+        ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
-                   'nb_views': 3}),
-        ('cell_objects', {'sym_label': 1, 'asym_label': 2,
-                          'min_obj_vx': {'sv': 100}})  # flattened RAG contains only on SV per cell
+                   'view_properties': {'nb_views': 3}
+                   }),
+        ('cell_objects',
+         {'sym_label': 1, 'asym_label': 2,
+          'min_obj_vx': {'sv': 100},  # flattened RAG contains only on SV per cell
+          # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
+          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
+                                      'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
+          }
+         )
     ]
     chunk_size = None
     n_folders_fs = 10000
@@ -121,42 +129,42 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
 
-    # log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-    #                                 n_folders_fs=n_folders_fs,
-    #                                 load_cellorganelles_from_kd_overlaycubes=True,
-    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
-    #                                 n_cores=1,
-    #                                 max_n_jobs=global_params.config.ncore_total * 4)
-    #
-    # # generate flattened RAG
-    # from syconn.reps.segmentation import SegmentationDataset
-    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    # rag_sub_g = nx.Graph()
-    # # add SV IDs to graph via self-edges
-    # # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
-    # # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    # # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
-    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # # log.info('{} SVs were added to the RAG after application of the size '
-    # #          'filter.'.format(len(filtered_ids)))
-    # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
-    #
-    # exec_init.run_create_rag()
-    #
-    # time_stamps.append(time.time())
-    # step_idents.append('SD generation')
+    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+                                    n_folders_fs=n_folders_fs,
+                                    load_cellorganelles_from_kd_overlaycubes=True,
+                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
+                                    n_cores=1,
+                                    max_n_jobs=global_params.config.ncore_total * 4)
+
+    # generate flattened RAG
+    from syconn.reps.segmentation import SegmentationDataset
+    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    rag_sub_g = nx.Graph()
+    # add SV IDs to graph via self-edges
+    mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    log.info('{} SVs were added to the RAG after application of the size '
+             'filter.'.format(len(filtered_ids)))
+    nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+
+    exec_init.run_create_rag()
+
+    time_stamps.append(time.time())
+    step_idents.append('SD generation')
 
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')
-        # exec_multiview.run_glia_rendering()
-        # exec_multiview.run_glia_prediction()
-        # exec_multiview.run_glia_splitting()
+        exec_multiview.run_glia_rendering()
+        exec_multiview.run_glia_prediction()
+        exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    # exec_multiview.run_create_neuron_ssd()
+    exec_multiview.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
