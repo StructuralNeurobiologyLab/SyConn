@@ -39,7 +39,8 @@ if __name__ == '__main__':
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
-                   'nb_views': 3}),
+                   'view_properties': {'nb_views': 3}
+                   }),
         ('cell_objects',
          {'sym_label': 1, 'asym_label': 2,
           'min_obj_vx': {'sv': 100},  # flattened RAG contains only on SV per cell

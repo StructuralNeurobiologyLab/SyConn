@@ -56,15 +56,18 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ct
     return out_dc
 
 
-def _preproc_syns(ssv_ids, ssd_kwargs):
+def _preproc_syns(args):
+    ssv_ids, ssd_kwargs = args
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     celltypes = []
     celltypes_old = []
     m = get_celltype_model_e3()
     for ssv in ssd.get_super_segmentation_object(ssv_ids):
+        ssv._view_caching = True
         _ = ssv.syn_ssv_mesh
         _ = ssv.typedsyns2mesh()
-        ssv.predict_celltype_cnn(m, '_v2', onthefly_views=True)
+        ssv.predict_celltype_cnn(m, '_v2', onthefly_views=True, verbose=True,
+                                 view_props=dict(nb_views=2))
         celltypes.append(ssv.celltype('celltype_cnn_e3_v2'))
         celltypes_old.append(ssv.celltype())
     return celltypes, celltypes_old
@@ -75,7 +78,7 @@ if __name__ == '__main__':
     da_equals_tan = True
     import pandas
     str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5,
-                         INT=7, FS=8, GLIA=9, LTS=7, GPi=5)
+                         INT=7, FS=7, GLIA=9, LTS=7, GPi=5)
     del str2int_label['GLIA']
     str2int_label["GP "] = 5  # typo
     int2str_label = {v: k for k, v in str2int_label.items()}
@@ -95,9 +98,8 @@ if __name__ == '__main__':
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
     ssd_kwargs = dict(working_dir=wd)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    params = [(ch, ssd_kwargs) for ch in basics.chunkify_successive(list(ssd.get_super_segmentation_object(ssv_ids)),
-                                                                    len(ssv_ids) // 4)]
-    mv_preds = start_multiprocess_imap(_preproc_syns, params, nb_cpus=None)
+    params = [([ssv_id], ssd_kwargs) for ssv_id in ssv_ids]
+    mv_preds = start_multiprocess_imap(_preproc_syns, params, nb_cpus=6)
     mv_preds_old = np.array([p[1] for p in mv_preds])
     mv_preds = np.array([p[0] for p in mv_preds])
     # load model
@@ -122,8 +124,6 @@ if __name__ == '__main__':
     valid_ids_local, valid_ls_local, valid_preds_local, valid_certainty_local = [], [], [], []
     for ix, curr_id in enumerate(ssv_ids):
         curr_l = ssv_labels[ix]
-        if curr_l == 8:  # this is FS
-            continue
         if da_equals_tan:
             # adapt GT labels
             if curr_l == 6: curr_l = 1  # TAN and DA are the same now

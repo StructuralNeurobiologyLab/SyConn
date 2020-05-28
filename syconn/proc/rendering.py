@@ -242,8 +242,9 @@ def render_sso_coords(sso: 'SuperSegmentationObject', coords: np.ndarray,
             add_cellobjects[add_cellobjects.index('sj')] = 'syn_ssv'
 
     if verbose:
-        log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
-                       ' platform "{}".'.format(len(coords), sso.id, global_params.config['pyopengl_platform']))
+        log_proc.debug('Started "render_sso_coords" at {} locations with sub-cellular structures {} for SSO {} using '
+                       'PyOpenGL platform "{}".'.format(len(coords), add_cellobjects, sso,
+                                                        global_params.config['pyopengl_platform']))
         start = time.time()
     if nb_views is None:
         nb_views = view_props_default['nb_views']

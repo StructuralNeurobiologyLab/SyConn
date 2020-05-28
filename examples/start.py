@@ -208,8 +208,7 @@ if __name__ == '__main__':
         step_idents.append('Neuron rendering')
 
     log.info('Step 4/9 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size,
-                                 n_folders_fs=n_folders_fs_sc)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 

@@ -2095,6 +2095,8 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
 
     from ..handler.prediction import naive_view_normalization_new
+    if verbose:
+        log_reps.debug('Finished rendering. Starting cell type prediction.')
     inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
     inp_d = naive_view_normalization_new(inp_d)
     if use_syntype:
@@ -2104,7 +2106,8 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
         res = model.predict_proba((inp_d, synsign_ratio), bs=40)
     else:
         res = model.predict_proba(inp_d, bs=40)
-
+    if verbose:
+        log_reps.debug('Finished prediction.')
     # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`, `predict_sso_celltype`
     if da_equals_tan:
         # accumulate evidence for DA and TAN
@@ -2398,13 +2401,13 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
                                     global_params.config['compartments']['dist_axoness_averaging'])
     if len(ssv.syn_ssv) == 0:
         return -1
-    syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv],
-                                   attr_keys=[pred_key_ax, ])[0]
+    syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv], attr_keys=[pred_key_ax, ])[0]
     # convert boutons to axon class
     syn_axs[syn_axs == 3] = 1
     syn_axs[syn_axs == 4] = 1
     syn_signs = []
     syn_sizes = []
+    # TODO: extend load_so_attr_bulk to arbitrary attributes and use that here, also include rep_coord (see above)
     for syn_ix, syn in enumerate(ssv.syn_ssv):
         if syn_axs[syn_ix] not in comp_types:
             continue

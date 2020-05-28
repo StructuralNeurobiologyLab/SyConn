@@ -3105,7 +3105,8 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             onthefly_views=False, overwrite=True, model_props=None):
+                             onthefly_views=False, overwrite=True, model_props=None,
+                             verbose: bool = False):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3121,18 +3122,21 @@ class SuperSegmentationObject(object):
             onthefly_views: bool
             overwrite:
             model_props: Model properties. See config.yml for an example.
+            verbose:
 
         """
         if model_props is None:
             model_props = {}
-        if view_props is None:
-            view_props = {}
+        view_props_def = global_params.config['views']['view_properties']
+        if view_props is not None:
+            view_props_def.update(view_props)
+        view_props = view_props_def
         if not onthefly_views:
             ssh.predict_sso_celltype(self, model, pred_key_appendix=pred_key_appendix,
                                      overwrite=overwrite, **model_props)
         else:
             ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
-                                        overwrite=overwrite, **view_props, **model_props)
+                                        overwrite=overwrite, verbose=verbose, **view_props, **model_props)
         if model_tnet is not None:
             view_props = dict(view_props)  # create copy
             if 'use_syntype' in view_props:
