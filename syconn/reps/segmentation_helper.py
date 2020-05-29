@@ -17,7 +17,7 @@ import os
 from collections import defaultdict
 import numpy as np
 from scipy import ndimage
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable, Any
 if TYPE_CHECKING:
     from ..reps.segmentation import SegmentationObject
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
@@ -114,6 +114,7 @@ def load_voxels_depr(so: 'SegmentationObject',
                      voxel_dc: Optional[VoxelStorage] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
+    Also calculates size and bounding box and assigns it to `so._size` and `so._bounding_box` respectively.
 
     Args:
         so: SegmentationObject
@@ -447,38 +448,54 @@ def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['Segment
     return md_out
 
 
-def load_so_attr_bulk(sos: List['SegmentationObject'], attr_key: str,
-                      use_new_subfold: bool = True) -> dict:
+def load_so_attr_bulk(sos: List['SegmentationObject'], attr_keys: Union[str, Iterable[str]],
+                      use_new_subfold: bool = True) -> Union[Dict[str, Dict[int, Any]], Dict[int, Any]]:
     """
     Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
+    Returns a single dict if only one attr_key is provided or a dict of dicts if many.
+    This method will also check if the requested attribute(s) already exist in the object's ``attr_dict``. This means
+    using ``cache_properties`` when initializing ``SegmentationDataset`` might be beneficial to avoid exhaustive file
+    reads in case `sos` is large.
 
     Args:
         sos: SegmentationObjects
-        attr_key: Attribute key.
+        attr_keys: Attribute key(s).
         use_new_subfold: Use new sub-folder structure
 
     Returns:
-        Dictionary, key: ID, value: mesh
+        (Dict. with key: attr_key of) dict. with key: ID, value: attribute value
     """
-    out = dict()
+    if type(attr_keys) is str:
+        attr_keys = [attr_keys]
+    out = {attr_k: dict() for attr_k in attr_keys}
     if len(sos) == 0:
+        if len(attr_keys) == 1:
+            out = out[attr_keys[0]]
         return out
     base_path = sos[0].so_storage_path
     nf = sos[0].n_folders_fs
-    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
-        rh.subfold_from_ix_OLD
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else rh.subfold_from_ix_OLD
     sub2ids = defaultdict(list)
     for so in sos:
+        keys_missing = len(attr_keys)
+        # use cached/loaded attributes
+        for k in attr_keys:
+            if k in so.attr_dict:
+                out[k][so.id] = so.attr_dict[k]
+                keys_missing -= 1
+        if keys_missing == 0:
+            continue
         subf = subf_from_ix(so.id, nf)
         sub2ids[subf].append(so.id)
-    cnt = 0
     for subfold, ids in sub2ids.items():
         attr_p = f'{base_path}/{subfold}/attr_dict.pkl'
         ad = AttributeDict(attr_p, disable_locking=True)
         for so_id in ids:
-            cnt += 1
-            out[so_id] = ad[so_id][attr_key]
-    assert cnt == len(sos)
+            so_dict = ad[so_id]
+            for attr_key in attr_keys:
+                out[attr_key][so_id] = so_dict[attr_key]
+    if len(attr_keys) == 1:
+        out = out[attr_keys[0]]
     return out
 
 

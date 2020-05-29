@@ -33,11 +33,15 @@ pred_key = global_params.config['compartments']['view_properties_semsegax']['sem
 max_dist = global_params.config['compartments']['dist_axoness_averaging']
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
 view_props = global_params.config['compartments']['view_properties_semsegax']
-n_worker = 4
+# TODO: work-in
+# global_params.config.use_point_models
+n_worker = 2
 params = [(ch_sub, view_props, ncpus, map_properties,
            pred_key, max_dist) for ch_sub in basics.chunkify(ch, n_worker * 2)]
 res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker)
 missing = np.concatenate(res)
+if len(missing) > 0:
+    missing = semsegaxoness_predictor((missing, view_props, ncpus, map_properties))
 if len(missing) > 0:
     print('ERROR: Sem. seg. prediction of {} SSVs ({}) failed.'.format(
         len(missing), str(missing)))

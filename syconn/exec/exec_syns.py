@@ -151,7 +151,8 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
 
 def run_spinehead_volume_calc():
     """
-
+    Calculate spine head volumes based on a watershed segmentation which is run on 3D spine label masks propagated
+    from cell surface predictions.
     """
     log = initialize_logging('spinehead_calc', global_params.config.working_dir + '/logs/',
                              overwrite=False)

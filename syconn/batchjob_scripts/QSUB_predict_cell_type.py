@@ -31,6 +31,8 @@ ch = args[0]
 
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
 model_props = global_params.config['celltypes']
+# TODO: work-in
+# global_params.config.use_point_models
 n_worker = 2
 params = basics.chunkify(ch, n_worker * 4)
 res = start_multiprocess_imap(celltype_predictor, [(p, ncpus, model_props) for p in params],

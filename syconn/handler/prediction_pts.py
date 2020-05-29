@@ -557,6 +557,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
     if not train:
+        np.random.seed(0)
         if draw_local:
             raise NotImplementedError()
         for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
@@ -570,14 +571,9 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
             ixs = np.ones((occ,), dtype=np.uint) * ssv_id
             cnt = 0
-            # TODO: this should be deterministic during inference
-            # nodes = hc.base_points(threshold=5000, source=len(hc.nodes) // 2)
-            # nodes = sparsify_skeleton_fast(hc.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=5000,
-            #                                max_dist_thresh=5000, dot_prod_thresh=0).nodes()
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-            pcd, idcs = pcd.voxel_down_sample_and_trace(
-                5000, pcd.get_min_bound(), pcd.get_max_bound())
+            pcd, idcs = pcd.voxel_down_sample_and_trace(5000, pcd.get_min_bound(), pcd.get_max_bound())
             nodes = np.max(idcs, axis=1)
             source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
             for source_node in source_nodes:
@@ -615,7 +611,6 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             yield ixs, (batch_f, batch)
     else:
         ssv_ids = np.unique(ssv_ids)
-        np.random.seed(0)
         # fluctuate context size in 1/4 samples
         if np.random.randint(0, 4) == 0:
             ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
@@ -782,8 +777,7 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
         npoints_ssv += npoints_add
         if train:
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
-                                            replace=len(hc.nodes) < batchsize)
+            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize, replace=len(hc.nodes) < batchsize)
         else:
             # source_nodes = hc.base_points(threshold=base_node_dst, source=len(hc.nodes) // 2)
             pcd = o3d.geometry.PointCloud()

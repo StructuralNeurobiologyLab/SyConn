@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
-           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices']
+           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes']
 
 
 class MeshObject(object):

@@ -46,9 +46,6 @@ class SegmentationObject(object):
                 keys2 = set(cell_sv_from_sd.attr_dict.keys())
                 print(keys1 == keys2)
 
-    Todo:
-        * Add examples.
-
     Attributes:
         attr_dict: Attribute dictionary which serves as a general-purpose container. Accessed via
             the :class:`~syconn.backend.storage.AttributeDict` interface.
@@ -567,8 +564,7 @@ class SegmentationObject(object):
         Returns:
             True if mesh exists.
         """
-        mesh_dc = MeshStorage(self.mesh_path,
-                              disable_locking=True)  # look-up only, PS 12Dec2018
+        mesh_dc = MeshStorage(self.mesh_path, disable_locking=True)
         return self.id in mesh_dc
 
     @property
@@ -577,8 +573,7 @@ class SegmentationObject(object):
         Returns:
             True if skeleton exists.
         """
-        skeleton_dc = SkeletonStorage(self.skeleton_path,
-                                      disable_locking=True)  # look-up only, PS 12Dec2018
+        skeleton_dc = SkeletonStorage(self.skeleton_path, disable_locking=True)
         return self.id in skeleton_dc
 
     @property
@@ -657,7 +652,7 @@ class SegmentationObject(object):
         if mesh_area is None:
             mesh_area = mesh_area_calc(self.mesh)
             if np.isnan(mesh_area) or np.isinf(mesh_area):
-                raise()
+                raise ValueError('Invalid mesh area.')
         return mesh_area
 
     @property
@@ -770,7 +765,7 @@ class SegmentationObject(object):
         return voxels
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
-        return load_voxels_downsampled(self, downsampling=downsampling)
+        return load_voxels_downsampled(self, ds=downsampling)
 
     def load_voxel_list(self):
         """
@@ -786,18 +781,6 @@ class SegmentationObject(object):
 
     def load_voxel_list_downsampled_adapt(self, downsampling=(2, 2, 1)):
         return load_voxel_list_downsampled_adapt(self, downsampling=downsampling)
-
-    def load_mesh(self, recompute: bool = False):
-        """
-        Loader method of :py:attr:`~mesh`.
-
-        Args:
-            recompute: Recompute the mesh via :func:`~mesh_from_scratch`.
-
-        Returns:
-            Flat arrays of indices, vertices, normals.
-        """
-        return load_mesh(self, recompute=recompute)
 
     def load_skeleton(self, recompute: bool = False):
         """
@@ -851,20 +834,18 @@ class SegmentationObject(object):
         :py:attr:`type` is `sv`.
 
         Args:
-            pred_key_appendix: Identifier for specific axon predictions. Only used
-                during development.
+            pred_key_appendix: Identifier for specific axon predictions. Only used during development.
 
         Returns:
             The axon probabilities of this supervoxel at every :py:attr:`~sample_locations`.
         """
         assert self.type == "sv"
         pred_key = "axoness_probas" + pred_key_appendix
-        if not pred_key in self.attr_dict:
+        if pred_key not in self.attr_dict:
             self.load_attr_dict()
-        if not pred_key in self.attr_dict:
-            msg = "WARNING: Requested axoness {} for SV {} is "\
-                  "not available. Existing keys: {}".format(
-                pred_key, self.id, self.attr_dict.keys())
+        if pred_key not in self.attr_dict:
+            msg = (f"WARNING: Requested axoness {pred_key} for SV {self.id} is not available. Existing "
+                   f"keys: {self.attr_dict.keys()}")
             raise ValueError(msg)
         return self.attr_dict[pred_key]
 
@@ -1158,10 +1139,10 @@ class SegmentationObject(object):
                 this object.
         """
         if voxel_dc is None:
-           voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                   disable_locking=True)
+            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                    disable_locking=True)
 
-        if not self.id in voxel_dc:
+        if self.id not in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
             log_reps.warning("No voxels found in VoxelDict!")
             return
@@ -1461,17 +1442,14 @@ class SegmentationDataset(object):
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
               objects.
     """
-    def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None,
-                 working_dir: Optional[str] = None,
+    def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
-                 version_dict: Optional[Dict[str, str]] = None, create: bool = False,
-                 config: Optional[str] = None,
-                 n_folders_fs: Optional[int] = None):
+                 version_dict: Optional[Dict[str, str]] = None, create: bool = False, config: Optional[str] = None,
+                 n_folders_fs: Optional[int] = None, cache_properties: Optional[List[str]] = None):
         """
         Args:
-            obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`s; usually
-                one of: 'vc', 'sj', 'mi', 'cs', 'sv'.
-            version: Version of dataset to distinguish it from others of the same type
+            obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`, e.g.: 'vc', 'sj', 'mi', 'cs', 'sv'.
+            version: Version of dataset to distinguish it from others of the same type.
             working_dir: Path to the working directory.
             scaling: Scaling of the raw data to nanometer
             version_dict: Dictionary which contains the versions of other dataset types which share
@@ -1479,6 +1457,8 @@ class SegmentationDataset(object):
             create: Whether or not to create this dataset's directory.
             config: Configuration file content.
             n_folders_fs: Number of folders within the dataset's folder structure.
+            cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
+                :py:class:`~syconn.reps.segmentation.SegmentationObject` via :py:func:`~get_segmentation_object`.
         """
 
         self._type = obj_type
@@ -1489,11 +1469,14 @@ class SegmentationDataset(object):
         self._ids = None
         self._rep_coords = None
         self._config = config
+        self._soid2ix = None
+        self._property_cache = dict()
+        if cache_properties is None:
+            cache_properties = tuple()
 
         if n_folders_fs is not None:
-            if not n_folders_fs in [10**i for i in range(6)]:
-                raise Exception("n_folders_fs must be in",
-                                [10**i for i in range(6)])
+            if n_folders_fs not in [10**i for i in range(6)]:
+                raise Exception("n_folders_fs must be in", [10**i for i in range(6)])
 
         if working_dir is None:
             if global_params.wd is not None or version == 'tmp':
@@ -1514,7 +1497,6 @@ class SegmentationDataset(object):
         if not self._working_dir.endswith("/"):
             self._working_dir += "/"
 
-        # self._config = parser.Config(self.working_dir)
         self._scaling = scaling
 
         if create and (version is None):
@@ -1563,6 +1545,8 @@ class SegmentationDataset(object):
 
         if create and not os.path.exists(self.so_storage_path):
             os.makedirs(self.so_storage_path)
+
+        self.enable_property_cache(cache_properties)
 
     def __repr__(self):
         return (f'{type(self).__name__}(obj_type="{self.type}", version="{self.version}", '
@@ -1797,7 +1781,7 @@ class SegmentationDataset(object):
             yield self.get_segmentation_object(self.ids[ix])
             ix += 1
 
-    def load_cached_data(self, prop_name) -> np.ndarray:
+    def load_cached_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
         """
         Load cached array. The ordering of the returned array will correspond
         to :py:attr:`~ids`.
@@ -1807,6 +1791,7 @@ class SegmentationDataset(object):
 
         Args:
             prop_name: Identifier of the requested cache array.
+            allow_nonexisting: If False, will fail for missing numpy files.
 
         Returns:
             numpy array of property `prop_name`.
@@ -1814,66 +1799,68 @@ class SegmentationDataset(object):
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
-            log_reps.warning(f'Requested data cache "{prop_name}" '
-                             f'did not exist.')
+            if not allow_nonexisting:
+                msg = f''
+                log_reps.error(msg)
+                raise FileNotFoundError(msg)
+            log_reps.warning(f'Requested data cache "{prop_name}" did not exist.')
 
-    def get_segmentationdataset(self, obj_type: str):
+    def get_segmentationdataset(self, obj_type: str) -> 'SegmentationDataset':
         """
-        Factory method for :class:`~syconn.reps.segmentation.SegmentationDataset` which are
-        part of this dataset.
+        Factory method for :class:`~syconn.reps.segmentation.SegmentationDataset` which are part of this dataset.
 
         Args:
             obj_type: Dataset of supervoxels with type `obj_type`.
 
         Returns:
-            The requested :class:`~syconn.reps.segmentation.SegmentationDataset`
-            object.
+            The requested :class:`~syconn.reps.segmentation.SegmentationDataset` object.
         """
         if obj_type not in self.version_dict:
-            raise ValueError('Requested object type {} not part of version_dict'
-                             ' {}.'.format(obj_type, self.version_dict))
-        return SegmentationDataset(obj_type,
-                                   version=self.version_dict[obj_type],
-                                   working_dir=self.working_dir)
+            raise ValueError('Requested object type {} not part of version_dict '
+                             '{}.'.format(obj_type, self.version_dict))
+        return SegmentationDataset(obj_type, version=self.version_dict[obj_type], working_dir=self.working_dir)
 
     def get_segmentation_object(self, obj_id: Union[int, List[int]],
-                                create: bool = False)\
-            -> Union[SegmentationObject, List[SegmentationObject]]:
+                                create: bool = False, **kwargs) -> Union[SegmentationObject, List[SegmentationObject]]:
         """
         Factory method for :class:`~syconn.reps.segmentation.SegmentationObject` which are
         part of this dataset.
 
         Args:
             obj_id: Supervoxel ID.
-            create: If True, creates the folder hierarchy down to the requested
-                supervoxel.
+            create: If True, creates the folder hierarchy down to the requested supervoxel.
 
         Returns:
-            The requested :class:`~syconn.reps.segmentation.SegmentationObject`
-            object.
+            The requested :class:`~syconn.reps.segmentation.SegmentationObject` object.
         """
         if np.isscalar(obj_id):
-            return SegmentationObject(obj_id=obj_id,
-                                      obj_type=self.type,
-                                      version=self.version,
-                                      working_dir=self.working_dir,
-                                      scaling=self.scaling,
-                                      create=create,
-                                      n_folders_fs=self.n_folders_fs,
-                                      config=self.config)
+            return self._get_segmentation_object(obj_id, create, **kwargs)
         else:
             res = []
             for ix in obj_id:
-                obj = SegmentationObject(obj_id=ix,
-                                      obj_type=self.type,
-                                      version=self.version,
-                                      working_dir=self.working_dir,
-                                      scaling=self.scaling,
-                                      create=create,
-                                      n_folders_fs=self.n_folders_fs,
-                                      config=self.config)
+                obj = self._get_segmentation_object(ix, create, **kwargs)
                 res.append(obj)
             return res
+
+    def _get_segmentation_object(self, obj_id: int, create: bool, **kwargs) -> SegmentationObject:
+        """
+        Initialize :py:class:`~SegmentationObject`.
+
+        Args:
+            obj_id: Object ID.
+            create: Create folder structure. Default: False.
+
+        Returns:
+            Supervoxel object.
+        """
+        kwargs_def = dict(obj_id=obj_id, obj_type=self.type, version=self.version, working_dir=self.working_dir,
+                          scaling=self.scaling, create=create, n_folders_fs=self.n_folders_fs, config=self.config)
+        kwargs_def.update(kwargs)
+
+        so = SegmentationObject(**kwargs_def)
+        for k, v in self._property_cache.items():
+            so.attr_dict[k] = v[self._soid2ix[obj_id]]
+        return so
 
     def save_version_dict(self):
         """
@@ -1888,5 +1875,18 @@ class SegmentationDataset(object):
         try:
             self.version_dict = load_pkl2obj(self.version_dict_path)
         except Exception as e:
-            raise FileNotFoundError('Version dictionary of SegmentationDataset'
-                                    ' not found. {}'.format(str(e)))
+            raise FileNotFoundError('Version dictionary of SegmentationDataset not found. {}'.format(str(e)))
+
+    def enable_property_cache(self, property_keys: Iterable[str]):
+        """
+        Add properties to cache.
+
+        Args:
+            property_keys: Property keys. Numpy cache arrays must exist.
+        """
+        # look-up for so IDs to index in cache arrays
+        if len(property_keys) == 0:
+            return
+        if self._soid2ix is None:
+            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
+        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})

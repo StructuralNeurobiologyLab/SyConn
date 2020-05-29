@@ -12,7 +12,7 @@ from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
-    find_missing_sv_attributes, find_missing_sv_skeletons
+    find_missing_sv_attributes, find_missing_sv_skeletons, load_so_attr_bulk
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..handler.basics import kd_factory
 from ..handler.multiviews import generate_rendering_locs
@@ -2350,9 +2350,8 @@ def compartments_graph(ssv: 'super_segmentation.SuperSegmentationObject',
     return den_graph, ax_graph, so_graph
 
 
-def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
-                            weighted: bool = True, recompute: bool = True,
-                            comp_types: Optional[List[int]] = None) -> float:
+def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', weighted: bool = True,
+                            recompute: bool = True, comp_types: Optional[List[int]] = None) -> float:
     """
     Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects)
     on specified functional compartments (`comp_types`) of the cell
@@ -2365,19 +2364,18 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
           available -> propagate to this method and return -1.
 
     Notes:
-        * Bouton predictions are converted into axon label,
-          i.e. 3 (en-passant) -> 1 and 4 (terminal) -> 1.
-
-        * The compartment type of the other cell cannot be inferred at this
-          point. Think about adding the property collection before celltype
-          reodiction -> would allow more detailed filtering of the synapses,
-          but adds an additional round of property collection.
+        * Bouton predictions are converted into axon label, i.e. 3 -> 1 (en-passant) and 4 -> 1 (terminal).
 
         * The compartment predictions are collected after the first access of this attribute
           during the celltype prediction. The key 'partner_axoness' is not available within ``
           self.syn_ssv`` until :func:`~syconn.extraction.cs_processing_steps
           ._collect_properties_from_ssv_partners_thread` is called (see
           :func:`~syconn.exec.exec_syns.run_matrix_export`).
+
+        * The compartment type of the other cell cannot be inferred at this
+          point. Think about adding the property collection before celltype
+          prediction -> would allow more detailed filtering of the synapses,
+          but adds an additional round of property collection.
 
     Args:
         ssv: The cell reconstruction.
@@ -2399,21 +2397,21 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
 
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                                     global_params.config['compartments']['dist_axoness_averaging'])
+
     if len(ssv.syn_ssv) == 0:
         return -1
-    syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv], attr_keys=[pred_key_ax, ])[0]
+    props = load_so_attr_bulk(ssv.syn_ssv, ('syn_sign', 'mesh_area', 'rep_coord'))
+    syn_axs = ssv.attr_for_coords([props['rep_coord'][syn.id] for syn in ssv.syn_ssv], attr_keys=[pred_key_ax, ])[0]
     # convert boutons to axon class
     syn_axs[syn_axs == 3] = 1
     syn_axs[syn_axs == 4] = 1
     syn_signs = []
     syn_sizes = []
-    # TODO: extend load_so_attr_bulk to arbitrary attributes and use that here, also include rep_coord (see above)
     for syn_ix, syn in enumerate(ssv.syn_ssv):
         if syn_axs[syn_ix] not in comp_types:
             continue
-        syn.load_attr_dict()
-        syn_signs.append(syn.attr_dict["syn_sign"])
-        syn_sizes.append(syn.mesh_area / 2)
+        syn_signs.append(props['syn_sign'][syn.id])
+        syn_sizes.append(props['mesh_area'][syn.id] / 2)
     if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
         return -1
     syn_signs = np.array(syn_signs)

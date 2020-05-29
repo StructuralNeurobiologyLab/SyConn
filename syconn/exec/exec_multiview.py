@@ -134,7 +134,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    predict_func = 'predict_axoness_semseg_pts' if global_params.config.use_point_models else 'predict_axoness_semseg'
+    predict_func = 'predict_axoness_semseg'
     path_to_out = qu.batchjob_script(multi_params, predict_func, log=log,
                                      suffix="", additional_flags="--gres=gpu:1",
                                      n_cores=n_cores, remove_jobfolder=False)
@@ -163,7 +163,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    predict_func = 'predict_spiness_semseg_pts' if global_params.config.use_point_models else 'predict_spiness_semseg'
+    predict_func = 'predict_spiness_semseg'
     qu.batchjob_script(multi_params, predict_func, log=log,
                        n_cores=global_params.config['ncores_per_node'] //
                                global_params.config['ngpus_per_node'],

@@ -29,13 +29,13 @@ there yet:
 * data1
 
 
-## COMMAND LINE ARGUMENTS
+## Command line arguments
 * `--working_dir`- can be given as a command line argument or defined
 by the user inside the script.
 * `--example_cube`- integer: 1
 
 
-## BASIC PARAMETERS
+## Basic parameters
 * `scale` numpy array; voxel size in nano meters
 * `prior_glia_removal` boolean
 * `chunk_size` touple; size of a cube that is processed by a single worker
@@ -57,19 +57,19 @@ be fetched from the annotation file;
 * `bd` numpy array; effectively dimensions of the cube of interest
 
 
-## LOGGING
+## Logging
 For the example run a convenient system of log files is provided.
 There is created one main log file for the whole run and other for
 subsequent steps of the pipeline.
 All log files are located in `log` folder inside working directory.
 
 
-## INITIALIZE DATA
+## Initialize data
 Data in the form of h5 files have to be converted into knossos datasets.
 For more information about knossos data format check [KNOSSOS](http://knossostool.org/)
 
 
-## START SyConn
+## Start SyConn
 Data processing is divided into nine steps that have to be run subsequently.
 
 
@@ -77,10 +77,9 @@ Data processing is divided into nine steps that have to be run subsequently.
 
 The transform functions will be applied when loading the segmentation
 data of cell organelles in order to convert them into binary fore- and
-background currently using `dill` package to support lambda expressions,
-a weak feature.
+background currently using `dill` package to support lambda expressions.
 Make sure all dependencies within the lambda expressions are imported
-in `QSUB_gauss_threshold_connected_components.py` (here: numpy)
+in `QSUB_gauss_threshold_connected_components.py` (here: numpy).
 
 
 # Prediction examples

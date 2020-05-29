@@ -5,20 +5,12 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-import numpy as np
 import os
-import subprocess
-import glob
-import shutil
-import sys
 import time
-import argparse
+import numpy as np
 import networkx as nx
-from knossos_utils import knossosdataset
 
-from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.config import generate_default_conf, initialize_logging
-from syconn.handler.compression import load_from_h5py
 from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
 
@@ -30,7 +22,7 @@ if __name__ == '__main__':
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 20),
@@ -72,9 +64,9 @@ if __name__ == '__main__':
     # currently using `dill` package to support lambda expressions, a weak feature. Make
     #  sure all dependencies within the lambda expressions are imported in
     #  `QSUB_gauss_threshold_connected_components.py` (here: numpy)
-    cellorganelle_transf_funcs = dict(mi=lambda x: ((x == 1)).astype(np.uint8),
-                                      vc=lambda x: ((x == 3)).astype(np.uint8),
-                                      sj=lambda x: ((x == 2)).astype(np.uint8))
+    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype(np.uint8),
+                                      vc=lambda x: (x == 3).astype(np.uint8),
+                                      sj=lambda x: (x == 2).astype(np.uint8))
 
     # Preparing data
     # --------------------------------------------------------------------------
@@ -82,7 +74,7 @@ if __name__ == '__main__':
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     time_stamps = [time.time()]
     step_idents = ['t-0']
-    log.info('Step 0/8 - Preparation')
+    log.info('Step 0/9 - Preparation')
 
     bb = None
     bd = None
@@ -94,13 +86,9 @@ if __name__ == '__main__':
                      ' in `global_params.py` '
                      'is overwritten and set to "{}".'.format(working_dir))
 
-    generate_default_conf(
-        working_dir, scale, syntype_avail=syntype_avail,
-        kd_seg=seg_kd_path, kd_mi=mi_kd_path,
-        kd_vc=vc_kd_path, kd_sj=sj_kd_path,
-        kd_sym=kd_sym_path, kd_asym=kd_asym_path,
-        key_value_pairs=key_val_pairs_conf,
-        force_overwrite=True)
+    generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
+                          kd_vc=vc_kd_path, kd_sj=sj_kd_path, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
+                          key_value_pairs=key_val_pairs_conf, force_overwrite=True)
 
     global_params.wd = working_dir
     os.makedirs(global_params.config.temp_path, exist_ok=True)
@@ -123,18 +111,17 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
-    log.info('Step 0/8 - Predicting sub-cellular structures')
+    log.info('Step 1/9 - Predicting sub-cellular structures')
     # myelin is not needed before `run_create_neuron_ssd`
-    # exec_dense_prediction.predict_myelin(raw_kd_path)
+    exec_dense_prediction.predict_myelin(raw_kd_path)
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
 
-    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
                                     n_folders_fs=n_folders_fs,
                                     load_cellorganelles_from_kd_overlaycubes=True,
                                     transf_func_kd_overlay=cellorganelle_transf_funcs,
-                                    n_cores=1,
                                     max_n_jobs=global_params.config.ncore_total * 4)
 
     # generate flattened RAG
@@ -151,42 +138,41 @@ if __name__ == '__main__':
     nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
 
     exec_init.run_create_rag()
-
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
     if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
+        log.info('Step 2.5/9 - Glia separation')
         exec_multiview.run_glia_rendering()
         exec_multiview.run_glia_prediction()
         exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
 
-    log.info('Step 2/8 - Creating SuperSegmentationDataset')
+    log.info('Step 3/9 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
-    log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering()
-    time_stamps.append(time.time())
-    step_idents.append('Neuron rendering')
+    if not global_params.config.use_onthefly_views:
+        log.info('Step 3.5/9 - Neuron rendering')
+        exec_multiview.run_neuron_rendering()
+        time_stamps.append(time.time())
+        step_idents.append('Neuron rendering')
 
-    log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size,
-                                 n_folders_fs=n_folders_fs_sc)
+    log.info('Step 4/9 - Synapse detection')
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 
-    log.info('Step 5/8 - Axon prediction')
+    log.info('Step 5/9 - Axon prediction')
     exec_multiview.run_semsegaxoness_prediction()
-    exec_multiview.run_semsegaxoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
-    log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction()
+    log.info('Step 6/9 - Spine prediction')
+    exec_multiview.run_semsegspiness_prediction()
+    exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
@@ -209,20 +195,14 @@ if __name__ == '__main__':
     dts = time_stamps[1:] - time_stamps[:-1]
     dt_tot = time_stamps[-1] - time_stamps[0]
     dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-                       " {}.\n".format(experiment_name, dt_tot_str)
+    time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
     n_steps = len(step_idents[1:]) - 1
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
-            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
+        step_dt_per = int(dts[i] / dt_tot * 100)
+        step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
         time_summary_str += step_str
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconst'
-             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-                   '/../kplugin/server.py'
-    os.system('python {} --working_dir={} --port=10001'.format(
-        fname_server, working_dir))
+    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
+             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    os.system(f'syconn.server --working_dir={working_dir} --port=10001')

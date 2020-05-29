@@ -171,7 +171,7 @@ if __name__ == '__main__':
     # START SyConn
     log.info('Example data will be processed in "{}".'.format(example_wd))
     log.info('Step 1/9 - Predicting sub-cellular structures')
-    # TODO: launch all inferences in parallel
+    # TODO: launch all predictions in parallel
     exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
@@ -184,7 +184,6 @@ if __name__ == '__main__':
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
                                     n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
-
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
@@ -242,17 +241,14 @@ if __name__ == '__main__':
     dts = time_stamps[1:] - time_stamps[:-1]
     dt_tot = time_stamps[-1] - time_stamps[0]
     dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-                       " {}.\n".format(experiment_name, dt_tot_str)
+    time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
     n_steps = len(step_idents[1:]) - 1
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "{:<10}{:<25}{:<20}{:<4s}\n".format(
-            f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_perc}%')
+        step_dt_per = int(dts[i] / dt_tot * 100)
+        step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
         time_summary_str += step_str
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconst'
-             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
+             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
     os.system(f'syconn.server --working_dir={example_wd} --port=10001')

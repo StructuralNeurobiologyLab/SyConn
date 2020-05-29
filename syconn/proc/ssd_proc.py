@@ -335,11 +335,11 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int])\
         -> Tuple[SuperSegmentationObject, SuperSegmentationObject]:
     """Splits an SuperSegmentationObject into two."""
 
-    if ssv._dataset is None:
+    if ssv._ssd is None:
         raise ValueError('SSV dataset has to be defined. Use "get_superseg'
                          'mentation_object" method to instantiate SSO objects,'
-                         ' or assign "_dataset" yourself accordingly.')
-    ssd = ssv._dataset
+                         ' or assign "_dataset".')
+    ssd = ssv._ssd
     orig_ids = set(ssv.sv_ids)
     # TODO: Support ssv.rag splitting
     splitted_sv_ids = set(splitted_sv_ids)

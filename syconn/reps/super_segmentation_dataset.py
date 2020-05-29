@@ -23,11 +23,13 @@ import os
 import shutil
 import numpy as np
 from multiprocessing.pool import ThreadPool
+
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
 from knossos_utils import knossosdataset
+
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -96,17 +98,16 @@ class SuperSegmentationDataset(object):
             print(n_synapes_per_type)
 
     Attributes:
-        sso_caching: WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+        sso_caching: WIP, enables caching mechanisms in SuperSegmentationObjects returned via
             `get_super_segmentation_object`
         sso_locking: If True, locking is enabled for SSV files.
     """
-    def __init__(self, working_dir: Optional[str] = None,
-                 version: Optional[str] = None, ssd_type: str = 'ssv',
-                 version_dict: Optional[Dict[str, str]] = None,
-                 sv_mapping: Optional[Union[Dict[int, int], str]] = None,
-                 scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
-                 config: DynConfig = None, sso_caching: bool = False,
-                 sso_locking: bool = False):
+
+    def __init__(self, working_dir: Optional[str] = None, version: Optional[str] = None, ssd_type: str = 'ssv',
+                 version_dict: Optional[Dict[str, str]] = None, sv_mapping: Optional[Union[Dict[int, int], str]] = None,
+                 scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
+                 sso_caching: bool = False, sso_locking: bool = False,
+                 sd_lookup: Optional[Dict[str, SegmentationDataset]] = None):
         """
         Args:
             working_dir: Path to the working directory.
@@ -119,9 +120,11 @@ class SuperSegmentationDataset(object):
             scaling: Array defining the voxel size in XYZ. Default is taken from the
                 `config.yml` file.
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`.
-            sso_caching: WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+            sso_caching: WIP, enables caching mechanisms in SuperSegmentationObjects returned via
                 `get_super_segmentation_object`
             sso_locking: If True, locking is enabled for SSV files.
+            sd_lookup: Lookup dict for :py:class:`~syconn.reps.segmentation.SegmentationDataset`, this will enable
+                usage of property cache arrays whenever possible. Only works for the attributes specified during init.
 
         """
         self.ssv_dict = {}
@@ -139,9 +142,8 @@ class SuperSegmentationDataset(object):
             if version == 'tmp' or global_params.config.working_dir is not None:
                 self._working_dir = global_params.config.working_dir
             else:
-                msg = "No working directory (wd) given. It has to be" \
-                      " specified either in global_params, via kwarg " \
-                      "`working_dir` or `config`."
+                msg = ("No working directory given. It has to be specified either in global_params, via kwarg "
+                       "`working_dir` or `config`.")
                 log_reps.error(msg)
                 raise ValueError(msg)
         elif config is not None:
@@ -188,6 +190,11 @@ class SuperSegmentationDataset(object):
             self._version = max_version + 1
         else:
             self._version = version
+
+        # init sd lookup
+        if sd_lookup is None:
+            sd_lookup = {"sv": None, "vc": None, "mi": None, "sj": None, "syn_ssv": None}
+        self.sd_lookup = sd_lookup
 
         if version_dict is None:
             try:
@@ -375,10 +382,8 @@ class SuperSegmentationDataset(object):
     @property
     def ssvs(self) -> Generator[SuperSegmentationObject, None, None]:
         """
-        Generator of
-        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
-        objects which are part of this
-        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+        Generator of :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` objects which are part
+        of this  :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
 
         Yields:
             :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
@@ -394,9 +399,6 @@ class SuperSegmentationDataset(object):
         """
         Flat array of supervoxels which are part of all super-supervoxels in this
         :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
-
-        Todo:
-            * add a non-flat, ragged array version and rename this into `sv_ids_flat`.
         """
         self.load_mapping_dict()
         return np.concatenate(list(self.mapping_dict.values()))
@@ -404,10 +406,7 @@ class SuperSegmentationDataset(object):
     @property
     def id_changer(self) -> List[int]:
         """
-
-        Todo:
-            * Understand reason for 'id_changer' and replace it by 'mapping_dict_reversed' if
-              appropriate.
+        Used to agglomerate of synapse fragments ('syn', supervoxel-level) to whole synapses between cells ('syn_ssv').
         """
         if len(self._id_changer) == 0:
             self.load_id_changer()
@@ -441,10 +440,9 @@ class SuperSegmentationDataset(object):
         """
         return self.id_changer[sv_id]
 
-    def get_segmentationdataset(self, obj_type):
+    def get_segmentationdataset(self, obj_type: str) -> SegmentationDataset:
         assert obj_type in self.version_dict
-        return SegmentationDataset(obj_type, version=self.version_dict[obj_type],
-                                   working_dir=self.working_dir)
+        return SegmentationDataset(obj_type, version=self.version_dict[obj_type], working_dir=self.working_dir)
 
     def apply_mergelist(self, sv_mapping: Union[Dict[int, int], str]):
         """
@@ -456,10 +454,8 @@ class SuperSegmentationDataset(object):
         """
         assemble_from_mergelist(self, sv_mapping)
 
-    def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]],
-                                      new_mapping: bool = False,
-                                      caching: Optional[bool] = None,
-                                      create: bool = False)\
+    def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]], new_mapping: bool = False,
+                                      caching: Optional[bool] = None, create: bool = False) \
             -> Union[SuperSegmentationObject, List[SuperSegmentationObject]]:
         """
         Factory method for
@@ -484,47 +480,24 @@ class SuperSegmentationDataset(object):
             SuperSegmentationObject(s) corresponding to the given `obj_id`
             (int or Iterable[int]).
         """
+        kwargs_def = dict(ssd_type=self.type, create=create, scaling=self.scaling, object_caching=caching,
+                          voxel_caching=caching, mesh_caching=caching, view_caching=caching, enable_locking_so=False,
+                          enable_locking=self.sso_locking, config=self.config)
         if caching is None:
             caching = self.sso_caching
         if np.isscalar(obj_id):
             if new_mapping:
-                sso = SuperSegmentationObject(obj_id,
-                                              self.version,
-                                              self.version_dict,
-                                              self.working_dir,
-                                              ssd_type=self.type,
-                                              create=create,
-                                              sv_ids=self.mapping_dict[obj_id],
-                                              scaling=self.scaling,
-                                              object_caching=caching,
-                                              voxel_caching=caching,
-                                              mesh_caching=caching,
-                                              view_caching=caching,
-                                              enable_locking_so=False,
-                                              enable_locking=self.sso_locking,
-                                              config=self.config)
+                sso = SuperSegmentationObject(obj_id, self.version, self.version_dict, self.working_dir,
+                                              sv_ids=self.mapping_dict[obj_id], **kwargs_def)
             else:
-                sso = SuperSegmentationObject(obj_id,
-                                              self.version,
-                                              self.version_dict,
-                                              self.working_dir,
-                                              ssd_type=self.type,
-                                              create=create,
-                                              scaling=self.scaling,
-                                              object_caching=caching,
-                                              voxel_caching=caching,
-                                              mesh_caching=caching,
-                                              view_caching=caching,
-                                              enable_locking_so=False,
-                                              enable_locking=self.sso_locking,
-                                              config=self.config)
-            sso._dataset = self
+                sso = SuperSegmentationObject(obj_id, self.version, self.version_dict, self.working_dir, **kwargs_def)
+            sso._ssd = self
         else:
             sso = []
             for ix in obj_id:
                 # call it with scalar input recursively
-                sso.append(self.get_super_segmentation_object(ix, create=create,
-                           new_mapping=new_mapping, caching=caching))
+                sso.append(self.get_super_segmentation_object(ix, create=create, new_mapping=new_mapping,
+                                                              caching=caching))
         return sso
 
     def save_dataset_shallow(self):
@@ -535,11 +508,8 @@ class SuperSegmentationDataset(object):
         self.save_mapping_dict()
         self.save_id_changer()
 
-    def save_dataset_deep(self, extract_only: bool = False,
-                          attr_keys: Iterable[str] = (),
-                          n_jobs: Optional[int] = None,
-                          nb_cpus: Optional[int] = None, use_batchjob=True,
-                          new_mapping: bool = True, overwrite=False):
+    def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
+                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True, overwrite=False):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
@@ -562,16 +532,13 @@ class SuperSegmentationDataset(object):
         Returns:
 
         """
-        save_dataset_deep(self, extract_only=extract_only,
-                          attr_keys=attr_keys, n_jobs=n_jobs,
-                          nb_cpus=nb_cpus, new_mapping=new_mapping,
-                          overwrite=overwrite, use_batchjob=use_batchjob)
+        save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
+                          new_mapping=new_mapping, overwrite=overwrite, use_batchjob=use_batchjob)
 
     def predict_cell_types_skelbased(self, stride: int = 1000,
-                           nb_cpus=1):
+                                     nb_cpus=1):
         """
-        Todo:
-            * Check usage and remove code trace if appropriate.
+        Not used anymore.
         """
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
@@ -1235,7 +1202,7 @@ def preproc_sso_skelfeature_thread(args: Tuple):
                 _ = ssv.skel_features(feat_ctx_nm)
             except IndexError as e:
                 log_reps.error("Error at SSO %d (context: %d).\n%s" % (
-                               ssv.id, feat_ctx_nm, e))
+                    ssv.id, feat_ctx_nm, e))
 
 
 def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
@@ -1271,4 +1238,3 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
                                           overwrite=True, **view_props)
         else:
             ssv.predict_views_embedding(m, pred_key_appendix)
-
