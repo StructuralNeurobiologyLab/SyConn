@@ -4,6 +4,9 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+import os
+
+from . import log_proc
 import numpy as np
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
@@ -17,12 +20,14 @@ from sklearn.manifold import TSNE as TSNE_sc
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
-import os
 from sklearn.preprocessing import label_binarize
-import seaborn as sns
 import joblib
 import matplotlib.patches as mpatches
-from . import log_proc
+# required for readthedocs build
+try:
+    import seaborn as sns
+except ImportError:
+    pass
 
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
