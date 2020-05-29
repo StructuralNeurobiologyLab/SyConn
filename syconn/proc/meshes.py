@@ -56,8 +56,8 @@ except ImportError:
     log_proc.error('ImportError. Could not import `in_boundinb_box` from '
                    '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 if TYPE_CHECKING:
-    from ..reps.segmentation import SegmentationObject
-    from ..reps.super_segmentation_object import SuperSegmentationObject
+    from ..reps import segmentation
+    from ..reps import super_segmentation_object
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
@@ -522,7 +522,7 @@ def _mesh_loader(so):
     return so.mesh
 
 
-def merge_someshes(sos: Iterable['SegmentationObject'], nb_simplices: int = 3,
+def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplices: int = 3,
                    nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
                    cmap: Optional = None, alpha: float = 1.0):
     """
@@ -795,7 +795,7 @@ def color_factory(c_values, mcmap, alpha=1.0):
     return np.array(colors)
 
 
-def compartmentalize_mesh(ssv, pred_key_appendix=""):
+def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
     """
     Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
     on axoness prediction of SV's contained in SuperSuperVoxel ssv.
@@ -854,7 +854,7 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
     return comp_meshes
 
 
-def mesh_creator_sso(ssv: 'SuperSegmentationObject',
+def mesh_creator_sso(ssv: 'super_segmentation_object.SuperSegmentationObject',
                      segobjs: Iterable[str] = ('sv', 'mi', 'sj', 'vc')):
     """
     Cache meshes of specified SegmentationObjects.
@@ -965,7 +965,7 @@ def mesh_chunk(args):
     md.push()
 
 
-def get_object_mesh(obj: 'SegmentationObject', ds: Union[tuple, list, np.ndarray],
+def get_object_mesh(obj: 'segmentation.SegmentationObject', ds: Union[tuple, list, np.ndarray],
                     mesher_kwargs: Optional[dict] = None):
     """
     Get object mesh from object voxels using marching cubes. Boundary artifacts

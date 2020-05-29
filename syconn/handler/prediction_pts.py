@@ -15,7 +15,6 @@ import collections
 from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
 from multiprocessing import Process, Queue
 import numpy as np
-import torch
 from scipy import spatial
 import morphx.processing.clouds as clouds
 import functools
@@ -25,7 +24,11 @@ from sklearn.preprocessing import label_binarize
 from morphx.processing.hybrids import extract_subset
 from morphx.processing.objects import bfs_vertices, context_splitting, context_splitting_v2
 from syconn.reps.super_segmentation import SuperSegmentationDataset
-
+# for readthedocs build
+try:
+    import torch
+except ImportError:
+    pass
 # TODO: specify further, add to config
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
 # in nm, should be replaced by Poisson disk sampling
@@ -92,17 +95,13 @@ def worker_postproc(q_out: Queue, q_postproc: Queue,
                 if inp in stops_received:
                     # already got STOP signal, put back in queue for other worker.
                     q_postproc.put(inp)
-                    print('Got duplicate STOP signal:', inp)
                 else:
-                    print('Received STOP signal:', inp)
                     stops_received.add(inp)
                 if len(stops_received) == n_worker_pred:
-                    print('Worker postproc done.')
                     break
                 continue
         else:
             if len(stops_received) == n_worker_pred:
-                print('Worker postproc done 2.')
                 break
             time.sleep(0.5)
             continue
@@ -160,7 +159,6 @@ def worker_load(q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func
         q_out:
         q_loader_sync:
         loader_func:
-        kwargs:
     """
     while True:
         if q_loader.empty():

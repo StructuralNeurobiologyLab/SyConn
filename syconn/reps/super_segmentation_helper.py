@@ -25,10 +25,9 @@ try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
-from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import super_segmentation
-    from torch.nn import Module
 
 from collections import Counter
 from multiprocessing.pool import ThreadPool
@@ -113,7 +112,7 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
-                         model: 'Module', nb_views_model: int = 20, use_syntype=True,
+                         model: Any, nb_views_model: int = 20, use_syntype=True,
                          overwrite: bool = False, pred_key_appendix="",
                          da_equals_tan=True):
     """

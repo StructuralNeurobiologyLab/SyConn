@@ -40,7 +40,11 @@ from scipy.stats import entropy
 from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
-import torch
+# for readthedocs build
+try:
+    import torch
+except ImportError:
+    pass
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
@@ -931,8 +935,7 @@ def prediction_helper(raw, model, override_mfp=True,
     return zxy2xyz(pred)
 
 
-def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
-               debug: bool = False):
+def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module', debug: bool = False):
     """
     Helper function to write chunks.
 
