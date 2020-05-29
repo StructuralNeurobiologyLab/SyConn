@@ -1,15 +1,22 @@
 import os
+import re
+import glob
+
 import numpy as np
 import networkx as nx
 from collections import deque
 from knossos_utils.skeleton_utils import load_skeleton
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn import global_params
 
 
 def expand_labels(input_path: str, output_path: str, scaling):
     input_path = os.path.expanduser(input_path)
     output_path = os.path.expanduser(output_path)
+    sso_id = int(re.findall(r"/(\d+).", input_path)[0])
+    sso = SuperSegmentationObject(sso_id)
+    sso.meshes2kzip(output_path)
     # load annotation object and corresponding skeleton
     a_obj = load_skeleton(input_path)
     if len(a_obj) == 1:
@@ -82,11 +89,8 @@ def label_search(g: nx.Graph, source: int) -> int:
 
 
 def nxGraph2kzip(g, coords, labels, kzip_path):
-    scaling = global_params.config['scaling']
-    coords = coords / scaling
     skel = Skeleton()
     anno = SkeletonAnnotation()
-    anno.scaling = scaling
     node_mapping = {}
     for v in g.nodes():
         c = coords[v]
@@ -98,3 +102,14 @@ def nxGraph2kzip(g, coords, labels, kzip_path):
         anno.addEdge(node_mapping[e[0]], node_mapping[e[1]])
     skel.add_annotation(anno)
     skel.to_kzip(kzip_path)
+
+
+if __name__ == '__main__':
+    data_path = "/wholebrain/u/jklimesch/thesis/tmp/sparse_gt/"
+    destination = "/wholebrain/u/jklimesch/thesis/tmp/sparse_gt/expanded/"
+    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    file_paths = glob.glob(data_path + '*.k.zip')
+    for file in file_paths:
+        slashs = [pos for pos, char in enumerate(file) if char == '/']
+        name = file[slashs[-1] + 1:]
+        expand_labels(file, destination + name, np.array([10, 10, 20]))

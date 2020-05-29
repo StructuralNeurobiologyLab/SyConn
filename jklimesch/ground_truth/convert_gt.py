@@ -41,7 +41,7 @@ def labels2mesh(args):
     # load cell and cell organelles
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh]
     # load new synapse version
-    meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=True))
+    meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=False))
     label_map = [-1, 7, 8, 9]
     hms = []
     for ix, mesh in enumerate(meshes):
@@ -54,10 +54,9 @@ def labels2mesh(args):
 
     # load annotation object and corresponding skeleton
     a_obj = load_skeleton(kzip_path)
-    if len(a_obj) == 1:
-        a_obj = list(a_obj.values())[0]
-    else:
-        a_obj = a_obj["skeleton"]
+    if len(a_obj) != 1:
+        raise ValueError("File contains more or less than one skeleton!")
+    a_obj = list(a_obj.values())[0]
     a_nodes = list(a_obj.getNodes())
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
     a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
@@ -118,7 +117,7 @@ def labels2mesh(args):
 
 def comment2int(comment: str):
     """ Map comments used during annotation to respective label. """
-    if comment == "gt_dendrite" or comment == "shaft":
+    if comment == "gt_dendrite" or comment == "shaft" or comment == "s":
         return 0
     elif comment == "gt_axon":
         return 1
@@ -128,7 +127,7 @@ def comment2int(comment: str):
         return 3
     elif comment == "gt_terminal":
         return 4
-    elif comment == "gt_neck" or comment == "neck":
+    elif comment == "gt_neck" or comment == "neck" or comment == "p" or comment == "nr" or comment == "in":
         return 5
     elif comment == "gt_head" or comment == "head":
         return 6
@@ -157,7 +156,7 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    # labels2mesh(params[0])
+    # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
