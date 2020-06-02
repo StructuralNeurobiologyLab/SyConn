@@ -8,7 +8,7 @@ from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvot
 
 
 def sso2ce(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
-           sy: bool = True, my: bool = True, mesh: bool = False) -> CloudEnsemble:
+           sy: bool = True, my: bool = False, my_avg: bool = True, mesh: bool = False) -> CloudEnsemble:
     """ Converts a SuperSegmentationObject into a CloudEnsemble (ce). Cell organelles are saved
         as additional cloud in the ce, named as in the function parameters (e.g. 'mi' for
         mitochondria). The no_pred (no prediction) flags of the ce are set for all additional
@@ -21,6 +21,7 @@ def sso2ce(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
         vc: Flag for including vesicle clouds.
         sy: Flag for including synapses.
         my: Flag for including myelin.
+        my_avg: Flag for applying majority vote on myelin property.
         mesh: Flag for storing all objects as HybridMesh objects with additional faces.
 
     Returns:
@@ -58,12 +59,12 @@ def sso2ce(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
     # merge all clouds into a CloudEnsemble
     ce = CloudEnsemble(clouds, hm, no_pred=[obj for obj in clouds])
     if my:
-        add_myelin(sso, hm)
+        add_myelin(sso, hm, average=my_avg)
     return ce
 
 
 def sso2hc(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
-           sy: bool = True, my: bool = True) -> HybridCloud:
+           sy: bool = True, my: bool = False, my_avg: bool = True) -> HybridCloud:
     """ Converts a SuperSegmentationObject into a HybridCloud (hc). The object boundaries
         are stored in the obj_bounds attribute of the hc. The no_pred (no prediction) flags
         are set for all cell organelles. Myelin is added in form of the types array of the
@@ -75,6 +76,7 @@ def sso2hc(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
         vc: Flag for including vesicle clouds.
         sy: Flag for including synapses.
         my: Flag for including myelin.
+        my_avg: Flag for applying majority vote on myelin property.
 
     Returns:
         HybridCloud object as described above.
@@ -108,24 +110,36 @@ def sso2hc(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
     obj_bounds = {'hc': [0, bound]}
     total_verts[0:bound] = hc_vertices
     for ix, cloud in enumerate(clouds):
+        if len(cloud) == 0:
+            # ignore cell organelles with zero vertices
+            continue
         obj_bounds[obj_names[ix]] = [bound, bound+len(cloud)]
         total_verts[bound:bound+len(cloud)] = cloud
+        bound += len(cloud)
     sso.load_skeleton()
     hc = HybridCloud(vertices=total_verts, nodes=sso.skeleton['nodes']*sso.scaling, edges=sso.skeleton['edges'],
                      obj_bounds=obj_bounds, no_pred=obj_names)
     if my:
-        add_myelin(sso, hc)
+        add_myelin(sso, hc, average=my_avg)
     return hc
 
 
-def add_myelin(sso: SuperSegmentationObject, hc: HybridCloud):
+def add_myelin(sso: SuperSegmentationObject, hc: HybridCloud, average: bool = True):
     """ Tranfers myelin prediction from a SuperSegmentationObject to an existing
         HybridCloud (hc). Myelin is added in form of the types array of the hc,
         where myelinated vertices have type 1 and 0 otherwise. Works in-place.
+
+    Args:
+        sso: SuperSegmentationObject which contains skeleton to which myelin should get mapped.
+        hc: HybridCloud to which myelin should get added.
+        average: Flag for applying majority vote to the myelin property
     """
     sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
-    majorityvote_skeleton_property(sso, 'myelin')
-    myelinated = sso.skeleton['myelin_avg10000']
+    if average:
+        majorityvote_skeleton_property(sso, 'myelin')
+        myelinated = sso.skeleton['myelin_avg10000']
+    else:
+        myelinated = sso.skeleton['myelin']
     nodes_idcs = np.arange(len(hc.nodes))
     myel_nodes = nodes_idcs[myelinated.astype(bool)]
     myel_vertices = []
