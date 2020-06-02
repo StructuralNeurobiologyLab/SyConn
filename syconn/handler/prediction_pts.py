@@ -95,13 +95,17 @@ def worker_postproc(q_out: Queue, q_postproc: Queue,
                 if inp in stops_received:
                     # already got STOP signal, put back in queue for other worker.
                     q_postproc.put(inp)
+                    print('Got duplicate STOP signal:', inp)
                 else:
+                    print('Received STOP signal:', inp)
                     stops_received.add(inp)
                 if len(stops_received) == n_worker_pred:
+                    print('Worker postproc done.')
                     break
                 continue
         else:
             if len(stops_received) == n_worker_pred:
+                print('Worker postproc done 2.')
                 break
             time.sleep(0.5)
             continue
@@ -131,23 +135,22 @@ def worker_pred(worker_cnt: int, q_out: Queue, q_cnt: Queue, q_in: Queue,
     while True:
         if not q_in.empty():
             inp = q_in.get()
-            if inp == 'STOP':
-                if stop_received:
-                    # already got STOP signal, put back in queue for other worker.
-                    q_in.put('STOP')
-                    # wait for the other worker to get the signal
-                    time.sleep(2)
-                    continue
-                stop_received = True
-                if not q_in.empty():
-                    continue
-                break
+            if 'STOP' in inp:
+                if inp == f'STOP{worker_cnt}':
+                    print('Received STOP signal:', inp)
+                    stop_received = True
+                    if q_in.empty():
+                        break
+                else:  # put it back to queue
+                    q_in.put(inp)
+                continue
         else:
             if stop_received:
                 break
             time.sleep(0.5)
             continue
         pred_func(m, inp, q_out, q_cnt, device, bs)
+    print(f'Pred worker {worker_cnt} stopped.')
     q_out.put(f'STOP{worker_cnt}')
 
 
@@ -207,9 +210,9 @@ def listener(q_cnt: Queue, q_in: Queue, q_loader_sync: Queue,
             _ = q_loader_sync.get()
             cnt_loder_done += 1
             if cnt_loder_done == nloader:
-                for _ in range(npredictor):
+                for ii in range(npredictor):
                     time.sleep(0.2)
-                    q_in.put('STOP')
+                    q_in.put(f'STOP{ii}')
 
 
 def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
@@ -224,7 +227,7 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
                       use_test_aug: bool = False,
                       device: str = 'cuda', bs: int = 40,
                       loader_kwargs: Optional[dict] = None,
-                      redundancy: int = 25) -> dict:
+                      redundancy: Union[int, tuple] = (25, 50)) -> dict:
     """
     # TODO: Use 'mode' kwarg to switch between point2scalar, point2points for skel and surface classifaction.
     # TODO: remove quick-fix with ssd_kwargs vs. ssv_ids kwargs
@@ -328,7 +331,12 @@ def predict_pts_plain(ssd_kwargs: dict, model_loader: Callable,
         if ssv_ids is None:
             ssv_ids = ssd.ssv_ids
         # redundancy
-        ssv_redundancy = [redundancy] * len(ssd.ssv_ids)
+        if type(redundancy) is tuple:
+            ssv_redundancy = [min(max(len(ssv.mesh[1]) // 3 // npoints * 3, redundancy[0]), redundancy[1]) for ssv in
+                              ssd.get_super_segmentation_object(ssv_ids)]
+        else:
+            ssv_redundancy = [max(len(ssv.mesh[1]) // 3 // npoints * 3, redundancy) for ssv in
+                              ssd.get_super_segmentation_object(ssv_ids)]
         ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
                                   for ii in range(len(ssv_ids))])
         params_in = [{**kwargs, **dict(ssv_ids=[ch])} for ch in ssv_ids]
@@ -564,6 +572,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             ssv = ssd.get_super_segmentation_object(ssv_id)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values()), 'celltype', None))
+            ssv.clear_cache()
             npoints_ssv = min(len(hc.vertices), npoints)
             batch = np.zeros((occ, npoints_ssv, 3))
             batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
@@ -618,6 +627,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values()), 'celltype', None))
+            ssv.clear_cache()
             npoints_ssv = min(len(hc.vertices), npoints)
             # add a +-10% fluctuation in the number of input points
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
@@ -768,6 +778,7 @@ def pts_loader_glia(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         ssv = ssd.get_super_segmentation_object(curr_ssv_params[0])
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
             feat_dc.values()), 'glia', None))
+        ssv.clear_cache()
         npoints_ssv = min(len(hc.vertices), npoints)
         # add a +-10% fluctuation in the number of input and output points
         npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))

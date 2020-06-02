@@ -526,7 +526,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
                    nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
                    cmap: Optional = None, alpha: float = 1.0):
     """
-    Merge meshes of SegmentationObjects.
+    Merge meshes of SegmentationObjects. This will cache :py:class:`~syconn.reps.segmentation.SegmentationObject`.
 
     Args:
         sos: SegmentationObjects are used to get .mesh, N x 1
@@ -544,7 +544,9 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
         meshes = start_multiprocess_imap(_mesh_loader, sos, nb_cpus=nb_cpus, show_progress=False)
     else:
         meshes = load_so_meshes_bulk(sos)
-        meshes = [meshes[so.id] for so in sos]
+        for so in sos:
+            so._mesh = meshes[so.id]
+        meshes = [so.mesh for so in sos]
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     ind_lst = []

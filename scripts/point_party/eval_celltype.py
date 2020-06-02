@@ -36,7 +36,8 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ct
     """
     out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
                                npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
-                               ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size)
+                               ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size,
+                               redundancy=(25, 50))
     out_dc = dict(out_dc)
     for ssv_id in out_dc:
         logit = np.concatenate(out_dc[ssv_id])
@@ -58,11 +59,11 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval0_sp50k/'
-    for run in range(1):
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp10k/'
+    for run in range(3):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval0/'
+        mdir = base_dir + '/celltype_pts_scale2000_nb10000_ctx10000_swish_gn_CV{}_eval{}/'
         mkwargs, loader_kwargs = get_pt_kwargs(mdir)
         npoints = loader_kwargs['npoints']
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)

@@ -64,10 +64,12 @@ def _preproc_syns(args):
     m = get_celltype_model_e3()
     for ssv in ssd.get_super_segmentation_object(ssv_ids):
         ssv._view_caching = True
-        _ = ssv.syn_ssv_mesh
-        _ = ssv.typedsyns2mesh()
-        ssv.predict_celltype_cnn(m, '_v2', onthefly_views=True, verbose=True,
-                                 view_props=dict(nb_views=2))
+        ssv.load_attr_dict()
+        # _ = ssv.syn_ssv_mesh
+        # _ = ssv.typedsyns2mesh()
+        if 'celltype_cnn_e3_v2' not in ssv.attr_dict:
+            ssv.predict_celltype_cnn(m, '_v2', onthefly_views=True, verbose=True,
+                                     view_props=dict(nb_views=2))
         celltypes.append(ssv.celltype('celltype_cnn_e3_v2'))
         celltypes_old.append(ssv.celltype())
     return celltypes, celltypes_old
@@ -98,7 +100,8 @@ if __name__ == '__main__':
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
     ssd_kwargs = dict(working_dir=wd)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    ordering = np.argsort([len(np.concatenate(ssv.sample_locations())) for ssv in ssd.get_super_segmentation_object(ssv_ids)])
+    ordering = np.argsort([len(np.concatenate(ssv.sample_locations())) for ssv in
+                           ssd.get_super_segmentation_object(ssv_ids)])[::-1]
     params = [([ssv_id], ssd_kwargs) for ssv_id in ssv_ids[ordering]]
     mv_preds = start_multiprocess_imap(_preproc_syns, params, nb_cpus=6)
     mv_preds_old = np.array([p[1] for p in mv_preds])

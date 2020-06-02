@@ -416,6 +416,7 @@ def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['Segment
                         use_new_subfold: bool = True, cache_decomp=True) -> MeshStorage:
     """
     Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
+    This will not assign the ``_mesh`` attribute!
 
     Args:
         sos: SegmentationObjects
@@ -434,17 +435,18 @@ def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['Segment
         rh.subfold_from_ix_OLD
     sub2ids = defaultdict(list)
     for so in sos:
-        subf = subf_from_ix(so.id, nf)
-        sub2ids[subf].append(so.id)
-    cnt = 0
+        if so._mesh is None:
+            subf = subf_from_ix(so.id, nf)
+            sub2ids[subf].append(so.id)
+        else:
+            md_out[so.id] = so._mesh
     for subfold, ids in sub2ids.items():
         mesh_path = f'{base_path}/{subfold}/mesh.pkl'
         md = MeshStorage(mesh_path, disable_locking=True,
                          cache_decomp=cache_decomp)
         for so_id in ids:
-            cnt += 1
             md_out._dc_intern[so_id] = md._dc_intern[so_id]
-    assert cnt == len(sos)
+    assert len(md_out) == len(sos)
     return md_out
 
 
