@@ -33,6 +33,7 @@ parser.add_argument('--sp', type=int, default=10000, help='Number of sample poin
 parser.add_argument('--scale_norm', type=int, default=1000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
+parser.add_argument('--use_bias', default=False, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
@@ -60,6 +61,7 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
+use_bias = args.use_bias
 
 lr = 5e-4
 lr_stepsize = 100
@@ -100,6 +102,9 @@ if use_cuda:
 else:
     device = torch.device('cpu')
 
+if not use_bias:
+    name += '_noBias'
+
 print(f'Running on device: {device}')
 
 # set paths
@@ -111,7 +116,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 model = SegSmall3(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                  track_running_stats=track_running_stats, act=act, use_bias=False)
+                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -138,7 +143,7 @@ train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='norma
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.05, distr='normal')])
+                                  clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 

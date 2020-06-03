@@ -450,8 +450,10 @@ def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['Segment
     return md_out
 
 
-def load_so_attr_bulk(sos: List['SegmentationObject'], attr_keys: Union[str, Iterable[str]],
-                      use_new_subfold: bool = True) -> Union[Dict[str, Dict[int, Any]], Dict[int, Any]]:
+def load_so_attr_bulk(sos: List['SegmentationObject'],
+                      attr_keys: Union[str, Iterable[str]],
+                      use_new_subfold: bool = True,
+                      allow_missing: bool = False) -> Union[Dict[str, Dict[int, Any]], Dict[int, Any]]:
     """
     Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
     Returns a single dict if only one attr_key is provided or a dict of dicts if many.
@@ -463,6 +465,7 @@ def load_so_attr_bulk(sos: List['SegmentationObject'], attr_keys: Union[str, Ite
         sos: SegmentationObjects
         attr_keys: Attribute key(s).
         use_new_subfold: Use new sub-folder structure
+        allow_missing: If True, sets attribute value to None if missing. If False and missing, raise KeyError.
 
     Returns:
         (Dict. with key: attr_key of) dict. with key: ID, value: attribute value
@@ -495,7 +498,13 @@ def load_so_attr_bulk(sos: List['SegmentationObject'], attr_keys: Union[str, Ite
         for so_id in ids:
             so_dict = ad[so_id]
             for attr_key in attr_keys:
-                out[attr_key][so_id] = so_dict[attr_key]
+                try:
+                    out[attr_key][so_id] = so_dict[attr_key]
+                except KeyError as e:
+                    if allow_missing:
+                        out[attr_key][so_id] = None
+                    else:
+                        raise KeyError(e)
     if len(attr_keys) == 1:
         out = out[attr_keys[0]]
     return out

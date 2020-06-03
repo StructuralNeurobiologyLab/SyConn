@@ -4,13 +4,17 @@ from syconn.handler import basics, config
 from syconn.handler.prediction import certainty_estimate
 import numpy as np
 from sklearn.metrics.classification import classification_report
+from sklearn.metrics import confusion_matrix
+from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
+from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
+
 from syconn.handler.prediction_pts import predict_pts_plain, \
     pts_loader_scalar, pts_pred_scalar, get_celltype_model_pts, get_pt_kwargs
 import os
 
 
 def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ctx_size, nloader=4, npredictor=2,
-                        ssv_ids=None, use_test_aug=False, device='cuda'):
+                        ssv_ids=None, use_test_aug=False, device='cuda', **kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -37,7 +41,7 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ct
     out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
                                npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
                                ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size,
-                               redundancy=(25, 50))
+                               redundancy=(100, 100), bs=10, **kwargs)
     out_dc = dict(out_dc)
     for ssv_id in out_dc:
         logit = np.concatenate(out_dc[ssv_id])
@@ -59,11 +63,12 @@ if __name__ == '__main__':
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp10k/'
-    for run in range(3):
+    base_dir_init = '/wholebrain/scratch/pschuber/e3trainings_BAK/ptconv_2020_06_03/celltype_eval{}_sp50k/'
+    ssd_kwargs = dict(working_dir=wd, version=gt_version)
+    ssd = SuperSegmentationDataset(**ssd_kwargs)
+    for run in range(1):
         base_dir = base_dir_init.format(run)
-        ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale2000_nb10000_ctx10000_swish_gn_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
         mkwargs, loader_kwargs = get_pt_kwargs(mdir)
         npoints = loader_kwargs['npoints']
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)
@@ -80,13 +85,12 @@ if __name__ == '__main__':
             assert os.path.isfile(mpath)
 
             res_dc = predict_celltype_wd(ssd_kwargs, get_celltype_model_pts, mpath, ssv_ids=split_dc['valid'],
-                                         nloader=10, npredictor=5, use_test_aug=True, **loader_kwargs)
+                                         nloader=6, npredictor=3, use_test_aug=False, seeded=True, **loader_kwargs)
             basics.write_obj2pkl(fname_pred, res_dc)
 
         # compare to GT
         import pandas
-        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5,
-                             INT=7, FS=8, GLIA=9)
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, GPe=5, INT=7, FS=8, GLIA=9)
         del str2int_label['GLIA']
         del str2int_label['FS']
         str2int_label["GP "] = 5  # typo
@@ -122,16 +126,26 @@ if __name__ == '__main__':
                 valid_preds_local.append(curr_pred)
                 valid_certainty.append(curr_cert)
                 valid_ids_local.append(curr_id)
-                if curr_pred != curr_l:
-                    log.info(f'id: {curr_id} target: {curr_l} prediction: {curr_pred} certainty: {curr_cert:.2f}')
-            log.info(f'\nCV split: {CV}')
-            log.info(classification_report(valid_ls_local, valid_preds_local, labels=np.arange(7),
-                                           target_names=target_names))
+                # if curr_pred != curr_l:
+                #     log.info(f'id: {curr_id} target: {curr_l} prediction: {curr_pred} certainty: {curr_cert:.2f}')
+            # log.info(f'\nCV split: {CV}')
+            # log.info(classification_report(valid_ls_local, valid_preds_local, labels=np.arange(7),
+            #                                target_names=target_names))
             valid_ls.extend(valid_ls_local)
             valid_preds.extend(valid_preds_local)
             valid_ids.extend(valid_ids_local)
 
         log.info(f'Final prediction result for run {run} with {loader_kwargs} and {mkwargs}.')
-        log.info(classification_report(valid_ls, valid_preds, labels=np.arange(7),
-                                       target_names=target_names))
+        log.info(classification_report(valid_ls, valid_preds, labels=np.arange(7), target_names=target_names))
+        log.info(confusion_matrix(valid_ls, valid_preds, labels=np.arange(7)))
+        for ix in range(len(valid_ls)):
+            curr_l = valid_ls[ix]
+            curr_pred = valid_preds[ix]
+            curr_id = valid_ids[ix]
+            curr_cert = valid_certainty[ix]
+            if curr_pred != curr_l:
+                log.info(f'id: {curr_id} target: {curr_l} prediction: {curr_pred} certainty: {curr_cert:.2f}')
+                # ssv = ssd.get_super_segmentation_object(curr_id)
+                # print(syn_sign_ratio_celltype(ssv, comp_types=[0, ]), syn_sign_ratio_celltype(ssv, comp_types=[0, ]))
+                # ssv.meshes2kzip(f'/wholebrain/scratch/pschuber/tmp/{ssv.id}_p{curr_pred}_t{curr_l}_cert{curr_cert>0.75}.k.zip', synssv_instead_sj=True)
         log.info('-------------------------------')

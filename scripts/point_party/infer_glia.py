@@ -84,7 +84,6 @@ def predict_glia_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ssv_
         assert np.sum(node_pred == -1) == 0
         prediction = label_binarize(prediction * 4, classes=np.arange(5))
         write_pts_ply(fname, orig_coords, prediction, binarized=True)
-    raise()
     return out_dc
 
 

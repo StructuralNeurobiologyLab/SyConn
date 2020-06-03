@@ -107,7 +107,7 @@ class ViewContainer(object):
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
 
-    def write_single_plot(self, dest_path, view_nb, perspective_nb=0, dpi=400):
+    def write_single_plot(self, dest_path, view_nb, perspective_nb=0, dpi=300):
         import matplotlib
         matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt

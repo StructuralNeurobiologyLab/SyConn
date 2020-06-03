@@ -46,14 +46,6 @@ cleanup:
   tags:
     - master
 
-cleanup_cache:
-  stage: cleanup
-  script:
-    - echo "Cleaning up"
-    - ls "%CACHE_PATH%/%CI_PIPELINE_ID%"
-  when: always
-
-
 pylint:
   stage: test
   before_script:

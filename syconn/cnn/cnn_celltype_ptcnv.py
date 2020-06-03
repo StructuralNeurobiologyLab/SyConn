@@ -35,6 +35,8 @@ parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor f
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
+parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
+parser.add_argument('--use_syntype', default=True, help='Use synapse type', type=bool)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -65,6 +67,8 @@ scale_norm = args.scale_norm
 save_root = args.sr
 cval = args.cval
 ctx = args.ctx
+use_bias = args.use_bias
+use_syntype = args.use_syntype
 
 if cval is None:
     cval = 0
@@ -77,7 +81,6 @@ max_steps = 150000
 # celltype specific
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
-use_syntype = True
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
@@ -103,6 +106,9 @@ if use_norm is False:
 else:
     name += f'_{use_norm}'
 
+if not use_bias:
+    name += '_noBias'
+
 if use_cuda:
     device = torch.device('cuda')
 else:
@@ -119,7 +125,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                   track_running_stats=track_running_stats, act=act)
+                   track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_CV{cval}_eval{eval_nr}'
 model = nn.DataParallel(model)
@@ -143,11 +149,11 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.05, distr='normal')])
+                                  clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
@@ -186,7 +192,7 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # )
 # extra weight for HVC and LMAN
 # STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
-criterion = torch.nn.CrossEntropyLoss(weight=torch.Tensor([1, 1, 1, 2, 2, 1, 1, 1]))
+criterion = torch.nn.CrossEntropyLoss(weight=torch.Tensor([1, 1, 1, 1, 1, 1, 1, 1]))
 if use_cuda:
     criterion.cuda()
 
@@ -218,7 +224,7 @@ trainer = Trainer3d(
     num_classes=num_classes,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=5
+    nbatch_avg=10,
 )
 
 # Archiving training script, src folder, env info

@@ -32,6 +32,7 @@ parser.add_argument('--bs', type=int, default=12, help='Batch size')
 parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=1500, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
+parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
 parser.add_argument(
@@ -60,6 +61,7 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
+use_bias = args.use_bias
 
 lr = 5e-4
 lr_stepsize = 100
@@ -94,6 +96,9 @@ else:
 if track_running_stats:
     name += '_trackRunStats'
 
+if not use_bias:
+    name += '_noBias'
+
 if use_cuda:
     device = torch.device('cuda')
 else:
@@ -110,7 +115,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=False)
+                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -134,11 +139,11 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.075, distr='normal')])
+                                  clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
@@ -204,7 +209,7 @@ trainer = Trainer3d(
     num_classes=num_classes,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=5
+    nbatch_avg=10
 )
 
 # Archiving training script, src folder, env info

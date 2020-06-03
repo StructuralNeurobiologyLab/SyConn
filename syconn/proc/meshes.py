@@ -524,7 +524,7 @@ def _mesh_loader(so):
 
 def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplices: int = 3,
                    nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
-                   cmap: Optional = None, alpha: float = 1.0):
+                   cmap: Optional = None, alpha: float = 1.0, use_new_subfold: bool = True):
     """
     Merge meshes of SegmentationObjects. This will cache :py:class:`~syconn.reps.segmentation.SegmentationObject`.
 
@@ -535,6 +535,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
         color_vals: Color values for every mesh, N x 4 (rgba). No normalization!
         cmap: matplotlib colormap
         alpha: float
+        use_new_subfold:
 
     Returns: np.array, np.array [, np.array]
         indices, vertices (scaled) [, colors]
@@ -543,7 +544,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
     if nb_cpus > 1:
         meshes = start_multiprocess_imap(_mesh_loader, sos, nb_cpus=nb_cpus, show_progress=False)
     else:
-        meshes = load_so_meshes_bulk(sos)
+        meshes = load_so_meshes_bulk(sos, use_new_subfold=use_new_subfold)
         for so in sos:
             so._mesh = meshes[so.id]
         meshes = [so.mesh for so in sos]

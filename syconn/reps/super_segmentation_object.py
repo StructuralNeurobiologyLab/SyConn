@@ -1007,7 +1007,8 @@ class SuperSegmentationObject(object):
                 ind, vert = mesh_dc[obj_type]
                 normals = np.zeros((0,), dtype=np.float32)
         else:
-            ind, vert, normals = merge_someshes(self.get_seg_objects(obj_type), nb_cpus=self.nb_cpus)
+            ind, vert, normals = merge_someshes(self.get_seg_objects(obj_type), nb_cpus=self.nb_cpus,
+                                                use_new_subfold=global_params.config.use_new_subfold)
             if not self.version == "tmp":
                 mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False, disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
@@ -1475,7 +1476,8 @@ class SuperSegmentationObject(object):
             return ratio
         syn_signs = []
         syn_sizes = []
-        props = load_so_attr_bulk(self.syn_ssv, ('partner_axoness', 'syn_sign', 'mesh_area', 'neuron_partners'))
+        props = load_so_attr_bulk(self.syn_ssv, ('partner_axoness', 'syn_sign', 'mesh_area', 'neuron_partners'),
+                                  use_new_subfold=global_params.config.use_new_subfold)
         for syn in self.syn_ssv:
             ax = np.array(props['partner_axoness'][syn.id])
             # convert boutons to axon class
@@ -2544,7 +2546,7 @@ class SuperSegmentationObject(object):
         if not rewrite and self.mesh_exists('syn_ssv_sym') and self.mesh_exists('syn_ssv_asym') \
                 and not self.version == "tmp":
             return
-        syn_signs = load_so_attr_bulk(self.syn_ssv, 'syn_sign')
+        syn_signs = load_so_attr_bulk(self.syn_ssv, 'syn_sign', use_new_subfold=global_params.config.use_new_subfold)
         sym_syns = []
         asym_syns = []
         for syn in self.syn_ssv:
@@ -2555,8 +2557,8 @@ class SuperSegmentationObject(object):
                 asym_syns.append(syn)
             else:
                 raise ValueError(f'Unknown synapse sign {syn_sign}.')
-        sym_syn_mesh = list(merge_someshes(sym_syns))
-        asym_syn_mesh = list(merge_someshes(asym_syns))
+        sym_syn_mesh = list(merge_someshes(sym_syns, use_new_subfold=global_params.config.use_new_subfold))
+        asym_syn_mesh = list(merge_someshes(asym_syns, use_new_subfold=global_params.config.use_new_subfold))
         if self.version is not "tmp":
             mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
                                   disable_locking=not self.enable_locking)
@@ -2588,8 +2590,8 @@ class SuperSegmentationObject(object):
             min_val = sv_attrs.min()
             sv_attrs -= min_val
             sv_attrs /= sv_attrs.max()
-        ind, vert, norm, col = merge_someshes(self.svs, color_vals=sv_attrs,
-                                              cmap=cmap)
+        ind, vert, norm, col = merge_someshes(self.svs, color_vals=sv_attrs, cmap=cmap,
+                                              use_new_subfold=global_params.config.use_new_subfold)
         write_mesh2kzip(dest_path, ind, vert, norm, col, "%s.ply" % attr_key)
 
     def svprobas2mergelist(self, key="glia_probas", dest_path=None):
@@ -2661,8 +2663,8 @@ class SuperSegmentationObject(object):
                        sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        mesh = merge_someshes(glia_svs)
-        neuron_mesh = merge_someshes(nonglia_svs)
+        mesh = merge_someshes(glia_svs, use_new_subfold=global_params.config.use_new_subfold)
+        neuron_mesh = merge_someshes(nonglia_svs, use_new_subfold=global_params.config.use_new_subfold)
         write_meshes2kzip(dest_path, [mesh[0], neuron_mesh[0]], [mesh[1], neuron_mesh[1]],
                           [mesh[2], neuron_mesh[2]], [None, None],
                           ["glia_%0.2f.ply" % thresh, "nonglia_%0.2f.ply" % thresh])
@@ -2735,13 +2737,13 @@ class SuperSegmentationObject(object):
         glia_ccs = self.attr_dict[glia_svs_key]
         for kk, glia in enumerate(glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
-                                   glia])
+                                   glia], use_new_subfold=global_params.config.use_new_subfold)
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "glia_cc%d.ply" % kk)
         non_glia_ccs = self.attr_dict[nonglia_svs_key]
         for kk, nonglia in enumerate(non_glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
-                                   nonglia])
+                                   nonglia], use_new_subfold=global_params.config.use_new_subfold)
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "nonglia_cc%d.ply" % kk)
 

@@ -174,13 +174,15 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
 
 
 def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
-                            nb_views: int,
-                            view_key: Optional[str] = None) -> np.ndarray:
+                            nb_views: int, view_key: Optional[str] = None) -> np.ndarray:
     """
     Converts the 2D projections views of an
     :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` into
     random subsets of views each of size `nb_views`. Used for cell type inference.
 
+    todo:
+        * shuffle after reshaping from (#multi-view locations, 4 channels, #nb_views, 128, 256) to
+          (#multi-view locations * #nb_views, 4 channels, 128, 256)?
     Args:
         sso: Cell reconstruction object.
         nb_views: Number of views in each view subset.
@@ -194,12 +196,11 @@ def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
     assert len(sso.sv_ids) > 0
     views = sso.load_views(view_key=view_key)
     np.random.shuffle(views)
-    # view shape: (#multi-views, 4 channels, 2 perspectives, 128, 256)
+    # view shape: (#multi-view locations, 4 channels, #nb_views, 128, 256)
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
     assert views.shape[1] > 0
     if views.shape[1] < nb_views:
-        rand_ixs = np.random.choice(np.arange(views.shape[1]),
-                                    nb_views - views.shape[1])
+        rand_ixs = np.random.choice(np.arange(views.shape[1]), nb_views - views.shape[1])
         views = np.append(views, views[:, rand_ixs], axis=1)
     nb_samples = np.floor(views.shape[1] / nb_views)
     assert nb_samples > 0
@@ -209,8 +210,7 @@ def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
 
 
 def radius_correction_found_vertices(sso: 'super_segmentation.SuperSegmentationObject',
-                                     plump_factor: int = 1,
-                                     num_found_vertices: int = 10):
+                                     plump_factor: int = 1, num_found_vertices: int = 10):
     """
     Algorithm finds two nearest vertices and takes the median of the
     distances for every node.
@@ -843,8 +843,8 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
             try:
                 ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
                 majorityvote_skeleton_property(ssv, prop_key='myelin')
-            except:
-                raise()
+            except Exception as e:
+                raise Exception(f'Myelin mapping in {ssv} failed with: {e}')
         ssv.save_skeleton()
         if dest_path is not None:
             ssv.save_skeleton_to_kzip(dest_path=dest_path)
@@ -2100,8 +2100,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
     inp_d = naive_view_normalization_new(inp_d)
     if use_syntype:
         synsign_ratio = np.array([[syn_sign_ratio_celltype(sso, comp_types=[1, ]),
-                                  syn_sign_ratio_celltype(sso, comp_types=[0, ])]]
-                                 * len(inp_d))
+                                  syn_sign_ratio_celltype(sso, comp_types=[0, ])]] * len(inp_d))
         res = model.predict_proba((inp_d, synsign_ratio), bs=40)
     else:
         res = model.predict_proba(inp_d, bs=40)
@@ -2380,10 +2379,9 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         ssv: The cell reconstruction.
         weighted: Compute synapse-area weighted ratio.
         recompute: Ignore existing value.
-        comp_types: All synapses that are formed between any of the
-            functional compartment types given in `comp_types` on the cell
-            reconstruction are used for computing the ratio (0: dendrite,
-            1: axon, 2: soma). Default: [1, ].
+        comp_types: All synapses that are formed between any of the functional compartment types given in
+            `comp_types` on the cell reconstruction are used for computing the ratio (0: dendrite, 1: axon, 2:
+             soma). Default: [1, ].
 
     Returns:
         (Area-weighted) ratio of symmetric synapses or -1 if no synapses.
@@ -2393,13 +2391,12 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
     ratio = ssv.lookup_in_attribute_dict("syn_sign_ratio")
     if not recompute and ratio is not None:
         return ratio
-
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                                     global_params.config['compartments']['dist_axoness_averaging'])
-
     if len(ssv.syn_ssv) == 0:
         return -1
-    props = load_so_attr_bulk(ssv.syn_ssv, ('syn_sign', 'mesh_area', 'rep_coord'))
+    props = load_so_attr_bulk(ssv.syn_ssv, ('syn_sign', 'mesh_area', 'rep_coord'), allow_missing=True,
+                              use_new_subfold=global_params.config.use_new_subfold)
     syn_axs = ssv.attr_for_coords([props['rep_coord'][syn.id] for syn in ssv.syn_ssv], attr_keys=[pred_key_ax, ])[0]
     # convert boutons to axon class
     syn_axs[syn_axs == 3] = 1
@@ -2409,8 +2406,12 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
     for syn_ix, syn in enumerate(ssv.syn_ssv):
         if syn_axs[syn_ix] not in comp_types:
             continue
-        syn_signs.append(props['syn_sign'][syn.id])
-        syn_sizes.append(props['mesh_area'][syn.id] / 2)
+        syn_sign = props['syn_sign'][syn.id]
+        syn_size = props['mesh_area'][syn.id] / 2
+        if syn_sign is None or syn_size is None:
+            raise ValueError(f'Got at least one None value for syn_sign and/or syn_size of {ssv.syn_ssv[syn_ix]}.')
+        syn_signs.append(syn_sign)
+        syn_sizes.append(syn_size)
     if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
         return -1
     syn_signs = np.array(syn_signs)

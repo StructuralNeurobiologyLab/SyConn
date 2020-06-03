@@ -1210,7 +1210,7 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
     # TODO: add global overwrite kwarg
     overwrite = True
     wd, obj_version, ssd_version, ssv_ids, max_rep_coord_dist_nm, max_vert_dist_nm = args
-
+    use_new_subfold = global_params.config.use_new_subfold
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
@@ -1276,9 +1276,12 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int)]
         close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int))]
 
-        md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_object(close_mi_ids))
-        md_vc = seghelp.load_so_meshes_bulk(sd_vc.get_segmentation_object(close_vc_ids))
-        # md_synssv = seghelp.load_so_meshes_bulk(sd_syn_ssv.get_segmentation_object(synssv_ids))
+        md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_object(close_mi_ids),
+                                            use_new_subfold=use_new_subfold)
+        md_vc = seghelp.load_so_meshes_bulk(sd_vc.get_segmentation_object(close_vc_ids),
+                                            use_new_subfold=use_new_subfold)
+        # md_synssv = seghelp.load_so_meshes_bulk(sd_syn_ssv.get_segmentation_object(synssv_ids),
+        #                                         use_new_subfold=use_new_subfold)
         # dts['meshcache'] += time.time() - start
 
         # start = time.time()
