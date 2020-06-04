@@ -1220,3 +1220,106 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
     # convert to certainty estimate
     return 1 - entr_norm
 
+
+def str2int_converter(comment: str, gt_type: str) -> int:
+    if gt_type == "axgt":
+        if comment == "gt_axon":
+            return 1
+        elif comment == "gt_dendrite":
+            return 0
+        elif comment == "gt_soma":
+            return 2
+        elif comment == "gt_bouton":
+            return 3
+        elif comment == "gt_terminal":
+            return 4
+        else:
+            return -1
+    elif gt_type == "spgt":
+        if "head" in comment:
+            return 1
+        elif "neck" in comment:
+            return 0
+        elif "shaft" in comment:
+            return 2
+        elif "other" in comment:
+            return 3
+        else:
+            return -1
+    elif gt_type == 'ctgt_j0251':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             INT=8, FS=9, LTS=10)
+        return str2int_label[comment]
+    else:
+        raise ValueError("Given groundtruth type is not valid.")
+
+
+# create function that converts information in string type to the
+# information in integer type
+
+def int2str_converter(label: int, gt_type: str) -> str:
+    """
+    TODO: remove redundant definitions.
+    Converts integer label into semantic string.
+
+    Args:
+        label: int
+        gt_type: str
+            e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
+
+    Returns: str
+
+    """
+    if type(label) == str:
+        label = int(label)
+    if gt_type == "axgt":
+        if label == 1:
+            return "gt_axon"
+        elif label == 0:
+            return "gt_dendrite"
+        elif label == 2:
+            return "gt_soma"
+        elif label == 3:
+            return "gt_bouton"
+        elif label == 4:
+            return "gt_terminal"
+        else:
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    elif gt_type == "spgt":
+        if label == 1:
+            return "head"
+        elif label == 0:
+            return "neck"
+        elif label == 2:
+            return "shaft"
+        elif label == 3:
+            return "other"
+        else:
+            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
+    elif gt_type == 'ctgt':
+        if label == 1:
+            return "MSN"
+        elif label == 0:
+            return "EA"
+        elif label == 2:
+            return "GP"
+        elif label == 3:
+            return "INT"
+        else:
+            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
+    elif gt_type == 'ctgt_v2':
+        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`
+        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            print('Unknown label "{}"'.format(label))
+            return -1
+    elif gt_type == 'ctgt_j0251':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             INT=8, FS=9, LTS=10)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
+    else:
+        raise ValueError("Given ground truth type is not valid.")

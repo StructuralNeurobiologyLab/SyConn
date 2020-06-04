@@ -1,4 +1,8 @@
+import os
+import tqdm
 import collections
+import multiprocessing
+# multiprocessing.set_start_method('spawn')
 import re
 from syconn.handler import basics, config
 from syconn.handler.prediction import certainty_estimate
@@ -10,8 +14,6 @@ from sklearn.metrics import confusion_matrix
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.prediction_pts import predict_pts_plain, \
     pts_loader_scalar, pts_pred_scalar, get_celltype_model_pts, get_pt_kwargs
-import os
-import tqdm
 
 
 def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ctx_size, nloader=4, npredictor=2,
@@ -41,7 +43,8 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ct
     """
     out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
                                npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
-                               ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size, **kwargs)
+                               ssv_ids=ssv_ids, redundancy=(25, 100), use_test_aug=use_test_aug, device=device,
+                               ctx_size=ctx_size, **kwargs)
     out_dc = dict(out_dc)
     for ssv_id in out_dc:
         logit = np.concatenate(out_dc[ssv_id])
@@ -104,7 +107,7 @@ if __name__ == '__main__':
             if curr_l == 6: curr_l = 1  # TAN and DA are the same now
             if curr_l == 7: curr_l = 6  # INT now has label 6
         ssv_labels[ix] = curr_l
-    #
+
     base_dir = '/wholebrain/scratch/pschuber/e3trainings_BAK/ptconv_2020_06_03/celltype_eval0_sp50k/'
     CV = 0
     mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval0/'
@@ -116,25 +119,25 @@ if __name__ == '__main__':
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
     ssd_kwargs = dict(working_dir=wd)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    params = [([ssv_id], ssd_kwargs) for ssv_id in ssv_ids]
-    mv_preds = start_multiprocess_imap(_preproc_syns, params, nb_cpus=1)
-
-    mv_preds_old = np.array([p[1] for p in mv_preds])
-    mv_preds = np.array([p[0] for p in mv_preds])
-    print(f'Multi view data (sj):')
-    log.info(classification_report(ssv_labels, mv_preds_old, labels=np.arange(7),
-                                   target_names=target_names))
-    for ix, curr_id in enumerate(ssv_ids):
-        if mv_preds_old[ix] != ssv_labels[ix]:
-            log.info(f'id: {curr_id} target: {ssv_labels[ix]} prediction: {mv_preds_old[ix]}')
-    print(confusion_matrix(ssv_labels, mv_preds_old, labels=np.arange(7)))
-    print(f'Multi view data (syn_ssv):')
-    log.info(classification_report(ssv_labels, mv_preds, labels=np.arange(7),
-                                   target_names=target_names))
-    for ix, curr_id in enumerate(ssv_ids):
-        if mv_preds_old[ix] != ssv_labels[ix]:
-            log.info(f'id: {curr_id} target: {ssv_labels[ix]} prediction: {mv_preds[ix]}')
-    print(confusion_matrix(ssv_labels, mv_preds, labels=np.arange(7)))
+    # params = [([ssv_id], ssd_kwargs) for ssv_id in ssv_ids]
+    # mv_preds = start_multiprocess_imap(_preproc_syns, params, nb_cpus=1)
+    #
+    # mv_preds_old = np.array([p[1] for p in mv_preds])
+    # mv_preds = np.array([p[0] for p in mv_preds])
+    # print(f'Multi view data (sj):')
+    # log.info(classification_report(ssv_labels, mv_preds_old, labels=np.arange(7),
+    #                                target_names=target_names))
+    # for ix, curr_id in enumerate(ssv_ids):
+    #     if mv_preds_old[ix] != ssv_labels[ix]:
+    #         log.info(f'id: {curr_id} target: {ssv_labels[ix]} prediction: {mv_preds_old[ix]}')
+    # print(confusion_matrix(ssv_labels, mv_preds_old, labels=np.arange(7)))
+    # print(f'Multi view data (syn_ssv):')
+    # log.info(classification_report(ssv_labels, mv_preds, labels=np.arange(7),
+    #                                target_names=target_names))
+    # for ix, curr_id in enumerate(ssv_ids):
+    #     if mv_preds_old[ix] != ssv_labels[ix]:
+    #         log.info(f'id: {curr_id} target: {ssv_labels[ix]} prediction: {mv_preds[ix]}')
+    # print(confusion_matrix(ssv_labels, mv_preds, labels=np.arange(7)))
 
     # eval point based data
     log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. j0251_celltype_gt_v0, '
@@ -145,8 +148,8 @@ if __name__ == '__main__':
     fname_pred = f'{base_dir}/j0251_celltype_gt_v0_PRED.pkl'
     assert os.path.isfile(mpath)
 
-    res_dc = predict_celltype_wd(ssd_kwargs, get_celltype_model_pts, mpath, ssv_ids=ssv_ids,
-                                 nloader=6, npredictor=3, use_test_aug=False, seeded=True, **loader_kwargs)
+    res_dc = predict_celltype_wd(ssd_kwargs, get_celltype_model_pts, mpath, ssv_ids=ssv_ids, bs=10,
+                                 nloader=8, npredictor=4, use_test_aug=False, seeded=True, **loader_kwargs)
     basics.write_obj2pkl(fname_pred, res_dc)
 
     target_ids_local, pts_preds = [], []

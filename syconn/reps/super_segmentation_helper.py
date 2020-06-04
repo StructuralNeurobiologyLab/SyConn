@@ -408,9 +408,9 @@ def create_new_skeleton(sv_id, sso):
                             config=sso.config)
     so.enable_locking = False
     so.load_attr_dict()
-    nodes, diameters, edges = load_skeleton(so)
+    skel = load_skeleton(so)
 
-    return nodes, diameters, edges
+    return skel['nodes'], skel['diameters'], skel['edges']
 
 
 def convert_coord(coord_list, scal):
@@ -771,8 +771,7 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
 
 
 def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentationObject'],
-                                 dest_paths: Optional[str] = None,
-                                 nb_cpus: Optional[int] = None,
+                                 dest_paths: Optional[str] = None, nb_cpus: Optional[int] = None,
                                  map_myelin: bool = False):
     """
     Used within :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
@@ -1013,7 +1012,8 @@ def create_new_skeleton_sv_fast(args):
     so.enable_locking = False
     so.load_attr_dict()
     # ignore diameters, will be populated at the and of create_sso_skeleton_fast
-    nodes, diameters, edges = load_skeleton(so)
+    skel = load_skeleton(so)
+    nodes, diameters, edges = skel['nodes'], skel['diameters'], skel['edges']
     edges = np.array(edges).reshape((-1, 2))
     nodes = np.array(nodes).reshape((-1, 3)).astype(np.uint32)
     # create nx graph
@@ -1136,10 +1136,10 @@ def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=1.5e3):
                                              sso.scaling - ssv_skel['nodes'][ix2].astype(
                 np.float32) * sso.scaling)
             if np.min(dists) < node_dist_check or node_dist_check > max_edge_length:
-                log_reps.warning(f'Found long edge with length '
-                                 f'{node_dist_check / 1e3:.0f} um between SVs '
-                                 f'{e1.id} and {e2.id} although they were '
-                                 f'connected within the SV graph. Skipping.')
+                log_reps.debug(f'Found long edge with length '
+                               f'{node_dist_check / 1e3:.0f} um between SVs '
+                               f'{e1.id} and {e2.id} although they were '
+                               f'connected within the SV graph. Skipping.')
                 # TODO: remove as soon as SV graphs only connect adjacent SVs.
                 continue
             edges.append(np.array([[ix1, ix2]], dtype=np.uint32))
@@ -1214,9 +1214,8 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True,
     if sparsify:
         # does not care about the angle between edges
         # skel_nx = skeleton_optimization(skel_nx, max_dist_thresh)
-        skel_nx = sparsify_skeleton_fast(
-            skel_nx, max_dist_thresh=max_dist_thresh,
-            min_dist_thresh=max_dist_thresh)
+        skel_nx = sparsify_skeleton_fast(skel_nx, max_dist_thresh=max_dist_thresh,
+                                         min_dist_thresh=max_dist_thresh)
 
         # log_reps.debug(
         #     'Number CC after 2nd sparsification SSO {}: {}'.format(sso.id,

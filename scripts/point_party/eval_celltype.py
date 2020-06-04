@@ -41,7 +41,7 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mpath, npoints, scale_fact, ct
     out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
                                npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
                                ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size,
-                               redundancy=(100, 100), bs=10, **kwargs)
+                               redundancy=(25, 100), bs=10, **kwargs)
     out_dc = dict(out_dc)
     for ssv_id in out_dc:
         logit = np.concatenate(out_dc[ssv_id])

@@ -3,15 +3,11 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert
 
 import sys
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_views
-#from syconn.handler.prediction import NeuralNetworkInterface
 from syconn.backend.storage import AttributeDict, CompressedStorage
 from syconn import global_params
 from syconn.handler import prediction

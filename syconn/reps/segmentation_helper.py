@@ -39,7 +39,7 @@ def glia_pred_so(so: 'SegmentationObject', thresh: float,
     """
     assert so.type == "sv"
     pred_key = "glia_probas" + pred_key_appendix
-    if not pred_key in so.attr_dict:
+    if pred_key not in so.attr_dict:
         so.load_attr_dict()
     try:
         preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int)
@@ -282,8 +282,7 @@ def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
     return [indices, vertices, normals]
 
 
-def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
-        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
     """
 
     Args:
@@ -294,18 +293,17 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
         nodes, diameters, edges; all flattened
 
     """
+    empty_skel = dict(nodes=np.zeros((0, )).astype(np.int), edges=np.zeros((0, )),
+                      diameters=np.zeros((0, )).astype(np.int))
     if not recompute and so.skeleton_exists:
         try:
             skeleton_dc = SkeletonStorage(so.skeleton_path,
                                           disable_locking=not so.enable_locking)
-            nodes = skeleton_dc[so.id]['nodes']
-            diameters = skeleton_dc[so.id]['diameters']
-            edges = skeleton_dc[so.id]['edges']
+            skel = skeleton_dc[so.id]
         except Exception as e:
             log_reps.error("\n{}\nException occured when loading skeletons.pkl"
                            " of SO ({}) with id {}.".format(e, so.type, so.id))
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )), \
-                   np.zeros((0, )).astype(np.int)
+            return empty_skel
     else:
         msg = "Skeleton of SV {} (size: {}) not found.\n".format(so.id, so.size)
         if so.type == "sv":
@@ -313,40 +311,26 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
                 log_reps.debug(msg)
             else:
                 log_reps.error(msg)
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )),\
-                   np.zeros((0, )).astype(np.int)
-
-    nodes = np.array(nodes, dtype=np.int)
-    diameters = np.array(diameters, dtype=np.float)
-    edges = np.array(edges, dtype=np.int)
-
-    return nodes, diameters, edges
+            return empty_skel
+    return skel
 
 
 def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
+    """
+
+    Args:
+        so:
+        overwrite:
+
+    Returns:
+
+    """
     skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
                                   disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:
         raise ValueError("Skeleton of SV {} already exists.".format(so.id))
-    sv_skel = {"nodes": so.skeleton[0], "edges": so.skeleton[2],
-               "diameters": so.skeleton[1]}
-    skeleton_dc[so.id] = sv_skel
+    skeleton_dc[so.id] = so.skeleton
     skeleton_dc.push()
-
-
-def binary_closing(vx, n_iterations=13):
-    n_iterations = int(n_iterations)
-    assert n_iterations > 0
-
-    vx = np.pad(vx, [[n_iterations]*2]*3, mode='constant')
-
-    vx = ndimage.morphology.binary_closing(vx, iterations=n_iterations)
-
-    vx = vx[n_iterations: -n_iterations,
-            n_iterations: -n_iterations,
-            n_iterations: -n_iterations]
-
-    return vx
 
 
 def sv_view_exists(args):
@@ -374,7 +358,7 @@ def find_missing_sv_views(sd, woglia, n_cores=20):
 def sv_skeleton_missing(sv):
     if sv.skeleton is None:
         sv.load_skeleton()
-    return (sv.skeleton is None) or (len(sv.skeleton[0]) == 0)
+    return (sv.skeleton is None) or (len(sv.skeleton['nodes']) == 0)
 
 
 def find_missing_sv_skeletons(svs, n_cores=20):

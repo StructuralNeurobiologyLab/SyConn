@@ -15,7 +15,8 @@ from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_vie
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 from syconn import global_params
 from syconn.handler.compression import save_to_h5py
-from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews, str2intconverter
+from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews
+from syconn.handler.prediction import str2int_converter
 from syconn.mp.mp_utils import start_multiprocess_imap
 import re
 from multiprocessing import cpu_count
@@ -80,7 +81,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     skel_nodes = list(skel.getNodes())
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
-    node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
+    node_labels = np.array([str2int_converter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
 

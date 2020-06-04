@@ -2,8 +2,8 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Philipp Schubert, Jörgen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert
 
 import sys
 from syconn.reps.super_segmentation_object import semsegspiness_predictor
@@ -11,10 +11,7 @@ from syconn import global_params
 from syconn.handler import basics
 from syconn.mp.mp_utils import start_multiprocess_imap
 import numpy as np
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

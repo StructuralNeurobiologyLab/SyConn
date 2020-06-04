@@ -19,7 +19,7 @@ from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
 from syconn.handler.logger import log_main as log_gate
-from syconn.handler.multiviews import int2str_converter
+from syconn.handler.prediction import int2str_converter
 from syconn.reps.segmentation import SegmentationDataset
 
 app = Flask(__name__)

@@ -17,10 +17,115 @@ from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
 from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
+from syconn.exec import exec_skeleton
+from syconn.mp.mp_utils import start_multiprocess_imap
+from syconn.proc import ssd_proc
+
+
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
+    """
+    Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
+    ``version=0`` at the currently active working directory based on the RAG
+    at ``/glia/neuron_rag.bz2``. In case glia splitting is active, this will be
+    the RAG after glia removal, if it was disabled it is identical to ``pruned_rag.bz2``.
+
+    Notes:
+        Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
+        optionally :func:`~run_glia_splitting`.
+    """
+    log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
+                             overwrite=False)
+    g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
+
+    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+
+    # if rag was not created by glia splitting procedure this filtering is required
+    if apply_ssv_size_threshold is None:
+        apply_ssv_size_threshold = not global_params.config.prior_glia_removal
+    if apply_ssv_size_threshold:
+        sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+
+        sv_size_dict = {}
+        bbs = sd.load_cached_data('bounding_box') * sd.scaling
+        for ii in range(len(sd.ids)):
+            sv_size_dict[sd.ids[ii]] = bbs[ii]
+        ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
+        log.debug("Finished preparation of SSV size dictionary based "
+                  "on bounding box diagional of corresponding SVs.")
+        before_cnt = len(rag_g.nodes())
+        for ix in list(rag_g.nodes()):
+            if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
+                rag_g.remove_node(ix)
+        log.debug("Removed %d neuron CCs because of size." %
+                  (before_cnt - len(rag_g.nodes())))
+
+    ccs = nx.connected_components(rag_g)
+    cc_dict = {}
+    for cc in ccs:
+        cc_arr = np.array(list(cc))
+        cc_dict[np.min(cc_arr)] = cc_arr
+
+    cc_dict_inv = {}
+    for ssv_id, cc in cc_dict.items():
+        for sv_id in cc:
+            cc_dict_inv[sv_id] = ssv_id
+    log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
+        g_p, len(cc_dict), len(cc_dict_inv)))
+
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
+                                   ssd_type="ssv", sv_mapping=cc_dict_inv)
+    # create cache-arrays for frequently used attributes
+    # also executes 'ssd.save_dataset_shallow()'
+    ssd.save_dataset_deep()
+
+    # Write SSV RAGs
+    params = [(g_p, ssv_ids) for ssv_ids in chunkify(
+        ssd.ssv_ids, global_params.config['ncores_per_node'] * 2)]
+    start_multiprocess_imap(_ssv_rag_writer, params,
+                            nb_cpus=global_params.config['ncores_per_node'])
+    log.info('Finished saving individual SSV RAGs.')
+
+    exec_skeleton.run_skeleton_generation()
+
+    log.info('Finished SSD initialization. Starting cellular '
+             'organelle mapping.')
+
+    # map cellular organelles to SSVs
+    # TODO: sort by SSV size (descending)
+    ssd_proc.aggregate_segmentation_object_mappings(
+        ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.apply_mapping_decisions(
+        ssd, global_params.config['existing_cell_organelles'])
+    log.info('Finished mapping of cellular organelles to SSVs. '
+             'Writing individual SSV graphs.')
+
+
+def _ssv_rag_writer(args):
+    g_p, ssv_ids = args
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir,
+                                   version='0', ssd_type="ssv")
+    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+    ccs = nx.connected_components(rag_g)
+    cc_dict = {}
+    for cc in ccs:
+        cc_arr = np.array(list(cc))
+        cc_dict[np.min(cc_arr)] = cc_arr
+    for ssv in ssd.get_super_segmentation_object(ssv_ids):
+        # get all nodes in CC of this SSV
+        if len(cc_dict[ssv.id]) > 1:  # CCs with 1 node do not exist in the global RAG
+            n_list = nx.node_connected_component(rag_g, ssv.id)
+            # get SSV RAG as subgraph
+            ssv_rag = nx.subgraph(rag_g, n_list)
+        else:
+            ssv_rag = nx.Graph()
+            # ssv.id is the minimal SV ID, and therefore the only SV in this case
+            ssv_rag.add_edge(ssv.id, ssv.id)
+        nx.write_edgelist(ssv_rag, ssv.edgelist_path)
 
 
 def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
@@ -192,11 +297,11 @@ def run_create_rag():
     """
     If ``global_params.config.prior_glia_removal==True``:
         stores pruned RAG at ``global_params.config.pruned_rag_path``, required for all glia
-        removal steps. :func:`~syconn.exec.exec_multiview.run_glia_splitting`
+        removal steps. :func:`~syconn.exec.exec_inference.run_glia_splitting`
         will finally store the ``neuron_rag.bz2`` at the currently active working directory.
     else:
         stores pruned RAG at ``global_params.config.working_dir + /glia/neuron_rag.bz2``,
-        required by :func:`~syconn.exec.exec_multiview.run_create_neuron_ssd`.
+        required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
     log = initialize_logging('create_rag', global_params.config.working_dir +
                              '/logs/', overwrite=True)

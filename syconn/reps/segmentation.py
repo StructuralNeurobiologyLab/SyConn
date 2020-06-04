@@ -594,16 +594,12 @@ class SegmentationObject(object):
             return self._mesh
 
     @property
-    def skeleton(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def skeleton(self) -> dict:
         """
         The skeleton representation of this supervoxel.
 
-        Todo:
-            * refactor data structure as in
-            :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
-
         Returns:
-            Three numpy arrays: nodes, estimated node diameters and edges.
+            Dict of at least three numpy arrays: "nodes", estimated node "diameters" and "edges".
         """
         if self._skeleton is None:
             if self.skeleton_caching:
@@ -732,7 +728,7 @@ class SegmentationObject(object):
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
             if ds_factor is None:
                 ds_factor = 2000
-            if global_params.config.use_new_renderings_locs:
+            if self.config.use_new_renderings_locs:
                 coords = generate_rendering_locs(verts, ds_factor).astype(np.float32)
             else:
                 coords = surface_samples(verts, [ds_factor] * 3,
@@ -782,20 +778,31 @@ class SegmentationObject(object):
     def load_voxel_list_downsampled_adapt(self, downsampling=(2, 2, 1)):
         return load_voxel_list_downsampled_adapt(self, downsampling=downsampling)
 
-    def load_skeleton(self, recompute: bool = False):
+    def load_skeleton(self, recompute: bool = False) -> dict:
         """
         Loader method of :py:attr:`~skeleton`.
-
-        Todo:
-            * `recompute` currently not supported.
 
         Args:
             recompute: Recompute the skeleton. Currently not implemented.
 
         Returns:
+            Dict of flat arrays of indices, vertices, diameters and attributes.
+        """
+        if recompute:
+            raise NotImplementedError('recompute SegmentationObject skeleton is not supported yet.')
+        return load_skeleton(self, recompute=recompute)
+
+    def save_skeleton(self, overwrite: bool = False):
+        """
+        Save method of :py:attr:`~skeleton`.
+
+        Args:
+            overwrite: Overwrite existing skeleton entry.
+
+        Returns:
             Flat arrays of indices, vertices, normals.
         """
-        return load_skeleton(self, recompute=recompute)
+        return save_skeleton(self, overwrite=overwrite)
 
     def glia_pred(self, thresh: float, pred_key_appendix: str = "") -> int:
         """
@@ -850,7 +857,7 @@ class SegmentationObject(object):
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS
-    def total_edge_length(self) -> float:
+    def total_edge_length(self) -> Union[np.ndarray, float]:
         """
         Total edge length of the supervoxel :py:attr:`~skeleton` in nanometers.
 
@@ -859,10 +866,9 @@ class SegmentationObject(object):
         """
         if self.skeleton is None:
             self.load_skeleton()
-        nodes = self.skleton[0].reshape(-1, 3).astype(np.float32)
-        edges = self.skeleton[2].reshape(-1, 2)
-        return np.sum([np.linalg.norm(
-            self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
+        nodes = self.skeleton['nodes'].reshape(-1, 3).astype(np.float32)
+        edges = self.skeleton['edges'].reshape(-1, 2)
+        return np.sum([np.linalg.norm(self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def mesh_from_scratch(self, ds: Optional[Tuple[int, int, int]] = None,
                           **kwargs: dict) -> List[np.ndarray]:
@@ -877,7 +883,7 @@ class SegmentationObject(object):
 
         """
         if ds is None:
-            ds = global_params.config['meshes']['downsampling'][self.type]
+            ds = self.config['meshes']['downsampling'][self.type]
         return meshes.get_object_mesh(self, ds, mesher_kwargs=kwargs)
 
     def _save_mesh(self, ind: np.ndarray, vert: np.ndarray,

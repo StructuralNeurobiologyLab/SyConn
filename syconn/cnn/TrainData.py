@@ -10,16 +10,17 @@ try:
     import open3d as o3d
 except ImportError:
     pass  # for sphinx build
-import matplotlib
+import os
 import re
+import matplotlib
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
-from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
-from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, \
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
+from syconn.handler.prediction_pts import pts_loader_scalar, \
     pts_loader_glia, load_hc_pkl, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
@@ -31,7 +32,6 @@ try:
     import vigra
 except ImportError as e:
     log_cnn.error(str(e))
-import os
 import threading
 from sklearn.model_selection import train_test_split
 try:
@@ -95,20 +95,23 @@ if elektronn3_avail:
             gt_dir = ssd.path
 
             log_cnn.info(f'Set {ssd} as GT source.')
-
-            if cv_val is -1:
-                log_cnn.critical(f'"cval_val" was set to -1. training will also '
-                                 f'include validation data.')
-                split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
-                split_dc = load_pkl2obj(split_dc_path)
-                split_dc['train'].extend(split_dc['valid'])
+            split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
+            if os.path.isfile(split_dc_path):
+                if cv_val is -1:
+                    log_cnn.critical(f'"cval_val" was set to -1. training will also '
+                                     f'include validation data.')
+                    split_dc = load_pkl2obj(split_dc_path)
+                    split_dc['train'].extend(split_dc['valid'])
+                else:
+                    split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv{cv_val}_10fold.pkl'
+                    split_dc = load_pkl2obj(split_dc_path)
+                    # Do not use validation split during training. Use training samples for validation
+                    # error instead (should still be informative due to missing augmentations)
+                    split_dc['valid'] = split_dc['train']
+                label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
             else:
-                split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv{cv_val}_10fold.pkl'
-                split_dc = load_pkl2obj(split_dc_path)
-                # Do not use validation split during training. Use training samples for validation
-                # error instead (should still be informative due to missing augmentations)
-                split_dc['valid'] = split_dc['train']
-            label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
+                split_dc = None
+                label_dc = None
             self.train = train
             self.num_pts = npoints
             self._batch_size = batch_size
@@ -116,22 +119,23 @@ if elektronn3_avail:
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
+            self.transform = transform
             if use_syntype:
                 self._num_obj_types = 5
             else:
                 self._num_obj_types = 4
             self.label_dc = label_dc
             self.splitting_dict = split_dc
-            self.sso_ids = self.splitting_dict['train'] if train else self.splitting_dict['valid']
-            for ix in self.sso_ids:
-                if ix not in ssd.ssv_ids:
-                    raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
-            self.transform = transform
-            print(f'Using splitting dict at "{split_dc_path}".')
-            for k, v in self.splitting_dict.items():
-                classes, c_cnts = np.unique([self.label_dc[ix] for ix in
-                                             self.splitting_dict[k]], return_counts=True)
-                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+            if self.splitting_dict is not None and self.label_dc is not None:
+                self.sso_ids = self.splitting_dict['train'] if train else self.splitting_dict['valid']
+                for ix in self.sso_ids:
+                    if ix not in ssd.ssv_ids:
+                        raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
+                print(f'Using splitting dict at "{split_dc_path}".')
+                for k, v in self.splitting_dict.items():
+                    classes, c_cnts = np.unique([self.label_dc[ix] for ix in
+                                                 self.splitting_dict[k]], return_counts=True)
+                    print(f"{k} [labels, counts]: {classes}, {c_cnts}")
 
         def __getitem__(self, item):
             """
@@ -246,6 +250,27 @@ if elektronn3_avail:
             return x0, x1, x2
 
 
+    class CellCloudDataJ0251(CellCloudData):
+        """
+        Uses the same data for train and valid set.
+        """
+        def __init__(self, **kwargs):
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+
+            super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
+            # load GT
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v0.csv"
+            df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
+            ssv_ids = df[:, 0].astype(np.uint)
+            if len(np.unique(ssv_ids)) != len(ssv_ids):
+                raise ValueError('Multi-usage of IDs!')
+            str_labels = df[:, 1]
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251') for el in str_labels], dtype=np.uint16)
+            self.sso_ids = ssv_ids
+            self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
+            self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}
+
+
     class CellCloudGlia(Dataset):
         """
         Loader for cell vertices.
@@ -275,10 +300,10 @@ if elektronn3_avail:
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint), nonglia_ssv_ids])
             self.ctx_size = ctx_size
-            self.sso_params = [(sso.id, sso.ssd_kwargs) for sso in
+            self.sso_params = [dict(ssv_id=sso.id, **sso.ssd_kwargs) for sso in
                                ssd.get_super_segmentation_object(nonglia_ssv_ids)]
             ssd_glia = SuperSegmentationDataset(working_dir=wd_path, version='gliagt')
-            self.sso_params += [(sso.id, sso.ssd_kwargs) for sso in ssd_glia.ssvs]
+            self.sso_params += [dict(ssv_id=sso.id, **sso.ssd_kwargs) for sso in ssd_glia.ssvs]
             log_cnn.info(f'Set {ssd} as GT source.')
 
             # get dataset statistics

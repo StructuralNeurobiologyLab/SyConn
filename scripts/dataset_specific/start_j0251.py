@@ -12,7 +12,7 @@ import networkx as nx
 
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
+from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
 
 
 if __name__ == '__main__':
@@ -143,20 +143,20 @@ if __name__ == '__main__':
 
     if global_params.config.prior_glia_removal:
         log.info('Step 2.5/9 - Glia separation')
-        exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction()
-        exec_multiview.run_glia_splitting()
+        exec_render.run_glia_rendering()
+        exec_inference.run_glia_prediction()
+        exec_inference.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
 
     log.info('Step 3/9 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd()
+    exec_init.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
     if not global_params.config.use_onthefly_views:
         log.info('Step 3.5/9 - Neuron rendering')
-        exec_multiview.run_neuron_rendering()
+        exec_render.run_neuron_rendering()
         time_stamps.append(time.time())
         step_idents.append('Neuron rendering')
 
@@ -166,23 +166,23 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/9 - Axon prediction')
-    exec_multiview.run_semsegaxoness_prediction()
+    exec_inference.run_semsegaxoness_prediction()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
     log.info('Step 6/9 - Spine prediction')
-    exec_multiview.run_semsegspiness_prediction()
+    exec_inference.run_semsegspiness_prediction()
     exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
     log.info('Step 7/9 - Morphology extraction')
-    exec_multiview.run_morphology_embedding()
+    exec_inference.run_morphology_embedding()
     time_stamps.append(time.time())
     step_idents.append('Morphology extraction')
 
     log.info('Step 8/9 - Celltype analysis')
-    exec_multiview.run_celltype_prediction()
+    exec_inference.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 

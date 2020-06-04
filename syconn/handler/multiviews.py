@@ -4,7 +4,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
+from .prediction import str2int_converter
 from ..proc.graphs import bfs_smoothing
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -46,7 +46,7 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.Supe
     skel_nodes = list(skel.getNodes())
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
-    node_labels = np.array([str2intconverter(n.getComment(), gt_type)
+    node_labels = np.array([str2int_converter(n.getComment(), gt_type)
                             for n in skel_nodes], dtype=np.int)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
@@ -108,99 +108,6 @@ def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) -> np.ndarra
                 remapped_label_views[kk] = i
                 break
     return remapped_label_views.reshape(rgb_view.shape[:-1])
-
-
-# create function that converts information in string type to the
-# information in integer type
-def str2intconverter(comment: str, gt_type: str):
-    if gt_type == "axgt":
-        if comment == "gt_axon":
-            return 1
-        elif comment == "gt_dendrite":
-            return 0
-        elif comment == "gt_soma":
-            return 2
-        elif comment == "gt_bouton":
-            return 3
-        elif comment == "gt_terminal":
-            return 4
-        else:
-            return -1
-    elif gt_type == "spgt":
-        if "head" in comment:
-            return 1
-        elif "neck" in comment:
-            return 0
-        elif "shaft" in comment:
-            return 2
-        elif "other" in comment:
-            return 3
-        else:
-            return -1
-    else: raise ValueError("Given groundtruth type is not valid.")
-
-
-def int2str_converter(label: int, gt_type: str):
-    """
-    TODO: remove redundant definitions.
-    Converts integer label into semantic string.
-
-    Args:
-        label: int
-        gt_type: str
-            e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
-
-    Returns: str
-
-    """
-    if type(label) == str:
-        label = int(label)
-    if gt_type == "axgt":
-        if label == 1:
-            return "gt_axon"
-        elif label == 0:
-            return "gt_dendrite"
-        elif label == 2:
-            return "gt_soma"
-        elif label == 3:
-            return "gt_bouton"
-        elif label == 4:
-            return "gt_terminal"
-        else:
-            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
-    elif gt_type == "spgt":
-        if label == 1:
-            return "head"
-        elif label == 0:
-            return "neck"
-        elif label == 2:
-            return "shaft"
-        elif label == 3:
-            return "other"
-        else:
-            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
-    elif gt_type == 'ctgt':
-        if label == 1:
-            return "MSN"
-        elif label == 0:
-            return "EA"
-        elif label == 2:
-            return "GP"
-        elif label == 3:
-            return "INT"
-        else:
-            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
-    elif gt_type == 'ctgt_v2':
-        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`
-        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
-        l_dc = {v: k for k, v in l_dc_inv.items()}
-        try:
-            return l_dc[label]
-        except KeyError:
-            print('Unknown label "{}"'.format(label))
-            return -1
-    else:
-        raise ValueError("Given ground truth type is not valid.")
 
 
 def img_rand_coloring(img: np.ndarray) -> np.ndarray:

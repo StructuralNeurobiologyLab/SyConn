@@ -451,8 +451,7 @@ class MeshStorage(StorageClass):
 
 class SkeletonStorage(StorageClass):
     """
-    Stores skeleton dictionaries (keys: "nodes", "diameters", "edges") as
-    compressed numpy arrays.
+    Stores skeleton dictionaries (keys: "nodes", "diameters", "edges") as compressed numpy arrays.
     """
 
     def __init__(self, inp, **kwargs):
@@ -477,6 +476,9 @@ class SkeletonStorage(StorageClass):
         skeleton = {"nodes": lz4string_listtoarr(comp_arrs[0], dtype=np.uint32),
                     "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
                     "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
+        if len(comp_arrs) > 3:
+            for k, v in comp_arrs[3]:
+                skeleton[k] = v
         if self._cache_decomp:
             self._cache_dc[item] = skeleton
         return skeleton
@@ -488,11 +490,17 @@ class SkeletonStorage(StorageClass):
         ----------
         key : int/str
         skeleton : dict
-            keys: nodes diameters edges
+            keys: nodes diameters edges and other attributes (uncompressed).
         """
         if self._cache_decomp:
             self._cache_dc[key] = skeleton
         comp_n = arrtolz4string_list(skeleton["nodes"].astype(dtype=np.uint32))
         comp_d = arrtolz4string_list(skeleton["diameters"].astype(dtype=np.float32))
         comp_e = arrtolz4string_list(skeleton["edges"].astype(dtype=np.uint32))
-        self._dc_intern[key] = [comp_n, comp_d, comp_e]
+        entry = [comp_n, comp_d, comp_e, dict()]
+        if len(skeleton) > 3:
+            for k, v in skeleton.items():
+                if k in ['nodes', 'diameters', 'edges']:
+                    continue
+                entry[3][k] = v
+        self._dc_intern[key] = entry

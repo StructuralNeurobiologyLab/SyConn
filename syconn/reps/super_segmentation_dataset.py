@@ -42,7 +42,7 @@ class SuperSegmentationDataset(object):
     represented by :class:`~syconn.reps.segmentation.SegmentationObject`.
 
     Examples:
-        After successfully executing :func:`syconn.exec.exec_multiview.run_create_neuron_ssd`,
+        After successfully executing :py:func:`syconn.exec.exec_init.run_create_neuron_ssd`,
         and subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) it is
         possible to load SSV properties via :func:`~load_cached_data` with the following keys
         (the ordering of the arrays corresponds to :py:attr:`~ssv_ids`):
@@ -653,7 +653,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
     ssd.save_dataset_shallow()
     if n_jobs is None:
-        n_jobs = global_params.config.ncore_total
+        n_jobs = ssd.config.ncore_total
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
                      ssd.working_dir, extract_only, attr_keys,
@@ -824,8 +824,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
     sv_kd = kd_factory(sv_kd_path)
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
-        scale = np.array(global_params.config['scaling'],
-                         dtype=np.float32)
+        scale = np.array(ssd.config['scaling'], dtype=np.float32)
         ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
                                        sv_kd.experiment_name, mags=[1])
 

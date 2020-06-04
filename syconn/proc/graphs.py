@@ -97,20 +97,19 @@ def chunkify_contiguous(l, n):
         yield l[i:i + n]
 
 
-def split_subcc_join(g: nx.Graph, subgraph_size: int,
-                     lo_first_n: int = 1) -> List[List[Any]]:
+def split_subcc_join(g: nx.Graph, subgraph_size: int, lo_first_n: int = 1) -> List[List[Any]]:
     """
     Creates a subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
 
     Args:
-        g: Graph
-        subgraph_size: int
-        lo_first_n: int
-            leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
-            nodes, i.e. not use them as new starting nodes.
+        g: Supervoxel graph
+        subgraph_size: Size of subgraphs. The difference between `subgraph_size` and `lo_first_n` defines the
+            supervoxel overlap.
+        lo_first_n: Leave out first n nodes: will collect `subgraph_size` nodes starting from center node and then
+            omit the first lo_first_n nodes, i.e. not use them as new starting nodes.
 
-    Returns: dict
+    Returns:
 
     """
     start_node = list(g.nodes())[0]
@@ -204,7 +203,6 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
         clahe: bool
         pred_key_appendix: str
             Defines type of glia predictions
-        verbose: bool
 
     Returns: list, list (of SegmentationObject)
         Neuron, glia nodes

@@ -7,7 +7,7 @@
 from ..reps import segmentation
 from . import log_reps
 from .. import global_params
-from ..handler.multiviews import int2str_converter
+from ..handler.prediction import int2str_converter
 
 import time
 import numpy as np
