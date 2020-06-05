@@ -46,6 +46,7 @@ pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70,
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 log_handler.level = 10
+m_postproc = Manager()
 
 
 # TODO: move to handler.basics
@@ -106,9 +107,9 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
                 if inp in stops_received:
                     # already got STOP signal, put back in queue for other worker.
                     q_postproc.put(inp)
-                    log_handler.debug('Postproc worker got duplicate STOP signal:', inp)
+                    log_handler.debug(f'Postproc worker got duplicate STOP signal: {inp}')
                 else:
-                    log_handler.debug('Postproc worker received STOP signal:', inp)
+                    log_handler.debug(f'Postproc worker received STOP signal: {inp}')
                     stops_received.add(inp)
                 if len(stops_received) == n_worker_pred:
                     log_handler.debug('Worker postproc done.')
@@ -359,6 +360,8 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         ssd = SuperSegmentationDataset(**ssd_kwargs)
         if ssv_ids is None:
             ssv_ids = ssd.ssv_ids
+        else:
+            ssv_ids = np.array(ssv_ids, np.uint)
         # redundancy, default: 3 * npoints / #vertices
         if type(redundancy) is tuple:
             ssv_redundancy = [min(max(len(ssv.mesh[1]) // npoints, redundancy[0]), redundancy[1]) for ssv in
@@ -366,6 +369,10 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         else:
             ssv_redundancy = [max(len(ssv.mesh[1]) // npoints, redundancy) for ssv in
                               ssd.get_super_segmentation_object(ssv_ids)]
+        ssv_redundancy = np.array(ssv_redundancy)
+        sorted_ix = np.argsort(ssv_redundancy)[::-1]
+        ssv_redundancy = ssv_redundancy[sorted_ix]
+        ssv_ids = ssv_ids[sorted_ix]
         ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
                                   for ii in range(len(ssv_ids))])
         params_in = [{**params_kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
@@ -383,10 +390,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         q_loader.put(el)
     q_load = Queue(maxsize=20*npredictor)
     q_progress = Queue()
-    m_postproc = Manager()
     d_postproc = m_postproc.dict()
     for k in ssv_ids:
-        d_postproc[k] = []
+        d_postproc[k] = m_postproc.list()
     q_postproc = m_postproc.Queue()
     q_out = Queue()
     q_loader_sync = Queue()
@@ -403,8 +409,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.start()
     dict_out = collections.defaultdict(list)
     cnt_end = 0
-    lsnr = Process(target=listener, args=(q_progress, q_load, q_loader_sync, npredictor,
-                                          nloader, nsamples_tot))
+    lsnr = Process(target=listener, args=(q_progress, q_load, q_loader_sync, npredictor, nloader, nsamples_tot))
     lsnr.start()
     while True:
         if q_out.empty():
@@ -557,16 +562,16 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 yield ixs, (batch_f, batch)
     else:
         ssv_ids = np.unique(ssv_ids)
-        # fluctuate context size in 1/4 samples
-        if np.random.randint(0, 4) == 0:
-            ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
-        else:
-            ctx_size_fluct = ctx_size
         for curr_ssvid in ssv_ids:
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
             hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values()), 'celltype', None))
             ssv.clear_cache()
+            # fluctuate context size in 1/4 samples
+            if np.random.randint(0, 4) == 0:
+                ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
+            else:
+                ctx_size_fluct = ctx_size
             npoints_ssv = min(len(hc.vertices), npoints)
             # add a +-10% fluctuation in the number of input points
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
@@ -683,7 +688,6 @@ def pts_loader_glia(ssv_params: List[dict],
             * eval: return as many batches (size `batchsize`) as there are base nodes in the SSV
               skeleton (distance between nodes see `base_node_dst`).
         base_node_dst: Distance between base nodes for context retrieval during eval mode.
-        ssd_kwargs:
 
     Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
         If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
@@ -703,23 +707,14 @@ def pts_loader_glia(ssv_params: List[dict],
         del feat_dc['mi']
         del feat_dc['vc']
         del feat_dc['syn_ssv']
-    if train and np.random.randint(0, 4) == 0:
-        ctx_size_fluct = (np.random.randn(1)[0] * 0.1 + 0.7) * ctx_size
-    else:
-        ctx_size_fluct = ctx_size
-    mandatory_kwargs = dict(mesh_caching=False, create=False, version='tmp')
+    default_kwargs = dict(mesh_caching=False, create=False, version='tmp')
     for curr_ssv_params in ssv_params:
-        curr_ssv_params.update(mandatory_kwargs)
+        default_kwargs.update(curr_ssv_params)
+        curr_ssv_params = default_kwargs
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(**curr_ssv_params)
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
         ssv.clear_cache()
-        npoints_ssv = min(len(hc.vertices), npoints)
-        # add a +-10% fluctuation in the number of input and output points
-        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-        n_out_pts_curr = n_out_pts + npoints_add
-        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-        npoints_ssv += npoints_add
         if train:
             source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize, replace=len(hc.nodes) < batchsize)
         else:
@@ -729,13 +724,22 @@ def pts_loader_glia(ssv_params: List[dict],
             pcd, idcs = pcd.voxel_down_sample_and_trace(
                 base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
-            # source_nodes = np.array(list(sparsify_skeleton_fast(hc.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=base_node_dst,
-            #                                       max_dist_thresh=base_node_dst, dot_prod_thresh=0).nodes()))
             batchsize = min(len(source_nodes), batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
-            source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize), source_nodes])
+            source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize),
+                                           source_nodes])
         for ii in range(n_batches):
+            if train and np.random.randint(0, 4) == 0:
+                ctx_size_fluct = (np.random.randn(1)[0] * 0.1 + 0.6) * ctx_size
+            else:
+                ctx_size_fluct = ctx_size
+            npoints_ssv = min(len(hc.vertices), npoints)
+            # add a +-10% fluctuation in the number of input and output points
+            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+            n_out_pts_curr = n_out_pts + npoints_add
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
@@ -745,22 +749,17 @@ def pts_loader_glia(ssv_params: List[dict],
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
-                # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
                 # get target locations
                 # ~1um apart
-                # base_points = sparsify_skeleton_fast(hc_sub.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=1000,
-                #                                      max_dist_thresh=1000, dot_prod_thresh=0, verbose=False).nodes()
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                pcd, idcs = pcd.voxel_down_sample_and_trace(
-                    1000, pcd.get_min_bound(), pcd.get_max_bound())
+                pcd, idcs = pcd.voxel_down_sample_and_trace(1000, pcd.get_min_bound(), pcd.get_max_bound())
                 base_points = np.max(idcs, axis=1)
-                base_points = np.random.choice(base_points, n_out_pts_curr,
-                                               replace=len(base_points) < n_out_pts_curr)
+                base_points = np.random.choice(base_points, n_out_pts_curr, replace=len(base_points) < n_out_pts_curr)
                 out_coords = hc_sub.nodes[base_points]
                 # sub-sample vertices
                 sample_ixs = np.arange(len(sample_pts))
@@ -847,9 +846,11 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
         node_probas.append(res['t_l'].reshape(-1, 2))
         # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
         node_coords.append(res['t_pts'].reshape(-1, 3))
+        d_in[sso.id][curr_ix] = None
         curr_ix += 1
         if res['batch_progress'][0] == res['batch_progress'][1]:
             break
+    del d_in[sso.id]
     node_probas = np.concatenate(node_probas)
     node_coords = np.concatenate(node_coords)
     kdt = cKDTree(node_coords)
@@ -859,10 +860,9 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
     if partitioned is not None and lo_first_n is not None and partitioned[sso.id]:
         max_sv = lo_first_n
     for sv in sso.svs[:max_sv]:
-        skel = sv.load_skeleton()
+        skel = sv.skeleton
         dists, ixs = kdt.query(skel['nodes'] * sso.scaling, k=10, distance_upper_bound=2000)
-        skel_pred = np.ones(len(skel['nodes'])) * -1
-        skel_probas = np.ones(len(skel['nodes'])) * -1
+        skel_probas = np.ones((len(skel['nodes']), 2)) * -1
         for ii, nn_dists, nn_ixs in zip(np.arange(len(skel['nodes'])), dists, ixs):
             nn_ixs = nn_ixs[nn_dists != np.inf]
             probas = node_probas[nn_ixs].squeeze()
@@ -872,11 +872,13 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
         skel[pred_key] = skel_probas
         sv.save_skeleton(overwrite=True)
         # get mean proba for this super voxel
-        sv.save_attributes([pred_key], skel_probas.mean(axis=0))
-
-        assert np.sum(skel_pred == -1) == 0, "Unpredicted skeleton node."
-    d_in[sso.id][curr_ix] = None
-    return [ssv_params], [True]
+        sv.save_attributes([pred_key], [skel_probas])
+        n_missed_nodes = np.sum(skel_probas[:, 0] == -1)
+        if n_missed_nodes > 0:
+            msg = f'Found {n_missed_nodes} unpredicted skeleton nodes.'
+            log_handler.warning(msg)
+            raise ValueError(msg)
+    return [sso.id], [True]
 
 
 def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
@@ -917,13 +919,6 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
     for pkl_f in fnames_pkl:
         hc = load_hc_pkl(pkl_f, 'compartment')
         npoints_ssv = min(len(hc.vertices), npoints)
-        # cell/sv vertices proportional to total npoints
-        n_out_pts = int(np.sum(hc.features == 0) / len(hc.vertices) * npoints_ssv)
-        # add a +-10% fluctuation in the number of input and output points
-        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-        n_out_pts_curr = n_out_pts + npoints_add
-        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-        npoints_ssv += npoints_add
         source_nodes = np.where(hc.node_labels == 1)[0]
         source_nodes = np.random.choice(len(source_nodes), batchsize,
                                         replace=len(source_nodes) < batchsize)
@@ -931,6 +926,13 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         if len(source_nodes) % batchsize != 0:
             source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
         for ii in range(n_batches):
+            # cell/sv vertices proportional to total npoints
+            n_out_pts = int(np.sum(hc.features == 0) / len(hc.vertices) * npoints_ssv)
+            # add a +-10% fluctuation in the number of input and output points
+            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+            n_out_pts_curr = n_out_pts + npoints_add
+            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+            npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
@@ -1333,8 +1335,11 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         mpath = global_params.config.mpath_celltype_pts
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
+    n_classes = 8
+    if 'j0251' in mpath:
+        n_classes = 11
     try:
-        m = ModelNet40(5, 8, **mkwargs).to(device)
+        m = ModelNet40(5, n_classes, **mkwargs).to(device)
     except RuntimeError as e:
         if not mkwargs['use_bias']:
             mkwargs['use_bias'] = True

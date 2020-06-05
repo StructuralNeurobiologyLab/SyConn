@@ -477,7 +477,7 @@ class SkeletonStorage(StorageClass):
                     "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
                     "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
         if len(comp_arrs) > 3:
-            for k, v in comp_arrs[3]:
+            for k, v in comp_arrs[3].items():
                 skeleton[k] = v
         if self._cache_decomp:
             self._cache_dc[item] = skeleton

@@ -290,16 +290,19 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
         recompute: bool
 
     Returns: Tuple[np.array]
-        nodes, diameters, edges; all flattened
+        nodes, diameters, edges;
 
     """
-    empty_skel = dict(nodes=np.zeros((0, )).astype(np.int), edges=np.zeros((0, )),
+    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int), edges=np.zeros((0, 2)),
                       diameters=np.zeros((0, )).astype(np.int))
     if not recompute and so.skeleton_exists:
         try:
-            skeleton_dc = SkeletonStorage(so.skeleton_path,
-                                          disable_locking=not so.enable_locking)
+            skeleton_dc = SkeletonStorage(so.skeleton_path, disable_locking=not so.enable_locking)
             skel = skeleton_dc[so.id]
+            if np.ndim(skel['nodes']) == 1:
+                skel['nodes'] = skel['nodes'].reshape((-1, 3))
+            if np.ndim(skel['edges']) == 1:
+                skel['edges'] = skel['edges'].reshape((-1, 2))
         except Exception as e:
             log_reps.error("\n{}\nException occured when loading skeletons.pkl"
                            " of SO ({}) with id {}.".format(e, so.type, so.id))
@@ -311,7 +314,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
                 log_reps.debug(msg)
             else:
                 log_reps.error(msg)
-            return empty_skel
+        return empty_skel
     return skel
 
 

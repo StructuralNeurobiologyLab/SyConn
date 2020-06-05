@@ -300,15 +300,16 @@ if elektronn3_avail:
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint), nonglia_ssv_ids])
             self.ctx_size = ctx_size
-            self.sso_params = [dict(ssv_id=sso.id, **sso.ssd_kwargs) for sso in
-                               ssd.get_super_segmentation_object(nonglia_ssv_ids)]
+            self.sso_params = {sso.id: dict(**sso.ssv_kwargs) for sso in ssd.get_super_segmentation_object(nonglia_ssv_ids)}
             ssd_glia = SuperSegmentationDataset(working_dir=wd_path, version='gliagt')
-            self.sso_params += [dict(ssv_id=sso.id, **sso.ssd_kwargs) for sso in ssd_glia.ssvs]
+            self.sso_params.update({sso.id: dict(**sso.ssv_kwargs) for sso in ssd_glia.ssvs})
             log_cnn.info(f'Set {ssd} as GT source.')
 
             # get dataset statistics
             self.label_dc = {sso_id: 0 for sso_id in nonglia_ssv_ids}
-            self.label_dc.update({sso_id: 1 for sso_id in ssd_glia.ssv_ids})
+            self._label_dc_neuron = self.label_dc.copy()
+            self._label_dc_glia = {sso_id: 1 for sso_id in ssd_glia.ssv_ids}
+            self.label_dc.update(self._label_dc_glia)
             classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                          self.label_dc], return_counts=True)
             size_cnt_glia = [sso.size for sso in ssd_glia.ssvs]
@@ -325,8 +326,7 @@ if elektronn3_avail:
             self.train = train
             self.num_pts = npoints
             self._batch_size = batch_size
-            self._curr_ssv_id = None
-            self._curr_ssd_kwargs = None
+            self._curr_ssv_params = None
             self._curr_ssv_label = None
             self.transform = transform
 
@@ -344,13 +344,31 @@ if elektronn3_avail:
                 Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
-            item = np.random.randint(0, len(self.sso_params))
-            pts, feats, out_pts, out_l = self.load_ssv_sample(item)
+            if 1:  # np.random.randint(10) == 1:
+                # reduce context and merge glia and neuron samples
+                orig_ctx = self.ctx_size
+                orig_npts = self.num_pts
+                self.ctx_size *= 0.75
+                self.num_pts = int(0.5 * self.num_pts)
+                item = np.random.choice(list(self._label_dc_neuron.keys()))
+                pts, feats, out_pts, out_l = self.load_ssv_sample(item)
+                item = np.random.choice(list(self._label_dc_glia.keys()))
+                pts_g, feats_g, out_pts_g, out_l_g = self.load_ssv_sample(item)
+                conc_axis = 1 if self._batch_size > 1 else 0
+                pts = np.concatenate([pts, pts_g], axis=conc_axis)
+                feats = np.concatenate([feats, feats_g], axis=conc_axis)
+                out_pts = np.concatenate([out_pts, out_pts_g], axis=conc_axis)
+                out_l = np.concatenate([out_l, out_l_g], axis=conc_axis)
+                self.ctx_size = orig_ctx
+                self.num_pts = orig_npts
+            else:
+                item = np.random.choice(list(self.label_dc.keys()))
+                pts, feats, out_pts, out_l = self.load_ssv_sample(item)
             pts = torch.from_numpy(pts).float()
             feats = torch.from_numpy(feats).float()
             out_pts = torch.from_numpy(out_pts).float()
-            lbs = torch.from_numpy(out_l).long()
-            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': lbs}
+            out_l = torch.from_numpy(out_l).long()
+            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': out_l}
 
         def __len__(self):
             if self.train:
@@ -372,10 +390,10 @@ if elektronn3_avail:
             Returns:
                 point and feature array; if batch size is 1, the first axis is removed.
             """
-            self._curr_ssv_id, self._curr_ssd_kwargs = self.sso_params[item]
-            self._curr_ssv_label = self.label_dc[self.sso_params[item][0]]
+            self._curr_ssv_params = self.sso_params[item]
+            self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
-                [*pts_loader_glia(self.sso_params[item:item+1], [self._curr_ssv_label], self._batch_size,
+                [*pts_loader_glia([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
                  self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
                                   train=True, ctx_size=self.ctx_size)][0]
             if self._batch_size == 1:

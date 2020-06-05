@@ -866,8 +866,8 @@ class SegmentationObject(object):
         """
         if self.skeleton is None:
             self.load_skeleton()
-        nodes = self.skeleton['nodes'].reshape(-1, 3).astype(np.float32)
-        edges = self.skeleton['edges'].reshape(-1, 2)
+        nodes = self.skeleton['nodes'].astype(np.float32)
+        edges = self.skeleton['edges']
         return np.sum([np.linalg.norm(self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def mesh_from_scratch(self, ds: Optional[Tuple[int, int, int]] = None,

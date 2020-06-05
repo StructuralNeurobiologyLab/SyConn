@@ -153,7 +153,7 @@ class SuperSegmentationObject(object):
             the same working directory. Defaults to the `Versions` entry in the `config.yml` file.
     """
     def __init__(self, ssv_id: int, version: Optional[str] = None, version_dict: Optional[Dict[str, str]] = None,
-                 working_dir: Optional[str] = None, create: bool = True,
+                 working_dir: Optional[str] = None, create: bool = False,
                  sv_ids: Optional[Union[np.ndarray, List[int]]] = None, scaling: Optional[np.ndarray] = None,
                  object_caching: bool = True, voxel_caching: bool = True, mesh_caching: bool = True,
                  view_caching: bool = False, config: Optional[DynConfig] = None, nb_cpus: int = 1,
@@ -415,9 +415,14 @@ class SuperSegmentationObject(object):
         return "%s/%s/" % (self.working_dir, self.identifier)
 
     @property
-    def ssd_kwargs(self):
+    def ssd_kwargs(self) -> dict:
         return dict(working_dir=self.working_dir, version=self.version,
                     ssd_type=self.type, sso_locking=self.enable_locking)
+
+    @property
+    def ssv_kwargs(self) -> dict:
+        return dict(ssv_id=self.id, working_dir=self.working_dir, version=self.version,
+                    ssd_type=self.type, enable_locking=self.enable_locking)
 
     @property
     def ssv_dir(self) -> str:

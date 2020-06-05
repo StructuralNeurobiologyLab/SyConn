@@ -401,15 +401,11 @@ def create_new_skeleton(sv_id, sso):
     Returns:
 
     """
-    so = SegmentationObject(sv_id, obj_type="sv",
-                            version=sso.version_dict[
-                                "sv"],
-                            working_dir=sso.working_dir,
+    so = SegmentationObject(sv_id, obj_type="sv", version=sso.version_dict["sv"], working_dir=sso.working_dir,
                             config=sso.config)
     so.enable_locking = False
     so.load_attr_dict()
     skel = load_skeleton(so)
-
     return skel['nodes'], skel['diameters'], skel['edges']
 
 
@@ -1013,9 +1009,7 @@ def create_new_skeleton_sv_fast(args):
     so.load_attr_dict()
     # ignore diameters, will be populated at the and of create_sso_skeleton_fast
     skel = load_skeleton(so)
-    nodes, diameters, edges = skel['nodes'], skel['diameters'], skel['edges']
-    edges = np.array(edges).reshape((-1, 2))
-    nodes = np.array(nodes).reshape((-1, 3)).astype(np.uint32)
+    nodes, diameters, edges = skel['nodes'].astype(np.uint32), skel['diameters'], skel['edges']
     # create nx graph
     skel_nx = nx.Graph()
     skel_nx.add_nodes_from([(ix, dict(position=coord)) for ix, coord
