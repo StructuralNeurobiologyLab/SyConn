@@ -441,7 +441,6 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
 def _load_ssv_hc(args):
     ssv, feats, feat_labels, pt_type, radius = args
     vert_dc = dict()
-    # TODO: replace by poisson disk sampling
     for k in feats:
         pcd = o3d.geometry.PointCloud()
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
@@ -559,7 +558,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                     batch_f[cnt] = pc.features
                     cnt += 1
                 assert cnt == n_samples
-                yield ixs, (batch_f, batch)
+                yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
     else:
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
@@ -646,21 +645,97 @@ def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
     Returns:
 
     """
-    # TODO: is it possible to get 'device' directly from model 'm'?
-    ssv_ids, inp = inp
+    ssv_kwargs, model_inp, batch_progress, n_batches = inp
+    n_samples = len(model_inp[0])
     res = []
-    n_samples = len(inp[0])
     for ii in range(0, int(np.ceil(n_samples / bs))):
         low = bs * ii
         high = bs * (ii + 1)
         with torch.no_grad():
-            g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in inp]
+            g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
             out = m(*g_inp).cpu().numpy()
         res.append(out)
 
     del inp
-    q_cnt.put(len(ssv_ids))
-    q_out.put((ssv_ids, res))
+    res = dict(probas=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+
+    q_cnt.put(n_samples)
+
+    if batch_progress == 1:
+        q_out.put(ssv_kwargs)
+    d_out[ssv_kwargs['ssv_id']].append(res)
+
+
+def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
+    """
+
+    Args:
+        m: Model instance.
+        inp: Input as given by the loader_func.
+        q_out:
+        d_out:
+        q_cnt:
+        device:
+        bs:
+
+    Returns:
+
+    """
+    ssv_kwargs, model_inp, _, _ = inp
+    n_samples = len(model_inp[0])
+    res = []
+    for ii in range(0, int(np.ceil(n_samples / bs))):
+        low = bs * ii
+        high = bs * (ii + 1)
+        with torch.no_grad():
+            g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
+            out = m(*g_inp).cpu().numpy()
+        res.append(out)
+    del inp
+    q_cnt.put(n_samples)
+    q_out.put(([ssv_kwargs['ssv_id']] * n_samples, res))
+
+
+def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = None) -> Tuple[List[int], List[bool]]:
+    """
+    Framework is very similar to what will be needed for semantic segmentation of surface points.
+    Requires adaptions in pts_loader_semseg and correct merge of vertex indices instead of skeleton node cKDTree.
+
+    Args:
+        ssv_kwargs:
+        d_in:
+        pred_key:
+
+    Returns:
+
+    """
+    if pred_key is None:
+        pred_key = 'celltype_cnn_e3'
+    curr_ix = 0
+    sso = SuperSegmentationObject(**ssv_kwargs)
+    sso.load_attr_dict()
+    celltype_probas = []
+    while True:
+        if len(d_in[sso.id]) < curr_ix + 1:
+            time.sleep(0.5)
+            continue
+        # res: [(dict(probas=.., batch_process)]
+        res = d_in[sso.id][curr_ix]
+        celltype_probas.append(res['probas'])
+        d_in[sso.id][curr_ix] = None
+        curr_ix += 1
+        if res['batch_progress'][0] == res['batch_progress'][1]:
+            break
+
+    logit = np.concatenate(celltype_probas)
+    cls = np.argmax(logit, axis=1).squeeze()
+    cls_maj = collections.Counter(cls).most_common(1)[0][0]
+
+    sso.save_attributes([pred_key], [cls_maj])
+    sso.save_attributes([f"{pred_key}_probas"], [logit])
+
+    d_in[sso.id][curr_ix] = None
+    return [sso.id], [True]
 
 
 def pts_loader_glia(ssv_params: List[dict],
@@ -754,12 +829,16 @@ def pts_loader_glia(ssv_params: List[dict],
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
                 # get target locations
-                # ~1um apart
-                pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                pcd, idcs = pcd.voxel_down_sample_and_trace(1000, pcd.get_min_bound(), pcd.get_max_bound())
-                base_points = np.max(idcs, axis=1)
-                base_points = np.random.choice(base_points, n_out_pts_curr, replace=len(base_points) < n_out_pts_curr)
+                if len(hc_sub.nodes) < n_out_pts_curr:
+                    base_points = np.random.choice(len(hc_sub.nodes))
+                # down sample to ~500nm apart
+                else:
+                    pcd = o3d.geometry.PointCloud()
+                    pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
+                    pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                    base_points = np.max(idcs, axis=1)
+                    base_points = np.random.choice(base_points, n_out_pts_curr,
+                                                   replace=len(base_points) < n_out_pts_curr)
                 out_coords = hc_sub.nodes[base_points]
                 # sub-sample vertices
                 sample_ixs = np.arange(len(sample_pts))
@@ -861,7 +940,7 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
         max_sv = lo_first_n
     for sv in sso.svs[:max_sv]:
         skel = sv.skeleton
-        dists, ixs = kdt.query(skel['nodes'] * sso.scaling, k=10, distance_upper_bound=2000)
+        dists, ixs = kdt.query(skel['nodes'] * sso.scaling, k=10, distance_upper_bound=1000)
         skel_probas = np.ones((len(skel['nodes']), 2)) * -1
         for ii, nn_dists, nn_ixs in zip(np.arange(len(skel['nodes'])), dists, ixs):
             nn_ixs = nn_ixs[nn_dists != np.inf]
@@ -1363,7 +1442,7 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
 
 
 # prediction wrapper
-def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
+def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1384,11 +1463,42 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
     loader_kwargs = get_pt_kwargs(mpath)[1]
     default_kwargs = dict(nloader=6, npredictor=3, bs=25,
                           loader_kwargs=dict(n_out_pts=100, base_node_dst=loader_kwargs['ctx_size']/2))
-    default_kwargs.update(kwargs_add)
+    default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_glia, pts_pred_glia,
                                postproc_func=pts_postproc_glia, mpath=mpath, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during glia prediction.')
+
+
+def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
+                         **add_kwargs):
+    """
+    Perform cell type predictions of cell reconstructions on sampled point sets from the
+    cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
+    fraction of the total number of vertices over ``npoints`` times two, but at least 5.
+    Every point set is constructed by collecting the vertices associated with skeleton within a
+    breadth-first search up to a maximum of ``npoints``.
+
+
+    Args:
+        ssd_kwargs:
+        mpath:
+        ssv_ids:
+
+    Returns:
+
+    """
+    if mpath is None:
+        mpath = global_params.config.mpath_glia_pts
+    loader_kwargs = get_pt_kwargs(mpath)[1]
+    default_kwargs = dict(nloader=6, npredictor=3, bs=10, redundancy=(25, 100))
+    default_kwargs.update(add_kwargs)
+    if ssv_ids is None:
+        ssv_ids = SuperSegmentationDataset(**ssd_kwargs).ssv_ids
+    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
+                               postproc_func=pts_postproc_scalar, ssv_ids=ssv_ids, **loader_kwargs, **default_kwargs)
+    if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
+        raise ValueError('Invalid output during cell type prediction.')
 
 
 # -------------------------------------------- SSO TO MORPHX CONVERSION ---------------------------------------------#

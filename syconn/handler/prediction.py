@@ -1318,7 +1318,7 @@ def int2str_converter(label: int, gt_type: str) -> str:
             return -1
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
-                             INT=8, FS=9, LTS=10)
+                             FS=8, LTS=9)
         int2str_label = {v: k for k, v in str2int_label.items()}
         return int2str_label[label]
     else:

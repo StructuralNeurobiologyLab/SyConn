@@ -3363,16 +3363,7 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     return views
 
 
-def merge_axis02(arr):
-    arr = arr.swapaxes(1, 2)  # swap channel and view axis
-    # N, 2, 4, 128, 256
-    orig_shape = arr.shape
-    # reshape to predict single projections
-    arr = arr.reshape([-1] + list(orig_shape[2:]))
-    return arr
-
-
-def celltype_predictor(args):
+def celltype_predictor(args) -> Iterable:
     """
 
     Args:
@@ -3401,7 +3392,7 @@ def celltype_predictor(args):
     return missing_ssvs
 
 
-def semsegaxoness_predictor(args)-> List[int]:
+def semsegaxoness_predictor(args) -> List[int]:
     """
     Predicts axoness and stores resulting labels at vertex dictionary.
 

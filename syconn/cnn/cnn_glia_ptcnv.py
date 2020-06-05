@@ -100,7 +100,7 @@ if not use_bias:
     name += '_noBias'
 
 if use_cuda:
-    device = torch.device('cuda')
+    device = torch.device('cuda:1')
 else:
     device = torch.device('cpu')
 

@@ -143,8 +143,11 @@ if __name__ == '__main__':
 
     if global_params.config.prior_glia_removal:
         log.info('Step 2.5/9 - Glia separation')
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
+        if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+        else:
+            exec_inference.run_glia_prediction_pts()
         exec_inference.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
@@ -154,7 +157,7 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
-    if not global_params.config.use_onthefly_views:
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
         log.info('Step 3.5/9 - Neuron rendering')
         exec_render.run_neuron_rendering()
         time_stamps.append(time.time())

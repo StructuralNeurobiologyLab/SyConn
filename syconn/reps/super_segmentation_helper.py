@@ -2069,8 +2069,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
     if not overwrite and pred_key in sso.attr_dict:
         return
 
-    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
-                       verbose=verbose, add_cellobjects=True,
+    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views, verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
     rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window

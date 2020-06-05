@@ -45,8 +45,7 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
-parser.add_argument('--cval', default=None,
-                    help='Cross-validation split indicator.', type=int)
+parser.add_argument('--cval', default=None, help='Cross-validation split indicator.', type=int)
 
 
 args = parser.parse_args()
@@ -110,7 +109,7 @@ if not use_bias:
     name += '_noBias'
 
 if use_cuda:
-    device = torch.device('cuda:1')
+    device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
@@ -128,7 +127,7 @@ model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_CV{cval}_eval{eval_nr}'
-# model = nn.DataParallel(model)
+model = nn.DataParallel(model)
 
 if use_cuda:
     model.to(device)
@@ -215,7 +214,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=10,
+    num_workers=5,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

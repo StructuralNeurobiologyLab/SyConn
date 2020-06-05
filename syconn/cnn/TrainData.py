@@ -269,6 +269,19 @@ if elektronn3_avail:
             self.sso_ids = ssv_ids
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}
+            self.sso_ids = self.splitting_dict['train']
+            for k, v in self.splitting_dict.items():
+                classes, c_cnts = np.unique([self.label_dc[ix] for ix in
+                                             self.splitting_dict[k]], return_counts=True)
+                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+
+        def __len__(self):
+            if self.train:
+                # make use of the underlying LRU cache with high epoch size,
+                # worker instances of the pytorch loader will reset after each epoch
+                return len(self.sso_ids) * 60
+            else:
+                return max(len(self.sso_ids) // 5, 1)
 
 
     class CellCloudGlia(Dataset):
