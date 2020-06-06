@@ -545,7 +545,7 @@ class SegmentationBase:
                     log_reps.error(msg)
                     raise ValueError(msg)
 
-        if not self._working_dir.endswith("/"):
+        if self._working_dir is not None and not self._working_dir.endswith("/"):
             self._working_dir += "/"
 
         if global_params.wd is None:

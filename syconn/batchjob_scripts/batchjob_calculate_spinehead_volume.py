@@ -6,11 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
-try:
-    import cPickle as pkl
-except Exception:
-    import pickle as pkl
+import pickle as pkl
 from syconn.reps.super_segmentation_helper import extract_spinehead_volume_mesh
 from syconn.reps.super_segmentation import *
 
