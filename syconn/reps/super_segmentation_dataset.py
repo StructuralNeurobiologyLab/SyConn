@@ -5,6 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 from .segmentation import SegmentationDataset, SegmentationObject
+from .rep_helper import SegmentationBase
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
 from .super_segmentation_helper import associate_objs_with_skel_nodes
@@ -16,6 +17,7 @@ from ..mp import mp_utils as sm
 from .. import global_params
 from . import log_reps
 
+import copy
 import re
 import glob
 from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
@@ -36,7 +38,7 @@ except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 
 
-class SuperSegmentationDataset(object):
+class SuperSegmentationDataset(SegmentationBase):
     """
     This class represents a set of agglomerated supervoxels, which themselves are
     represented by :class:`~syconn.reps.segmentation.SegmentationObject`.
@@ -119,7 +121,8 @@ class SuperSegmentationDataset(object):
             sv_mapping: Dictionary mapping supervoxel IDs (key) to their super-supervoxel ID.
             scaling: Array defining the voxel size in XYZ. Default is taken from the
                 `config.yml` file.
-            config: Config. object, see :class:`~syconn.handler.config.DynConfig`.
+            config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
+                setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
             sso_caching: WIP, enables caching mechanisms in SuperSegmentationObjects returned via
                 `get_super_segmentation_object`
             sso_locking: If True, locking is enabled for SSV files.
@@ -136,43 +139,19 @@ class SuperSegmentationDataset(object):
         self._type = ssd_type
         self._id_changer = []
         self._ssv_ids = None
-        self._config = config
 
-        if working_dir is None:
-            if version == 'tmp' or global_params.config.working_dir is not None:
-                self._working_dir = global_params.config.working_dir
-            else:
-                msg = ("No working directory given. It has to be specified either in global_params, via kwarg "
-                       "`working_dir` or `config`.")
-                log_reps.error(msg)
-                raise ValueError(msg)
-        elif config is not None:
-            if os.path.normpath(config.working_dir) != os.path.normpath(working_dir):
-                raise ValueError('Inconsistent working directories in `config` and'
-                                 '`working_dir` kwargs.')
-            self._config = config
-            self._working_dir = working_dir
-        else:
-            self._working_dir = working_dir
-            self._config = DynConfig(working_dir)
-
-        if global_params.wd is None:
-            global_params.wd = self._working_dir
-
-        if scaling is None:
-            try:
-                self._scaling = \
-                    np.array(self.config['scaling'])
-            except:
-                self._scaling = np.array([1, 1, 1])
-        else:
-            self._scaling = scaling
+        if version == 'temp':
+            version = 'tmp'
+        self._setup_working_dir(working_dir, config, version, scaling)
+        if version is not 'tmp' and self._config is not None:
+            self._config = copy.copy(self._config)
+            self._config.fix_config = True
 
         if version is None:
             try:
                 self._version = self.config["versions"][self.type]
-            except:
-                raise Exception("unclear value for version")
+            except KeyError:
+                raise Exception(f"Unclear version '{version}' during initialization of {self}.")
         elif version == "new":
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
@@ -199,8 +178,8 @@ class SuperSegmentationDataset(object):
         if version_dict is None:
             try:
                 self.version_dict = self.config["versions"]
-            except:
-                raise Exception("No version dict specified in config")
+            except KeyError:
+                raise ValueError("No version dict specified in config")
         else:
             if isinstance(version_dict, dict):
                 self.version_dict = version_dict
@@ -208,11 +187,10 @@ class SuperSegmentationDataset(object):
                 if self.version_dict_exists:
                     self.load_version_dict()
             else:
-                raise Exception("No version dict specified in config")
+                raise ValueError("No version dict specified in config")
 
         # TODO: add create kwarg and and only do this if create=True
-        if not os.path.exists(self.path):
-            os.makedirs(self.path)
+        os.makedirs(self.path, exist_ok=True)
 
         if sv_mapping is not None:
             if type(sv_mapping) is dict and 0 in sv_mapping:

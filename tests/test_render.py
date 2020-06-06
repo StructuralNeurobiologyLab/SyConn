@@ -49,6 +49,7 @@ def test_raw_and_index_rendering_osmesa():
     from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
+    assert ssv.config['pyopengl_platform'] == 'osmesa'
     rendering_locations = np.concatenate(ssv.sample_locations())
     index_views = render_sso_coords_index_views(ssv, rendering_locations, verbose=True)
     raw_views = render_sso_coords(ssv, rendering_locations, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))
@@ -64,6 +65,7 @@ def test_raw_and_index_rendering_egl():
     from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
     assert os.path.isfile(fname)
     ssv = init_sso_from_kzip(fname, sso_id=1)
+    assert ssv.config['pyopengl_platform'] == 'egl'
     rendering_locations = np.concatenate(ssv.sample_locations())
     index_views = render_sso_coords_index_views(ssv, rendering_locations, verbose=True)
     raw_views = render_sso_coords(ssv, rendering_locations, verbose=True, add_cellobjects=('mi', 'vc', 'sj'))

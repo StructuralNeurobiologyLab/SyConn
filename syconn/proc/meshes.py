@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
-           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes']
+           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes', 'find_meshes']
 
 
 class MeshObject(object):
@@ -881,8 +881,7 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
                 scaling: Optional[Union[tuple, list, np.ndarray]] = None,
                 meshing_props: Optional[dict] = None) -> Dict[int, List[np.ndarray]]:
     """
-    Find meshes within a segmented cube. The offset is given in voxels. Mesh
-    vertices are scaled according to
+    Find meshes within a segmented cube. The offset is given in voxels. Mesh vertices are scaled according to
     ``global_params.config['scaling']``.
 
     Args:
@@ -894,8 +893,7 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
         meshing_props: Keyword arguments used in ``zmesh.Mesher.get_mesh``.
 
     Returns:
-        The mesh of each segmentation ID in the input `chunk`. Vertices are in
-        nm!
+        The mesh of each segmentation ID in the input `chunk`. Vertices are in nm!
     """
     if scaling is None:
         scaling = np.array(global_params.config['scaling'], copy=True)
@@ -923,6 +921,8 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
         # vertices are xyz in nm (after scaling)
         tmp = mesher.get_mesh(obj_id, **meshing_props)
         tmp.vertices[:] = (tmp.vertices + offset)
+        # vertices can be below zero due to padding and down sampling.
+        tmp.vertices[tmp.vertices[:] < 0] = 0
         meshes[obj_id] = [tmp.faces.flatten().astype(np.uint32),
                           tmp.vertices.flatten().astype(np.float32)]
         if tmp.normals is not None:

@@ -42,6 +42,7 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
@@ -165,8 +166,7 @@ if __name__ == '__main__':
         time_stamps.append(time.time())
         step_idents.append('Preparation')
 
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(bd))
+    log.info('Finished example cube initialization (shape: {}). Starting SyConn pipeline.'.format(bd))
 
     # START SyConn
     log.info('Example data will be processed in "{}".'.format(example_wd))

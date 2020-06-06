@@ -8,13 +8,13 @@ from .. import global_params
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from . import log_proc
 
-from typing import List, Any
+import itertools
+from typing import List, Any, Optional, Dict, Union
 import networkx as nx
 import numpy as np
 from scipy import spatial
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import tqdm
-import itertools
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
@@ -506,7 +506,7 @@ def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
     skel.to_kzip(dest_path)
 
 
-def coordpath2anno(coords, scaling=None):
+def coordpath2anno(coords: np.ndarray, scaling: Optional[np.ndarray] = None) -> SkeletonAnnotation:
     """
     Creates skeleton from scaled coordinates, assume coords are in order for
     edge creation.
@@ -533,47 +533,35 @@ def coordpath2anno(coords, scaling=None):
     return anno
 
 
-def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
-                            mst=False):
+def create_graph_from_coords(coords: np.ndarray, max_dist: float = 6000, force_single_cc: bool = True,
+                             mst: bool = False) -> nx.Graph:
     """
-    Generate skeleton from sample locations by adding edges between points
-    with a maximum distance and then pruning the skeleton using MST.
+    Generate skeleton from sample locations by adding edges between points with a maximum distance and then pruning
+    the skeleton using MST. Nodes will have a 'position' attribute.
 
     Args:
-        coords: np.array
-        max_dist: float
-        force_single_cc: bool
-            force that the tree generated from coords is a single connected
-            component
-        mst:
+        coords: Coordinates.
+        max_dist: Add edges between two nodes that are within this distance.
+        force_single_cc: Force that the tree generated from coords is a single connected component.
+        mst: Compute the minimum spanning tree.
 
-    Returns: np. array
-        edge list of nodes (coords) using the ordering of coords, i.e. the
+    Returns:
+        Networkx graph. Edge between nodes (coord indices) using the ordering of coords, i.e. the
         edge (1, 2) connects coordinate coord[1] and coord[2].
 
     """
     g = nx.Graph()
     if len(coords) == 1:
         g.add_node(0)
-        # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
         g.add_weighted_edges_from([[0, 0, 0]])
         return g
     kd_t = spatial.cKDTree(coords)
     pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    if force_single_cc and len(coords) > 1:
-        cnt = 0
-        n_nodes = len(np.unique(pairs))
-        while not n_nodes == len(coords) and cnt < 100:
-            cnt += 1
-            max_dist += max_dist / 3
-            log_proc.debug("Generated skeleton ({} edges, {} nodes) is not a single connected "
-                           "component (#coords: {})). Increasing maximum node distance"
-                           " to {}".format(len(pairs), n_nodes, len(coords), max_dist))
-            pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    g.add_nodes_from(np.arange(len(coords)))
-    weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)#np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
-    # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
+    g.add_nodes_from([(ix, dict(position=coord)) for ix, coord in enumerate(coords)])
+    weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)
     g.add_weighted_edges_from([[pairs[i][0], pairs[i][1], weights[i]] for i in range(len(pairs))])
+    if force_single_cc:  # make sure its a connected component
+        g = stitch_skel_nx(g)
     if mst:
         g = nx.minimum_spanning_tree(g)
     return g
@@ -688,3 +676,39 @@ def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
     skel.add_annotation(anno)
     skel.to_kzip(kzip_path)
     pbar.close()
+
+
+def stitch_skel_nx(skel_nx: nx.Graph) -> nx.Graph:
+    """
+    Stitch connected components within a graph by recursively adding edges between the closest components.
+
+    Args:
+        skel_nx: Networkx graph. Nodes require 'position' attribute.
+
+    Returns:
+        Single connected component graph.
+    """
+    no_of_seg = nx.number_connected_components(skel_nx)
+    if no_of_seg == 1:
+        return skel_nx
+
+    skel_nx_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.int)
+    new_nodes = skel_nx_nodes.copy()
+    while no_of_seg != 1:
+        rest_nodes = []
+        current_set_of_nodes = []
+        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_nx), key=len, reverse=True)])
+        for single_rest_graph in list_of_comp[1:]:
+            rest_nodes = rest_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+        for single_rest_graph in list_of_comp[:1]:
+            current_set_of_nodes = current_set_of_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+        tree = spatial.cKDTree(rest_nodes, 1)
+        thread_lengths, indices = tree.query(current_set_of_nodes)
+        start_thread_index = np.argmin(thread_lengths)
+        stop_thread_index = indices[start_thread_index]
+        start_thread_node = \
+        np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
+        skel_nx.add_edge(start_thread_node, stop_thread_node)
+        no_of_seg -= 1
+    return skel_nx

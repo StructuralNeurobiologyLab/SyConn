@@ -22,6 +22,7 @@ from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import split_subcc_join
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
+from syconn.handler.prediction_pts import predict_glia_ssv
 
 
 def run_morphology_embedding(max_n_jobs: Optional[int] = None):
@@ -108,8 +109,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
 
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else \
-            global_params.config.ngpu_total
+        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
     if qu.batchjob_enabled():
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
     else:
@@ -141,8 +141,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
         max_n_jobs_gpu: Number of parallel GPU jobs. Used for the inference.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else \
-            global_params.config.ngpu_total
+        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
     log = initialize_logging('spine_identification', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -172,8 +171,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds`.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else \
-            global_params.config.ngpu_total
+        max_n_jobs_gpu = global_params.config.ngpu_total * 10
     log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/', overwrite=False)
     pred_key = "glia_probas"
 
@@ -207,13 +205,23 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     # only append to this key if needed (e.g. different versions)
     np.random.seed(0)
     np.random.shuffle(multi_params)
-    multi_params = [(el, pred_key) for el in chunkify(multi_params, max_n_jobs_gpu)]
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additional axis
-
-    qu.batchjob_script(multi_params, 'predict_glia_pts', log=log,
-                       n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                       suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
+    if not qu.batchjob_enabled():
+        # Default SLURM fallback with Popen keeps freezing.
+        working_dir = global_params.config.working_dir
+        ssv_params = []
+        partitioned = dict()
+        for sv_ids, g, was_partitioned in multi_params:
+            ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g))
+            partitioned[sv_ids[0]] = was_partitioned
+        postproc_kwargs = dict(pred_key=pred_key, lo_first_n=lo_first_n, partitioned=partitioned)
+        predict_glia_ssv(ssv_params, postproc_kwargs=postproc_kwargs)
+    else:
+        multi_params = [(el, pred_key) for el in chunkify(multi_params, max_n_jobs_gpu)]
+        qu.batchjob_script(multi_params, 'predict_glia_pts', log=log,
+                           n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
+                           suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished glia prediction.')
 
 

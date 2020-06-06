@@ -15,6 +15,7 @@ import collections
 from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
 from multiprocessing import Process, Queue, Manager
 import numpy as np
+import scipy.special
 from scipy import spatial
 import morphx.processing.clouds as clouds
 import functools
@@ -600,7 +601,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
-                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
+                    log_handler.debug(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes)
                 local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
@@ -750,7 +751,8 @@ def pts_loader_glia(ssv_params: List[dict],
 
     Args:
         ssv_params: SuperSegmentationObject kwargs for which samples are generated.
-        out_point_label: Either key for sso.skeleton attribute or int (used for all out locations).
+        out_point_label: Either key for sso.skeleton attribute or int (used for all out locations). Currently only
+            int is supported!
         batchsize: Only used during training.
         ctx_size:
         npoints: Number of points used to generate sample context.
@@ -771,11 +773,9 @@ def pts_loader_glia(ssv_params: List[dict],
     """
     if ctx_size is None:
         ctx_size = 20000
-    # TODO: support node attributes in hybrid cloud graph also
-    if type(out_point_label) == str:
-        raise NotImplementedError
+    if train and type(out_point_label) == str:
+        raise NotImplementedError('Type str is not implemented yet for out_point_label!')
     feat_dc = dict(pts_feat_dict)
-    # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
     del feat_dc['syn_ssv_sym']
     if not use_subcell:
@@ -864,7 +864,6 @@ def pts_loader_glia(ssv_params: List[dict],
                 batch_out[cnt] = hc_sub.nodes
                 if not train:
                     batch_out_orig[cnt] = out_coords
-                # TODO: currently only supports type(out_point_label) = int
                 batch_out_l[cnt] = out_point_label
                 cnt += 1
             assert cnt == batchsize
@@ -890,7 +889,6 @@ def pts_pred_glia(m, inp, q_out, d_out, q_cnt, device, bs):
     Returns:
 
     """
-    # TODO: is it possible to get 'device' directly from model 'm'?
     ssv_params, model_inp,  out_pts_orig, batch_progress, n_batches = inp
     res = []
     with torch.no_grad():
@@ -910,7 +908,7 @@ def pts_pred_glia(m, inp, q_out, d_out, q_cnt, device, bs):
 
 
 def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: Optional[int] = None,
-                      partitioned: Optional[bool] = False) -> Tuple[List[dict], List[bool]]:
+                      partitioned: Optional[bool] = False, apply_softmax: bool = True) -> Tuple[List[dict], List[bool]]:
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
     node_probas = []
@@ -931,6 +929,8 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
             break
     del d_in[sso.id]
     node_probas = np.concatenate(node_probas)
+    if apply_softmax:
+        node_probas = scipy.special.softmax(node_probas, axis=1)
     node_coords = np.concatenate(node_coords)
     kdt = cKDTree(node_coords)
     max_sv = len(sso.svs)
@@ -939,24 +939,22 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
     if partitioned is not None and lo_first_n is not None and partitioned[sso.id]:
         max_sv = lo_first_n
     for sv in sso.svs[:max_sv]:
-        skel = sv.skeleton
-        dists, ixs = kdt.query(skel['nodes'] * sso.scaling, k=10, distance_upper_bound=1000)
-        skel_probas = np.ones((len(skel['nodes']), 2)) * -1
-        for ii, nn_dists, nn_ixs in zip(np.arange(len(skel['nodes'])), dists, ixs):
+        coords = sv.sample_locations(save=False)
+        dists, ixs = kdt.query(coords, k=10, distance_upper_bound=1000)
+        skel_probas = np.ones((len(coords), 2)) * -1
+        for ii, nn_dists, nn_ixs in zip(np.arange(len(coords)), dists, ixs):
             nn_ixs = nn_ixs[nn_dists != np.inf]
             probas = node_probas[nn_ixs].squeeze()
             # get mean probability per node
+            if len(probas) == 0:
+                msg = f'Did not find close-by node predictions in {sso} at {coords[ii]}! {sso.ssv_kwargs}.' \
+                      f'\nGot {len(node_probas)} predictions for {len(skel_probas)} skeleton nodes.'
+                log_handler.error(msg)
+                # raise ValueError(msg)
             skel_probas[ii] = np.mean(probas, axis=0)
         # every node has at least one prediction
-        skel[pred_key] = skel_probas
-        sv.save_skeleton(overwrite=True)
         # get mean proba for this super voxel
         sv.save_attributes([pred_key], [skel_probas])
-        n_missed_nodes = np.sum(skel_probas[:, 0] == -1)
-        if n_missed_nodes > 0:
-            msg = f'Found {n_missed_nodes} unpredicted skeleton nodes.'
-            log_handler.warning(msg)
-            raise ValueError(msg)
     return [sso.id], [True]
 
 
@@ -1461,7 +1459,7 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=6, npredictor=3, bs=25,
+    default_kwargs = dict(nloader=1, npredictor=1, bs=25,
                           loader_kwargs=dict(n_out_pts=100, base_node_dst=loader_kwargs['ctx_size']/2))
     default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_glia, pts_pred_glia,

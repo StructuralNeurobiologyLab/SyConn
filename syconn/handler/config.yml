@@ -159,30 +159,13 @@ meshes:
     max_simplification_error: 40  # in nm
 
 skeleton:
-  allow_skel_gen: True
+  # If True, allow cell skeleton generation from rendering locations (inaccurate).
+  allow_ssv_skel_gen: True
   feature_context_rfc: # in nm
     axoness: 8000
     spiness: 1000
 
 use_point_models: False
-
-points:
-  compartments:
-    point_properties:
-      nb_points:
-      ctx_size:  # in nm
-  celltype:
-    point_properties:
-      nb_points:
-      ctx_size:  # in nm
-  glia:
-    point_properties:
-      nb_points:
-      ctx_size:  # in nm
-  morphology:
-    point_properties:
-      nb_points:
-      ctx_size:  # in nm
 
 views:
   use_onthefly_views: True  # TODO: does not yet apply for glia

@@ -31,6 +31,7 @@ class Config(object):
         self._working_dir = working_dir
         self.initialized = False
         if self._working_dir is not None and len(self._working_dir) > 0:
+            self._working_dir = os.path.abspath(self._working_dir)
             self.parse_config()
 
     def __eq__(self, other: 'Config') -> bool:
@@ -88,8 +89,7 @@ class Config(object):
         Reads the content stored in the config file.
         """
         try:
-            self._config = yaml.load(open(self.path_config, 'r'),
-                                     Loader=yaml.FullLoader)
+            self._config = yaml.load(open(self.path_config, 'r'), Loader=yaml.FullLoader)
             self.initialized = True
         except FileNotFoundError:
             pass
@@ -112,7 +112,8 @@ class Config(object):
         with open(fname_conf, 'w') as f:
             f.write(yaml.dump(self.entries, default_flow_style=False))
 
-    def version(self):
+    @staticmethod
+    def version():
         from syconn import __version__
         return __version__
 
@@ -141,16 +142,21 @@ class DynConfig(Config):
             cfg = global_params.config  # this is the `DynConfig` object
 
     """
-    def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None):
+    def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None, fix_config: bool = False):
         """
         Args:
             wd: Path to working directory
+            log:
+            fix_config: Keep config constant.
         """
         verbose = False
         if wd is None:
             wd = global_params.wd
             verbose = True if wd is not None else False
         super().__init__(wd)
+        self.fix_config = fix_config
+        if fix_config and self.working_dir is None:
+            raise ValueError('Fixed config must have a valid working directory.')
         self._default_conf = None
         if log is None:
             log = logging.getLogger('syconn')
@@ -228,16 +234,17 @@ class DynConfig(Config):
         Checks os.environ and global_params and triggers an update if the therein
          specified WD is not the same as :py:attr:`~working dir`.
         """
-        # first check if working directory was set in environ,
-        # else check if it was changed in memory.
+        if self.fix_config:
+            return
+        # first check if working directory was set in environ, else check if it was changed in memory.
         new_wd = None
-        if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
-            len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
-            if super().working_dir != os.environ['syconn_wd']:
-                new_wd = os.environ['syconn_wd']
-        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
-                (global_params.wd != "None") and (super().working_dir != global_params.wd):
-            new_wd = global_params.wd
+        if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and len(os.environ['syconn_wd']) > 0 \
+                and os.environ['syconn_wd'] != "None":
+            if super().working_dir != os.path.abspath(os.environ['syconn_wd']):
+                new_wd = os.path.abspath(os.environ['syconn_wd'])
+        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and (global_params.wd != "None") and\
+                (super().working_dir != os.path.abspath(global_params.wd)):
+            new_wd = os.path.abspath(global_params.wd)
         if new_wd is None:
             return
         super().__init__(new_wd)
@@ -413,7 +420,7 @@ class DynConfig(Config):
             Path to an encoder network of local cell morphology trained via
             triplet loss on point data.
         """
-        mpath = glob.glob(self.model_dir + '/pts/*tnet*/model.pt')
+        mpath = glob.glob(self.model_dir + '/pts/*tnet*/state_dict.pth')
         assert len(mpath) == 1
         return mpath[0]
 
@@ -444,7 +451,7 @@ class DynConfig(Config):
             Path to model trained on detecting axon, terminal and en-passant boutons,
             dendritic shaft, spine head and neck, and soma from point data.
         """
-        mpath = glob.glob(self.model_dir + '/pts/*semseg*/model.pt')
+        mpath = glob.glob(self.model_dir + '/pts/*semseg*/state_dict.pth')
         assert len(mpath) == 1
         return mpath[0]
 
@@ -463,7 +470,7 @@ class DynConfig(Config):
         Returns:
             Path to model trained on prediction cell types from point data.
         """
-        mpath = glob.glob(self.model_dir + '/pts/*celltype*/model.pt')
+        mpath = glob.glob(self.model_dir + '/pts/*celltype*/state_dict.pth')
         assert len(mpath) == 1
         return mpath[0]
 
@@ -484,7 +491,7 @@ class DynConfig(Config):
             Path to point-based model trained to classify local 2D projections into glia
             vs. neuron.
         """
-        mpath = glob.glob(self.model_dir + '/pts/*glia*/model.pt')
+        mpath = glob.glob(self.model_dir + '/pts/*glia*/state_dict.pth')
         assert len(mpath) == 1
         return mpath[0]
 
@@ -524,7 +531,7 @@ class DynConfig(Config):
             return False
 
     @property
-    def allow_skel_gen(self) -> bool:
+    def allow_ssv_skel_gen(self) -> bool:
         """
         Controls whether cell supervoxel skeletons are provided a priori or
         can be computed from scratch. Currently this is done via a naive sampling
@@ -533,7 +540,11 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        return self.entries['skeleton']['allow_skel_gen']
+        try:
+            res = self.entries['skeleton']['allow_ssv_skel_gen']
+        except KeyError:  # backwards compat.
+            res = self.entries['skeleton']['allow_skel_gen']
+        return res
 
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
@@ -683,7 +694,6 @@ class DynConfig(Config):
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
-                          allow_skel_gen: bool = True,
                           use_new_renderings_locs: bool = True,
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
@@ -868,7 +878,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                 max_simplification_error: 40  # in nm
 
             skeleton:
-              allow_skel_gen: True
+              allow_ssv_skel_gen: True
               feature_context_rfc: # in nm
                 axoness: 8000
                 spiness: 1000
@@ -943,8 +953,6 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         scaling: Voxel size in NM.
         syntype_avail: If True, synapse objects will contain additional type
             property (symmetric vs asymmetric).
-        allow_skel_gen: If True, allow cell skeleton generation from rendering
-            locations (inaccurate).
         use_new_renderings_locs: If True, uses new heuristic for generating
             rendering locations.
         kd_seg: Path to the KnossosDataset which contains the cell segmentation.
@@ -996,8 +1004,6 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['meshes']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
     entries['meshes']['use_new_meshing'] = use_new_meshing
-
-    entries['skeleton']['allow_skel_gen'] = allow_skel_gen
 
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 

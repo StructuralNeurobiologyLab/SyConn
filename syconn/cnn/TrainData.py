@@ -357,7 +357,7 @@ if elektronn3_avail:
                 Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
-            if 1:  # np.random.randint(10) == 1:
+            if np.random.randint(5) == 1:
                 # reduce context and merge glia and neuron samples
                 orig_ctx = self.ctx_size
                 orig_npts = self.num_pts

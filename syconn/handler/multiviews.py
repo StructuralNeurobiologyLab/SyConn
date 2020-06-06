@@ -4,6 +4,10 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 from .prediction import str2int_converter
 from ..proc.graphs import bfs_smoothing
 from typing import TYPE_CHECKING
@@ -332,29 +336,18 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
 
 def generate_rendering_locs(verts: np.ndarray, ds_factor: float) -> np.ndarray:
     """
+    Generate rendering locations by downsampling the input points. Locations will be a subset of the input
+    locations.
 
     Args:
-        verts: np.ndarray
-            Vertices [N, 3].
-        ds_factor: float
-            volume (ds_factor^3) for which a rendering location is returned.
+        verts: Vertices [N, 3].
+        ds_factor: Volume (ds_factor^3) for which a rendering location is returned.
 
-    Returns: np.ndarray
-        rendering locations.
+    Returns:
+        Rendering locations.
 
     """
-    # get unique array of downsampled vertex locations (scaled back to nm)
-    verts_ixs = np.arange(len(verts))
-    np.random.seed(0)
-    np.random.shuffle(verts_ixs)
-    ds_locs_encountered = {}
-    rendering_locs = []
-    for kk, c in enumerate(verts[verts_ixs]):
-        ds_loc = tuple((c / ds_factor).astype(np.int))
-        # always gets first coordinate which is in downsampled voxel, the others are skipped
-        if ds_loc in ds_locs_encountered:
-            continue
-        rendering_locs.append(c)
-        ds_locs_encountered[ds_loc] = None
-    rendering_locs = np.array(rendering_locs)
-    return rendering_locs
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(verts)
+    pcd = pcd.voxel_down_sample(ds_factor)
+    return np.asarray(pcd.points)

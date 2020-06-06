@@ -436,11 +436,7 @@ class main_class(QtGui.QDialog):
 
     def populate_ssv_list(self):
         all_ssv_ids = self.syconn_gate.get_list_of_all_ssv_ids()['ssvs']
-
-        #print('list of all here')
-        #print(len(all_ssv_ids))
         for ssv_id in all_ssv_ids:
-            #print(ssv_id)
             item = QtGui.QStandardItem(str(int(ssv_id)))
             self.ssv_item_model.appendRow(item)
 
@@ -449,9 +445,6 @@ class main_class(QtGui.QDialog):
 
     def populate_syn_list(self):
         self.all_syns = self.syconn_gate.get_all_syn_metda_data()
-
-        #print('list of all here')
-        #print(len(all_ssv_ids))
         for syn in zip(self.all_syns['ssv_partner_0'], self.all_syns['ssv_partner_1']):
             item = QtGui.QStandardItem(str(syn))
             self.syn_item_model.appendRow(item)

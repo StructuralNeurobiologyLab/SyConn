@@ -7,9 +7,6 @@
 import sys
 from syconn.handler.prediction_pts import predict_glia_ssv
 from syconn import global_params
-from syconn.handler import basics
-from syconn.mp.mp_utils import start_multiprocess_imap
-import numpy as np
 import pickle as pkl
 
 path_storage_file = sys.argv[1]
@@ -44,11 +41,7 @@ for sv_ids, g, was_partitioned in ch:
     ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g))
     partitioned[sv_ids[0]] = was_partitioned
 postproc_kwargs = dict(pred_key=pred_key, lo_first_n=lo_first_n, partitioned=partitioned)
-params = [(el, dict(postproc_kwargs=postproc_kwargs)) for el in basics.chunkify(ch, n_worker * 2)]
-res = start_multiprocess_imap(predict_glia_ssv, params, nb_cpus=n_worker)
-missing = np.concatenate(res)
-if len(missing) > 0:
-    raise ValueError('Sem. seg. prediction of {} SSVs ({}) failed.'.format(
-        len(missing), str(missing)))
+predict_glia_ssv(ssv_params, postproc_kwargs=postproc_kwargs)
+
 with open(path_out_file, "wb") as f:
     pkl.dump(None, f)

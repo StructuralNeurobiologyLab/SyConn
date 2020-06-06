@@ -8,7 +8,8 @@ from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject, SegmentationDataset
 from .segmentation_helper import load_so_attr_bulk
 from ..proc.sd_proc import predict_sos_views
-from .rep_helper import knossos_ml_from_sso, colorcode_vertices, knossos_ml_from_svixs, subfold_from_ix_SSO
+from .rep_helper import knossos_ml_from_sso, colorcode_vertices, knossos_ml_from_svixs, subfold_from_ix_SSO, \
+    SegmentationBase
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, coordpath2anno, load_pkl2obj, \
     write_obj2pkl, flatten_list, chunkify, data2kzip
 from ..handler.prediction import certainty_estimate
@@ -47,7 +48,7 @@ MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
 
-class SuperSegmentationObject(object):
+class SuperSegmentationObject(SegmentationBase):
     """
     Class instances represent individual neuron reconstructions, defined by a
     list of agglomerated supervoxels (see :class:`~syconn.reps.segmentation.SegmentationObject`).
@@ -224,7 +225,6 @@ class SuperSegmentationObject(object):
         self._rep_coord = None
         self._size = None
         self._bounding_box = None
-        self._config = config
 
         self._objects = {}
         self.skeleton = None
@@ -235,8 +235,8 @@ class SuperSegmentationObject(object):
         self._sv_graph_uint = sv_graph
 
         # init mesh dicts
-        self._meshes = {"sv": None, "vc": None, "mi": None, "sj": None, "syn_ssv": None,
-                        "syn_ssv_sym": None, "syn_ssv_asym": None}
+        self._meshes = {"sv": None, "vc": None, "mi": None, "sj": None, "syn_ssv": None, "syn_ssv_sym": None,
+                        "syn_ssv_asym": None}
 
         self._views = None
         self._weighted_graph = None
@@ -248,41 +248,13 @@ class SuperSegmentationObject(object):
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
 
-        if working_dir is None:
-            if global_params.wd is not None or version == 'tmp':
-                self._working_dir = global_params.wd
-            else:
-                msg = "No working directory (wd) given. It has to be" \
-                      " specified either in global_params, via kwarg " \
-                      "`working_dir` or `config`."
-                log_reps.error(msg)
-                raise ValueError(msg)
-        else:
-            self._working_dir = working_dir
-            if self._config is None:
-                self._config = DynConfig(working_dir)
-            else:
-                assert self._config.working_dir == self._working_dir
+        self._setup_working_dir(working_dir, config, version, scaling)
 
-        if global_params.wd is None:
-            global_params.wd = self._working_dir
-
-        if scaling is None:
-            try:
-                self._scaling = \
-                    np.array(self.config['scaling'])
-            except KeyError:
-                msg = 'Scaling not set and could not be found in config ("{}"' \
-                      ') with entries: {}'.format(self.config.path_config, self.config.entries)
-                log_reps.error(msg)
-                raise KeyError(msg)
-        else:
-            self._scaling = scaling
         if version is None:
             try:
                 self._version = self.config["versions"][self.type]
-            except:
-                raise Exception("unclear value for version")
+            except KeyError:
+                raise Exception(f"Unclear version '{version}' during initialization of {self}.")
         elif version == "new":
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
@@ -300,16 +272,16 @@ class SuperSegmentationObject(object):
         if version_dict is None:
             try:
                 self.version_dict = self.config["versions"]
-            except:
-                raise Exception("No version dict specified in config")
+            except KeyError:
+                raise ValueError(f"Unclear version '{version}' during initialization of {self}.")
         else:
             if isinstance(version_dict, dict):
                 self.version_dict = version_dict
             else:
-                raise Exception("No version dict specified in config")
+                raise ValueError("No version dict specified in config.")
 
-        if create and not os.path.exists(self.ssv_dir):
-            os.makedirs(self.ssv_dir)
+        if create:
+            os.makedirs(self.ssv_dir, exist_ok=True)
 
     def __hash__(self) -> int:
         return hash((self.id, self.type, frozenset(self.sv_ids)))
@@ -416,21 +388,23 @@ class SuperSegmentationObject(object):
 
     @property
     def ssd_kwargs(self) -> dict:
-        return dict(working_dir=self.working_dir, version=self.version,
+        return dict(working_dir=self.working_dir, version=self.version, config=self._config,
                     ssd_type=self.type, sso_locking=self.enable_locking)
 
     @property
     def ssv_kwargs(self) -> dict:
-        return dict(ssv_id=self.id, working_dir=self.working_dir, version=self.version,
-                    ssd_type=self.type, enable_locking=self.enable_locking)
+        kw = dict(ssv_id=self.id, working_dir=self.working_dir, version=self.version, config=self._config,
+                  ssd_type=self.type, enable_locking=self.enable_locking)
+        if self.version == 'tmp':
+            kw.update(sv_ids=self.sv_ids)
+        return kw
 
     @property
     def ssv_dir(self) -> str:
         """
         Path to the folder where the data of this super-supervoxel is stored.
         """
-        return "%s/so_storage/%s/" % (self.ssd_dir,
-                                      subfold_from_ix_SSO(self.id))
+        return "%s/so_storage/%s/" % (self.ssd_dir, subfold_from_ix_SSO(self.id))
 
     @property
     def attr_dict_path(self) -> str:
@@ -1183,22 +1157,22 @@ class SuperSegmentationObject(object):
         self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
         self._bounding_box = self._bounding_box.astype(np.int)
 
-    def calculate_skeleton(self, force: bool = False):
+    def calculate_skeleton(self, force: bool = False, **kwargs):
         """
-        Merges existing supervoxel skeletons (``allow_skel_gen=False``) or calculates them
+        Merges existing supervoxel skeletons (``allow_ssv_skel_gen=False``) or calculates them
         from scratch using :func:`~syconn.reps.super_segmentation_helper
-        .create_sso_skeletons_wrapper` otherwise (requires ``allow_skel_gen=True``).
+        .create_sso_skeletons_wrapper` otherwise (requires ``allow_ssv_skel_gen=True``).
         Skeleton will be saved at :py:attr:`~skeleton_path`.
 
         Args:
             force: Skips :func:`~load_skeleton` if ``force=True``.
         """
         if force or self._allow_skeleton_calc:
-            return ssh.create_sso_skeletons_wrapper([self])
+            return ssh.create_sso_skeletons_wrapper([self], **kwargs)
         if self.skeleton is not None and len(self.skeleton["nodes"]) != 0 \
                 and not force:
             return
-        ssh.create_sso_skeletons_wrapper([self])
+        ssh.create_sso_skeletons_wrapper([self], **kwargs)
 
     def save_skeleton_to_kzip(self, dest_path: Optional[str] = None,
                               additional_keys: Optional[List[str]] = None):
@@ -1374,7 +1348,7 @@ class SuperSegmentationObject(object):
     def load_skeleton(self) -> bool:
         """
         Loads skeleton and will compute it if it does not exist yet (requires
-        ``allow_skel_gen=True``).
+        ``allow_ssv_skel_gen=True``).
 
         Returns:
             True if successfully loaded/generated skeleton, else False.
@@ -1384,7 +1358,7 @@ class SuperSegmentationObject(object):
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except (KeyError, FileNotFoundError):
-            if self.config.allow_skel_gen or self._allow_skeleton_calc:
+            if self.config.allow_ssv_skel_gen or self._allow_skeleton_calc:
                 self.calculate_skeleton()
                 return True
             return False
