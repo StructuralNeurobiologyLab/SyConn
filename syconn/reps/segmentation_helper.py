@@ -311,7 +311,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
                            " of SO ({}) with id {}.".format(e, so.type, so.id))
             return empty_skel
     elif recompute:
-        skel = generate_skeleton_sv
+        skel = generate_skeleton_sv(so)
     else:
         msg = f"Skeleton of {so} (size: {so.size}) not found.\n"
         if so.type == "sv":

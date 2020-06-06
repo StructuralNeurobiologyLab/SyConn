@@ -701,8 +701,7 @@ class SegmentationObject(SegmentationBase):
             if self.config.use_new_renderings_locs:
                 coords = generate_rendering_locs(verts, ds_factor).astype(np.float32)
             else:
-                coords = surface_samples(verts, [ds_factor] * 3,
-                                         r=ds_factor/2).astype(np.float32)
+                coords = surface_samples(verts, [ds_factor] * 3, r=ds_factor/2).astype(np.float32)
             if save:
                 loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                            disable_locking=not self.enable_locking)

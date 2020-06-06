@@ -1289,7 +1289,7 @@ class CelltypeViews(MultiViewData):
             self.sample_weights[source] = compute_class_weight('balanced',
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
-        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=True)
+        ixs = np.random.choice(len(self.view_cache[source]), batch_size, replace=True)
         d, l, syn_signs = transform_celltype_data_views_alternative(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
             [self.syn_sign_cache[source][ix] for ix in ixs], batch_size, self.nb_views)
@@ -1375,7 +1375,7 @@ class CelltypeViews(MultiViewData):
             self.sample_weights[source] = compute_class_weight('balanced',
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
-        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
+        ixs = np.random.choice(len(self.view_cache[source]), batch_size, replace=False)
         d, l = transform_celltype_data_views_alternative_noscal(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
             batch_size, self.nb_views)
@@ -1545,8 +1545,7 @@ def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
         curr_nb_samples = np.max([curr_nb_samples, 1])
         if curr_nb_samples == 0:
             continue
-        view_sampling = np.random.choice(np.arange(views.shape[1]),
-                                         curr_nb_samples*nb_views, replace=False)
+        view_sampling = np.random.choice(views.shape[1], curr_nb_samples*nb_views, replace=False)
         orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
                                                                                  nb_views, 128, 256)).swapaxes(1, 0)
         new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]

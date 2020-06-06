@@ -201,7 +201,7 @@ def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
     assert views.shape[1] > 0
     if views.shape[1] < nb_views:
-        rand_ixs = np.random.choice(np.arange(views.shape[1]), nb_views - views.shape[1])
+        rand_ixs = np.random.choice(views.shape[1], nb_views - views.shape[1])
         views = np.append(views, views[:, rand_ixs], axis=1)
     nb_samples = np.floor(views.shape[1] / nb_views)
     assert nb_samples > 0

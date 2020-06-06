@@ -22,7 +22,7 @@ from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import split_subcc_join
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
-from syconn.handler.prediction_pts import predict_glia_ssv
+from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd
 
 
 def run_morphology_embedding(max_n_jobs: Optional[int] = None):
@@ -76,17 +76,19 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    np.random.seed(0)
     multi_params = ssd.ssv_ids
-    np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, max_n_jobs_gpu)
-    # job parameter will be read sequentially, i.e. in order to provide only
-    # one list as parameter one needs an additonal axis
-    multi_params = [(ixs, ) for ixs in multi_params]
-
-    qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
-                       n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                       remove_jobfolder=True)
+    if not qu.batchjob_enabled() and global_params.config.use_point_models:
+        predict_celltype_ssd(ssd_kwargs=dict(working_dir=global_params.config.working_dir), ssv_ids=multi_params)
+    else:
+        np.random.seed(0)
+        np.random.shuffle(multi_params)
+        multi_params = chunkify(multi_params, max_n_jobs_gpu)
+        # job parameter will be read sequentially, i.e. in order to provide only
+        # one list as parameter one needs an additonal axis
+        multi_params = [(ixs,) for ixs in multi_params]
+        qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
+                           n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
+                           remove_jobfolder=True)
     log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
 
 
@@ -313,6 +315,6 @@ def run_glia_splitting():
     # # here use reconnected RAG or initial rag
     recon_nx = G
     # create glia / neuron RAGs
-    write_glia_rag(recon_nx, global_params.config['glia']['min_cc_size_ssv'])
+    write_glia_rag(recon_nx, global_params.config['glia']['min_cc_size_ssv'], log=log)
     log.info("Finished glia splitting. Resulting neuron and glia RAGs are stored at {}."
              "".format(global_params.config.working_dir + "/glia/"))

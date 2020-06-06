@@ -546,7 +546,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                     sample_pts = sample_pts[sample_ixs][:npoints_ssv]
                     sample_feats = sample_feats[sample_ixs][:npoints_ssv]
                     npoints_add = npoints_ssv - len(sample_pts)
-                    idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                    idx = np.random.choice(len(sample_pts), npoints_add)
                     sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                     sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                     # one hot encoding
@@ -580,8 +580,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
             cnt = 0
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
-                                            replace=len(hc.nodes) < batchsize)
+            source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
             if draw_local:
                 # only use half of the nodes and choose a close-by node as root for similar context retrieval
                 source_nodes = source_nodes[::2]
@@ -615,7 +614,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 # add duplicated points before applying the transform if sample_pts
                 # has less points than npoints_ssv
                 npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                idx = np.random.choice(len(sample_pts), npoints_add)
                 sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                 sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                 # one hot encoding
@@ -791,7 +790,7 @@ def pts_loader_glia(ssv_params: List[dict],
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
         ssv.clear_cache()
         if train:
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize, replace=len(hc.nodes) < batchsize)
+            source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
         else:
             # source_nodes = hc.base_points(threshold=base_node_dst, source=len(hc.nodes) // 2)
             pcd = o3d.geometry.PointCloud()
@@ -830,7 +829,9 @@ def pts_loader_glia(ssv_params: List[dict],
                 sample_pts = hc_sub.vertices
                 # get target locations
                 if len(hc_sub.nodes) < n_out_pts_curr:
-                    base_points = np.random.choice(len(hc_sub.nodes))
+                    # add surface points
+                    add_verts = sample_pts[np.random.choice(len(sample_pts), n_out_pts_curr - len(hc_sub.nodes))]
+                    out_coords = np.concatenate([hc_sub.nodes, add_verts])
                 # down sample to ~500nm apart
                 else:
                     pcd = o3d.geometry.PointCloud()
@@ -839,7 +840,11 @@ def pts_loader_glia(ssv_params: List[dict],
                     base_points = np.max(idcs, axis=1)
                     base_points = np.random.choice(base_points, n_out_pts_curr,
                                                    replace=len(base_points) < n_out_pts_curr)
-                out_coords = hc_sub.nodes[base_points]
+                    out_coords = hc_sub.nodes[base_points]
+                if train:
+                    n_add_verts = min(1, int(n_out_pts_curr * 0.1))
+                    add_verts = sample_pts[np.random.choice(len(sample_pts), n_add_verts)]
+                    out_coords[np.random.randint(0, n_add_verts)] = add_verts
                 # sub-sample vertices
                 sample_ixs = np.arange(len(sample_pts))
                 np.random.shuffle(sample_ixs)
@@ -848,7 +853,7 @@ def pts_loader_glia(ssv_params: List[dict],
                 # add duplicate points before applying the transform if sample_pts
                 # has less points than npoints_ssv
                 npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                idx = np.random.choice(len(sample_pts), npoints_add)
                 sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                 sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                 # one hot encoding
@@ -863,7 +868,7 @@ def pts_loader_glia(ssv_params: List[dict],
                 batch_f[cnt] = hc_sub.features
                 batch_out[cnt] = hc_sub.nodes
                 if not train:
-                    batch_out_orig[cnt] = out_coords
+                    batch_out_orig[cnt][:] = out_coords
                 batch_out_l[cnt] = out_point_label
                 cnt += 1
             assert cnt == batchsize
@@ -932,6 +937,8 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
     if apply_softmax:
         node_probas = scipy.special.softmax(node_probas, axis=1)
     node_coords = np.concatenate(node_coords)
+    # TODO: changed!
+    uni_coords = len(set([frozenset(c) for c in node_coords]))
     kdt = cKDTree(node_coords)
     max_sv = len(sso.svs)
     # only write results for the first N supervoxels (as it was flagged "partitioned", meaning the rest of the
@@ -940,7 +947,7 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
         max_sv = lo_first_n
     for sv in sso.svs[:max_sv]:
         coords = sv.sample_locations(save=False)
-        dists, ixs = kdt.query(coords, k=10, distance_upper_bound=1000)
+        dists, ixs = kdt.query(coords, k=10, distance_upper_bound=4000)
         skel_probas = np.ones((len(coords), 2)) * -1
         for ii, nn_dists, nn_ixs in zip(np.arange(len(coords)), dists, ixs):
             nn_ixs = nn_ixs[nn_dists != np.inf]
@@ -948,9 +955,10 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
             # get mean probability per node
             if len(probas) == 0:
                 msg = f'Did not find close-by node predictions in {sso} at {coords[ii]}! {sso.ssv_kwargs}.' \
-                      f'\nGot {len(node_probas)} predictions for {len(skel_probas)} skeleton nodes.'
+                      f'\nGot {len(node_probas)} predictions for {len(skel_probas)} sample locations nodes.' \
+                      f'{node_coords[::2]}\n{coords}\n{sso.scaling}\n{uni_coords}'
                 log_handler.error(msg)
-                # raise ValueError(msg)
+                raise ValueError(msg)
             skel_probas[ii] = np.mean(probas, axis=0)
         # every node has at least one prediction
         # get mean proba for this super voxel
@@ -1038,7 +1046,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 # add duplicate points before applying the transform if sample_pts
                 # has less points than npoints_ssv
                 npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                idx = np.random.choice(len(sample_pts), npoints_add)
                 sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                 sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                 sample_labels = np.concatenate([sample_labels, sample_labels[idx]])
@@ -1131,7 +1139,7 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
         npoints_ssv += npoints_add
         if train:
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize, replace=len(hc.nodes) < batchsize)
+            source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
         else:
             # source_nodes = hc.base_points(threshold=base_node_dst, source=len(hc.nodes) // 2)
             pcd = o3d.geometry.PointCloud()
@@ -1181,7 +1189,7 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                 # add duplicate points before applying the transform if sample_pts
                 # has less points than npoints_ssv
                 npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
+                idx = np.random.choice(len(sample_pts), npoints_add)
                 sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                 sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                 # TODO: batch_out needs to be adapted, also add batch_out_ixs to store the vertex indices for quick
@@ -1459,7 +1467,7 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=1, npredictor=1, bs=25,
+    default_kwargs = dict(nloader=8, npredictor=4, bs=25,
                           loader_kwargs=dict(n_out_pts=100, base_node_dst=loader_kwargs['ctx_size']/2))
     default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_glia, pts_pred_glia,
@@ -1487,7 +1495,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 
     """
     if mpath is None:
-        mpath = global_params.config.mpath_glia_pts
+        mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
     default_kwargs = dict(nloader=6, npredictor=3, bs=10, redundancy=(25, 100))
     default_kwargs.update(add_kwargs)

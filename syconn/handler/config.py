@@ -471,6 +471,8 @@ class DynConfig(Config):
             Path to model trained on prediction cell types from point data.
         """
         mpath = glob.glob(self.model_dir + '/pts/*celltype*/state_dict.pth')
+        if len(mpath) > 1:
+            mpath = [m for m in mpath if 'tnet' not in m]
         assert len(mpath) == 1
         return mpath[0]
 

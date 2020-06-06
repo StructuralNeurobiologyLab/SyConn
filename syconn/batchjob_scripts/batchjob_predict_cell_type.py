@@ -35,9 +35,10 @@ ch = args[0]
 # multi view model properties
 model_props = global_params.config['celltypes']
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-ssd_kwargs = dict(working_dir=global_params.config.working_dir)
+
 
 if global_params.config.use_point_models:
+    ssd_kwargs = dict(working_dir=global_params.config.working_dir)
     predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch)
 else:
     n_worker = 2
