@@ -11,6 +11,9 @@ from ..mp.mp_utils import start_multiprocess_imap
 from . import rep_helper as rh
 from . import log_reps
 from .. import global_params
+from .rep_helper import surface_samples
+from ..handler.multiviews import generate_rendering_locs
+from ..proc.graphs import create_graph_from_coords
 
 import glob
 import os
@@ -287,31 +290,37 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
 
     Args:
         so: SegmentationObject
-        recompute: bool
+        recompute: Compute skeleton, will not store it in ``SkeletonStorage``.
 
-    Returns: Tuple[np.array]
-        nodes, diameters, edges; all flattened
+    Returns:
+        Dictionary with "nodes", "diameters" and "edges".
 
     """
-    empty_skel = dict(nodes=np.zeros((0, )).astype(np.int), edges=np.zeros((0, )),
+    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int), edges=np.zeros((0, 2)),
                       diameters=np.zeros((0, )).astype(np.int))
     if not recompute and so.skeleton_exists:
         try:
-            skeleton_dc = SkeletonStorage(so.skeleton_path,
-                                          disable_locking=not so.enable_locking)
+            skeleton_dc = SkeletonStorage(so.skeleton_path, disable_locking=not so.enable_locking)
             skel = skeleton_dc[so.id]
+            if np.ndim(skel['nodes']) == 1:
+                skel['nodes'] = skel['nodes'].reshape((-1, 3))
+            if np.ndim(skel['edges']) == 1:
+                skel['edges'] = skel['edges'].reshape((-1, 2))
         except Exception as e:
             log_reps.error("\n{}\nException occured when loading skeletons.pkl"
                            " of SO ({}) with id {}.".format(e, so.type, so.id))
             return empty_skel
+    elif recompute:
+        skel = generate_skeleton_sv
     else:
-        msg = "Skeleton of SV {} (size: {}) not found.\n".format(so.id, so.size)
+        msg = f"Skeleton of {so} (size: {so.size}) not found.\n"
         if so.type == "sv":
             if so.size == 1:  # small SVs don't have a skeleton
                 log_reps.debug(msg)
             else:
                 log_reps.error(msg)
-            return empty_skel
+                raise ValueError(msg)
+        return empty_skel
     return skel
 
 
@@ -325,10 +334,9 @@ def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
     Returns:
 
     """
-    skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
-                                  disable_locking=not so.enable_locking)
+    skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False, disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:
-        raise ValueError("Skeleton of SV {} already exists.".format(so.id))
+        raise ValueError(f"Skeleton of {so} already exists.")
     skeleton_dc[so.id] = so.skeleton
     skeleton_dc.push()
 
@@ -555,3 +563,40 @@ def get_sd_load_distribution(sd: 'SegmentationDataset', use_vxsize: bool = True)
     n_objects = start_multiprocess_imap(_helper_func, [(ch, use_vxsize) for ch in chunkify(sd.so_dir_paths, 1000)],
                                         nb_cpus=None)
     return np.concatenate(n_objects).astype(np.int)
+
+
+def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
+    """
+    Poor man's solution to generate a SV "skeleton". Used for glia predictions.
+
+    Args:
+        so:
+
+    Returns:
+        Dictionary with keys "nodes", "edges" and "diameters" (all 1).
+    """
+    verts = so.mesh[1].reshape(-1, 3)
+    # choose random subset of surface vertices
+    np.random.seed(0)
+    ixs = np.arange(len(verts))
+    np.random.shuffle(ixs)
+    ixs = ixs[:int(0.5 * len(ixs))]
+    if global_params.config.use_new_renderings_locs:
+        locs = generate_rendering_locs(verts[ixs], 1000)
+    else:
+        locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+                               max_nb_samples=10000, r=500)
+    g = create_graph_from_coords(locs, mst=True)
+    if g.number_of_edges() == 1:
+        edge_list = np.array(list(g.edges()))
+    else:
+        edge_list = np.array(g.edges())
+    del g
+    if edge_list.ndim != 2:
+        raise ValueError("Edge list ist not a 2D array: {}\n{}".format(
+            edge_list.shape, edge_list))
+    skeleton = dict()
+    skeleton["nodes"] = (locs / np.array(so.scaling)).astype(np.int)
+    skeleton["edges"] = edge_list
+    skeleton["diameters"] = np.ones(len(locs))
+    return skeleton

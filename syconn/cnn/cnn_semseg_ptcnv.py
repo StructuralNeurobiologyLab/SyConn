@@ -140,12 +140,11 @@ elif args.jit == 'train':
 
 # Transformations to be applied to samples before feeding them to the network
 train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
-                                  clouds.Normalization(scale_norm),
                                   clouds.Center(),
+                                  clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
-valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
-                                  clouds.Center()])
+valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform,
                            batch_size=batch_size, ctx_size=ctx)

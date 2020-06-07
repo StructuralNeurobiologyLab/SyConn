@@ -130,6 +130,14 @@ def batchjob_script(params: list, name: str,
             raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". '
                                   f'Please make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
+
+    # Check if fallback is required
+    if disable_batchjob or not batchjob_enabled():
+        return batchjob_fallback(params, name, n_cores, suffix,
+                                 script_folder, python_path, show_progress=show_progress,
+                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
+                                 job_folder=batchjob_folder)
+
     if log is None:
         log_batchjob = initialize_logging("{}".format(name + suffix),
                                           log_dir=batchjob_folder)
@@ -146,12 +154,6 @@ def batchjob_script(params: list, name: str,
         else:
             raise FileNotFoundError(f'Specified script does not exist: {path_to_script}')
 
-    # Check if fallback is required
-    if disable_batchjob or not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path, show_progress=show_progress,
-                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
-                                 job_folder=batchjob_folder)
     if global_params.config['batch_proc_system'] != 'SLURM':
         msg = ('"batchjob_script" currently does not support any other batch processing '
                'system than SLURM.')
@@ -434,8 +436,13 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
         path_to_scripts = script_folder
     else:
         path_to_scripts = path_to_scripts_default
+    path_to_script = f'{path_to_scripts}/QSUB_{name}.py'
+    if not os.path.exists(path_to_script):
+        if os.path.exists(f'{path_to_scripts}/batchjob_{name}.py'):
+            path_to_script = f'{path_to_scripts}/batchjob_{name}.py'
+        else:
+            raise FileNotFoundError(f'Specified script does not exist: {path_to_script}')
 
-    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
     path_to_storage = "%s/storage/" % job_folder
     path_to_sh = "%s/sh/" % job_folder
     path_to_log = "%s/log/" % job_folder

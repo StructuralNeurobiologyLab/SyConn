@@ -83,7 +83,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
             raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
                                        dtype=np.int)
             if verbose:
-                print('Using scale adapted raw offset:', raw_data_offset)
+                log_handler.debug(f'Using scale adapted raw offset: {raw_data_offset}')
         elif len(raw_data_offset) != 3:
             raise ValueError("Offset for raw cubes has to have length 3.")
         else:
@@ -1210,11 +1210,9 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
         proba = softmax(inp, axis=1)
     else:
         proba = inp
-    # sum probabilities across samples
-    proba = np.sum(proba, axis=0)
-    # normalize
-    proba = proba / np.sum(proba)
-    # maximum entropy at equal probabilities: -sum(1/N*ln(1/N) = ln(N)
+    # sum probabilities across samples and normalize
+    proba = np.mean(proba, axis=0)
+    # maximum entropy at equal probabilities: -sum(1/N*ln(1/N)) = ln(N)
     entr_max = np.log(len(proba))
     entr_norm = entropy(proba) / entr_max
     # convert to certainty estimate
@@ -1318,7 +1316,7 @@ def int2str_converter(label: int, gt_type: str) -> str:
             return -1
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
-                             INT=8, FS=9, LTS=10)
+                             FS=8, LTS=9)
         int2str_label = {v: k for k, v in str2int_label.items()}
         return int2str_label[label]
     else:

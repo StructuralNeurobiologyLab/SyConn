@@ -66,7 +66,7 @@ use_bias = args.use_bias
 lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.992
-max_steps = 300000
+max_steps = 250000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -140,12 +140,11 @@ elif args.jit == 'train':
 
 # Transformations to be applied to samples before feeding them to the network
 train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
+                                  clouds.Center(500, distr='uniform'),  # in nm
                                   clouds.Normalization(scale_norm),
-                                  clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
-valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
-                                  clouds.Center()])
+valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
 train_ds = CellCloudGlia(npoints=npoints, transform=train_transform,
                          batch_size=batch_size, ctx_size=ctx)

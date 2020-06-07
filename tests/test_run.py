@@ -156,10 +156,7 @@ def test_full_run():
     # START SyConn
     log.info('Example data will be processed in "{}".'.format(example_wd))
     log.info('Step 1/9 - Predicting sub-cellular structures')
-    # TODO: launch all inferences in parallel
     exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
     time_stamps.append(time.time())

@@ -8,12 +8,13 @@ from ..proc.meshes import mesh_area_calc
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from ..handler.config import DynConfig
-from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
+from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs, SegmentationBase
 from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
 
+import copy
 import re
 import errno
 import networkx as nx
@@ -25,7 +26,7 @@ MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
 
-class SegmentationObject(object):
+class SegmentationObject(SegmentationBase):
     """
     Represents individual supervoxels. Used for cell shape ('sv'), cell organelles,
     e.g. mitochondria ('mi'), vesicle clouds ('vc') and synaptic junctions ('sj').
@@ -80,7 +81,7 @@ class SegmentationObject(object):
                 be saved to disk.
             working_dir: Path to folder which contains SegmentationDataset of type 'obj_type'.
             rep_coord: Representative coordinate.
-            size: Number of voxels. TODO: Check what this is used for.
+            size: Number of voxels.
             scaling: Array defining the voxel size in nanometers (XYZ).
             create: If True, the folder to its storage location :py:attr:`~segobj_dir` will be
                 created.
@@ -93,9 +94,6 @@ class SegmentationObject(object):
                 :class:`~syconn.reps.segmentation.SegmentationDataset`'s folder structure.
             enable_locking:  If True, enables file locking.
         """
-        if scaling is None:
-            scaling = global_params.config['scaling']
-
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
@@ -118,49 +116,21 @@ class SegmentationObject(object):
         self._views = None
         self._skeleton = None
         self._skeleton_caching = skeleton_caching
+        if version == 'temp':
+            version = 'tmp'
 
-        if working_dir is None:
-            if global_params.wd is not None or version == 'tmp':
-                self._working_dir = global_params.wd
-            else:
-                msg = "No working directory (wd) given. It has to be" \
-                      " specified either in global_params, via kwarg " \
-                      "`working_dir` or `config`."
-                log_reps.error(msg)
-                raise ValueError(msg)
-        elif config is not None:
-            if os.path.normpath(config.working_dir) != \
-                    os.path.normpath(working_dir):
-                raise ValueError('Inconsistent working directories in `config` and'
-                                 '`working_dir` kwargs.')
-            assert self._config.working_dir == working_dir
-            self._config = config
-            self._working_dir = working_dir
-        else:
-            self._working_dir = working_dir
-            self._config = DynConfig(working_dir)
-
-        if global_params.wd is None:
-            global_params.wd = self._working_dir
-
-        self._scaling = scaling
+        self._setup_working_dir(working_dir, config, version, scaling)
 
         if version is None:
             try:
                 self._version = self.config["versions"][self.type]
-            except:
-                raise Exception("unclear value for version")
+            except KeyError:
+                raise Exception(f"Unclear version '{version}' during initialization of {self}.")
         else:
             self._version = version
 
         if create:
-            try:
-                os.makedirs(self.segobj_dir)
-            except OSError as exc:  # Python >2.5
-                if exc.errno == errno.EEXIST and os.path.isdir(self.segobj_dir):
-                    pass
-                else:
-                    raise Exception(exc)
+            os.makedirs(self.segobj_dir, exist_ok=True)
 
     #                                                       IMMEDIATE PARAMETERS
     def __hash__(self):
@@ -713,10 +683,10 @@ class SegmentationObject(object):
             force: Overwrite existing data.
             save: If True, saves the result at :py:attr:`~locations_path`. Uses
             :class:`~syconn.backend.storage.CompressedStorage`.
-            ds_factor: Downsampling factor used to generate the rendering locations.
+            ds_factor: Down sampling factor used to generate the rendering locations.
 
         Returns:
-            Array of rendering locations (XYZ) with shape (N, 3) in nanometers.
+            Array of rendering locations (XYZ) with shape (N, 3) in nanometers!
         """
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
@@ -788,8 +758,6 @@ class SegmentationObject(object):
         Returns:
             Dict of flat arrays of indices, vertices, diameters and attributes.
         """
-        if recompute:
-            raise NotImplementedError('recompute SegmentationObject skeleton is not supported yet.')
         return load_skeleton(self, recompute=recompute)
 
     def save_skeleton(self, overwrite: bool = False):
@@ -866,8 +834,8 @@ class SegmentationObject(object):
         """
         if self.skeleton is None:
             self.load_skeleton()
-        nodes = self.skeleton['nodes'].reshape(-1, 3).astype(np.float32)
-        edges = self.skeleton['edges'].reshape(-1, 2)
+        nodes = self.skeleton['nodes'].astype(np.float32)
+        edges = self.skeleton['edges']
         return np.sum([np.linalg.norm(self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def mesh_from_scratch(self, ds: Optional[Tuple[int, int, int]] = None,
@@ -1375,7 +1343,7 @@ class SegmentationObject(object):
                 save_voxels(new_so_obj, this_voxels, bb[0])
 
 
-class SegmentationDataset(object):
+class SegmentationDataset(SegmentationBase):
     """
     This class represents a set of supervoxels.
 
@@ -1450,7 +1418,8 @@ class SegmentationDataset(object):
     """
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
-                 version_dict: Optional[Dict[str, str]] = None, create: bool = False, config: Optional[str] = None,
+                 version_dict: Optional[Dict[str, str]] = None, create: bool = False,
+                 config: Optional[Union[str, DynConfig]] = None,
                  n_folders_fs: Optional[int] = None, cache_properties: Optional[List[str]] = None):
         """
         Args:
@@ -1461,7 +1430,8 @@ class SegmentationDataset(object):
             version_dict: Dictionary which contains the versions of other dataset types which share
                 the same working directory.
             create: Whether or not to create this dataset's directory.
-            config: Configuration file content.
+            config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
+                setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
             n_folders_fs: Number of folders within the dataset's folder structure.
             cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
                 :py:class:`~syconn.reps.segmentation.SegmentationObject` via :py:func:`~get_segmentation_object`.
@@ -1484,26 +1454,12 @@ class SegmentationDataset(object):
             if n_folders_fs not in [10**i for i in range(6)]:
                 raise Exception("n_folders_fs must be in", [10**i for i in range(6)])
 
-        if working_dir is None:
-            if global_params.wd is not None or version == 'tmp':
-                self._working_dir = global_params.wd
-            else:
-                msg = "No working directory (wd) given. It has to be" \
-                      " specified either in global_params, via kwarg " \
-                      "`working_dir` or `config`."
-                log_reps.error(msg)
-                raise ValueError(msg)
-        else:
-            self._working_dir = working_dir
-            self._config = DynConfig(working_dir)
-
-        if global_params.wd is None:
-            global_params.wd = self._working_dir
-
-        if not self._working_dir.endswith("/"):
-            self._working_dir += "/"
-
-        self._scaling = scaling
+        if version == 'temp':
+            version = 'tmp'
+        self._setup_working_dir(working_dir, config, version, scaling)
+        if version is not 'tmp' and self._config is not None:
+            self._config = copy.copy(self._config)
+            self._config.fix_config = True
 
         if create and (version is None):
             version = 'new'
@@ -1511,8 +1467,8 @@ class SegmentationDataset(object):
         if version is None and create is False:
             try:
                 self._version = self.config["versions"][self.type]
-            except:
-                raise Exception("unclear value for version")
+            except KeyError:
+                raise Exception(f"Unclear version '{version}' during initialization of {self}.")
         elif version == "new":
             other_datasets = \
                 glob.glob(self.working_dir + "/%s_[0-9]" % self.type) + \
@@ -1535,7 +1491,7 @@ class SegmentationDataset(object):
         if version_dict is None:
             try:
                 self.version_dict = self.config["versions"]
-            except:
+            except KeyError:
                 raise Exception("No version dict specified in config")
         else:
             if isinstance(version_dict, dict):
@@ -1546,11 +1502,9 @@ class SegmentationDataset(object):
             else:
                 raise Exception("No version dict specified in config")
 
-        if create and not os.path.exists(self.path):
-            os.makedirs(self.path)
-
-        if create and not os.path.exists(self.so_storage_path):
-            os.makedirs(self.so_storage_path)
+        if create:
+            os.makedirs(self.path, exist_ok=True)
+            os.makedirs(self.so_storage_path, exist_ok=True)
 
         self.enable_property_cache(cache_properties)
 
@@ -1766,10 +1720,7 @@ class SegmentationDataset(object):
             Voxel size in nanometers (XYZ).
         """
         if self._scaling is None:
-            self._scaling = \
-                np.array(self.config['scaling'],
-                         dtype=np.float32)
-
+            self._scaling = np.array(self.config['scaling'], dtype=np.float32)
         return self._scaling
 
     @property

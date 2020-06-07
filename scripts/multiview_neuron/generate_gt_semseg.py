@@ -26,6 +26,15 @@ import glob
 global initial_run
 
 
+def merge_axis02(arr):
+    arr = arr.swapaxes(1, 2)  # swap channel and view axis
+    # N, 2, 4, 128, 256
+    orig_shape = arr.shape
+    # reshape to predict single projections
+    arr = arr.reshape([-1] + list(orig_shape[2:]))
+    return arr
+
+
 def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=2,
                          ws=(256, 128), comp_window=8e3,
                          out_path=None, verbose=False):
