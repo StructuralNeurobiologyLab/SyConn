@@ -1580,7 +1580,8 @@ def pts_loader_cpmt(ssv_params: Optional[List[Tuple[int, dict]]] = None, batchsi
         for ii in range(n_batches):
             batch = np.zeros((batchsize, npoints, 3))
             batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
-            batch_idcs = np.zeros((batchsize, npoints, 3))
+            batch_mask = np.zeros((batchsize, npoints, 1,), dtype=bool)
+            idcs_list = []
             # generate contexts
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
@@ -1588,17 +1589,19 @@ def pts_loader_cpmt(ssv_params: Optional[List[Tuple[int, dict]]] = None, batchsi
                 hc_sub, idcs_sub = extract_subset(hc, node_ids)[0]
                 hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints)
                 # get vertex indices respective to total hc
-                idcs = idcs_sub[idcs_sample]
+                global_idcs = idcs_sub[idcs_sample]
+                bounds = hc.obj_bounds['sv']
+                sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
                 hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
                 if transform is not None:
                     transform(hc_sample)
                 batch[cnt] = hc_sample.vertices
                 batch_f[cnt] = hc_sample.features
-                # TODO: restrict to cell surface using no_pred
-                batch_idcs[cnt] = idcs
+                idcs_list.append(global_idcs[sv_mask])
+                batch_mask[cnt] = sv_mask
                 cnt += 1
             batch_progress = ii + 1
-            yield curr_ssv_params, (batch_f, batch), batch_idcs, batch_progress, n_batches
+            yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask), batch_progress, n_batches
 
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
@@ -1612,7 +1615,9 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
         device: Device.
         bs: Batchsize.
     """
-    ssv_params, model_inp, batch_idcs, batch_progress, n_batches = inp
+    ssv_params, model_inp, batch_info, batch_progress, n_batches = inp
+    idcs_list = batch_info[0]
+    batch_mask = batch_info[1]
     res = []
     with torch.no_grad():
         for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
@@ -1621,34 +1626,15 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
             with torch.no_grad():
                 g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
                 out = m(*g_inp).cpu().numpy()
+                masks = batch_mask[low:high]
+                out = out[masks]
             res.append(out)
-    res = dict(preds=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+    res = dict(idcs=idcs_list, preds=np.concatenate(res), batch_progress=(batch_progress, n_batches))
 
     q_cnt.put(1./n_batches)
     if batch_progress == 1:
         q_out.put(ssv_params['ssv_id'])
     d_out[ssv_params['ssv_id']].append(res)
-
-
-def cpmt_postproc(ssv_id: int, d_in: dict, working_dir: Optional[str] = None,
-                  version: Optional[str] = None) -> Tuple[List[int], List[bool]]:
-    curr_ix = 0
-    sso = SuperSegmentationObject(ssv_id=ssv_id, working_dir=working_dir, version=version)
-    node_preds = []
-    node_coords = []
-    while True:
-        if len(d_in[ssv_id]) < curr_ix + 1:
-            time.sleep(0.5)
-            continue
-        res = d_in[ssv_id][curr_ix]
-        node_preds.append(np.argmax(res['preds'], axis=1))
-        node_coords.append(res['t_pts'].reshape(-1, 3))
-        if res['batch_progress'][0] == res['batch_progress'][1]:
-            break
-    node_preds = np.concatenate(node_preds)
-    # TODO: perform mapping
-    d_in[ssv_id][curr_ix] = None
-    return [ssv_id], [True]
 
 
 def predict_cpmt_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
@@ -1673,20 +1659,23 @@ def predict_cpmt_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
 def ssv2hc(ssv: SuperSegmentationObject, feats: Tuple, feat_labels: Tuple, pt_type: str, myelin: bool = False,
            radius: int = None, label_remove: List[int] = None, label_mappings: List[Tuple[int, int]] = None):
     vert_dc = dict()
-    # TODO: replace by poisson disk sampling
+    obj_bounds = {}
+    offset = 0
     for k in feats:
         pcd = o3d.geometry.PointCloud()
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
         pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
         vert_dc[k] = np.asarray(pcd.points)
+        obj_bounds[k] = [offset, offset+len(pcd.points)]
+        offset += len(pcd.points)
     sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
                                    for ii, k in enumerate(feats)])
     sample_pts = np.concatenate([vert_dc[k] for k in feats])
     if not ssv.load_skeleton():
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
-    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
+    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats, obj_bounds=obj_bounds)
     if myelin:
         add_myelin(ssv, hc)
     if label_remove is not None:
