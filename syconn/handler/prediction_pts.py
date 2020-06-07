@@ -1386,141 +1386,226 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
         raise ValueError('Invalid output during glia prediction.')
 
 
+# -------------------------------------------- COMPARTMENT PREDICTION ---------------------------------------------#
+
+def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
+    """
+    Args:
+        mpath: path to model.
+
+    Returns:
+        Inference model.
+    """
+    if mpath is None:
+        mpath = global_params.config.mpath_comp_pts
+    # TODO: Create new inference model
+    from elektronn3.models.convpoint import CpmtSeg
+    # TODO: Extend get_pt_kwargs for CpmtSeg
+    mkwargs, _ = get_pt_kwargs(mpath)
+    m = CpmtSeg(**mkwargs).to(device)
+    m.load_state_dict(torch.load(mpath)['model_state_dict'])
+    return m
+
+
+def pts_loader_cpmt(ssv_params: Optional[List[Tuple[int, dict]]] = None, batchsize: Optional[int] = None,
+                    npoints: Optional[int] = None, ctx_size: Optional[float] = None, use_myelin: bool = False,
+                    transform: Optional[Callable] = None, base_node_dst: float = 10000, use_subcell: bool = True,
+                    ssd_kwargs: Optional[dict] = None, label_remove: List[int] = None,
+                    label_mappings: List[Tuple[int, int]] = None):
+    """
+    Args:
+        ssv_params: SuperSegmentationObject kwargs for which samples are generated.
+        batchsize: Number of contexts in one batch.
+        npoints: Number of points which get sampled from one context.
+        ctx_size: Context size.
+        use_myelin: Include myelin. This makes loading very slow.
+        ssd_kwargs: kwargs for SuperSegmentationDataset.
+        transform: Transformations which are applied to each context.
+        base_node_dst: Distance between base nodes around which contexts are extracted.
+        use_subcell: Flag for including cell organelles.
+        label_remove: Remove nodes with certain labels (can only be used after e.g. ads-prediction).
+        label_mappings: List of label mappings (also only useful after first ads-prediction).
+
+    Yields:
+        SSV params, (features of samples in batch, vertices of samples in batch), original vertex indices of vertices
+        in batch, batch_progess, n_batches
+    """
+    feat_dc = dict(pts_feat_dict)
+    # TODO: add use_syntype
+    del feat_dc['syn_ssv_asym']
+    del feat_dc['syn_ssv_sym']
+    if not use_subcell:
+        del feat_dc['mi']
+        del feat_dc['vc']
+        del feat_dc['syn_ssv']
+    if ssv_params is None:
+        if ssd_kwargs is None:
+            raise ValueError
+        ssv_params = ssd_kwargs
+    for curr_ssv_params in ssv_params:
+        # do not write SSV mesh in case it does not exist (will be build from SV meshes)
+        ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
+        hc = ssv2hc(ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', myelin=use_myelin,
+                    label_remove=label_remove, label_mappings=label_mappings)
+        ssv.clear_cache()
+
+        # select source nodes for context extraction
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(hc.nodes)
+        pcd, idcs = pcd.voxel_down_sample_and_trace(
+            base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
+        source_nodes = np.max(idcs, axis=1)
+        batchsize = min(len(source_nodes), batchsize)
+        n_batches = int(np.ceil(len(source_nodes) / batchsize))
+
+        # add additional source nodes to fill batches
+        if len(source_nodes) % batchsize != 0:
+            source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize),
+                                           source_nodes])
+        # collect contexts into batches
+        for ii in range(n_batches):
+            batch = np.zeros((batchsize, npoints, 3))
+            batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
+            batch_idcs = np.zeros((batchsize, npoints, 3))
+            # generate contexts
+            cnt = 0
+            for source_node in source_nodes[ii::n_batches]:
+                node_ids = context_splitting_v2(hc, source_node, ctx_size)
+                hc_sub, idcs_sub = extract_subset(hc, node_ids)[0]
+                hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints)
+                # get vertex indices respective to total hc
+                idcs = idcs_sub[idcs_sample]
+                hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
+                if transform is not None:
+                    transform(hc_sample)
+                batch[cnt] = hc_sample.vertices
+                batch_f[cnt] = hc_sample.features
+                # TODO: restrict to cell surface using no_pred
+                batch_idcs[cnt] = idcs
+                cnt += 1
+            batch_progress = ii + 1
+            yield curr_ssv_params, (batch_f, batch), batch_idcs, batch_progress, n_batches
+
+
+def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
+    """
+    Args:
+        m: Inference model
+        inp: Output of loader function (ssv_params, model_inp, batch_idcs, batch_progress, n_batches.
+        q_out: Queue which contains SSV IDs.
+        d_out: Dict (key: SSV ID, value: list of prediction outputs.
+        q_cnt: Progress queue.
+        device: Device.
+        bs: Batchsize.
+    """
+    ssv_params, model_inp, batch_idcs, batch_progress, n_batches = inp
+    res = []
+    with torch.no_grad():
+        for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
+            low = bs * ii
+            high = bs * (ii + 1)
+            with torch.no_grad():
+                g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
+                out = m(*g_inp).cpu().numpy()
+            res.append(out)
+    res = dict(preds=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+
+    q_cnt.put(1./n_batches)
+    if batch_progress == 1:
+        q_out.put(ssv_params['ssv_id'])
+    d_out[ssv_params['ssv_id']].append(res)
+
+
+def cpmt_postproc(ssv_id: int, d_in: dict, working_dir: Optional[str] = None,
+                  version: Optional[str] = None) -> Tuple[List[int], List[bool]]:
+    curr_ix = 0
+    sso = SuperSegmentationObject(ssv_id=ssv_id, working_dir=working_dir, version=version)
+    node_preds = []
+    node_coords = []
+    while True:
+        if len(d_in[ssv_id]) < curr_ix + 1:
+            time.sleep(0.5)
+            continue
+        res = d_in[ssv_id][curr_ix]
+        node_preds.append(np.argmax(res['preds'], axis=1))
+        node_coords.append(res['t_pts'].reshape(-1, 3))
+        if res['batch_progress'][0] == res['batch_progress'][1]:
+            break
+    node_preds = np.concatenate(node_preds)
+    # TODO: perform mapping
+    d_in[ssv_id][curr_ix] = None
+    return [ssv_id], [True]
+
+
+def predict_cpmt_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
+    if mpath is None:
+        mpath = global_params.config.mpath_cpmt_pts
+    loader_kwargs = get_pt_kwargs(mpath)[1]
+    default_kwargs = dict(nloader=6, npredictor=3, bs=25)
+    default_kwargs.update(kwargs_add)
+    out_dc = predict_pts_plain(ssv_params,
+                               model_loader=get_cpmt_model_pts,
+                               loader_func=pts_loader_cpmt,
+                               pred_func=cpmt_pred,
+                               postproc_func=cpmt_postproc,
+                               mpath=mpath, **loader_kwargs, **default_kwargs)
+    if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
+        raise ValueError('Invalid output during cpmt prediction.')
+
+
 # -------------------------------------------- SSO TO MORPHX CONVERSION ---------------------------------------------#
 
-def sso2ce(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
-           sy: bool = True, my: bool = False, my_avg: bool = True, mesh: bool = False) -> CloudEnsemble:
-    """ Converts a SuperSegmentationObject into a CloudEnsemble (ce). Cell organelles are saved
-        as additional cloud in the ce, named as in the function parameters (e.g. 'mi' for
-        mitochondria). The no_pred (no prediction) flags of the ce are set for all additional
-        clouds. Myelin is added in form of the types array of the HybridCloud, where myelinated
-        vertices have type 1 and 0 otherwise.
-
-    Args:
-        sso: The SuperSegmentationObject which should get converted to a CloudEnsemble.
-        mi: Flag for including mitochondria.
-        vc: Flag for including vesicle clouds.
-        sy: Flag for including synapses.
-        my: Flag for including myelin.
-        my_avg: Flag for applying majority vote on myelin property.
-        mesh: Flag for storing all objects as HybridMesh objects with additional faces.
-
-    Returns:
-        CloudEnsemble object as described above.
-    """
-    # convert cell organelle meshes
-    clouds = {}
-    if mi:
-        indices, vertices, normals = sso.mi_mesh
-        if mesh:
-            clouds['mi'] = HybridMesh(vertices=vertices.reshape((-1, 3)), faces=indices.reshape((-1, 3)))
-        else:
-            clouds['mi'] = PointCloud(vertices=vertices.reshape((-1, 3)))
-    if vc:
-        indices, vertices, normals = sso.vc_mesh
-        if mesh:
-            clouds['vc'] = HybridMesh(vertices=vertices.reshape((-1, 3)), faces=indices.reshape((-1, 3)))
-        else:
-            clouds['vc'] = PointCloud(vertices=vertices.reshape((-1, 3)))
-    if sy:
-        indices, vertices, normals = sso._load_obj_mesh('syn_ssv', rewrite=False)
-        if mesh:
-            clouds['sy'] = HybridMesh(vertices=vertices.reshape((-1, 3)), faces=indices.reshape((-1, 3)))
-        else:
-            clouds['sy'] = PointCloud(vertices=vertices.reshape((-1, 3)))
-    # convert cell mesh
-    indices, vertices, normals = sso.mesh
-    sso.load_skeleton()
-    if mesh:
-        hm = HybridMesh(vertices=vertices.reshape((-1, 3)), faces=indices.reshape((-1, 3)),
-                        nodes=sso.skeleton['nodes']*sso.scaling, edges=sso.skeleton['edges'])
-    else:
-        hm = HybridCloud(vertices=vertices.reshape((-1, 3)), nodes=sso.skeleton['nodes']*sso.scaling,
-                         edges=sso.skeleton['edges'])
-    # merge all clouds into a CloudEnsemble
-    ce = CloudEnsemble(clouds, hm, no_pred=[obj for obj in clouds])
-    if my:
-        add_myelin(sso, hm, average=my_avg)
-    return ce
-
-
-def sso2hc(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
-           sy: bool = True, my: bool = False, my_avg: bool = True) -> HybridCloud:
-    """ Converts a SuperSegmentationObject into a HybridCloud (hc). The object boundaries
-        are stored in the obj_bounds attribute of the hc. The no_pred (no prediction) flags
-        are set for all cell organelles. Myelin is added in form of the types array of the
-        hc, where myelinated vertices have type 1 and 0 otherwise.
-
-    Args:
-        sso: The SuperSegmentationObject which should get converted to a CloudEnsemble.
-        mi: Flag for including mitochondria.
-        vc: Flag for including vesicle clouds.
-        sy: Flag for including synapses.
-        my: Flag for including myelin.
-        my_avg: Flag for applying majority vote on myelin property.
-
-    Returns:
-        HybridCloud object as described above.
-    """
-    vertex_num = 0
-    # convert cell organelle meshes
-    clouds = []
-    obj_names = []
-    if mi:
-        indices, vertices, normals = sso.mi_mesh
-        clouds.append(vertices.reshape((-1, 3)))
-        obj_names.append('mi')
-        vertex_num += len(vertices.reshape((-1, 3)))
-    if vc:
-        indices, vertices, normals = sso.vc_mesh
-        clouds.append(vertices.reshape((-1, 3)))
-        obj_names.append('vc')
-        vertex_num += len(vertices.reshape((-1, 3)))
-    if sy:
-        indices, vertices, normals = sso._load_obj_mesh('syn_ssv', rewrite=False)
-        clouds.append(vertices.reshape((-1, 3)))
-        obj_names.append('sy')
-        vertex_num += len(vertices.reshape((-1, 3)))
-    # convert cell mesh
-    indices, vertices, normals = sso.mesh
-    hc_vertices = vertices.reshape((-1, 3))
-    vertex_num += len(hc_vertices)
-    # merge all clouds into a HybridCloud
-    total_verts = np.zeros((vertex_num, 3))
-    bound = len(hc_vertices)
-    obj_bounds = {'hc': [0, bound]}
-    total_verts[0:bound] = hc_vertices
-    for ix, cloud in enumerate(clouds):
-        if len(cloud) == 0:
-            # ignore cell organelles with zero vertices
-            continue
-        obj_bounds[obj_names[ix]] = [bound, bound+len(cloud)]
-        total_verts[bound:bound+len(cloud)] = cloud
-        bound += len(cloud)
-    sso.load_skeleton()
-    hc = HybridCloud(vertices=total_verts, nodes=sso.skeleton['nodes']*sso.scaling, edges=sso.skeleton['edges'],
-                     obj_bounds=obj_bounds, no_pred=obj_names)
-    if my:
-        add_myelin(sso, hc, average=my_avg)
+@functools.lru_cache(256)
+def ssv2hc(ssv: SuperSegmentationObject, feats: Tuple, feat_labels: Tuple, pt_type: str, myelin: bool = False,
+           radius: int = None, label_remove: List[int] = None, label_mappings: List[Tuple[int, int]] = None):
+    vert_dc = dict()
+    # TODO: replace by poisson disk sampling
+    for k in feats:
+        pcd = o3d.geometry.PointCloud()
+        verts = ssv.load_mesh(k)[1].reshape(-1, 3)
+        pcd.points = o3d.utility.Vector3dVector(verts)
+        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
+        vert_dc[k] = np.asarray(pcd.points)
+    sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
+                                   for ii, k in enumerate(feats)])
+    sample_pts = np.concatenate([vert_dc[k] for k in feats])
+    if not ssv.load_skeleton():
+        raise ValueError(f'Couldnt find skeleton of {ssv}')
+    nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
+    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
+    if myelin:
+        add_myelin(ssv, hc)
+    if label_remove is not None:
+        hc.remove_nodes(label_remove)
+    if label_mappings is not None:
+        hc.map_labels(label_mappings)
+    # cache verts2node
+    _ = hc.verts2node
+    if radius is not None:
+        # add edges within radius
+        kdt = spatial.cKDTree(hc.nodes)
+        pairs = list(kdt.query_pairs(radius))
+        # remap to subset of indices
+        hc._edges = np.concatenate([hc._edges, pairs])
     return hc
 
 
-def add_myelin(sso: SuperSegmentationObject, hc: HybridCloud, average: bool = True):
+def add_myelin(ssv: SuperSegmentationObject, hc: HybridCloud, average: bool = True):
     """ Tranfers myelin prediction from a SuperSegmentationObject to an existing
         HybridCloud (hc). Myelin is added in form of the types array of the hc,
         where myelinated vertices have type 1 and 0 otherwise. Works in-place.
 
     Args:
-        sso: SuperSegmentationObject which contains skeleton to which myelin should get mapped.
+        ssv: SuperSegmentationObject which contains skeleton to which myelin should get mapped.
         hc: HybridCloud to which myelin should get added.
         average: Flag for applying majority vote to the myelin property
     """
-    sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    ssv.skeleton['myelin'] = map_myelin2coords(ssv.skeleton['nodes'], mag=4)
     if average:
-        majorityvote_skeleton_property(sso, 'myelin')
-        myelinated = sso.skeleton['myelin_avg10000']
+        majorityvote_skeleton_property(ssv, 'myelin')
+        myelinated = ssv.skeleton['myelin_avg10000']
     else:
-        myelinated = sso.skeleton['myelin']
+        myelinated = ssv.skeleton['myelin']
     nodes_idcs = np.arange(len(hc.nodes))
     myel_nodes = nodes_idcs[myelinated.astype(bool)]
     myel_vertices = []
