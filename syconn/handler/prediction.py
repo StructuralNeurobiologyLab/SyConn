@@ -657,13 +657,12 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
 
-    # Set tile and overlap shape (-> patch shape)
-    # overlap_shape_tiles = np.array([30, 31, 20])
+    # TODO: these should be config parameters
+    overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
+    chunk_size = np.array([482, 481, 236])
     if qu.batchjob_enabled():
-        chunk_size = np.array([1024, 1024, 512])
-    else:  # assume small dataset volume
-        chunk_size = np.array([482, 481, 236])
+        chunk_size *= 2
     tile_shape = [271, 181, 138]
 
     cd = ChunkDataset()
@@ -694,13 +693,12 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
                     for ch_ids in multi_params]
-    log.info('Started dense prediction of {} in {:d} chunk(s).'.format(
-        ", ".join(target_names), len(chunk_ids)))
+    log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if\
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
 
-    qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
-                       additional_flags="--gres=gpu:1")
+    qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
+                       remove_jobfolder=True, log=log, additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 

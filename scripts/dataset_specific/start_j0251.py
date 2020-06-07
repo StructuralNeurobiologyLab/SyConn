@@ -17,7 +17,7 @@ from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
+    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
@@ -28,6 +28,7 @@ if __name__ == '__main__':
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
+        ('use_point_models', True),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -94,9 +95,10 @@ if __name__ == '__main__':
     os.makedirs(global_params.config.temp_path, exist_ok=True)
     start = time.time()
 
-    # Checking models
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
-                      'mpath_axoness', 'mpath_glia']:
+    # check model existence
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+                      'mpath_tnet']:
         mpath = getattr(global_params.config, mpath_key)
         if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
             raise ValueError('Could not find model "{}". Make sure to copy the'
@@ -141,16 +143,16 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
-    if global_params.config.prior_glia_removal:
-        log.info('Step 2.5/9 - Glia separation')
-        if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
-        else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
-        time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+    # if global_params.config.prior_glia_removal:
+    #     log.info('Step 2.5/9 - Glia separation')
+    #     if not global_params.config.use_point_models:
+    #         exec_render.run_glia_rendering()
+    #         exec_inference.run_glia_prediction()
+    #     else:
+    #         exec_inference.run_glia_prediction_pts()
+    #     exec_inference.run_glia_splitting()
+    #     time_stamps.append(time.time())
+    #     step_idents.append('Glia separation')
 
     log.info('Step 3/9 - Creating SuperSegmentationDataset')
     exec_init.run_create_neuron_ssd()

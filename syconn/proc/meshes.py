@@ -962,8 +962,7 @@ def mesh_chunk(args):
         # create binary mask as single 3D cube
         mask, off = voxel_dc.get_voxel_data_cubed(ix)
         # create mesh
-        indices, vertices, normals = find_meshes(mask, off, pad=1, ds=ds, scaling=scaling,
-                                                 meshing_props=meshing_props)[ix]
+        indices, vertices, normals = find_meshes(mask, off, pad=1, ds=ds, scaling=scaling, meshing_props=meshing_props)[ix]
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
 
@@ -998,8 +997,7 @@ def get_object_mesh(obj: 'segmentation.SegmentationObject', ds: Union[tuple, lis
     mask = obj.voxels
     off = obj.bounding_box[0]  # in voxel
     # create mesh; binary mask -> object always has ID 1
-    indices, vertices, normals = find_meshes(mask, off, pad=1, ds=ds, scaling=obj.scaling,
-                                             **mesher_kwargs)[1]
+    indices, vertices, normals = find_meshes(mask, off, pad=1, ds=ds, scaling=obj.scaling, **mesher_kwargs)[1]
     if 0 < len(normals) != len(vertices):
         msg = f'Length of normals ({normals.shape}) does not correspond to length of vertices ({vertices.shape}).'
         log_proc.error(msg)
