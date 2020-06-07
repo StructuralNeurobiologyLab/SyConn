@@ -47,11 +47,9 @@ def predict_myelin(kd_raw_path: str = None,
     """
     if kd_raw_path is None:
         kd_raw_path = global_params.config.kd_seg_path
-    predict_dense_to_kd(kd_raw_path,
-                        global_params.config.working_dir + '/knossosdatasets/',
-                        global_params.config.mpath_myelin, n_channel=2, mag=4,
-                        target_channels=[(1, )], target_names=['myelin'],
-                        cube_of_interest=cube_of_interest)
+    predict_dense_to_kd(kd_raw_path, global_params.config.working_dir + '/knossosdatasets/',
+                        global_params.config.mpath_myelin, n_channel=2, mag=4, target_channels=[(1, )],
+                        target_names=['myelin'], cube_of_interest=cube_of_interest)
 
 
 def predict_synapsetype(cube_of_interest: Optional[Tuple[np.ndarray]] = None):

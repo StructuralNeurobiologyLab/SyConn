@@ -1477,7 +1477,7 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
 
 
 def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
-                         **add_kwargs):
+                         da_equals_tan: bool = True, pred_key: Optional[str] = None, **add_kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1490,19 +1490,36 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         ssd_kwargs:
         mpath:
         ssv_ids:
+        da_equals_tan:
+        pred_key:
 
     Returns:
 
     """
+    if pred_key is None:
+        pred_key = 'celltype_cnn_e3'
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
     default_kwargs = dict(nloader=6, npredictor=3, bs=10, redundancy=(25, 100))
     default_kwargs.update(add_kwargs)
+    ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
-        ssv_ids = SuperSegmentationDataset(**ssd_kwargs).ssv_ids
-    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar, pts_pred_scalar, mpath=mpath,
-                               postproc_func=pts_postproc_scalar, ssv_ids=ssv_ids, **loader_kwargs, **default_kwargs)
+        ssv_ids = ssd.ssv_ids
+    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar, pts_pred_scalar_nopostproc,
+                               mpath=mpath, ssv_ids=ssv_ids, **loader_kwargs, **default_kwargs)
+    for ssv in ssd.get_super_segmentation_object(out_dc.keys()):
+        logit = np.concatenate(out_dc[ssv.id])
+        if da_equals_tan:
+            # accumulate evidence for DA and TAN
+            logit[:, 1] += logit[:, 6]
+            # remove TAN in proba array
+            logit = np.delete(logit, [6], axis=1)
+            # INT is now at index 6 -> label 6 is INT
+        cls = np.argmax(logit, axis=1).squeeze()
+        cls_maj = collections.Counter(cls).most_common(1)[0][0]
+        ssv.save_attributes([pred_key], [cls_maj])
+        ssv.save_attributes([f"{pred_key}_probas"], [logit])
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
         raise ValueError('Invalid output during cell type prediction.')
 

@@ -38,7 +38,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
         optionally :func:`~run_glia_splitting`.
     """
-    log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
 
@@ -237,7 +237,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
             XYZ).
         overwrite: If True, will overwrite existing data.
     """
-    log = initialize_logging('create_sds', global_params.config.working_dir +
+    log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
         transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
@@ -303,7 +303,7 @@ def run_create_rag():
         stores pruned RAG at ``global_params.config.working_dir + /glia/neuron_rag.bz2``,
         required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
-    log = initialize_logging('create_rag', global_params.config.working_dir +
+    log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
     G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint)

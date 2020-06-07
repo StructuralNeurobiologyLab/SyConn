@@ -1663,22 +1663,26 @@ def synssv_o_featurenames():
             'n_vc_vxs_neuron2']
 
 
-def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None, export_kzip=False):
+def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] = None,
+                  threshold_syn: Optional[float] = None, export_kzip: bool = False, log: Optional[Logger] = None):
     """
     Writes .csv and optionally .kzip (large memory consumption) summary file of connectivity matrix.
 
     Parameters
     ----------
     obj_version : str
-    dest_folder : str
-        Path to csv file
-    threshold_syn : float
-    export_kzip: bool
+    dest_folder : Path to csv file.
+    threshold_syn : Threshold applied to filter synapses. If None, set to
+        ``global_params.config['cell_objects']['thresh_synssv_proba']``.
+    export_kzip: Export connectivity matrix as kzip - high memory consumption.
+    log: Logger.
     """
     if threshold_syn is None:
         threshold_syn = global_params.config['cell_objects']['thresh_synssv_proba']
     if dest_folder is None:
         dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
+    if log is None:
+        log = log_extraction
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
@@ -1724,9 +1728,9 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None, export
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])])
                )
-    wiring, borders = generate_wiring_array(thresh_syn_prob=threshold_syn, syn_version=obj_version)
-    plot_wiring(f'{dest_folder}', wiring, borders, borders)
-    plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0)
+    wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
+    plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
+    plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
 
     if export_kzip:
         ax_labels = np.array(["N/A", "D", "A", "S"])   # TODO: this is already defined in handler.multiviews!

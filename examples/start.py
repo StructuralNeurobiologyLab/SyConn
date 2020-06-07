@@ -187,8 +187,8 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
+    log.info('Step 3/9 - Glia separation')
     if global_params.config.prior_glia_removal:
-        log.info('Step 2.5/9 - Glia separation')
         if not global_params.config.use_point_models:
             exec_render.run_glia_rendering()
             exec_inference.run_glia_prediction()
@@ -196,34 +196,34 @@ if __name__ == '__main__':
             exec_inference.run_glia_prediction_pts()
         exec_inference.run_glia_splitting()
         time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+    else:
+        log.info('Glia separation disabled. Skipping.')
+    step_idents.append('Glia separation')
 
-    log.info('Step 3/9 - Creating SuperSegmentationDataset')
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
     exec_init.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 3.5/9 - Neuron rendering')
+        log.info('Step 4.5/9 - Neuron rendering')
         exec_render.run_neuron_rendering()
         time_stamps.append(time.time())
         step_idents.append('Neuron rendering')
 
-    log.info('Step 4/9 - Synapse detection')
+    log.info('Step 5/9 - Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 
-    log.info('Step 5/9 - Axon prediction')
+    log.info('Step 6/9 - Compartment prediction')
     exec_inference.run_semsegaxoness_prediction()
     time_stamps.append(time.time())
-    step_idents.append('Axon prediction')
 
-    log.info('Step 6/9 - Spine prediction')
     exec_inference.run_semsegspiness_prediction()
     exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
-    step_idents.append('Spine prediction')
+    step_idents.append('Compartment prediction')
 
     log.info('Step 7/9 - Morphology extraction')
     exec_inference.run_morphology_embedding()

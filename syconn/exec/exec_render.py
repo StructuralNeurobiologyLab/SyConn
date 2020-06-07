@@ -152,7 +152,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     Notes:
         Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
-    log = initialize_logging('neuron_view_rendering',
+    log = initialize_logging('neuron_rendering',
                              global_params.config.working_dir + '/logs/')
     ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),
           Process(target=_run_neuron_rendering_small_helper, args=(max_n_jobs, ))]
@@ -219,7 +219,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
         max_n_jobs = global_params.config.ngpu_total * 4 if \
             global_params.config['pyopengl_platform'] == 'egl' \
             else global_params.config.ncore_total * 4
-    log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=True)
     log.info("Preparing RAG.")
     np.random.seed(0)

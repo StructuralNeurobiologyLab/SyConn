@@ -601,7 +601,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     Otherwise the classification results will be written to the overlay channel.
 
     Notes:
-        *  TODO: Currently has a high GPU memory requirement (minimum 12GB).
+        * Has a high GPU memory requirement (minimum 12GB). Does should be controlable from the config or determined
+          automatically.
+        * Resulting KnossosDatasets currently do not use pyknossos confs.
 
     Args:
         kd_path: Path to KnossosDataset .conf file of the raw data.
@@ -638,13 +640,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         overwrite: Overwrite existing KDs.
 
     """
-    # TODO: switch to pyk confs
     if log is None:
-        log_name = 'dense_prediction'
-        if target_names is not None:
-            log_name += '_' + "".join(target_names)
-        log = initialize_logging(log_name, global_params.config.working_dir + '/logs/',
-                                 overwrite=False)
+        log = initialize_logging('dense_predictions', global_params.config.working_dir + '/logs/', overwrite=False)
     if target_names is None:
         target_names = ['pred']
     if target_channels is None:
@@ -660,8 +657,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
 
-    # TODO: these should be config parameters
-    overlap_shape_tiles = np.array([30, 31, 20])
+    # Set tile and overlap shape (-> patch shape)
+    # overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
     if qu.batchjob_enabled():
         chunk_size = np.array([1024, 1024, 512])
@@ -702,8 +699,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if\
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
 
-    qu.batchjob_script(multi_params, "predict_dense",
-                       n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
+    qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
                        additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
@@ -734,9 +730,8 @@ def dense_predictor(args):
     # TODO: remove chunk necessity
     # TODO: clean up (e.g. redundant chunk sizes, ...)
     #
-    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles,\
-    tile_shape, chunk_size, n_channel, target_channels, target_kd_path_list, \
-    channel_thresholds, mag, cube_of_interest = args
+    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
+        target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest = args
 
     # init KnossosDataset:
     kd = KnossosDataset()

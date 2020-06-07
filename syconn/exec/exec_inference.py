@@ -116,7 +116,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
     else:
         n_cores = global_params.config['ncores_per_node']
-    log = initialize_logging('axoness_prediction', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     np.random.seed(0)
@@ -144,7 +144,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
-    log = initialize_logging('spine_identification', global_params.config.working_dir
+    log = initialize_logging('compartment_prediction', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     np.random.seed(0)
@@ -174,7 +174,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     """
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.config.ngpu_total * 10
-    log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/', overwrite=False)
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/', overwrite=False)
     pred_key = "glia_probas"
 
     log.info("Preparing RAG.")
@@ -235,7 +235,7 @@ def run_glia_prediction():
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
         :func:`~run_glia_rendering`.
     """
-    log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # only append to this key if needed (e.g. different versions)
     pred_key = "glia_probas"
@@ -295,7 +295,7 @@ def run_glia_splitting():
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds`,
         :func:`~run_glia_rendering` and :func:`~run_glia_prediction`.
     """
-    log = initialize_logging('glia_splitting', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
     log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
