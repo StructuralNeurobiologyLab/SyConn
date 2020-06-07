@@ -1521,7 +1521,7 @@ def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
     return m
 
 
-def pts_loader_cpmt(ssv_params: Optional[List[Tuple[int, dict]]] = None, batchsize: Optional[int] = None,
+def pts_loader_cpmt(ssv_params=None, batchsize: Optional[int] = None,
                     npoints: Optional[int] = None, ctx_size: Optional[float] = None, use_myelin: bool = False,
                     transform: Optional[Callable] = None, base_node_dst: float = 10000, use_subcell: bool = True,
                     ssd_kwargs: Optional[dict] = None, label_remove: List[int] = None,
@@ -1646,8 +1646,7 @@ def predict_cpmt_ssv(ssv_params, mpath: Optional[str] = None, **kwargs_add):
     out_dc = predict_pts_plain(ssv_params,
                                model_loader=get_cpmt_model_pts,
                                loader_func=pts_loader_cpmt,
-                               pred_func=cpmt_pred,
-                               postproc_func=cpmt_postproc,
+                               pred_func=pts_pred_cmpt,
                                mpath=mpath, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during cpmt prediction.')
