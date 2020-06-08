@@ -20,15 +20,15 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import split_subcc_join
-from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
-    write_glia_rag, transform_rag_edgelist2pkl
-from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd
+from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_glia_rag, transform_rag_edgelist2pkl
+from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd
 
 
 def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     """
     Infer local morphology embeddings for all neuron reconstructions base on
     triplet-loss trained cellular morphology learning network (tCMN).
+    The point based model is trained with the pts_loader_scalar (used for celltypes)
 
     Args:
         max_n_jobs: Number of parallel jobs.
@@ -45,19 +45,21 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     pred_key_appendix = ""
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
-                               in ssd.ssv_ids])
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     # sort ssv ids according to their number of SVs (descending)
     multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
-    multi_params = chunkify(multi_params, max_n_jobs)
-    # add ssd parameters
-    multi_params = [(ssv_ids, ssd.version, ssd.version_dict,
-                     pred_key_appendix) for ssv_ids in multi_params]
-    qu.batchjob_script(multi_params, "generate_morphology_embedding",
-                       n_cores=global_params.config['ncores_per_node'] //
-                               global_params.config['ngpus_per_node'],
-                       log=log, suffix="", additional_flags="--gres=gpu:1",
-                       remove_jobfolder=True)
+
+    if not qu.batchjob_enabled() and global_params.config.use_point_models:
+        ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
+        ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
+        infere_cell_morphology_ssd(ssv_params)
+    else:
+        multi_params = chunkify(multi_params, max_n_jobs)
+        # add ssd parameters
+        multi_params = [(ssv_ids, pred_key_appendix) for ssv_ids in multi_params]
+        qu.batchjob_script(multi_params, "generate_morphology_embedding",
+                           n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
+                           log=log, suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished extraction of cell morphology embedding.')
 
 
@@ -215,7 +217,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
         ssv_params = []
         partitioned = dict()
         for sv_ids, g, was_partitioned in multi_params:
-            ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g))
+            ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g, version='tmp'))
             partitioned[sv_ids[0]] = was_partitioned
         postproc_kwargs = dict(pred_key=pred_key, lo_first_n=lo_first_n, partitioned=partitioned)
         predict_glia_ssv(ssv_params, postproc_kwargs=postproc_kwargs)

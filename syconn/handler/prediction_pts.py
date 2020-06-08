@@ -162,7 +162,8 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                         break
                 else:  # put it back to queue
                     q_in.put(inp)
-                    time.sleep(0.1)
+                    # use random sleep to avoid worker lock by simultaneously putting in the other worker's stop signal
+                    time.sleep(np.random.randint(25) / 10)
                     if stop_received and (time.time() - stop_received_at > max_idle_dt):
                         break
                 continue
@@ -274,7 +275,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             times as `npoints` fits into the number of cell vertices (times three). The `loader_func` needs to handle
             ``ssd_kwargs`` and ``ssv_ids`` as kwargs (see :py:func:`~pts_loader_scalar`). If type iterable, then the
             `loader_func` needs to handle `ssv_params` which is a tuple of SSV ID and working directory
-            (see :py:func:`~pts_loader_glia`).
+            (see :py:func:`~pts_loader_local_skel`).
         model_loader: Function which returns the pytorch model object.
         mpath: Path to model.
         loader_func: Loader function, used by `nloader` workers retrieving samples.
@@ -471,6 +472,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                       transform: Optional[Callable] = None,
                       train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, seeded: bool = False,
+                      use_ctx_sampling: bool = True,
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -490,6 +492,8 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             the same location, requires a single unique element in ssv_ids
         draw_local_dist: Maximum distance to similar source node in nm.
         seeded: If True, will set the seed to ``hash(frozenset(ssv_id, n_samples, curr_batch_count))``.
+        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
+            until `npoints` have been collected.
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -517,7 +521,6 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 npoints_ssv = min(len(hc.vertices), npoints)
                 batch = np.zeros((n_samples, npoints_ssv, 3))
                 batch_f = np.zeros((n_samples, npoints_ssv, len(feat_dc)))
-                ixs = np.ones((n_samples,), dtype=np.uint) * ssv_id
                 cnt = 0
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(hc.nodes)
@@ -528,16 +531,22 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 #                                max_dist_thresh=2500, dot_prod_thresh=0).nodes()
                 source_nodes = np.random.choice(nodes, n_samples, replace=len(nodes) < n_samples)
                 for source_node in source_nodes:
-                    # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                    # This might be slow
                     while True:
-                        node_ids = context_splitting_v2(hc, source_node, ctx_size)
+                        if use_ctx_sampling:
+                            node_ids = context_splitting_v2(hc, source_node, ctx_size)
+                        else:
+                            node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                         hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                         sample_feats = hc_sub.features
                         if len(sample_feats) > 0:
                             break
                         print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                         source_node = np.random.choice(source_nodes)
-                    local_bfs = context_splitting_v2(hc, source_node, ctx_size)
+                    if use_ctx_sampling:
+                        local_bfs = context_splitting_v2(hc, source_node, ctx_size)
+                    else:
+                        local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                     pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                     sample_feats = pc.features
                     sample_pts = pc.vertices
@@ -595,14 +604,20 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
             for source_node in source_nodes:
                 # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                 while True:
-                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    if use_ctx_sampling:
+                        node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    else:
+                        node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
                     log_handler.debug(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes)
-                local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                if use_ctx_sampling:
+                    local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                else:
+                    local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                 pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
                 sample_feats = pc.features
                 sample_pts = pc.vertices
@@ -738,12 +753,12 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
     return [sso.id], [True]
 
 
-def pts_loader_glia(ssv_params: List[dict],
-                    out_point_label: Optional[List[Union[str, int]]] = None,
-                    batchsize: Optional[int] = None, npoints: Optional[int] = None,
-                    ctx_size: Optional[float] = None,  transform: Optional[Callable] = None,
-                    n_out_pts: int = 100, train=False, base_node_dst: float = 10000,
-                    use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List[Union[str, int]]] = None,
+                          batchsize: Optional[int] = None, npoints: Optional[int] = None,
+                          ctx_size: Optional[float] = None, transform: Optional[Callable] = None,
+                          n_out_pts: int = 100, train=False, base_node_dst: float = 10000,
+                          use_ctx_sampling: bool = True, use_syntype: bool = False,
+                          use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     local point-to-scalar tasks, e.g. morphology embeddings or glia detection.
@@ -753,7 +768,7 @@ def pts_loader_glia(ssv_params: List[dict],
         out_point_label: Either key for sso.skeleton attribute or int (used for all out locations). Currently only
             int is supported!
         batchsize: Only used during training.
-        ctx_size:
+        ctx_size: Context size in nm.
         npoints: Number of points used to generate sample context.
         transform: Transformation/agumentation applied to every sample.
         n_out_pts: Maximum number of out points.
@@ -764,6 +779,8 @@ def pts_loader_glia(ssv_params: List[dict],
             * eval: return as many batches (size `batchsize`) as there are base nodes in the SSV
               skeleton (distance between nodes see `base_node_dst`).
         base_node_dst: Distance between base nodes for context retrieval during eval mode.
+        use_syntype: Use synapse type as point feature.
+        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm).
 
     Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
         If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
@@ -775,13 +792,19 @@ def pts_loader_glia(ssv_params: List[dict],
     if train and type(out_point_label) == str:
         raise NotImplementedError('Type str is not implemented yet for out_point_label!')
     feat_dc = dict(pts_feat_dict)
-    del feat_dc['syn_ssv_asym']
-    del feat_dc['syn_ssv_sym']
     if not use_subcell:
         del feat_dc['mi']
         del feat_dc['vc']
         del feat_dc['syn_ssv']
-    default_kwargs = dict(mesh_caching=False, create=False, version='tmp')
+        del feat_dc['syn_ssv_asym']
+        del feat_dc['syn_ssv_sym']
+    else:
+        if not use_syntype:
+            del feat_dc['syn_ssv_asym']
+            del feat_dc['syn_ssv_sym']
+        else:
+            del feat_dc['syn_ssv']
+    default_kwargs = dict(mesh_caching=False, create=False)
     for curr_ssv_params in ssv_params:
         default_kwargs.update(curr_ssv_params)
         curr_ssv_params = default_kwargs
@@ -810,8 +833,11 @@ def pts_loader_glia(ssv_params: List[dict],
                 ctx_size_fluct = ctx_size
             npoints_ssv = min(len(hc.vertices), npoints)
             # add a +-10% fluctuation in the number of input and output points
-            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-            n_out_pts_curr = n_out_pts + npoints_add
+            if n_out_pts > 1:  # n_out_pts == 1 for embedding generation
+                npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+                n_out_pts_curr = n_out_pts + npoints_add
+            else:
+                n_out_pts_curr = n_out_pts
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
@@ -823,12 +849,17 @@ def pts_loader_glia(ssv_params: List[dict],
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
-                node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                if use_ctx_sampling:
+                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                else:
+                    node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
                 # get target locations
-                if len(hc_sub.nodes) < n_out_pts_curr:
+                if n_out_pts_curr == 1:
+                    out_coords = np.array([hc.nodes[source_node]])
+                elif len(hc_sub.nodes) < n_out_pts_curr:
                     # add surface points
                     add_verts = sample_pts[np.random.choice(len(sample_pts), n_out_pts_curr - len(hc_sub.nodes))]
                     out_coords = np.concatenate([hc_sub.nodes, add_verts])
@@ -879,7 +910,7 @@ def pts_loader_glia(ssv_params: List[dict],
                 yield curr_ssv_params, (batch_f, batch), (batch_out, batch_out_l)
 
 
-def pts_pred_glia(m, inp, q_out, d_out, q_cnt, device, bs):
+def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
     """
 
     Args:
@@ -894,7 +925,7 @@ def pts_pred_glia(m, inp, q_out, d_out, q_cnt, device, bs):
     Returns:
 
     """
-    ssv_params, model_inp,  out_pts_orig, batch_progress, n_batches = inp
+    ssv_params, model_inp, out_pts_orig, batch_progress, n_batches = inp
     res = []
     with torch.no_grad():
         for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
@@ -924,7 +955,7 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
             continue
         # res: [(dict(t_pts=.., t_label, batch_process)]
         res = d_in[sso.id][curr_ix]
-        # el['t_l'] has shape (b, num_points, n_classes) -> (n_nodes, 1)
+        # el['t_l'] has shape (b, num_points, n_classes) -> (n_nodes, n_classes)
         node_probas.append(res['t_l'].reshape(-1, 2))
         # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
         node_coords.append(res['t_pts'].reshape(-1, 3))
@@ -937,8 +968,6 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
     if apply_softmax:
         node_probas = scipy.special.softmax(node_probas, axis=1)
     node_coords = np.concatenate(node_coords)
-    # TODO: changed!
-    uni_coords = len(set([frozenset(c) for c in node_coords]))
     kdt = cKDTree(node_coords)
     max_sv = len(sso.svs)
     # only write results for the first N supervoxels (as it was flagged "partitioned", meaning the rest of the
@@ -955,14 +984,81 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
             # get mean probability per node
             if len(probas) == 0:
                 msg = f'Did not find close-by node predictions in {sso} at {coords[ii]}! {sso.ssv_kwargs}.' \
-                      f'\nGot {len(node_probas)} predictions for {len(skel_probas)} sample locations nodes.' \
-                      f'{node_coords[::2]}\n{coords}\n{sso.scaling}\n{uni_coords}'
+                      f'\nGot {len(node_probas)} predictions for {len(skel_probas)} sample locations nodes.'
                 log_handler.error(msg)
                 raise ValueError(msg)
             skel_probas[ii] = np.mean(probas, axis=0)
         # every node has at least one prediction
         # get mean proba for this super voxel
         sv.save_attributes([pred_key], [skel_probas])
+    return [sso.id], [True]
+
+
+def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
+    """
+    Uses loader method: :py:func:`~pts_loader_local_skel`.
+    Args:
+        m: Model instance.
+        inp: Input as given by the loader_func.
+        q_out:
+        d_out:
+        q_cnt:
+        device:
+        bs:
+
+    Returns:
+
+    """
+    ssv_params, model_inp, out_pts_orig, batch_progress, n_batches = inp
+    # ignore target points, not needed for the representation network (e.g. ModelNet40) which is pts2scalar
+    model_inp = model_inp[:2]
+    res = []
+    with torch.no_grad():
+        for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
+            low = bs * ii
+            high = bs * (ii + 1)
+            with torch.no_grad():
+                g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
+                out = m(g_inp, None, None).cpu().numpy()
+            res.append(out)
+    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+
+    q_cnt.put(1./n_batches)
+    if batch_progress == 1:
+        q_out.put(ssv_params)
+    d_out[ssv_params['ssv_id']].append(res)
+
+
+def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str] = None
+                           ) -> Tuple[List[dict], List[bool]]:
+    curr_ix = 0
+    sso = SuperSegmentationObject(**ssv_params)
+    node_embedding = []
+    node_coords = []
+    while True:
+        if len(d_in[sso.id]) < curr_ix + 1:
+            time.sleep(0.5)
+            continue
+        # res: [(dict(t_pts=.., t_label, batch_process)]
+        res = d_in[sso.id][curr_ix]
+        # el['t_l'] has shape (b, num_points, n_latent_dim) -> (n_nodes, n_latent_dim)
+        node_embedding.append(res['t_l'].reshape(-1, res['t_l'].shape[-1]))
+        # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
+        node_coords.append(res['t_pts'].reshape(-1, 3))
+        d_in[sso.id][curr_ix] = None
+        curr_ix += 1
+        if res['batch_progress'][0] == res['batch_progress'][1]:
+            break
+    del d_in[sso.id]
+    node_embedding = np.concatenate(node_embedding)
+    node_coords = np.concatenate(node_coords)
+
+    # map inference sites of latent vecs to skeleton node locations via nearest neighbor
+    sso.load_skeleton()
+    hull_tree = spatial.cKDTree(node_coords)
+    dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
+    sso.skeleton[pred_key] = node_embedding[ixs]
+    sso.save_skeleton()
     return [sso.id], [True]
 
 
@@ -1401,7 +1497,7 @@ def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'In
         m = SegSmall(1, 2, **mkwargs).to(device)
         m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
-    return m
+    return m.eval()
 
 
 def get_compartment_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
@@ -1412,7 +1508,7 @@ def get_compartment_model_pts(mpath: Optional[str] = None, device='cuda') -> 'In
     m = SegSmall2(5, 7, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
-    return m
+    return m.eval()
 
 
 def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
@@ -1433,24 +1529,24 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         m = ModelNet40(5, 8, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
-    return m
+    return m.eval()
 
 
 def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
-    from elektronn3.models.convpoint import ModelNet40
+    from elektronn3.models.convpoint import ModelNet40, TripletNet
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
-    m = ModelNet40(5, 10, **mkwargs).to(device)
+    m = TripletNet(ModelNet40(5, 10, **mkwargs).to(device))
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
-    return m
+    return m.eval()
 
 
 # prediction wrapper
 def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
     """
-    Perform cell type predictions of cell reconstructions on sampled point sets from the
+    Perform glia predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
     fraction of the total number of vertices over ``npoints`` times two, but at least 5.
     Every point set is constructed by collecting the vertices associated with skeleton within a
@@ -1470,8 +1566,41 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
     default_kwargs = dict(nloader=8, npredictor=4, bs=25,
                           loader_kwargs=dict(n_out_pts=100, base_node_dst=loader_kwargs['ctx_size']/2))
     default_kwargs.update(add_kwargs)
-    out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_glia, pts_pred_glia,
+    out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_local_skel, pts_pred_local_skel,
                                postproc_func=pts_postproc_glia, mpath=mpath, **loader_kwargs, **default_kwargs)
+    if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
+        raise ValueError('Invalid output during glia prediction.')
+
+
+def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key_appendix: str = '', **add_kwargs):
+    """
+    Extract local morphology embeddings of cell reconstructions on sampled point sets from the
+    cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
+    fraction of the total number of vertices over ``npoints`` times two, but at least 5.
+    Every point set is constructed by collecting the vertices associated with skeleton within a
+    breadth-first search up to a maximum of ``npoints``.
+
+
+    Args:
+        ssv_params:
+        mpath:
+        pred_key_appendix:
+
+    Returns:
+
+    """
+    pred_key = "latent_morph"
+    pred_key += pred_key_appendix
+    if mpath is None:
+        mpath = global_params.config.mpath_tnet_pts
+    loader_kwargs = get_pt_kwargs(mpath)[1]
+    default_kwargs = dict(nloader=1, npredictor=1, bs=25, loader_kwargs=dict(
+        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size']/2, use_syntype=True, use_subcell=True))
+    postproc_kwargs = dict(pred_key=pred_key)
+    default_kwargs.update(add_kwargs)
+    out_dc = predict_pts_plain(ssv_params, get_tnet_model_pts, pts_loader_local_skel, pts_pred_embedding,
+                               postproc_kwargs=postproc_kwargs, postproc_func=pts_postproc_embedding,
+                               mpath=mpath, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during glia prediction.')
 

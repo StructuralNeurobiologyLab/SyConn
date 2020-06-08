@@ -104,6 +104,7 @@ if __name__ == '__main__':
     track_running_stats = False
     use_norm = 'gn'
     act = 'swish'
+    dataset = 'j0126'
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}'
@@ -128,6 +129,15 @@ if __name__ == '__main__':
             name += '_trackRunStats'
     else:
         name += f'_{use_norm}'
+
+    if dataset == 'j0126':
+        ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_'
+                                      'agglo_cbsplit')
+    elif dataset == 'j0251':
+        ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+    else:
+        raise NotImplementedError
+    name += f'_{dataset}'
 
     print(f'Running on device: {device}')
 
@@ -171,15 +181,14 @@ if __name__ == '__main__':
 
     # Transformations to be applied to samples before feeding them to the network
     train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
-                                      clouds.Center(),
+                                      clouds.Center(500, distr='uniform'),
                                       clouds.Normalization(scale_norm),
                                       clouds.RandomRotate(apply_flip=True),
                                       clouds.RandomScale(distr_scale=0.1, distr='uniform')])
-    valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
-                                    cellshape_only=cellshape_only, use_syntype=use_syntype,
-                                    onehot=onehot, batch_size=batch_size, ctx_size=ctx)
+                                    cellshape_only=cellshape_only, use_syntype=use_syntype, onehot=onehot,
+                                    batch_size=batch_size, ctx_size=ctx, ssd_kwargs=ssd_kwargs)
 
     # PREPARE AND START TRAINING #
 

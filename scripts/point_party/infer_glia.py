@@ -22,17 +22,17 @@ if __name__ == '__main__':
     # sizes = ssd.load_cached_data('size')[ixs]
     # ssv_ids = ssv_ids[np.argsort(sizes)[::-1]]
     ssv_ids = []
-    ssv_params = [dict(ssv_id=ssv.id, sv_ids=ssv.sv_ids, sv_graph=ssv.sv_graph_uint,
+    ssv_params = [dict(ssv_id=ssv.id, sv_ids=ssv.sv_ids, sv_graph=ssv.sv_graph_uint, version='tmp',
                        **ssd_kwargs) for ssv in ssd.get_super_segmentation_object(ssv_ids)]
 
     nodes = [10861339, 10705496, 16300957, 16393831, 16300965, 16394199, 16394279, 16300952, 10864571,
              10961702, 10868575]
     g = nx.generators.classic.complete_graph(nodes)
-    ssv_params.append(dict(ssv_id=nodes[0], sv_ids=nodes, sv_graph=g, **ssd_kwargs))
+    ssv_params.append(dict(ssv_id=nodes[0], sv_ids=nodes, sv_graph=g, version='tmp', **ssd_kwargs))
 
     nodes = [10864918, 10958215, 10958277, 10958221, 10864571, 10951524, 10875873]
     g = nx.generators.classic.complete_graph(nodes)
-    ssv_params.append(dict(ssv_id=nodes[0], sv_ids=nodes, sv_graph=g, **ssd_kwargs))
+    ssv_params.append(dict(ssv_id=nodes[0], sv_ids=nodes, sv_graph=g, version='tmp', **ssd_kwargs))
 
     res = predict_glia_ssv(ssv_params, mpath=mpath, nloader=4, npredictor=2,
                            postproc_kwargs=dict(pred_key='glia_probas_test'))

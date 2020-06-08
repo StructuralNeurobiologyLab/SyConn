@@ -671,9 +671,8 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             np.save(ssd.path + "/%ss_sel.npy" % attribute,  # Why '_sel'?
                     attr_dict[attribute])
         else:
-            np.save(ssd.path + "/%ss.npy" % attribute,
-                    attr_dict[attribute])
-    log_reps.info('Finished `save_dataset_deep`of {}.'.format(repr(ssd)))
+            np.save(ssd.path + "/%ss.npy" % attribute, attr_dict[attribute])
+    log_reps.info(f'Finished `save_dataset_deep` of {ssd}.')
 
 
 def _write_super_segmentation_dataset_thread(args):
@@ -1196,14 +1195,11 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
     """
     ssv_obj_ids = args[0]
     nb_cpus = args[1]
-    version = args[2]
-    version_dict = args[3]
-    pred_key_appendix = args[4]
+    pred_key_appendix = args[2]
     use_onthefly_views = global_params.config.use_onthefly_views
     view_props = global_params.config['views']['view_properties']
 
-    ssd = SuperSegmentationDataset(version=version,
-                                   version_dict=version_dict)
+    ssd = SuperSegmentationDataset()
     from ..handler.prediction import get_tripletnet_model_e3
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)

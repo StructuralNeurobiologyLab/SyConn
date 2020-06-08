@@ -1824,7 +1824,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
     for an alternative which uses file-system cached views.
     By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph_ct`. Note that `latent_morph` is inferred locally via `
+    and `latent_morph`.
 
     Args:
         sso:
@@ -1835,13 +1835,11 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
             to infer pixel size).
         pred_key_appendix:
         verbose: Adds progress bars for view generation.
-        overwrite:
+        overwrite: Overwrite existing views in temporary view dictionary. Key: ``'tmp_views' + pred_key_appendix``.
 
     """
-    pred_key = "latent_morph_ct" + pred_key_appendix
-    sso.load_attr_dict()
-    if not overwrite and pred_key in sso.attr_dict:
-        return
+    pred_key = "latent_morph"
+    pred_key += pred_key_appendix
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
@@ -1851,8 +1849,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
-        rendering_locs = generate_rendering_locs(verts,
-                                                 comp_window / 3)  # three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
 
         # overwrite default rendering locations (used later on for the view generation)
         sso._sample_locations = rendering_locs
@@ -1866,9 +1863,14 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
     inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
     # return dist1, dist2, inp1, inp2, inp3 latent
-    _, _, latent, _, _ = model.predict_proba(inp, bs=5)  # only use first view for now
-    # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
-    sso.save_attributes([pred_key], [latent])
+    _, _, latent, _, _ = model.predict_proba(inp)  # only use first view for now
+
+    # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
+    sso.load_skeleton()
+    hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))  # view location ordering same as views / latent
+    dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
+    sso.skeleton[pred_key] = latent[ixs]
+    sso.save_skeleton()
 
 
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],

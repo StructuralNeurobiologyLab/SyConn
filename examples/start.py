@@ -168,62 +168,62 @@ if __name__ == '__main__':
 
     log.info('Finished example cube initialization (shape: {}). Starting SyConn pipeline.'.format(bd))
 
-    # START SyConn
-    log.info('Example data will be processed in "{}".'.format(example_wd))
-    log.info('Step 1/9 - Predicting sub-cellular structures')
-    # TODO: launch all predictions in parallel
-    exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
-    # exec_dense_prediction.predict_cellorganelles()
-    # exec_dense_prediction.predict_synapsetype()
-    time_stamps.append(time.time())
-    step_idents.append('Dense predictions')
-
-    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc)
-    exec_init.run_create_rag()
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
-
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
-        else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
-        time_stamps.append(time.time())
-    else:
-        log.info('Glia separation disabled. Skipping.')
-    step_idents.append('Glia separation')
-
-    log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    exec_init.run_create_neuron_ssd()
-    time_stamps.append(time.time())
-    step_idents.append('SSD generation')
-
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 4.5/9 - Neuron rendering')
-        exec_render.run_neuron_rendering()
-        time_stamps.append(time.time())
-        step_idents.append('Neuron rendering')
-
-    log.info('Step 5/9 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    time_stamps.append(time.time())
-    step_idents.append('Synapse detection')
-
-    log.info('Step 6/9 - Compartment prediction')
-    exec_inference.run_semsegaxoness_prediction()
-    time_stamps.append(time.time())
-
-    exec_inference.run_semsegspiness_prediction()
-    exec_syns.run_spinehead_volume_calc()
-    time_stamps.append(time.time())
-    step_idents.append('Compartment prediction')
+    # # START SyConn
+    # log.info('Example data will be processed in "{}".'.format(example_wd))
+    # log.info('Step 1/9 - Predicting sub-cellular structures')
+    # # TODO: launch all predictions in parallel
+    # exec_dense_prediction.predict_myelin()
+    # # TODO: if performed, work-in paths of the resulting KDs to the config
+    # # TODO: might also require adaptions in init_cell_subcell_sds
+    # # exec_dense_prediction.predict_cellorganelles()
+    # # exec_dense_prediction.predict_synapsetype()
+    # time_stamps.append(time.time())
+    # step_idents.append('Dense predictions')
+    #
+    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+    #                                 n_folders_fs_sc=n_folders_fs_sc)
+    # exec_init.run_create_rag()
+    # time_stamps.append(time.time())
+    # step_idents.append('SD generation')
+    #
+    # log.info('Step 3/9 - Glia separation')
+    # if global_params.config.prior_glia_removal:
+    #     if not global_params.config.use_point_models:
+    #         exec_render.run_glia_rendering()
+    #         exec_inference.run_glia_prediction()
+    #     else:
+    #         exec_inference.run_glia_prediction_pts()
+    #     exec_inference.run_glia_splitting()
+    #     time_stamps.append(time.time())
+    # else:
+    #     log.info('Glia separation disabled. Skipping.')
+    # step_idents.append('Glia separation')
+    #
+    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    # exec_init.run_create_neuron_ssd()
+    # time_stamps.append(time.time())
+    # step_idents.append('SSD generation')
+    #
+    # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+    #     log.info('Step 4.5/9 - Neuron rendering')
+    #     exec_render.run_neuron_rendering()
+    #     time_stamps.append(time.time())
+    #     step_idents.append('Neuron rendering')
+    #
+    # log.info('Step 5/9 - Synapse detection')
+    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    # time_stamps.append(time.time())
+    # step_idents.append('Synapse detection')
+    #
+    # log.info('Step 6/9 - Compartment prediction')
+    # exec_inference.run_semsegaxoness_prediction()
+    # time_stamps.append(time.time())
+    #
+    # exec_inference.run_semsegspiness_prediction()
+    # exec_syns.run_spinehead_volume_calc()
+    # time_stamps.append(time.time())
+    # step_idents.append('Compartment prediction')
 
     log.info('Step 7/9 - Morphology extraction')
     exec_inference.run_morphology_embedding()

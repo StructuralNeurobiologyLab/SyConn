@@ -21,7 +21,7 @@ import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
 from syconn.handler.prediction_pts import pts_loader_scalar, \
-    pts_loader_glia, load_hc_pkl, pts_loader_semseg_train
+    pts_loader_local_skel, load_hc_pkl, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -92,6 +92,8 @@ if elektronn3_avail:
                                        version='ctgt_v4')
             self.ctx_size = ctx_size
             ssd = SuperSegmentationDataset(**self.ssd_kwargs)
+            self.ssd = ssd
+            self.sso_ids = None
             gt_dir = ssd.path
 
             log_cnn.info(f'Set {ssd} as GT source.')
@@ -154,8 +156,7 @@ if elektronn3_avail:
             item = np.random.randint(0, len(self.sso_ids))
             self._curr_ssv_id = self.sso_ids[item]
             pts, feats = self.load_ssv_sample(item)
-            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size,
-                           dtype=np.int)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size, dtype=np.int)
             pts = torch.from_numpy(pts).float()
             lbs = torch.from_numpy(lbs[..., None]).long()
             feats = torch.from_numpy(feats).float()
@@ -207,7 +208,7 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, draw_local: bool=True, **kwargs):
+        def __init__(self, draw_local: bool = True, **kwargs):
             """
 
             Args:
@@ -216,6 +217,11 @@ if elektronn3_avail:
                 **kwargs:
             """
             super().__init__(**kwargs)
+            if self.sso_ids is None:
+                bb = self.ssd.load_cached_data('bounding_box') * self.ssd.scaling  # N, 2, 3
+                bb = np.linalg.norm(bb[:, 1] - bb[:, 0], axis=1)
+                self.sso_ids = self.ssd.ssv_ids[bb > 2 * self.ctx_size]
+                print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
             self._curr_ssv_id_altern = None
             self.draw_local = draw_local
 
@@ -248,6 +254,9 @@ if elektronn3_avail:
                   torch.from_numpy(feats1).float()}
             x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
             return x0, x1, x2
+
+        def __len__(self):
+            return 20000
 
 
     class CellCloudDataJ0251(CellCloudData):
@@ -406,9 +415,9 @@ if elektronn3_avail:
             self._curr_ssv_params = self.sso_params[item]
             self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
-                [*pts_loader_glia([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
-                 self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
-                                  train=True, ctx_size=self.ctx_size)][0]
+                [*pts_loader_local_skel([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
+                                        self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
+                                        train=True, ctx_size=self.ctx_size)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:

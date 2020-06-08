@@ -2987,12 +2987,19 @@ class SuperSegmentationObject(SegmentationBase):
                        "%0.4fs/SV" % (len(self.svs), end - start,
                                       float(end - start) / len(self.svs)))
 
-    def predict_views_embedding(self, model, pred_key_appendix="",
-                                view_key=None):
+    def predict_views_embedding(self, model, pred_key_appendix="", view_key=None):
         """
         This will save a latent vector which captures a local morphology fingerprint for every
         skeleton node location as :py:attr:`~skeleton`['latent_morph'] based on the nearest rendering
         location.
+
+        Notes:
+            * This method requires existing :py:attr:`~views`. For on the fly view rendering use
+              :py:func:`~syconn.reps.super_segmentation_helper.view_embedding_of_sso_nocache`
+
+        Todo:
+            * Add option for on the fly rendering and call
+              :py:func:`~syconn.reps.super_segmentation_helper.view_embedding_of_sso_nocache` in here.
 
         Args:
             model:
@@ -3021,7 +3028,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
         self.load_skeleton()
-        if not 'view_ixs' in self.skeleton:
+        if 'view_ixs' not in self.skeleton:
             hull_tree = spatial.cKDTree(np.concatenate(self.sample_locations()))
             dists, ixs = hull_tree.query(self.skeleton["nodes"] * self.scaling,
                                          n_jobs=self.nb_cpus, k=1)

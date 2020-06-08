@@ -51,8 +51,8 @@ if __name__ == '__main__':
     n_runs = 3
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint//celltype_eval{}_sp25k/'
-    mfold = '/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint//celltype_eval{}_sp2k/'
+    mfold = '/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
     for run in range(n_runs):
         base_dir = base_dir_init.format(run)
         for CV in range(ncv_min, n_cv):
