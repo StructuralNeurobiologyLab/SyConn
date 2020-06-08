@@ -79,7 +79,7 @@ The transform functions will be applied when loading the segmentation
 data of cell organelles in order to convert them into binary fore- and
 background currently using `dill` package to support lambda expressions.
 Make sure all dependencies within the lambda expressions are imported
-in `QSUB_gauss_threshold_connected_components.py` (here: numpy).
+in `batchjob_object_segmentation.py` (here: numpy).
 
 
 # Prediction examples

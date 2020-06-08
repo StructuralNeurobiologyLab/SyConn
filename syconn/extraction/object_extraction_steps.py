@@ -135,7 +135,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     stitch overlap: np.array
     """
     if transform_func is None:
-        transform_func = _gauss_threshold_connected_components_thread
+        transform_func = _object_segmentation_thread
 
     if thresholds is None:
         thresholds = np.zeros(len(hdf5names))
@@ -194,11 +194,10 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                 results_as_list.append(entry)
 
     else:
-        assert transform_func == _gauss_threshold_connected_components_thread,\
-            "QSUB currently only supported for gaussian threshold CC."
+        assert transform_func == _object_segmentation_thread, "batch jobs currently only supported for " \
+                                                              "`_object_segmentation_thread`."
         path_to_out = qu.batchjob_script(
-            multi_params, "gauss_threshold_connected_components", n_cores=nb_cpus,
-            use_dill=True, suffix=filename)
+            multi_params, "object_segmentation", n_cores=nb_cpus, use_dill=True, suffix=filename)
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
@@ -209,7 +208,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     return results_as_list, [overlap, stitch_overlap]
 
 
-def _gauss_threshold_connected_components_thread(args):
+def _object_segmentation_thread(args):
     """
     Default worker of object_segmentation. Performs a gaussian blur with
      subsequent thresholding to extract connected components of a probability
@@ -317,24 +316,23 @@ def _gauss_threshold_connected_components_thread(args):
                                               offset[1]: membrane_data_shape[1]-offset[1],
                                               offset[2]: membrane_data_shape[2]-offset[2]]
                 tmp_data[membrane_data > 255*.4] = 0
+                del membrane_data
             elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:
                 kd_bar = kd_factory(membrane_kd_path)
                 membrane_data = kd_bar.load_raw(size=size, offset=box_offset,
                                                 mag=1).swapaxes(0, 2)
                 tmp_data[membrane_data > 255*.4] = 0
-
+                del membrane_data
             if thresholds[nb_hdf5_name] != 0 and not load_from_kd_overlaycubes:
-                tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name],
-                                    dtype=np.uint8)
+                tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
             if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
                 mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
                                                           mop_kwargs=dict(structure=struct))
                 if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1]:
-                    distance = distanceTransform(tmp_data.astype(np.uint32), background=False,
-                                                 pixel_pitch=scaling.astype(np.uint32))
                     # combine remaining fragments
-                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0], ['binary_closing']).astype(np.uint32)
+                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0],
+                                                             ['binary_closing']).astype(np.uint32)
                     # remove small fragments and 0; this will also delete objects bigger than min_size as
                     # this threshold is applied after N binary erosion!
                     if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
@@ -355,6 +353,8 @@ def _gauss_threshold_connected_components_thread(args):
                         # in-place modification of markers array
                         relabel_vol(markers, label_m)
 
+                    distance = distanceTransform(tmp_data.astype(np.uint32, copy=False), background=False,
+                                                 pixel_pitch=scaling.astype(np.uint32))
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
                     max_label = np.max(this_labels_data)
                 else:
@@ -367,6 +367,7 @@ def _gauss_threshold_connected_components_thread(args):
         h5_fname = chunk.folder + filename + "_connected_components%s.h5" % suffix
         os.makedirs(os.path.split(h5_fname)[0], exist_ok=True)
         compression.save_to_h5py(labels_data, h5_fname, hdf5names)
+        del labels_data
     return nb_cc_list
 
 

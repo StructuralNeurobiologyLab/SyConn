@@ -64,7 +64,7 @@ if __name__ == '__main__':
     # in order to convert them into binary fore- and background
     # currently using `dill` package to support lambda expressions, a weak feature. Make
     #  sure all dependencies within the lambda expressions are imported in
-    #  `QSUB_gauss_threshold_connected_components.py` (here: numpy)
+    #  `batchjob_object_segmentation.py` (here: numpy)
     cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype(np.uint8),
                                       vc=lambda x: (x == 3).astype(np.uint8),
                                       sj=lambda x: (x == 2).astype(np.uint8))
@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     log.info('Step 1/9 - Predicting sub-cellular structures')
     # myelin is not needed before `run_create_neuron_ssd`
-    exec_dense_prediction.predict_myelin(raw_kd_path)
+    # exec_dense_prediction.predict_myelin(raw_kd_path)
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
 

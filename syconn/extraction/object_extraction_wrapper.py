@@ -209,7 +209,7 @@ def from_probabilities_to_kd(
         suffix: Suffix used for the intermediate processing steps.
         transform_func: [WIP] Segmentation method which is applied, currently
           only func:`~syconn.extraction.object_extraction_steps.
-          _gauss_threshold_connected_components_thread`
+          _object_segmentation_thread`
           is supported for batch jobs.
         func_kwargs: keyword arguments for `transform_func`.
         n_chunk_jobs: Number of jobs.

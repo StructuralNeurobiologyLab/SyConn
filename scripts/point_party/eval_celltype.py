@@ -48,15 +48,22 @@ if __name__ == '__main__':
     ncv_min = 0
     n_cv = 10
     da_equals_tan = True
+    n_runs = 3
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir_init = '/wholebrain/scratch/pschuber/e3trainings_BAK/ptconv_2020_06_03/celltype_eval{}_sp50k/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint//celltype_eval{}_sp25k/'
+    mfold = '/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
+    for run in range(n_runs):
+        base_dir = base_dir_init.format(run)
+        for CV in range(ncv_min, n_cv):
+            mpath = f'{base_dir_init.format(run)}{mfold.format(CV, run)}/state_dict_final.pth'
+            assert os.path.isfile(mpath), f"'{mpath}' not found."
+
     ssd_kwargs = dict(working_dir=wd, version=gt_version)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    for run in range(1):
+    mkwargs, loader_kwargs = get_pt_kwargs(mfold)
+    for run in range(n_runs):
         base_dir = base_dir_init.format(run)
-        mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
-        mkwargs, loader_kwargs = get_pt_kwargs(mdir)
         npoints = loader_kwargs['npoints']
         log = config.initialize_logging(f'log_eval{run}_sp{npoints}k', base_dir)
         log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
@@ -65,14 +72,14 @@ if __name__ == '__main__':
         for CV in range(ncv_min, n_cv):
             split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                            f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-            mpath = f'{mdir.format(CV, run)}/state_dict_final.pth'
+            mpath = f'{base_dir_init.format(run)}{mfold.format(CV, run)}/state_dict_final.pth'
             mkwargs['mpath'] = mpath
             log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
             assert os.path.isfile(mpath)
 
-            res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, redundancy=(25, 100), bs=10, nloader=6,
-                                         seeded=True, ssv_ids=split_dc['valid'], npredictor=3, use_test_aug=False,
+            res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, redundancy=(25, 100), bs=10, nloader=10,
+                                         seeded=True, ssv_ids=split_dc['valid'], npredictor=5, use_test_aug=False,
                                          **loader_kwargs)
             basics.write_obj2pkl(fname_pred, res_dc)
 

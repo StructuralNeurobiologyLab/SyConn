@@ -242,10 +242,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     if transf_func_kd_overlay is None:
         transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
     if chunk_size is None:
-        chunk_size_kdinit = [1024, 1024, 512]
         chunk_size = [512, 512, 512]
-    else:
-        chunk_size_kdinit = chunk_size
+    chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
         # loading cached data or adapt number of jobs/cache size dynamically,

@@ -661,8 +661,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
     chunk_size = np.array([482, 481, 236])
-    if qu.batchjob_enabled():
-        chunk_size *= 2
+    # if qu.batchjob_enabled():
+    #     chunk_size *= 2
     tile_shape = [271, 181, 138]
 
     cd = ChunkDataset()

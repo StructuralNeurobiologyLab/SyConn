@@ -8,10 +8,7 @@
 import sys
 import dill
 import numpy as np  # needed for transfer function
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
@@ -25,7 +22,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = oes._gauss_threshold_connected_components_thread(args)
+out = oes._object_segmentation_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)
