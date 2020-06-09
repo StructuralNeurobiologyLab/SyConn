@@ -105,8 +105,8 @@ def nxGraph2kzip(g, coords, labels, kzip_path):
 
 
 if __name__ == '__main__':
-    data_path = "/wholebrain/u/jklimesch/thesis/tmp/sparse_gt/"
-    destination = "/wholebrain/u/jklimesch/thesis/tmp/sparse_gt/expanded/"
+    data_path = "/wholebrain/u/jklimesch/thesis/tmp/"
+    destination = "/wholebrain/u/jklimesch/thesis/tmp/expanded/"
     global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     file_paths = glob.glob(data_path + '*.k.zip')
     for file in file_paths:

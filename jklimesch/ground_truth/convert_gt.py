@@ -96,20 +96,20 @@ def labels2mesh(args):
     ce = CloudEnsemble(clouds, hm, no_pred=['mi', 'vc', 'sy'])
 
     # add myelin (see docstring of map_myelin2coords)
-    sso.load_skeleton()
-    sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
-    majorityvote_skeleton_property(sso, 'myelin')
-    myelinated = sso.skeleton['myelin_avg10000']
-    hm_myelin = HybridCloud(vertices=hms[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
-    nodes_idcs = np.arange(len(hm_myelin.nodes))
-    myel_nodes = nodes_idcs[myelinated.astype(bool)]
-    myel_vertices = []
-    for node in myel_nodes:
-        myel_vertices.extend(hm_myelin.verts2node[node])
-    # myelinated vertices get type 1, not myelinated vertices get type 0
-    types = np.zeros(len(hm.vertices))
-    types[myel_vertices] = 1
-    hm.set_types(types)
+    # sso.load_skeleton()
+    # sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    # majorityvote_skeleton_property(sso, 'myelin')
+    # myelinated = sso.skeleton['myelin_avg10000']
+    # hm_myelin = HybridCloud(vertices=hms[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
+    # nodes_idcs = np.arange(len(hm_myelin.nodes))
+    # myel_nodes = nodes_idcs[myelinated.astype(bool)]
+    # myel_vertices = []
+    # for node in myel_nodes:
+    #     myel_vertices.extend(hm_myelin.verts2node[node])
+    # # myelinated vertices get type 1, not myelinated vertices get type 0
+    # types = np.zeros(len(hm.vertices))
+    # types[myel_vertices] = 1
+    # hm.set_types(types)
 
     # save generated cloud ensemble to file
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
@@ -156,14 +156,14 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    # labels2mesh(params[1])
+    # labels2mesh(params[0])
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/tmp/"
-    data_path = "/wholebrain/u/jklimesch/thesis/tmp/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/20_06_09/raw/"
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/annotations/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
