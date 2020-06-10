@@ -4,15 +4,16 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
-from . import log_mp
-import time
-import tqdm
-from typing import Callable, List, Dict, Union
-import numpy as np
-from multiprocessing import cpu_count
-from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing.pool
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import cpu_count
+from typing import Callable, List, Union
 
+import numpy as np
+import tqdm
+
+from . import log_mp
 
 MyPool = multiprocessing.Pool
 

@@ -5,26 +5,28 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-import time
 import os
 import shutil
+import time
 from logging import Logger
-from typing import Optional, Callable, Tuple, Dict, Any
 from multiprocessing import Process
+from typing import Optional, Callable, Tuple, Dict, Any
+
 import networkx as nx
 import numpy as np
+
 from syconn import global_params
+from syconn.exec import exec_skeleton
 from syconn.extraction import object_extraction_wrapper as oew
-from syconn.proc import sd_proc
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.handler.basics import chunkify, kd_factory
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
-from syconn.proc.graphs import create_ccsize_dict
-from syconn.handler.basics import chunkify, kd_factory
-from syconn.exec import exec_skeleton
 from syconn.mp.mp_utils import start_multiprocess_imap
+from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
+from syconn.proc.graphs import create_ccsize_dict
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
 def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
@@ -145,7 +147,7 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     multi_params = [[par, so_kwargs] for par in multi_params]
 
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
-       global_params.config.allow_mesh_gen_cells)):
+                                                                    global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
             multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
 

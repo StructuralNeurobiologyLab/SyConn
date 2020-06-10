@@ -7,12 +7,13 @@
 import os
 from collections import Counter
 from typing import Tuple, Optional, Union, List, Dict, Any
+
 import numpy as np
 from scipy import spatial
 
-from ..reps import log_reps
 from .. import global_params
 from ..handler.config import DynConfig
+from ..reps import log_reps
 
 
 def knossos_ml_from_svixs(sv_ixs: Union[np.ndarray, List],
@@ -179,7 +180,7 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     -------
     str
     """
-    assert n_folders in [10**i for i in range(6)]
+    assert n_folders in [10 ** i for i in range(6)]
 
     order = int(np.log10(n_folders))
 
@@ -323,7 +324,7 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     """
     if colors is None:
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                           [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+                                    [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
     else:
         if np.max(colors) <= 1.0:
             colors = np.array(colors) * 255
@@ -423,7 +424,7 @@ def surface_samples(coords: np.ndarray,
         thresh_val = np.sort(H.flatten())[::-1][nb_smaples]
         H[H <= thresh_val] = 0
     # get vertices closest to grid bins with density != 0
-    max_dens_locs = (np.array(np.where(H != 0)).swapaxes(1, 0) + 0.5)\
+    max_dens_locs = (np.array(np.where(H != 0)).swapaxes(1, 0) + 0.5) \
                     * bin_sizes
     dists, ixs = query_tree.query(max_dens_locs)
     samples = coords[ixs]
@@ -450,7 +451,7 @@ def find_object_properties(cube: np.ndarray) -> \
         coordinate pointing to an object voxel, bounding box, size (in voxels).
     """
     try:
-        from . find_object_properties_C import find_object_propertiesC
+        from .find_object_properties_C import find_object_propertiesC
         return find_object_propertiesC(cube)
     except ImportError:
         return _find_object_properties(cube)

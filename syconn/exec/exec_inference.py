@@ -6,22 +6,23 @@
 # Authors: Philipp Schubert
 
 import os
-import numpy as np
 import shutil
 from typing import Optional
+
 import networkx as nx
+import numpy as np
 
 from syconn import global_params
 from syconn.handler.basics import chunkify
-from syconn.reps.segmentation import SegmentationDataset
+from syconn.handler.config import initialize_logging
+from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd
+from syconn.mp import batchjob_utils as qu
+from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_glia_rag, transform_rag_edgelist2pkl
 from syconn.proc.graphs import create_ccsize_dict
+from syconn.proc.graphs import split_subcc_join
+from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationDataset
-from syconn.handler.config import initialize_logging
-from syconn.mp import batchjob_utils as qu
-from syconn.proc.graphs import split_subcc_join
-from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_glia_rag, transform_rag_edgelist2pkl
-from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd
 
 
 def run_morphology_embedding(max_n_jobs: Optional[int] = None):
@@ -60,7 +61,7 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
         qu.batchjob_script(multi_params, "generate_morphology_embedding",
                            n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
                            log=log, suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
-    log.info('Finished extraction of cell morphology embedding.')
+    log.info('Finished extraction of cell morphology embeddings.')
 
 
 def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
@@ -127,7 +128,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     multi_params = chunkify(multi_params, max_n_jobs_gpu)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
-    multi_params = [(ixs, ) for ixs in multi_params]
+    multi_params = [(ixs,) for ixs in multi_params]
 
     path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
                                      suffix="", additional_flags="--gres=gpu:1",
@@ -154,12 +155,12 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     multi_params = chunkify(multi_params, max_n_jobs_gpu)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additional axis
-    multi_params = [(ixs, ) for ixs in multi_params]
+    multi_params = [(ixs,) for ixs in multi_params]
 
     predict_func = 'predict_spiness_semseg'
     qu.batchjob_script(multi_params, predict_func, log=log,
                        n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                       suffix="",  additional_flags="--gres=gpu:1", remove_jobfolder=True)
+                       suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished spine prediction.')
 
 

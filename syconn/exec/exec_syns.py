@@ -5,18 +5,20 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-import numpy as np
 from typing import Tuple, Optional
-from syconn.mp.batchjob_utils import batchjob_script
-from syconn.extraction import cs_extraction_steps as ces
+
+import numpy as np
+
 from syconn import global_params
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.extraction import cs_extraction_steps as ces
+from syconn.extraction import cs_processing_steps as cps
+from syconn.handler.basics import kd_factory, chunkify
+from syconn.handler.config import initialize_logging
+from syconn.mp.batchjob_utils import batchjob_script
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
-from syconn.extraction import cs_processing_steps as cps
-from syconn.handler.config import initialize_logging
-from syconn.handler.basics import kd_factory, chunkify
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
 def run_matrix_export():
@@ -152,7 +154,7 @@ def run_spinehead_volume_calc():
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
     multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
-    multi_params = [(ixs, ) for ixs in multi_params]
+    multi_params = [(ixs,) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
                     remove_jobfolder=True)

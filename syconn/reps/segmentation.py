@@ -4,23 +4,23 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..proc.meshes import mesh_area_calc
-from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
-from ..handler.multiviews import generate_rendering_locs
-from ..handler.config import DynConfig
-from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs, SegmentationBase
-from ..handler.basics import get_filepaths_from_dir, safe_copy,\
-    write_txt2kzip, temp_seed
-from .segmentation_helper import *
-from ..proc import meshes
-
 import copy
 import re
-import errno
-import networkx as nx
-from scipy import spatial
-from knossos_utils import knossosdataset
 from typing import Union, Tuple, List, Optional, Dict, Generator, Any
+
+import networkx as nx
+from knossos_utils import knossosdataset
+from scipy import spatial
+
+from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase
+from .segmentation_helper import *
+from ..handler.basics import get_filepaths_from_dir, safe_copy, \
+    write_txt2kzip, temp_seed
+from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
+from ..handler.config import DynConfig
+from ..proc import meshes
+from ..proc.meshes import mesh_area_calc
+from ..backend.storage import VoxelStorageDyn
 
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
@@ -53,6 +53,7 @@ class SegmentationObject(SegmentationBase):
         enable_locking: If True, enables file locking.
 
     """
+
     def __init__(self, obj_id: int, obj_type: str = "sv",
                  version: Optional[str] = None, working_dir: Optional[str] = None,
                  rep_coord: Optional[np.ndarray] = None, size: Optional[int] = None,
@@ -490,7 +491,7 @@ class SegmentationObject(SegmentationBase):
         if not os.path.isfile(self.attr_dict_path):
             return False
         glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                     disable_locking=True) # look-up only, PS 12Dec2018
+                                     disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in glob_attr_dc
 
     @property
@@ -701,7 +702,7 @@ class SegmentationObject(SegmentationBase):
             if self.config.use_new_renderings_locs:
                 coords = generate_rendering_locs(verts, ds_factor).astype(np.float32)
             else:
-                coords = surface_samples(verts, [ds_factor] * 3, r=ds_factor/2).astype(np.float32)
+                coords = surface_samples(verts, [ds_factor] * 3, r=ds_factor / 2).astype(np.float32)
             if save:
                 loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                            disable_locking=not self.enable_locking)
@@ -850,7 +851,7 @@ class SegmentationObject(SegmentationBase):
             self.load_skeleton()
         nodes = self.skeleton['nodes'].astype(np.float32)
         edges = self.skeleton['edges']
-        return np.sum([np.linalg.norm(self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
+        return np.sum([np.linalg.norm(self.scaling * (nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def mesh_from_scratch(self, ds: Optional[Tuple[int, int, int]] = None,
                           **kwargs: dict) -> List[np.ndarray]:
@@ -1014,9 +1015,9 @@ class SegmentationObject(SegmentationBase):
             0 if successful, -1 if attribute dictionary storage does not exist.
         """
         try:
-             glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                          disable_locking=True)  # disable locking, PS 07June2019
-             self.attr_dict = glob_attr_dc[self.id]
+            glob_attr_dc = AttributeDict(self.attr_dict_path,
+                                         disable_locking=True)  # disable locking, PS 07June2019
+            self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError) as e:
             log_reps.critical("Could not load SSO attributes at {} due to "
                               "{}.".format(self.attr_dict_path, e))
@@ -1168,9 +1169,8 @@ class SegmentationObject(SegmentationBase):
 
         # downsampling to ensure fast processing - this is deterministic!
         if len(id_locs[0]) > 1e4:
-
             with temp_seed(0):
-                idx = np.random.randint(0,len(id_locs[0]),int(1e4))
+                idx = np.random.randint(0, len(id_locs[0]), int(1e4))
             id_locs = np.array([id_locs[0][idx], id_locs[1][idx], id_locs[2][idx]])
 
         # calculate COM
@@ -1298,10 +1298,10 @@ class SegmentationObject(SegmentationBase):
                 pass
         # copy attr_dict values
         self.load_attr_dict()
-        if os.path.isfile(dest_dir+"/attr_dict.pkl"):
-            dest_attr_dc = load_pkl2obj(dest_dir+"/attr_dict.pkl")
+        if os.path.isfile(dest_dir + "/attr_dict.pkl"):
+            dest_attr_dc = load_pkl2obj(dest_dir + "/attr_dict.pkl")
         else:
-             dest_attr_dc = {}
+            dest_attr_dc = {}
         # overwrite existing keys in the destination attribute dict
         dest_attr_dc.update(self.attr_dict)
         self.attr_dict = dest_attr_dc
@@ -1350,7 +1350,7 @@ class SegmentationObject(SegmentationBase):
 
                 this_voxel_list -= bb[0]
 
-                this_voxels = np.zeros(bb[1]-bb[0]+1, dtype=np.bool)
+                this_voxels = np.zeros(bb[1] - bb[0] + 1, dtype=np.bool)
                 this_voxels[this_voxel_list[:, 0],
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
@@ -1430,6 +1430,7 @@ class SegmentationDataset(SegmentationBase):
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
               objects.
     """
+
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
                  version_dict: Optional[Dict[str, str]] = None, create: bool = False,
@@ -1465,8 +1466,8 @@ class SegmentationDataset(SegmentationBase):
             cache_properties = tuple()
 
         if n_folders_fs is not None:
-            if n_folders_fs not in [10**i for i in range(6)]:
-                raise Exception("n_folders_fs must be in", [10**i for i in range(6)])
+            if n_folders_fs not in [10 ** i for i in range(6)]:
+                raise Exception("n_folders_fs must be in", [10 ** i for i in range(6)])
 
         if version == 'temp':
             version = 'tmp'

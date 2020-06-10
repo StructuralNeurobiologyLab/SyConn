@@ -4,17 +4,19 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..reps import segmentation
+import time
+from logging import Logger
+from typing import Optional
+
+import matplotlib
+import networkx as nx
+import numpy as np
+
 from . import log_reps
 from .. import global_params
 from ..handler.prediction import int2str_converter
+from ..reps import segmentation
 
-import time
-import numpy as np
-from logging import Logger
-import networkx as nx
-from typing import Optional
-import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -59,7 +61,7 @@ def connectivity_to_nx_graph(cd_dict):
         nxg.add_edge(u, v)
         # for each synapse create edge with attributes
     log_reps.debug('Done with graph ({1} nodes) construction, took {0}'.format(
-        time.time()-start, nxg.number_of_nodes()))
+        time.time() - start, nxg.number_of_nodes()))
 
     return nxg
 
@@ -93,7 +95,7 @@ def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
     cd_dict = dict()
     cd_dict['ids'] = csd.load_cached_data('id')
     # in um2, overlap of cs and sj
-    cd_dict['syn_size'] =\
+    cd_dict['syn_size'] = \
         csd.load_cached_data('mesh_area') / 2  # as used in export_matrix
     cd_dict['synaptivity_proba'] = \
         csd.load_cached_data('syn_prob')
@@ -341,11 +343,11 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, log: Optiona
     plt.close()
 
     if cumul:
-        mat_name = "/matrix_cum_%d_%d" % (int(int_cut_neg*100000), int(int_cut_pos*100000))
+        mat_name = "/matrix_cum_%d_%d" % (int(int_cut_neg * 100000), int(int_cut_pos * 100000))
         fig.savefig(path + mat_name + '.png', dpi=600)
     else:
         mat_name = "/matrix_%d_%d_%d" % (
-            intensity_plot.shape[0], int(int_cut_neg*100000), int(int_cut_pos*100000))
+            intensity_plot.shape[0], int(int_cut_neg * 100000), int(int_cut_pos * 100000))
         fig.savefig(path + mat_name + '.png', dpi=600)
     # TODO: refine summary log
     sum_str = f"Cut value negative: {int_cut_neg}\n"
@@ -391,8 +393,8 @@ def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0, log: Optional[
             else:
                 # convert to density (average cumul. synaptic area between cell pairs)
                 cumul /= (ax_end - ax_start) * (de_end - de_start)
-            cumul_matrix[i_de_border-1, i_ax_border-1] = cumul
-    plot_wiring(path, cumul_matrix, list(range(1, len(borders)+1)), list(range(1, len(borders)+1)), cumul=True,
+            cumul_matrix[i_de_border - 1, i_ax_border - 1] = cumul
+    plot_wiring(path, cumul_matrix, list(range(1, len(borders) + 1)), list(range(1, len(borders) + 1)), cumul=True,
                 log=log)
 
 
@@ -413,8 +415,8 @@ def make_colormap(seq):
     return mcolors.LinearSegmentedColormap('CustomMap', cdict)
 
 
-def diverge_map(high=(239/255., 65/255., 50/255.),
-                low=(39/255., 184/255., 148/255.)):
+def diverge_map(high=(239 / 255., 65 / 255., 50 / 255.),
+                low=(39 / 255., 184 / 255., 148 / 255.)):
     """Low and high are colors that will be used for the two
     ends of the spectrum. they can be either color strings
     or rgb color tuples

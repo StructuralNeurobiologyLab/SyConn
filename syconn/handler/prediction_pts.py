@@ -8,34 +8,36 @@ try:
     import open3d as o3d
 except ImportError:
     pass  # for sphinx build
+import collections
+import functools
 import re
 import time
-import tqdm
-import collections
-from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
 from multiprocessing import Process, Queue, Manager
+from typing import Iterable, Union, Optional, Tuple, Callable, List
+
+import morphx.processing.clouds as clouds
+import networkx as nx
 import numpy as np
 import scipy.special
-from scipy import spatial
-import morphx.processing.clouds as clouds
-import functools
+import tqdm
+from morphx.classes.cloudensemble import CloudEnsemble
 from morphx.classes.hybridcloud import HybridCloud
-import networkx as nx
-from scipy.spatial import cKDTree
-from sklearn.preprocessing import label_binarize
-from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting, context_splitting_v2
-from syconn.reps.super_segmentation import SuperSegmentationDataset
-from syconn.handler.basics import chunkify_successive
-from syconn.reps.super_segmentation_helper import sparsify_skeleton_fast
-from syconn import global_params
-from syconn.handler import log_handler
-from syconn.mp.mp_utils import start_multiprocess_imap
 from morphx.classes.hybridmesh import HybridMesh
 from morphx.classes.pointcloud import PointCloud
-from morphx.classes.cloudensemble import CloudEnsemble
+from morphx.processing.hybrids import extract_subset
+from morphx.processing.objects import bfs_vertices, context_splitting_v2
+from scipy import spatial
+from scipy.spatial import cKDTree
+from sklearn.preprocessing import label_binarize
+
+from syconn import global_params
+from syconn.handler import log_handler
+from syconn.handler.basics import chunkify_successive
+from syconn.mp.mp_utils import start_multiprocess_imap
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+
 # for readthedocs build
 try:
     import torch
@@ -79,7 +81,7 @@ def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray, binarized=Fals
               4: [[250, 100, 100]], 2: [[100, 200, 100]], 5: [[100, 200, 200]],
               6: [0, 0, 0]}
     if not binarized:
-        feats = label_binarize(feats, np.arange(np.max(feats)+1))
+        feats = label_binarize(feats, np.arange(np.max(feats) + 1))
     cols = np.zeros(pts.shape, dtype=np.uint8)
     for k in range(feats.shape[1]):
         mask = feats[:, k] == 1
@@ -106,7 +108,6 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
             inp = q_postproc.get()
             if 'STOP' in inp:
                 if inp not in stops_received:
-                    log_handler.debug(f'Postproc worker received STOP signal: {inp}')
                     stops_received.add(inp)
                 else:
                     q_postproc.put(inp)
@@ -146,7 +147,6 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         n_worker_load: Number of loader.
         n_worker_postporc: Number of postproc worker.
     """
-    log_handler.debug(f'Predictor {worker_cnt} started.')
     m = model_loader(mpath, device)
     stops_received = set()
     while True:
@@ -154,7 +154,6 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
             inp = q_in.get()
             if 'STOP' in inp:
                 if inp not in stops_received:
-                    log_handler.debug(f'Pred worker received STOP signal: {inp}')
                     stops_received.add(inp)
                 else:
                     q_in.put(inp)
@@ -183,7 +182,6 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
         loader_func:
         n_worker_pred:
     """
-    log_handler.debug(f'Loader {worker_cnt} started.')
     while True:
         if q_loader.empty():
             break
@@ -382,7 +380,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     q_loader = Queue()
     for el in params_in:
         q_loader.put(el)
-    q_load = Queue(maxsize=20*npredictor)
+    q_load = Queue(maxsize=20 * npredictor)
     q_progress = Queue()
     d_postproc = m_postproc.dict()
     for k in ssv_ids:
@@ -394,8 +392,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                  for ii in range(nloader)]
     for p in producers:
         p.start()
-    consumers = [Process(target=worker_pred, args=(ii, q_postproc, d_postproc, q_progress, q_load, model_loader, pred_func,
-                                                   nloader, npostptroc, device, mpath, bs)) for ii in range(npredictor)]
+    consumers = [
+        Process(target=worker_pred, args=(ii, q_postproc, d_postproc, q_progress, q_load, model_loader, pred_func,
+                                          nloader, npostptroc, device, mpath, bs)) for ii in range(npredictor)]
     for c in consumers:
         c.start()
     postprocs = [Process(target=worker_postproc, args=(q_out, q_postproc, d_postproc, postproc_func, postproc_kwargs,
@@ -896,7 +895,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                 cnt += 1
             assert cnt == batchsize
             if not train:
-                batch_progress = ii+1
+                batch_progress = ii + 1
                 yield curr_ssv_params, (batch_f, batch, batch_out), batch_out_orig, batch_progress, n_batches
             else:
                 yield curr_ssv_params, (batch_f, batch), (batch_out, batch_out_l)
@@ -929,7 +928,7 @@ def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
             res.append(out)
     res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
 
-    q_cnt.put(1./n_batches)
+    q_cnt.put(1. / n_batches)
     if batch_progress == 1:
         q_out.put(ssv_params)
     d_out[ssv_params['ssv_id']].append(res)
@@ -1019,7 +1018,7 @@ def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
             res.append(out)
     res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
 
-    q_cnt.put(1./n_batches)
+    q_cnt.put(1. / n_batches)
     if batch_progress == 1:
         q_out.put(ssv_params)
     d_out[ssv_params['ssv_id']].append(res)
@@ -1170,7 +1169,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
 def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                       out_point_label: Optional[List[Union[str, int]]] = None,
                       batchsize: Optional[int] = None, npoints: Optional[int] = None,
-                      ctx_size: Optional[float] = None,  transform: Optional[Callable] = None,
+                      ctx_size: Optional[float] = None, transform: Optional[Callable] = None,
                       n_out_pts: int = 100, train=False, base_node_dst: float = 10000, use_subcell: bool = True,
                       ssd_kwargs: Optional[dict] = None) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
@@ -1245,7 +1244,8 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             batchsize = min(len(source_nodes), batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
-            source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize), source_nodes])
+            source_nodes = np.concatenate(
+                [np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize), source_nodes])
         for ii in range(n_batches):
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
@@ -1304,7 +1304,7 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
                 cnt += 1
             assert cnt == batchsize
             if not train:
-                batch_progress = ii+1
+                batch_progress = ii + 1
                 yield curr_ssv_params, (batch_f, batch, batch_out), batch_out_orig, batch_progress, n_batches
             else:
                 yield curr_ssv_params, (batch_f, batch), (batch_out, batch_out_l)
@@ -1326,7 +1326,7 @@ def pts_pred_semseg(m, inp, q_out, d_out, q_cnt, device, bs):
 
     """
     # TODO: is it possible to get 'device' directly from model 'm'?
-    ssv_params, model_inp,  out_pts_orig, batch_progress, n_batches = inp
+    ssv_params, model_inp, out_pts_orig, batch_progress, n_batches = inp
     res = []
     with torch.no_grad():
         for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
@@ -1338,7 +1338,7 @@ def pts_pred_semseg(m, inp, q_out, d_out, q_cnt, device, bs):
             res.append(out)
     res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
 
-    q_cnt.put(1./n_batches)
+    q_cnt.put(1. / n_batches)
     if batch_progress == 1:
         q_out.put(ssv_params)
     d_out[ssv_params['ssv_id']].append(res)
@@ -1563,7 +1563,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
     default_kwargs = dict(nloader=10, npredictor=5, bs=10,
-                          loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size']/3))
+                          loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size'] / 3))
     default_kwargs.update(add_kwargs)
     postproc_kwargs_def = global_params.config['points']['glia']['mapping']
     if postproc_kwargs is None:
@@ -1599,7 +1599,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
         mpath = global_params.config.mpath_tnet_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
     default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(
-        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size']/2, use_syntype=True, use_subcell=True))
+        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True))
     postproc_kwargs = dict(pred_key=pred_key)
     default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_tnet_model_pts, pts_loader_local_skel, pts_pred_embedding,
@@ -1704,9 +1704,9 @@ def sso2ce(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
     sso.load_skeleton()
     if mesh:
         hm = HybridMesh(vertices=vertices.reshape((-1, 3)), faces=indices.reshape((-1, 3)),
-                        nodes=sso.skeleton['nodes']*sso.scaling, edges=sso.skeleton['edges'])
+                        nodes=sso.skeleton['nodes'] * sso.scaling, edges=sso.skeleton['edges'])
     else:
-        hm = HybridCloud(vertices=vertices.reshape((-1, 3)), nodes=sso.skeleton['nodes']*sso.scaling,
+        hm = HybridCloud(vertices=vertices.reshape((-1, 3)), nodes=sso.skeleton['nodes'] * sso.scaling,
                          edges=sso.skeleton['edges'])
     # merge all clouds into a CloudEnsemble
     ce = CloudEnsemble(clouds, hm, no_pred=[obj for obj in clouds])
@@ -1765,11 +1765,11 @@ def sso2hc(sso: SuperSegmentationObject, mi: bool = True, vc: bool = True,
         if len(cloud) == 0:
             # ignore cell organelles with zero vertices
             continue
-        obj_bounds[obj_names[ix]] = [bound, bound+len(cloud)]
-        total_verts[bound:bound+len(cloud)] = cloud
+        obj_bounds[obj_names[ix]] = [bound, bound + len(cloud)]
+        total_verts[bound:bound + len(cloud)] = cloud
         bound += len(cloud)
     sso.load_skeleton()
-    hc = HybridCloud(vertices=total_verts, nodes=sso.skeleton['nodes']*sso.scaling, edges=sso.skeleton['edges'],
+    hc = HybridCloud(vertices=total_verts, nodes=sso.skeleton['nodes'] * sso.scaling, edges=sso.skeleton['edges'],
                      obj_bounds=obj_bounds, no_pred=obj_names)
     if my:
         add_myelin(sso, hc, average=my_avg)

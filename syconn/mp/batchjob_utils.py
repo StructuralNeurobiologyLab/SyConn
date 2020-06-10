@@ -4,17 +4,15 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
+import dill  # supports pickling of lambda expressions
+
+from . import log_mp
+from .mp_utils import start_multiprocess_imap
+from .. import global_params
 from ..handler.basics import temp_seed, str_delta_sec
 from ..handler.config import initialize_logging
-from .. import global_params
-from .mp_utils import start_multiprocess_imap
-from . import log_mp
 
-import dill  # supports pickling of lambda expressions
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 import getpass
 import glob
 import os
@@ -271,7 +269,7 @@ def batchjob_script(params: list, name: str,
         except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
             log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
                                  f'again, SLURM cache might have been delayed.')
-            time.sleep(1.5*sleep_time)
+            time.sleep(1.5 * sleep_time)
             js_dc = jobstates_slurm(job_name, starttime)
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         # all jobs which are not running, completed or pending have failed for
@@ -511,9 +509,9 @@ def fallback_exec(cmd_exec):
     out_str = ""
     reported = False
     if 'error' in out.decode().lower() or 'error' in err.decode().lower() \
-    or 'killed' in out.decode().lower() or 'killed' in err.decode().lower() \
-    or 'segmentation fault' in out.decode().lower() \
-    or 'segmentation fault' in err.decode().lower():
+            or 'killed' in out.decode().lower() or 'killed' in err.decode().lower() \
+            or 'segmentation fault' in out.decode().lower() \
+            or 'segmentation fault' in err.decode().lower():
         reported = True
         out_str = out.decode() + err.decode()
     if not reported and ('warning' in out.decode().lower() or

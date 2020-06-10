@@ -6,34 +6,35 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage, CompressedStorage
-from ..reps import rep_helper
-from ..mp import batchjob_utils as qu
-from ..handler import compression, basics
-from ..reps import segmentation
-from . object_extraction_steps import export_cset_to_kd_batchjob
+import glob
+import os
+import pickle as pkl
+import shutil
+import time
+from collections import defaultdict
+from logging import Logger
+from typing import Optional, Dict, List, Tuple, Union
+
+import numpy as np
+import scipy.ndimage
+import tqdm
+from knossos_utils import chunky
+from knossos_utils import knossosdataset
+
 from . import log_extraction
+from .block_processing_C import extract_cs_syntype
+from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
+from .object_extraction_steps import export_cset_to_kd_batchjob
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
+from .. import global_params
+from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage, CompressedStorage
+from ..handler import compression, basics
+from ..mp import batchjob_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
-from .. import global_params
-from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
-from .block_processing_C import extract_cs_syntype
-
-import os
-import time
-import shutil
-import tqdm
-from collections import defaultdict
-import pickle as pkl
-from typing import Optional, Dict, List, Tuple, Union
-from logging import Logger
-import glob
-import numpy as np
-import scipy.ndimage
-from knossos_utils import knossosdataset
-from knossos_utils import chunky
+from ..reps import rep_helper
+from ..reps import segmentation
 
 
 def process_block_nonzero(*args):
@@ -232,9 +233,9 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
                                           mags=[1, ])
         target_kd = basics.kd_factory(path)
         export_cset_to_kd_batchjob({obj_type: path},
-            cset, obj_type, [obj_type],
-            offset=offset, size=size, stride=chunk_size, as_raw=False,
-            orig_dtype=np.uint64, unified_labels=False, log=log)
+                                   cset, obj_type, [obj_type],
+                                   offset=offset, size=size, stride=chunk_size, as_raw=False,
+                                   orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
                   ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
 
@@ -311,8 +312,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     os.makedirs(worker_dir_props, exist_ok=True)
 
     if global_params.config.syntype_available and \
-       (global_params.config.sym_label == global_params.config.asym_label) and \
-       (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
+            (global_params.config.sym_label == global_params.config.asym_label) and \
+            (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
         raise ValueError('Both KnossosDatasets and labels for symmetric and '
                          'asymmetric synapses are identical. Either one '
                          'must differ.')
@@ -360,7 +361,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
         sj_d = (kd_sj.load_seg(size=size, offset=offset, mag=1,
-                                datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
+                               datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
@@ -379,9 +380,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                     asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
                               == global_params.config.asym_label).astype(np.uint8, copy=False)
             else:
-                assert global_params.config.asym_label is not None,\
+                assert global_params.config.asym_label is not None, \
                     'Label of asymmetric synapses is not set.'
-                assert global_params.config.sym_label is not None,\
+                assert global_params.config.sym_label is not None, \
                     'Label of symmetric synapses is not set.'
                 # load synapse type classification results stored in the same KD
                 sym_d = kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
@@ -806,9 +807,9 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
 
     # convert Chunkdataset to KD
     export_cset_to_kd_batchjob({hdf5name: path},
-        cset, '{}'.format(filename), [hdf5name],
-        offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-        orig_dtype=np.uint64, unified_labels=False)
+                               cset, '{}'.format(filename), [hdf5name],
+                               offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
+                               orig_dtype=np.uint64, unified_labels=False)
     log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
         cset.path_head_folder, target_kd.knossos_path))
 

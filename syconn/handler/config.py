@@ -4,17 +4,19 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert
-from .. import global_params
-import glob
-import os
-import yaml
-import logging
-import coloredlogs
 import datetime
-from typing import Tuple, Optional, Union, Dict, Any, List
+import glob
+import logging
+import os
 from logging import Logger
-from termcolor import colored
+from typing import Tuple, Optional, Union, Dict, Any, List
+
+import coloredlogs
 import numpy as np
+import yaml
+from termcolor import colored
+
+from .. import global_params
 
 __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
@@ -25,6 +27,7 @@ class Config(object):
     in `working_dir` :py:attr:`~initialized` will be False without raising an
     error.
     """
+
     def __init__(self, working_dir):
         self._config = None
         self._configspec = None
@@ -142,6 +145,7 @@ class DynConfig(Config):
             cfg = global_params.config  # this is the `DynConfig` object
 
     """
+
     def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None, fix_config: bool = False):
         """
         Args:
@@ -242,7 +246,7 @@ class DynConfig(Config):
                 and os.environ['syconn_wd'] != "None":
             if super().working_dir != os.path.abspath(os.environ['syconn_wd']):
                 new_wd = os.path.abspath(os.environ['syconn_wd'])
-        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and (global_params.wd != "None") and\
+        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and (global_params.wd != "None") and \
                 (super().working_dir != os.path.abspath(global_params.wd)):
             new_wd = os.path.abspath(global_params.wd)
         if new_wd is None:
@@ -715,7 +719,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           use_new_renderings_locs: bool = True,
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
-                          kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
+                          kd_sj: Optional[str] = None, kd_mi: Optional[str] = None,
                           kd_vc: Optional[str] = None, init_rag_p: str = "",
                           prior_glia_removal: bool = True,
                           use_new_meshing: bool = True,
@@ -1094,14 +1098,15 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
 
 class TimeFilter(logging.Filter):
     """https://stackoverflow.com/questions/31521859/python-logging-module-time-since-last-log"""
+
     def filter(self, record):
         try:
-          last = self.last
+            last = self.last
         except AttributeError:
-          last = record.relativeCreated
+            last = record.relativeCreated
 
-        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - \
-                datetime.datetime.fromtimestamp(last/1000.0)
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated / 1000.0) - \
+                datetime.datetime.fromtimestamp(last / 1000.0)
 
         record.relative = '{0:.1f}'.format(delta.seconds / 60.)
 

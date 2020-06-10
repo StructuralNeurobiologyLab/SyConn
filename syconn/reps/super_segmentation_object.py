@@ -4,41 +4,44 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from . import super_segmentation_helper as ssh
-from .segmentation import SegmentationObject, SegmentationDataset
-from .segmentation_helper import load_so_attr_bulk
-from ..proc.sd_proc import predict_sos_views
-from .rep_helper import knossos_ml_from_sso, colorcode_vertices, knossos_ml_from_svixs, subfold_from_ix_SSO, \
-    SegmentationBase
-from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, coordpath2anno, load_pkl2obj, \
-    write_obj2pkl, flatten_list, chunkify, data2kzip
-from ..handler.prediction import certainty_estimate
-from ..backend.storage import CompressedStorage, MeshStorage
-from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
-from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
-from ..proc.rendering import render_sampled_sso, load_rendering_func, render_sso_coords, render_sso_coords_index_views
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..reps import log_reps
-from ..handler.config import DynConfig
-from .. import global_params
-
 import glob
 import os
 import re
 import shutil
 import time
 from collections import Counter, defaultdict
-import scipy.spatial
+from typing import Optional, Dict, List, Tuple, Union, Iterable, Any, TYPE_CHECKING
+
 import networkx as nx
 import numpy as np
+import scipy.spatial
 from scipy import spatial
-from typing import Optional, Dict, List, Tuple, Any, Union, Iterable, Any, TYPE_CHECKING
+
+from . import super_segmentation_helper as ssh
+from .rep_helper import knossos_ml_from_sso, colorcode_vertices, knossos_ml_from_svixs, subfold_from_ix_SSO, \
+    SegmentationBase
+from .segmentation import SegmentationObject, SegmentationDataset
+from .segmentation_helper import load_so_attr_bulk
+from .. import global_params
+from ..backend.storage import CompressedStorage, MeshStorage
+from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, coordpath2anno, load_pkl2obj, \
+    write_obj2pkl, flatten_list, chunkify, data2kzip
+from ..handler.config import DynConfig
+from ..handler.prediction import certainty_estimate
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
+from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
+from ..proc.rendering import render_sampled_sso, load_rendering_func, render_sso_coords, render_sso_coords_index_views
+from ..proc.sd_proc import predict_sos_views
+from ..reps import log_reps
+
 if TYPE_CHECKING:
     from .super_segmentation_dataset import SuperSegmentationDataset
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
+
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -153,6 +156,7 @@ class SuperSegmentationObject(SegmentationBase):
         version_dict: A dictionary which contains the versions of other dataset types which share
             the same working directory. Defaults to the `Versions` entry in the `config.yml` file.
     """
+
     def __init__(self, ssv_id: int, version: Optional[str] = None, version_dict: Optional[Dict[str, str]] = None,
                  working_dir: Optional[str] = None, create: bool = False,
                  sv_ids: Optional[Union[np.ndarray, List[int]]] = None, scaling: Optional[np.ndarray] = None,
@@ -1030,7 +1034,7 @@ class SuperSegmentationObject(SegmentationBase):
         write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
         shutil.move(self.attr_dict_path + '.tmp', self.attr_dict_path)
 
-    def save_attributes(self, attr_keys : List[str], attr_values: List[Any]):
+    def save_attributes(self, attr_keys: List[str], attr_values: List[Any]):
         """
         Writes attributes to attribute dict on file system. Does not care about
         self.attr_dict.
@@ -1209,9 +1213,9 @@ class SuperSegmentationObject(SegmentationBase):
                 skel_nodes.append(skeleton.SkeletonNode().
                                   from_scratch(a, c[0], c[1], c[2], radius=r))
                 pred_key_ax = "{}_avg{}".format(self.config['compartments'][
-                                            'view_properties_semsegax']['semseg_key'],
+                                                    'view_properties_semsegax']['semseg_key'],
                                                 self.config['compartments'][
-                                            'dist_axoness_averaging'])
+                                                    'dist_axoness_averaging'])
                 if pred_key_ax in self.skeleton:
                     skel_nodes[-1].data[pred_key_ax] = self.skeleton[pred_key_ax][
                         i_node]
@@ -1336,8 +1340,8 @@ class SuperSegmentationObject(SegmentationBase):
         """
         if self.version == 'tmp':
             log_reps.debug('"save_skeleton" called but this SSV '
-                             'has version "tmp", skeleton will'
-                             ' not be saved to disk.')
+                           'has version "tmp", skeleton will'
+                           ' not be saved to disk.')
             return
         if to_object:
             write_obj2pkl(self.skeleton_path, self.skeleton)
@@ -1831,7 +1835,7 @@ class SuperSegmentationObject(SegmentationBase):
         return so_views_exist
 
     def render_views(self, add_cellobjects: bool = False, verbose: bool = False,
-                     overwrite: bool = True, cellobjects_only: bool =False,
+                     overwrite: bool = True, cellobjects_only: bool = False,
                      woglia: bool = True, skip_indexviews: bool = False):
         """
         Renders views for each SV based on SSV context and stores them
@@ -2277,7 +2281,7 @@ class SuperSegmentationObject(SegmentationBase):
         # list of arrays
         # TODO: currently does not support multiprocessing
         locs = sm.start_multiprocess_obj("sample_locations", params,
-                                         nb_cpus=1)  #self.nb_cpus)
+                                         nb_cpus=1)  # self.nb_cpus)
         if cache:
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
@@ -2432,7 +2436,7 @@ class SuperSegmentationObject(SegmentationBase):
         mesh2obj_file(dest_path, self.load_mesh(obj_type), center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton', ),
+    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton',),
                     rag: Optional[nx.Graph] = None,
                     sv_color: Optional[np.ndarray] = None,
                     synssv_instead_sj: bool = False):
@@ -3125,7 +3129,7 @@ class SuperSegmentationObject(SegmentationBase):
                                               overwrite=True, **view_props)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
-                               obj_to_render=("sv", )):
+                               obj_to_render=("sv",)):
         multi_view_sso = load_rendering_func('multi_view_sso')
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
@@ -3226,7 +3230,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         if axoness_key is None:
             axoness_key = 'axoness_avg{}'.format(self.config['compartments'][
-                                            'dist_axoness_averaging'])
+                                                     'dist_axoness_averaging'])
         nodes = self.skeleton['nodes']
         soma_ixs = np.nonzero(self.skeleton[axoness_key] == 2)[0]
         if np.sum(soma_ixs) == 0:
@@ -3489,5 +3493,3 @@ def semsegspiness_predictor(args) -> List[int]:
             msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
     return missing_ssvs
-
-

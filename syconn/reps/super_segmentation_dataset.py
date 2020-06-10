@@ -4,27 +4,28 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from .segmentation import SegmentationDataset, SegmentationObject
+import copy
+import glob
+import os
+import re
+import shutil
+from multiprocessing.pool import ThreadPool
+from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
+
+import numpy as np
+
+from . import log_reps
 from .rep_helper import SegmentationBase
-from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
-from ..handler.config import DynConfig
+from .segmentation import SegmentationDataset, SegmentationObject
+from .super_segmentation_helper import assemble_from_mergelist
 from .super_segmentation_helper import associate_objs_with_skel_nodes
 from .super_segmentation_helper import view_embedding_of_sso_nocache
-from .super_segmentation_helper import assemble_from_mergelist
-from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
-from ..mp import mp_utils as sm
 from .. import global_params
-from . import log_reps
-
-import copy
-import re
-import glob
-from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
-import os
-import shutil
-import numpy as np
-from multiprocessing.pool import ThreadPool
+from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
+from ..handler.config import DynConfig
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
 
 try:
     import cPickle as pkl
