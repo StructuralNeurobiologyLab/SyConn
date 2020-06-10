@@ -178,6 +178,14 @@ views:
     ws: [256, 128]  # in pixel (x, y)
     nb_views: 2
 
+points:
+  glia:
+    mapping:
+      # if SV skeletons do not exist, use simple vertex downsampling to generate target locations for the prediction.
+      sample_loc_ds: 100
+      # number of nearest neighbors searched for every target location within the predicted locations.
+      pred2loc_knn: 5
+
 # --------- GLIA PARAMETERS
 glia:
   prior_glia_removal: True

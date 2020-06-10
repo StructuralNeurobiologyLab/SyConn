@@ -937,7 +937,8 @@ def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
 
 
 def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: Optional[int] = None,
-                      partitioned: Optional[bool] = False, apply_softmax: bool = True) -> Tuple[List[dict], List[bool]]:
+                      partitioned: Optional[bool] = False, apply_softmax: bool = True,
+                      sample_loc_ds: float = 100, pred2loc_knn: int = 5) -> Tuple[List[dict], List[bool]]:
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
     node_probas = []
@@ -968,8 +969,11 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
     if partitioned is not None and lo_first_n is not None and partitioned[sso.id]:
         max_sv = lo_first_n
     for sv in sso.svs[:max_sv]:
-        coords = sv.sample_locations(save=False)
-        dists, ixs = kdt.query(coords, k=10, distance_upper_bound=4000)
+        if sv.skeleton_exists:
+            coords = sv.skeleton['nodes'] * sv.scaling
+        else:
+            coords = sv.sample_locations(ds_factor=sample_loc_ds, save=False)
+        dists, ixs = kdt.query(coords, k=pred2loc_knn)
         skel_probas = np.ones((len(coords), 2)) * -1
         for ii, nn_dists, nn_ixs in zip(np.arange(len(coords)), dists, ixs):
             nn_ixs = nn_ixs[nn_dists != np.inf]
@@ -1047,6 +1051,7 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
     node_coords = np.concatenate(node_coords)
 
     # map inference sites of latent vecs to skeleton node locations via nearest neighbor
+    # TODO: perform interpolation?
     sso.load_skeleton()
     hull_tree = spatial.cKDTree(node_coords)
     dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
@@ -1537,7 +1542,8 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
 
 
 # prediction wrapper
-def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
+def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
+                     postproc_kwargs: Optional[dict] = None, **add_kwargs):
     """
     Perform glia predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1547,8 +1553,9 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
 
 
     Args:
-        ssv_params:
-        mpath:
+        ssv_params: List of kwargs to initialize SSVs.
+        mpath: Path to model.
+        postproc_kwargs: Postprocessing kwargs.
 
     Returns:
 
@@ -1556,11 +1563,16 @@ def predict_glia_ssv(ssv_params, mpath: Optional[str] = None, **add_kwargs):
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=8, npredictor=4, bs=25,
-                          loader_kwargs=dict(n_out_pts=100, base_node_dst=loader_kwargs['ctx_size']/2))
+    default_kwargs = dict(nloader=10, npredictor=5, bs=10,
+                          loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size']/3))
     default_kwargs.update(add_kwargs)
+    postproc_kwargs_def = global_params.config['points']['glia']['mapping']
+    if postproc_kwargs is None:
+        postproc_kwargs = {}
+    postproc_kwargs_def.update(postproc_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_local_skel, pts_pred_local_skel,
-                               postproc_func=pts_postproc_glia, mpath=mpath, **loader_kwargs, **default_kwargs)
+                               postproc_func=pts_postproc_glia, mpath=mpath, postproc_kwargs=postproc_kwargs_def,
+                               **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during glia prediction.')
 
@@ -1587,7 +1599,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=1, npredictor=1, bs=25, loader_kwargs=dict(
+    default_kwargs = dict(nloader=1, npredictor=1, bs=10, loader_kwargs=dict(
         n_out_pts=1, base_node_dst=loader_kwargs['ctx_size']/2, use_syntype=True, use_subcell=True))
     postproc_kwargs = dict(pred_key=pred_key)
     default_kwargs.update(add_kwargs)

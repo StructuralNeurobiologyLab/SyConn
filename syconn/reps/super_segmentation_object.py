@@ -2639,8 +2639,7 @@ class SuperSegmentationObject(SegmentationBase):
         for sv in self.svs:
             sv.load_attr_dict()
         glia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
-        nonglia_svs = [sv for sv in self.svs if
-                       sv.glia_pred(thresh, pred_key_appendix) == 0]
+        nonglia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         mesh = merge_someshes(glia_svs, use_new_subfold=self.config.use_new_subfold)

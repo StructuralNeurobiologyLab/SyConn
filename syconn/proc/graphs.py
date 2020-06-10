@@ -246,7 +246,7 @@ def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
 
 def glia_loader_helper(args):
     so, glia_key, thresh, use_sv_volume = args
-    if not glia_key in so.attr_dict.keys():
+    if glia_key not in so.attr_dict.keys():
         so.load_attr_dict()
     curr_glianess = so.glia_pred(thresh)
     if not use_sv_volume:

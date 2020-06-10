@@ -58,6 +58,24 @@ def glia_pred_so(so: 'SegmentationObject', thresh: float,
     return 0
 
 
+def glia_proba_so(so: 'SegmentationObject', pred_key_appendix: str) -> float:
+    """
+    Get mean glia probability of a cell supervoxel (0: neuron, 1: glia).
+
+    Args:
+        so: The cell supervoxel object.
+        pred_key_appendix: Additional prediction key.
+
+    Returns:
+
+    """
+    assert so.type == "sv"
+    pred_key = "glia_probas" + pred_key_appendix
+    if pred_key not in so.attr_dict:
+        so.load_attr_dict()
+    return np.mean(so.attr_dict[pred_key][:, 1])
+
+
 def acquire_obj_ids(sd: 'SegmentationDataset'):
     """
     Acquires all obj ids present in the dataset. Loads id array if available.

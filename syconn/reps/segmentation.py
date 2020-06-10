@@ -773,8 +773,7 @@ class SegmentationObject(SegmentationBase):
 
     def glia_pred(self, thresh: float, pred_key_appendix: str = "") -> int:
         """
-        Glia prediction (0: neuron, 1: glia) based on `img2scalar` CMN. Only
-         valid if :py:attr:`type` is `sv`.
+        SV glia prediction (0: neuron, 1: glia). Only valid if :py:attr:`type` is `sv`.
 
         Args:
             thresh: Classification threshold.
@@ -785,7 +784,23 @@ class SegmentationObject(SegmentationBase):
             The glia prediction of this supervoxel.
         """
         assert self.type == "sv"
+        if self.config.use_point_models:
+            return int(self.glia_proba(pred_key_appendix) >= thresh)
         return glia_pred_so(self, thresh, pred_key_appendix)
+
+    def glia_proba(self, pred_key_appendix: str = "") -> float:
+        """
+        SV glia probability (0: neuron, 1: glia). Only valid if :py:attr:`type` is `sv`.
+
+        Args:
+            pred_key_appendix: Identifier for specific glia predictions. Only used
+                during development.
+
+        Returns:
+            The glia prediction of this supervoxel.
+        """
+        assert self.type == "sv"
+        return glia_proba_so(self, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix: str = "") -> np.ndarray:
         """
