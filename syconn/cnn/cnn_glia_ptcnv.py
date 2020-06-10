@@ -65,8 +65,8 @@ use_bias = args.use_bias
 
 lr = 5e-4
 lr_stepsize = 100
-lr_dec = 0.992
-max_steps = 250000
+lr_dec = 0.99
+max_steps = 300000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition

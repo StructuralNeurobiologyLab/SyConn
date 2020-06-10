@@ -171,8 +171,7 @@ def batchjob_script(params: list, name: str,
     if job_name == "default":
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
-            job_name = "".join([letters[l] for l in
-                                np.random.randint(0, len(letters), 8)])
+            job_name = "".join([letters[l] for l in np.random.randint(0, len(letters), 8)])
     log_batchjob.info(
         'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks, each'
         ' using {} core(s).'.format(name, job_name, suffix, len(params), n_cores))

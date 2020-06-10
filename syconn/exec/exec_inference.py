@@ -129,8 +129,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    predict_func = 'predict_axoness_semseg'
-    path_to_out = qu.batchjob_script(multi_params, predict_func, log=log,
+    path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
                                      suffix="", additional_flags="--gres=gpu:1",
                                      n_cores=n_cores, remove_jobfolder=False)
     log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')

@@ -46,7 +46,6 @@ pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
 pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
-log_handler.level = 10
 m_postproc = Manager()
 
 
@@ -105,31 +104,28 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
         if not q_postproc.empty():
             inp = q_postproc.get()
             if 'STOP' in inp:
-                if inp in stops_received:
-                    # already got STOP signal, put back in queue for other worker.
-                    q_postproc.put(inp)
-                    log_handler.debug(f'Postproc worker got duplicate STOP signal: {inp}')
-                else:
+                if inp not in stops_received:
                     log_handler.debug(f'Postproc worker received STOP signal: {inp}')
                     stops_received.add(inp)
+                else:
+                    q_postproc.put(inp)
+                    time.sleep(np.random.randint(25) / 10)
                 if len(stops_received) == n_worker_pred:
-                    log_handler.debug('Worker postproc done.')
                     break
                 continue
         else:
             if len(stops_received) == n_worker_pred:
-                log_handler.debug('Worker postproc done.')
                 break
             time.sleep(0.5)
             continue
         q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
+    log_handler.debug(f'Worker postproc done.')
     q_out.put('END')
 
 
 def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q_in: Queue,
-                model_loader: Callable, pred_func: Callable,
-                device: str, mpath: Optional[str] = None,
-                bs: Optional[int] = None, max_idle_dt: float = 60):
+                model_loader: Callable, pred_func: Callable, n_worker_load: int, n_worker_postporc: int,
+                device: str, mpath: Optional[str] = None, bs: Optional[int] = None):
     """
 
     Args:
@@ -146,46 +142,47 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         mpath: Path to the pytorch model.
         device: Device
         bs: Batch size.
-        max_idle_dt: Maximum time a worker is allowed to be idle.
+        n_worker_load: Number of loader.
+        n_worker_postporc: Number of postproc worker.
     """
+    log_handler.debug(f'Predictor {worker_cnt} started.')
     m = model_loader(mpath, device)
-    stop_received = False
+    stops_received = set()
     while True:
         if not q_in.empty():
             inp = q_in.get()
             if 'STOP' in inp:
-                if inp == f'STOP{worker_cnt}':
+                if inp not in stops_received:
                     log_handler.debug(f'Pred worker received STOP signal: {inp}')
-                    stop_received = True
-                    stop_received_at = time.time()
-                    if q_in.empty():
-                        break
-                else:  # put it back to queue
+                    stops_received.add(inp)
+                else:
                     q_in.put(inp)
-                    # use random sleep to avoid worker lock by simultaneously putting in the other worker's stop signal
                     time.sleep(np.random.randint(25) / 10)
-                    if stop_received and (time.time() - stop_received_at > max_idle_dt):
-                        break
+                if len(stops_received) == n_worker_load:
+                    break
                 continue
         else:
-            if stop_received:
-                break
             time.sleep(0.5)
             continue
         pred_func(m, inp, q_out, d_out, q_progress, device, bs)
     log_handler.debug(f'Pred worker {worker_cnt} stopped.')
-    q_out.put(f'STOP{worker_cnt}')
+    for _ in range(n_worker_postporc):
+        q_out.put(f'STOP{worker_cnt}')
 
 
-def worker_load(q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func: Callable):
+def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func: Callable,
+                n_worker_pred: int):
     """
 
     Args:
+        worker_cnt:
         q_loader:
         q_out:
         q_loader_sync:
         loader_func:
+        n_worker_pred:
     """
+    log_handler.debug(f'Loader {worker_cnt} started.')
     while True:
         if q_loader.empty():
             break
@@ -200,18 +197,17 @@ def worker_load(q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func
                     break
             q_out.put(el)
     time.sleep(1)
+    for _ in range(n_worker_pred):
+        q_out.put(f'STOP{worker_cnt}')
     q_loader_sync.put('DONE')
 
 
-def listener(q_progress: Queue, q_in: Queue, q_loader_sync: Queue,
-             npredictor: int, nloader: int, total: int):
+def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int):
     """
 
     Args:
         q_progress:
-        q_in:
         q_loader_sync:
-        npredictor:
         nloader:
         total:
     """
@@ -232,10 +228,6 @@ def listener(q_progress: Queue, q_in: Queue, q_loader_sync: Queue,
         else:
             _ = q_loader_sync.get()
             cnt_loder_done += 1
-            if cnt_loder_done == nloader:
-                for ii in range(npredictor):
-                    time.sleep(0.2)
-                    q_in.put(f'STOP{ii}')
 
 
 def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
@@ -398,11 +390,12 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     q_postproc = m_postproc.Queue()
     q_out = Queue()
     q_loader_sync = Queue()
-    producers = [Process(target=worker_load, args=(q_loader, q_load, q_loader_sync, loader_func)) for _ in range(nloader)]
+    producers = [Process(target=worker_load, args=(ii, q_loader, q_load, q_loader_sync, loader_func, npredictor))
+                 for ii in range(nloader)]
     for p in producers:
         p.start()
     consumers = [Process(target=worker_pred, args=(ii, q_postproc, d_postproc, q_progress, q_load, model_loader, pred_func,
-                                                   device, mpath, bs)) for ii in range(npredictor)]
+                                                   nloader, npostptroc, device, mpath, bs)) for ii in range(npredictor)]
     for c in consumers:
         c.start()
     postprocs = [Process(target=worker_postproc, args=(q_out, q_postproc, d_postproc, postproc_func, postproc_kwargs,
@@ -411,7 +404,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.start()
     dict_out = collections.defaultdict(list)
     cnt_end = 0
-    lsnr = Process(target=listener, args=(q_progress, q_load, q_loader_sync, npredictor, nloader, nsamples_tot))
+    lsnr = Process(target=listener, args=(q_progress, q_loader_sync, nloader, nsamples_tot))
     lsnr.start()
     while True:
         if q_out.empty():

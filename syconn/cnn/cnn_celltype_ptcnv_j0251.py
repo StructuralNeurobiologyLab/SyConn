@@ -30,11 +30,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=10, help='Batch size')
-parser.add_argument('--sp', type=int, default=30000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=1500, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=15000, help='Context size in nm', type=int)
+parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
 parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--use_syntype', default=True, help='Use synapse type', type=bool)
 parser.add_argument(
@@ -83,7 +83,7 @@ cellshape_only = False
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
-num_classes = 11
+num_classes = 10
 onehot = True
 act = 'swish'
 
