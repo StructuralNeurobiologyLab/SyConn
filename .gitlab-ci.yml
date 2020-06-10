@@ -12,6 +12,8 @@ test:
     - pytest --cache-clear
   except:
     - master
+  tags:
+    - default
 
 build:
   stage: build
@@ -20,6 +22,8 @@ build:
     - source ~/.bashrc
     - conda activate pysyintegration_m
   only:
+    - master
+  tags:
     - master
 
 test-full:
@@ -31,6 +35,8 @@ test-full:
     - pytest --cache-clear -c tests/full_run.ini
   only:
     - master
+  tags:
+    - master
 
 cleanup:
   stage: cleanup
@@ -38,6 +44,8 @@ cleanup:
     - conda remove --yes -n pysyintegration_m --all
   when: always
   only:
+    - master
+  tags:
     - master
 
 pylint:
@@ -54,4 +62,6 @@ pylint:
     paths:
       - ./pylint/
     expire_in: 2 yrs
+  tags:
+    - default
   allow_failure: true
