@@ -30,6 +30,7 @@ from syconn.handler.basics import chunkify_successive
 from syconn.reps.super_segmentation_helper import sparsify_skeleton_fast
 from syconn import global_params
 from syconn.handler import log_handler
+from syconn.mp.mp_utils import start_multiprocess_imap
 from morphx.classes.hybridmesh import HybridMesh
 from morphx.classes.pointcloud import PointCloud
 from morphx.classes.cloudensemble import CloudEnsemble
@@ -230,6 +231,11 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int):
             cnt_loder_done += 1
 
 
+def _vert_counter(args):
+    ssv_id, ssd_kwargs = args
+    return SuperSegmentationObject(ssv_id, **ssd_kwargs).mesh[1].shape[0]
+
+
 def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       loader_func: Callable, pred_func: Callable,
                       npoints: int, scale_fact: float, ctx_size: int,
@@ -237,7 +243,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       postproc_kwargs: Optional[dict] = None,
                       output_func: Optional[Callable] = None,
                       mpath: Optional[str] = None,
-                      nloader: int = 4, npredictor: int = 2, npostptroc: int = 1,
+                      nloader: int = 4, npredictor: int = 2, npostptroc: int = 2,
                       ssv_ids: Optional[Union[list, np.ndarray]] = None,
                       use_test_aug: bool = False,
                       seeded: bool = False,
@@ -245,9 +251,6 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       loader_kwargs: Optional[dict] = None,
                       redundancy: Union[int, tuple] = (25, 100)) -> dict:
     """
-    # TODO: Use 'mode' kwarg to switch between point2scalar, point2points for skel and surface classifaction.
-    # TODO: remove quick-fix with ssd_kwargs vs. ssv_ids kwargs
-
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions `npreds` per cell is calculated based on the
     fraction of the total number of vertices over `npoints` times two, but at least 5.
@@ -330,8 +333,6 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
 
     """
-    # TODO: make this work
-    assert npostptroc == 1
     if loader_kwargs is None:
         loader_kwargs = dict()
     if output_func is None:
@@ -351,18 +352,18 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     if type(ssd_kwargs) is dict:
         params_kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs,
                              transform=transform, ctx_size=ctx_size, seeded=seeded, **loader_kwargs)
-        ssd = SuperSegmentationDataset(**ssd_kwargs)
         if ssv_ids is None:
+            ssd = SuperSegmentationDataset(**ssd_kwargs)
             ssv_ids = ssd.ssv_ids
         else:
             ssv_ids = np.array(ssv_ids, np.uint)
         # redundancy, default: 3 * npoints / #vertices
+        ssv_n_vertices = start_multiprocess_imap(_vert_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
+                                                 nb_cpus=None)
         if type(redundancy) is tuple:
-            ssv_redundancy = [min(max(len(ssv.mesh[1]) // npoints, redundancy[0]), redundancy[1]) for ssv in
-                              ssd.get_super_segmentation_object(ssv_ids)]
+            ssv_redundancy = [min(max(nverts // npoints, redundancy[0]), redundancy[1]) for nverts in ssv_n_vertices]
         else:
-            ssv_redundancy = [max(len(ssv.mesh[1]) // npoints, redundancy) for ssv in
-                              ssd.get_super_segmentation_object(ssv_ids)]
+            ssv_redundancy = [max(nverts // npoints, redundancy) for nverts in ssv_n_vertices]
         ssv_redundancy = np.array(ssv_redundancy)
         sorted_ix = np.argsort(ssv_redundancy)[::-1]
         ssv_redundancy = ssv_redundancy[sorted_ix]
@@ -372,8 +373,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         params_in = [{**params_kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
             ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
     else:
-        params_kwargs = dict(batchsize=bs, npoints=npoints,
-                             transform=transform, ctx_size=ctx_size, **loader_kwargs)
+        params_kwargs = dict(batchsize=bs, npoints=npoints, transform=transform, ctx_size=ctx_size, **loader_kwargs)
         params_in = [{**params_kwargs, **dict(ssv_params=[ch])} for ch in ssd_kwargs]
         ssv_ids = [el['ssv_id'] for el in ssd_kwargs]
 
@@ -536,13 +536,8 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                             break
                         print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                         source_node = np.random.choice(source_nodes)
-                    if use_ctx_sampling:
-                        local_bfs = context_splitting_v2(hc, source_node, ctx_size)
-                    else:
-                        local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                    pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                    sample_feats = pc.features
-                    sample_pts = pc.vertices
+                    sample_feats = hc_sub.features
+                    sample_pts = hc_sub.vertices
                     # make sure there is always the same number of points within a batch
                     sample_ixs = np.arange(len(sample_pts))
                     sample_pts = sample_pts[sample_ixs][:npoints_ssv]
@@ -553,12 +548,12 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                     sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                     # one hot encoding
                     sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                    pc._vertices = sample_pts
-                    pc._features = sample_feats
+                    hc_sub._vertices = sample_pts
+                    hc_sub._features = sample_feats
                     if transform is not None:
-                        transform(pc)
-                    batch[cnt] = pc.vertices
-                    batch_f[cnt] = pc.features
+                        transform(hc_sub)
+                    batch[cnt] = hc_sub.vertices
+                    batch_f[cnt] = hc_sub.features
                     cnt += 1
                 assert cnt == n_samples
                 yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
@@ -607,13 +602,9 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                         break
                     log_handler.debug(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes)
-                if use_ctx_sampling:
-                    local_bfs = context_splitting_v2(hc, source_node, ctx_size_fluct)
-                else:
-                    local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                sample_feats = pc.features
-                sample_pts = pc.vertices
+
+                sample_feats = hc_sub.features
+                sample_pts = hc_sub.vertices
                 # shuffling
                 sample_ixs = np.arange(len(sample_pts))
                 np.random.shuffle(sample_ixs)
@@ -627,12 +618,12 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                 # one hot encoding
                 sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                pc._vertices = sample_pts
-                pc._features = sample_feats
+                hc_sub._vertices = sample_pts
+                hc_sub._features = sample_feats
                 if transform is not None:
-                    transform(pc)
-                batch[cnt] = pc.vertices
-                batch_f[cnt] = pc.features
+                    transform(hc_sub)
+                batch[cnt] = hc_sub.vertices
+                batch_f[cnt] = hc_sub.features
                 cnt += 1
             assert cnt == batchsize
             yield ixs, (batch_f, batch)
@@ -842,11 +833,19 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
-                if use_ctx_sampling:
-                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
-                else:
-                    node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+
+                while True:
+                    if use_ctx_sampling:
+                        node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    else:
+                        node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    sample_feats = hc_sub.features
+                    if len(sample_feats) > 0:
+                        break
+                    log_handler.debug(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
+                    source_node = np.random.choice(source_nodes)
+
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
                 # get target locations
@@ -1599,7 +1598,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=1, npredictor=1, bs=10, loader_kwargs=dict(
+    default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(
         n_out_pts=1, base_node_dst=loader_kwargs['ctx_size']/2, use_syntype=True, use_subcell=True))
     postproc_kwargs = dict(pred_key=pred_key)
     default_kwargs.update(add_kwargs)
@@ -1635,7 +1634,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=6, npredictor=3, bs=10, redundancy=(25, 100))
+    default_kwargs = dict(nloader=10, npredictor=4, bs=10, redundancy=(25, 100))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:

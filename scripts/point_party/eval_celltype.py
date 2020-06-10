@@ -99,15 +99,13 @@ if __name__ == '__main__':
     n_cv = 10
     nclasses = 8
     da_equals_tan = True
-    overwrite = False
+    overwrite = True
     n_runs = 2
     state_dict_fname = 'state_dict.pth'
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_pts50000_ctx20000_old/'
-    mfold = base_dir + '/celltype_eval{}_sp50k/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
-    # base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint//celltype_eval{}_sp50k/'
-    # mfold = '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
+    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_pts2500_ctx10000/'
+    mfold = base_dir + '/celltype_eval{}_sp2k/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
     for run in range(n_runs):
         for CV in range(ncv_min, n_cv):
             mpath = f'{mfold.format(run, CV, run)}/{state_dict_fname}'
