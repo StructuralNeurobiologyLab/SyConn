@@ -13,6 +13,7 @@ import functools
 import re
 import os
 import time
+import glob
 from multiprocessing import Process, Queue, Manager
 from typing import Iterable, Union, Optional, Tuple, Callable, List
 import morphx.processing.clouds as clouds
@@ -123,7 +124,8 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
 
 def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q_in: Queue,
                 model_loader: Callable, pred_func: Callable, n_worker_load: int, n_worker_postporc: int,
-                device: str, mpath: Optional[str] = None, bs: Optional[int] = None):
+                device: str, mpath: Optional[str] = None, bs: Optional[int] = None,
+                model_loader_kwargs: Optional[dict] = None):
     """
 
     Args:
@@ -142,8 +144,11 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         bs: Batch size.
         n_worker_load: Number of loader.
         n_worker_postporc: Number of postproc worker.
+        model_loader_kwargs: Additional keyword arguments for the model loader.
     """
-    m = model_loader(mpath, device)
+    if model_loader_kwargs is None:
+        model_loader_kwargs = dict()
+    m = model_loader(mpath, device, **model_loader_kwargs)
     stops_received = set()
     while True:
         if not q_in.empty():
@@ -232,7 +237,7 @@ def _vert_counter(args):
 
 def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       loader_func: Callable, pred_func: Callable,
-                      npoints: int, scale_fact: float, ctx_size: int,
+                      npoints: Union[int, dict], scale_fact: Union[float, dict], ctx_size: Union[int, dict],
                       postproc_func: Optional[Callable] = None,
                       postproc_kwargs: Optional[dict] = None,
                       output_func: Optional[Callable] = None,
@@ -243,6 +248,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       seeded: bool = False,
                       device: str = 'cuda', bs: int = 40,
                       loader_kwargs: Optional[dict] = None,
+                      model_loader_kwargs: Optional[dict] = None,
                       redundancy: Union[int, tuple] = (25, 100)) -> dict:
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
@@ -329,6 +335,8 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     """
     if loader_kwargs is None:
         loader_kwargs = dict()
+    if model_loader_kwargs is None:
+        model_loader_kwargs = dict()
     if output_func is None:
         def output_func(res_dc, ret):
             for ix, out in zip(*ret):
@@ -338,10 +346,15 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     if postproc_kwargs is None:
         postproc_kwargs = dict()
 
-    transform = [clouds.Normalization(scale_fact), clouds.Center()]
-    if use_test_aug:
-        transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
-    transform = clouds.Compose(transform)
+    if type(scale_fact) == dict:
+        transform = {}
+        for p_t in loader_kwargs['pred_types']:
+            transform[p_t] = clouds.Compose([clouds.Normalization(scale_fact[p_t]), clouds.Center()])
+    else:
+        transform = [clouds.Normalization(scale_fact), clouds.Center()]
+        if use_test_aug:
+            transform = [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
+        transform = clouds.Compose(transform)
 
     if type(ssd_kwargs) is dict:
         params_kwargs = dict(batchsize=bs, npoints=npoints, ssd_kwargs=ssd_kwargs,
@@ -1656,28 +1669,94 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 # -------------------------------------------- COMPARTMENT PREDICTION ---------------------------------------------#
 
 
-def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
+def predict_cmpt_ssd(ssv_params: List[dict], mpath: Optional[str] = None, pred_types: List[str] = None):
     """
-    Args:
-        mpath: path to model.
+    Performs compartment predictions on the ssv's given with ``ssv_params``. The kwargs for predict_pts_plain are
+    organized as dicts with the respective values, keyed by the pred_type (see Args below). This enables the pred
+    worker to apply multiple different models at once.
 
-    Returns:
-        Inference model.
+    Args:
+         ssv_params: List of ssv_params with which ssv's can be initialized.
+         mpath: Path to model folder (which contains models with model identifier) or to single model file.
+         pred_types: List of model identifiers (e.g. ['ads', 'abt', 'dnh'] for axon, dendrite, soma; axon, bouton,
+            terminal; dendrite, neck, head; models.
     """
     if mpath is None:
-        mpath = global_params.config.mpath_comp_pts
-    mpath = os.path.expanduser(mpath)
+        mpath = global_params.config.mpath_compartment_pts
+    if os.path.isdir(mpath):
+        # multiple models
+        mpaths = glob.glob(mpath + '*.pth')
+    else:
+        # single model, must contain 'cmpt' in its name
+        mpaths = [mpath]
+        if pred_types is None:
+            pred_types = ['cmpt']
+    if len(mpaths) != len(pred_types):
+        raise ValueError(f"{len(mpaths)} models were found, but {len(pred_types)} prediction types were given.")
+    # These variables are needed in predict_pts_plain
+    ctx_size = {}
+    npoints = {}
+    scale_fact = {}
+    for path in mpaths:
+        for p_t in pred_types:
+            if p_t in path:
+                kwargs = get_cmpt_kwargs(path)[1]
+                if p_t in ctx_size:
+                    raise ValueError(f"Found multiple models for prediction type {p_t}.")
+                ctx_size[p_t] = kwargs['ctx_size']
+                npoints[p_t] = kwargs['npoints']
+                scale_fact[p_t] = kwargs['scale_fact']
+    kwargs = dict(ctx_size=ctx_size, npoints=npoints, scale_fact=scale_fact)
+    loader_kwargs = dict(pred_types=pred_types)
+    out_dc = predict_pts_plain(ssv_params,
+                               nloader=10,
+                               npredictor=5,
+                               bs=10,
+                               model_loader=get_cpmt_model_pts,
+                               loader_func=pts_loader_cpmt,
+                               pred_func=pts_pred_cmpt,
+                               postproc_func=pts_postproc_cpmt,
+                               mpath=mpath,
+                               loader_kwargs=loader_kwargs,
+                               model_loader_kwargs=loader_kwargs,
+                               **kwargs)
+    if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
+        raise ValueError('Invalid output during compartment prediction.')
+
+
+def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda', model_loader_kwargs: Optional[List] = None):
+    if mpath is None:
+        mpath = global_params.config.mpath_compartment_pts
+    if os.path.isdir(mpath):
+        # multiple models
+        mpaths = glob.glob(mpath + '*.pth')
+    else:
+        # single model, must contain 'cmpt' in its name
+        mpaths = [mpath]
+    if model_loader_kwargs is None:
+        pred_types = ['cmpt']
+    else:
+        pred_types = model_loader_kwargs
+    models = {}
     from elektronn3.models.convpoint import SegBig
-    m = SegBig(4, 3, norm_type='gn').to(device)
-    m.load_state_dict(torch.load(mpath)['model_state_dict'])
-    return m
+    for path in mpaths:
+        for p_t in pred_types:
+            if p_t in path:
+                mkwargs, _ = get_cmpt_kwargs(path)[0]
+                if p_t in models:
+                    raise ValueError(f"Found multiple models for prediction type {p_t}.")
+                m = SegBig(**mkwargs).to(device)
+                m.load_state_dict(torch.load(mpath)['model_state_dict'])
+                models[p_t] = m
+    return models
 
 
-def pts_loader_cpmt(ssv_params=None, batchsize: Optional[int] = None,
-                    npoints: Optional[int] = None, ctx_size: Optional[float] = None, use_myelin: bool = False,
-                    transform: Optional[Callable] = None, base_node_dst: float = 10000, use_subcell: bool = True,
-                    ssd_kwargs: Optional[dict] = None, label_remove: List[int] = None,
-                    label_mappings: List[Tuple[int, int]] = None):
+def pts_loader_cpmt(ssv_params = None, pred_types: dict = None, batchsize: Optional[int] = None,
+                    npoints: Optional[Union[int, dict]] = None,
+                    ctx_size: Optional[Union[float, dict]] = None,
+                    transform: Optional[Union[Callable, dict]] = None,
+                    use_subcell: bool = True, use_myelin: bool = False,
+                    ssd_kwargs: Optional[dict] = None):
     feat_dc = dict(pts_feat_dict)
     # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
@@ -1691,57 +1770,71 @@ def pts_loader_cpmt(ssv_params=None, batchsize: Optional[int] = None,
             raise ValueError
         ssv_params = ssd_kwargs
     for curr_ssv_params in ssv_params:
-        # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
         hc, voxel_dict = sso2hc(ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment',
-                                myelin=use_myelin, label_remove=label_remove, label_mappings=label_mappings)
+                                myelin=use_myelin)
         ssv.clear_cache()
+        if pred_types is None:
+            raise ValueError("pred_types is None. However, pred_types must at least contain one pred_type such as "
+                             "'cmpt'")
+        for p_t in pred_types:
+            base_node_dst = ctx_size[p_t] / 3
+            # select source nodes for context extraction
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(hc.nodes)
+            pcd, idcs = pcd.voxel_down_sample_and_trace(
+                base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
+            source_nodes = np.max(idcs, axis=1)
+            batchsize = min(len(source_nodes), batchsize)
+            n_batches = int(np.ceil(len(source_nodes) / batchsize))
 
-        # select source nodes for context extraction
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(
-            base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
-        source_nodes = np.max(idcs, axis=1)
-        batchsize = min(len(source_nodes), batchsize)
-        n_batches = int(np.ceil(len(source_nodes) / batchsize))
-
-        # add additional source nodes to fill batches
-        if len(source_nodes) % batchsize != 0:
-            source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize),
-                                           source_nodes])
-        # collect contexts into batches (each batch contains every n_batches contexts (e.g. every 4th if n_batches = 4)
-        for ii in range(n_batches):
-            batch = np.zeros((batchsize, npoints, 3))
-            batch_f = np.zeros((batchsize, npoints, len(feat_dc)))
-            batch_mask = np.zeros((batchsize, npoints), dtype=bool)
-            idcs_list = []
-            # generate contexts
-            cnt = 0
-            for source_node in source_nodes[ii::n_batches]:
-                node_ids = context_splitting_v2(hc, source_node, ctx_size, 1000)
-                hc_sub, idcs_sub = extract_subset(hc, node_ids)
-                hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints)
-                # get vertex indices respective to total hc
-                global_idcs = idcs_sub[idcs_sample]
-                # prepare masks for filtering sv vertices
-                bounds = hc.obj_bounds['sv']
-                sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
-                hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
-                if transform is not None:
-                    transform(hc_sample)
-                batch[cnt] = hc_sample.vertices
-                batch_f[cnt] = hc_sample.features
-                idcs_list.append(global_idcs[sv_mask])
-                batch_mask[cnt] = sv_mask
-                cnt += 1
-            batch_progress = ii + 1
-            yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), batch_progress, \
-                  n_batches
+            # add additional source nodes to fill batches
+            if len(source_nodes) % batchsize != 0:
+                source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize),
+                                               source_nodes])
+            # collect contexts into batches (each batch contains every n_batches contexts (e.g. every 4th if n_batches = 4)
+            for ii in range(n_batches):
+                batch = np.zeros((batchsize, npoints[p_t], 3))
+                batch_f = np.zeros((batchsize, npoints[p_t], len(feat_dc)))
+                batch_mask = np.zeros((batchsize, npoints[p_t]), dtype=bool)
+                idcs_list = []
+                # generate contexts
+                cnt = 0
+                for source_node in source_nodes[ii::n_batches]:
+                    node_ids = context_splitting_v2(hc, source_node, ctx_size[p_t], 1000)
+                    hc_sub, idcs_sub = extract_subset(hc, node_ids)
+                    hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
+                    # get vertex indices respective to total hc
+                    global_idcs = idcs_sub[idcs_sample]
+                    # prepare masks for filtering sv vertices
+                    bounds = hc.obj_bounds['sv']
+                    sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
+                    hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
+                    if transform is not None:
+                        transform(hc_sample)
+                    batch[cnt] = hc_sample.vertices
+                    batch_f[cnt] = hc_sample.features
+                    idcs_list.append(global_idcs[sv_mask])
+                    batch_mask[cnt] = sv_mask
+                    cnt += 1
+                batch_progress = ii + 1
+                if batch_progress == 1:
+                    yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), \
+                          (batch_progress, n_batches, p_t, pred_types)
+                else:
+                    yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), \
+                          (batch_progress, n_batches, p_t)
 
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
-    ssv_params, model_inp, batch_info, batch_progress, n_batches = inp
+    """
+    Args:
+        inp: Tuple of ssv_params, (feats, verts), (mapping_indices, masks (for removing cell organelles),
+        voxel_indices), (batch_progress, n_batches, p_t (prediction type of this batch), pred_types (only
+        present in first batches)
+        m: Dict with pytorch models keyed by the prediction type
+    """
+    ssv_params, model_inp, batch_info, batch_progress = inp
     idcs_list = batch_info[0]
     batch_mask = batch_info[1]
     idcs_voxel = batch_info[2]
@@ -1752,54 +1845,80 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
             high = bs * (ii + 1)
             with torch.no_grad():
                 g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
-                out = m(*g_inp).cpu().numpy()
+                out = m[batch_progress[2]](*g_inp).cpu().numpy()
                 masks = batch_mask[low:high]
                 # filter vertices which belong to sv (discard predictions for cell organelles)
                 out = out[masks]
             res.append(out)
-    if batch_progress == 1:
+    # batch_progress: (batch_progress, n_batches, p_t, pred_types), bzw. (batch_progress, n_batches, p_t)
+    if batch_progress[0] == 1:
         res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
-                   batch_progress=(batch_progress, n_batches), idcs_voxel=idcs_voxel)
+                   batch_progress=batch_progress, idcs_voxel=idcs_voxel)
     else:
         res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
-                   batch_progress=(batch_progress, n_batches))
-
-    q_cnt.put(1./n_batches)
-    if batch_progress == 1:
+                   batch_progress=batch_progress)
+    q_cnt.put(1./batch_progress[1])
+    if batch_progress[0] == 1:
         q_out.put(ssv_params['ssv_id'])
     d_out[ssv_params['ssv_id']].append(res)
 
 
 def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None, version: Optional[str] = None):
+    """
+    Receives predictions from the prediction queue, waits until all predictions for one sso have been received and
+    then concatenates and evaluates all the predictions (taking the majority vote over all predictions per vertex).
+    The resulting label arrays (number dependent on the number of prediction types (e.g. ads, abt, dnh)) get saved
+    in the original sso object.
+    """
     curr_ix = 0
     sso = SuperSegmentationObject(ssv_id=sso_id, working_dir=working_dir, version=version)
-    preds = []
-    preds_idcs = []
+    preds = {}
+    preds_idcs = {}
+    # indices of vertices which were chosen during voxelization (allows mapping between hc and sso)
     voxel_idcs = None
+    # predictions types which were forwarded from the loading function
+    pred_types = None
+    p_t_done = {}
     while True:
         if len(d_in[sso_id]) < curr_ix + 1:
             time.sleep(0.5)
             continue
         res = d_in[sso_id][curr_ix]
-        preds.append(np.argmax(res['preds'], axis=1))
-        preds_idcs.append(res['idcs'])
         if voxel_idcs is None:
             voxel_idcs = res['idcs_voxel']
+        if pred_types is None:
+            pred_types = res['batch_progress'][3]
+            for p_t in pred_types:
+                p_t_done[p_t] = False
+                preds[p_t] = []
+                preds_idcs[p_t] = []
+        p_t = res['batch_progress'][2]
+        preds[p_t].append(np.argmax(res['preds'], axis=1))
+        preds_idcs[p_t].append(res['idcs'])
         d_in[sso_id][curr_ix] = None
         curr_ix += 1
+        # check if all predictions for this sso were received (all pred_types must evaluate to True)
         if res['batch_progress'][0] == res['batch_progress'][1]:
-            break
+            p_t_done[p_t] = True
+            done = True
+            for p_t in p_t_done:
+                done = done and p_t_done[p_t]
+            if done:
+                break
     del d_in[sso_id]
-    preds = np.concatenate(preds)
-    preds_idcs = np.concatenate(preds_idcs)
-    pred_labels = np.ones((len(voxel_idcs), 1))*-1
-    evaluate_preds(preds_idcs, preds, pred_labels)
-    # map hc predictions to original sso vertices
+
+    # evaluate predictions and map them to the original sso vertices (with respect to
+    # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))
-    sso_preds = np.ones((len(sso_vertices), 1))*-1
-    sso_preds[voxel_idcs] = pred_labels
     ld = sso.label_dict('vertex')
-    ld['cmpt'] = sso_preds
+    for p_t in pred_types:
+        preds[p_t] = np.concatenate(preds[p_t])
+        preds_idcs[p_t] = np.concatenate(preds_idcs[p_t])
+        pred_labels = np.ones((len(voxel_idcs), 1))*-1
+        evaluate_preds(preds_idcs[p_t], preds[p_t], pred_labels)
+        sso_preds = np.ones((len(sso_vertices), 1))*-1
+        sso_preds[voxel_idcs] = pred_labels
+        ld[p_t] = sso_preds
     ld.push()
     return [sso_id], [True]
 
@@ -1816,6 +1935,28 @@ def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.nd
     for u_ix in u_preds_idcs:
         counts = np.bincount(pred_dict[u_ix])
         pred_labels[u_ix] = np.argmax(counts)
+
+
+def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
+    use_norm = False
+    use_bias = True
+    norm_type = 'gn'
+    if 'noBias' in mdir:
+        use_bias = False
+    if 'useNorm' in mdir:
+        use_norm = True
+    if '_bn_' in mdir:
+        norm_type = 'bn'
+    npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
+    scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
+    ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
+    feat_dim = int(re.findall(r'_fdim(\d+)_', mdir)[0])
+    class_num = int(re.findall(r'_cnum(\d+)_', mdir)[0])
+    # TODO: Fix neighbor_nums or create extra model
+    mkwargs = dict(input_channels=feat_dim, output_channels=class_num, use_norm=use_norm, use_bias=use_bias,
+                   norm_type=norm_type)
+    loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints)
+    return mkwargs, loader_kwargs
 
 
 # -------------------------------------------- SSO TO MORPHX CONVERSION ---------------------------------------------#

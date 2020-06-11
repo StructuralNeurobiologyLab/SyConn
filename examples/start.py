@@ -220,7 +220,8 @@ if __name__ == '__main__':
     exec_inference.run_semsegaxoness_prediction()
     time_stamps.append(time.time())
 
-    exec_inference.run_semsegspiness_prediction()
+    if not global_params.config.use_point_models:
+        exec_inference.run_semsegspiness_prediction()
     exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
     step_idents.append('Compartment prediction')
