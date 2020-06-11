@@ -43,14 +43,14 @@ def labels2mesh(args):
     # load new synapse version
     meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=False))
     label_map = [-1, 7, 8, 9]
-    hms = []
+    hcs = []
     for ix, mesh in enumerate(meshes):
         indices, vertices, normals = mesh
         vertices = vertices.reshape((-1, 3))
         labels = np.ones((len(vertices), 1)) * label_map[ix]
         indices = indices.reshape((-1, 3))
-        hm = HybridMesh(vertices=vertices, faces=indices, labels=labels)
-        hms.append(hm)
+        hc = HybridCloud(vertices=vertices, labels=labels)
+        hcs.append(hc)
 
     # load annotation object and corresponding skeleton
     a_obj = load_skeleton(kzip_path)
@@ -68,39 +68,45 @@ def labels2mesh(args):
         for neighbor in neighbors:
             nix = a_nodes.index(neighbor)
             a_edges.append((ix, nix))
-    # propagate labels, nodes with no label get label from nearest node with label
     g = nx.Graph()
     g.add_nodes_from([(i, dict(label=a_node_labels[i])) for i in range(len(a_nodes))])
     g.add_edges_from(a_edges)
     a_edges = np.array(g.edges)
-    cached_labels = a_node_labels.copy()
-    for node in g.nodes:
-        if g.nodes[node]['label'] == -1:
-            ix = label_search(g, node)
-            a_node_labels[node] = cached_labels[ix]
+    # propagate labels, nodes with no label get label from nearest node with label
+    if -1 in a_node_labels:
+        cached_labels = a_node_labels.copy()
+        for node in g.nodes:
+            if g.nodes[node]['label'] == -1:
+                ix = label_search(g, node)
+                a_node_labels[node] = cached_labels[ix]
 
     # create cloud ensemble
     encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6}
     obj_names = ['hc', 'mi', 'vc', 'sy']
-    hm = None
+    hc = None
     clouds = {}
-    for ix, cloud in enumerate(hms):
+    for ix, cloud in enumerate(hcs):
         if ix == 0:
-            vertices = hms[0].vertices
-            hm = HybridMesh(vertices=vertices, labels=np.ones(len(vertices))*-1, faces=hms[0].faces,
-                            nodes=a_node_coords, edges=a_edges, encoding=encoding, node_labels=a_node_labels)
+            vertices = hcs[0].vertices
+            hm = HybridCloud(vertices=vertices, labels=np.ones(len(vertices))*-1, nodes=a_node_coords, edges=a_edges,
+                             encoding=encoding, node_labels=a_node_labels)
             hm.nodel2vertl()
+            sso.load_skeleton()
+            skel = sso.skeleton
+            nodes = skel['nodes'] * sso.scaling
+            edges = skel['edges']
+            hc = HybridCloud(vertices=vertices, labels=hm.labels, nodes=nodes, edges=edges, encoding=hm.encoding)
         else:
-            hms[ix].set_encoding({obj_names[ix]: label_map[ix]})
-            clouds[obj_names[ix]] = hms[ix]
-    ce = CloudEnsemble(clouds, hm, no_pred=['mi', 'vc', 'sy'])
+            hcs[ix].set_encoding({obj_names[ix]: label_map[ix]})
+            clouds[obj_names[ix]] = hcs[ix]
+    ce = CloudEnsemble(clouds, hc, no_pred=['mi', 'vc', 'sy'])
 
     # add myelin (see docstring of map_myelin2coords)
     # sso.load_skeleton()
     # sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
     # majorityvote_skeleton_property(sso, 'myelin')
     # myelinated = sso.skeleton['myelin_avg10000']
-    # hm_myelin = HybridCloud(vertices=hms[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
+    # hm_myelin = HybridCloud(vertices=hcs[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
     # nodes_idcs = np.arange(len(hm_myelin.nodes))
     # myel_nodes = nodes_idcs[myelinated.astype(bool)]
     # myel_vertices = []

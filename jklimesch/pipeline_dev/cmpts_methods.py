@@ -5,9 +5,10 @@ except ImportError:
 import re
 import os
 import time
+from numba.typed import List, Dict
 import tqdm
 import collections
-import numpy as np
+import numba as nb
 import morphx.processing.clouds as clouds
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from elektronn3.models.convpoint import SegBig
@@ -61,7 +62,7 @@ def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
         mpath = global_params.config.mpath_comp_pts
     mpath = os.path.expanduser(mpath)
     from elektronn3.models.convpoint import SegBig
-    m = SegBig(4, 3, use_bias=True, use_norm=False).to(device)
+    m = SegBig(4, 3, norm_type='gn').to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     return m
 
@@ -104,8 +105,8 @@ def pts_loader_cpmt(ssv_params=None, batchsize: Optional[int] = None,
     for curr_ssv_params in ssv_params:
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
-        hc, _ = sso2hc(ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment',
-                    myelin=use_myelin, label_remove=label_remove, label_mappings=label_mappings)
+        hc, voxel_dict = sso2hc(ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment',
+                                myelin=use_myelin, label_remove=label_remove, label_mappings=label_mappings)
         ssv.clear_cache()
 
         # select source nodes for context extraction
@@ -130,7 +131,7 @@ def pts_loader_cpmt(ssv_params=None, batchsize: Optional[int] = None,
             # generate contexts
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
-                node_ids = context_splitting_v2(hc, source_node, ctx_size)
+                node_ids = context_splitting_v2(hc, source_node, ctx_size, 1000)
                 hc_sub, idcs_sub = extract_subset(hc, node_ids)
                 hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints)
                 # get vertex indices respective to total hc
@@ -147,7 +148,8 @@ def pts_loader_cpmt(ssv_params=None, batchsize: Optional[int] = None,
                 batch_mask[cnt] = sv_mask
                 cnt += 1
             batch_progress = ii + 1
-            yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask), batch_progress, n_batches
+            yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), batch_progress, \
+                  n_batches
 
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
@@ -164,6 +166,7 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
     ssv_params, model_inp, batch_info, batch_progress, n_batches = inp
     idcs_list = batch_info[0]
     batch_mask = batch_info[1]
+    idcs_voxel = batch_info[2]
     res = []
     with torch.no_grad():
         for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
@@ -176,7 +179,12 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
                 # filter vertices which belong to sv (discard predictions for cell organelles)
                 out = out[masks]
             res.append(out)
-    res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+    if batch_progress == 1:
+        res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
+                   batch_progress=(batch_progress, n_batches), idcs_voxel=idcs_voxel)
+    else:
+        res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
+                   batch_progress=(batch_progress, n_batches))
 
     q_cnt.put(1./n_batches)
     if batch_progress == 1:
@@ -187,9 +195,11 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
 def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None, version: Optional[str] = None):
     curr_ix = 0
     sso = SuperSegmentationObject(ssv_id=sso_id, working_dir=working_dir, version=version)
-    hc, idcs = sso2hc(sso, 'sv', 0, 'compartment')
+    # TODO: Remove hc stuff after forwarding of voxel_idcs and testing
+    hc, _ = sso2hc(sso, 'sv', 0, 'compartment')
     preds = []
     preds_idcs = []
+    voxel_idcs = None
     while True:
         if len(d_in[sso_id]) < curr_ix + 1:
             time.sleep(0.5)
@@ -197,6 +207,8 @@ def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None
         res = d_in[sso_id][curr_ix]
         preds.append(np.argmax(res['preds'], axis=1))
         preds_idcs.append(res['idcs'])
+        if voxel_idcs is None:
+            voxel_idcs = res['idcs_voxel']
         d_in[sso_id][curr_ix] = None
         curr_ix += 1
         if res['batch_progress'][0] == res['batch_progress'][1]:
@@ -204,19 +216,34 @@ def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None
     del d_in[sso_id]
     preds = np.concatenate(preds)
     preds_idcs = np.concatenate(preds_idcs)
-    u_preds_idcs = np.unique(preds_idcs)
     pred_labels = np.ones((len(hc.vertices), 1))*-1
-    for u_ix in u_preds_idcs:
-        mask = preds_idcs == u_ix
-        vert_preds = preds[mask]
-        vals, counts = np.unique(vert_preds, return_counts=True)
-        pred_labels[u_ix] = vals[np.argmax(counts)]
+    evaluate_preds(preds_idcs, preds, pred_labels)
     hc.set_labels(pred_labels)
-    # TODO: write predictions into sso object
+    # TODO: Implement direct forwarding of voxel_idcs (between loader and postproc)
+    # sso_vertices = sso.mesh[1].reshape((-1, 3))
+    # sso_preds = np.ones((len(sso_vertices), 1))*-1
+    # sso_preds[voxel_idcs] = pred_labels
+    # ld = sso.label_dict('vertex')
+    # ld['cmpt'] = sso_preds
+    # ld.push()
     return [sso_id], [True], hc
+
+# ------------------------------------------------- HELPER METHODS --------------------------------------------------#
+
+
+def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.ndarray):
+    from collections import defaultdict
+    pred_dict = defaultdict(list)
+    u_preds_idcs = np.unique(preds_idcs)
+    for i in range(len(preds_idcs)):
+        pred_dict[preds_idcs[i]].append(preds[i])
+    for u_ix in u_preds_idcs:
+        counts = np.bincount(pred_dict[u_ix])
+        pred_labels[u_ix] = np.argmax(counts)
 
 
 # -------------------------------------------- SSO TO MORPHX CONVERSION ---------------------------------------------#
+
 
 @functools.lru_cache(256)
 def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: Union[Tuple, int], pt_type: str, myelin: bool = False,
@@ -301,7 +328,7 @@ def test_cmpt_pipeline():
     ssv_params = [dict(ssv_id=ssv.id, sv_ids=ssv.sv_ids, **ssd_kwargs)
                   for ssv in ssd.get_super_segmentation_object(ssv_ids)]
 
-    transform = [clouds.Normalization(5000), clouds.Center()]
+    transform = [clouds.Normalization(20000), clouds.Center()]
     transform = clouds.Compose(transform)
 
     # pipeline simulation
@@ -310,14 +337,14 @@ def test_cmpt_pipeline():
     sim_q_cnt = Queue()
     sim_m_postproc = Manager()
     sim_d_out = sim_m_postproc.dict()
+    ix = 2
     for k in ssv_ids:
         sim_d_out[k] = sim_m_postproc.list()
-    res = pts_loader_cpmt([ssv_params[1]], 16, 11000, 20000, use_myelin=False, transform=transform,
+    res = pts_loader_cpmt([ssv_params[ix]], 16, 11000, 20000, use_myelin=False, transform=transform,
                           base_node_dst=10000)
     for el in res:
         sim_q_load.put(el)
-    m = get_cpmt_model_pts('~/thesis/current_work/3-class/paper/pipeline_trainings/'
-                           'test_models/2020_06_09_noBN_ctx20000_nb11000.pth')
+    m = get_cpmt_model_pts('~/thesis/current_work/paper/ads/2020_06_10_20000_11000/models/state_dict_e17.pth')
     cnt = 0
     while True:
         if not sim_q_load.empty():
@@ -329,9 +356,9 @@ def test_cmpt_pipeline():
             print("Empty!")
             cnt += 1
             time.sleep(2)
-            if cnt == 5:
+            if cnt == 2:
                 break
-    id_list, success_list, hc = pts_postproc_cpmt(2854913, sim_d_out, wd)
+    id_list, success_list, hc = pts_postproc_cpmt(ssv_ids[ix], sim_d_out, wd)
     import ipdb
     ipdb.set_trace()
 

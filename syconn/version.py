@@ -1,0 +1,4 @@
+
+# THIS FILE IS GENERATED FROM SYCONN SETUP.PY
+#
+version = '0.3'
