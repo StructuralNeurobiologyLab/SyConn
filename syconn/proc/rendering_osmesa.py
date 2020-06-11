@@ -4,29 +4,32 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-from .image import rgb2gray, apply_clahe
-from . import log_proc
-from .. import global_params
-from .meshes import merge_meshes, MeshObject, calc_rot_matrices
-
-import time
 import os
-import tqdm
+import time
 from ctypes import sizeof, c_float, c_void_p, c_uint
-from PIL import Image
+
 import numpy as np
+import tqdm
+from PIL import Image
 from scipy.ndimage.filters import gaussian_filter
+
+from . import log_proc
+from .image import rgb2gray, apply_clahe
+from .meshes import merge_meshes, MeshObject, calc_rot_matrices
+from .. import global_params
 
 if os.environ['PYOPENGL_PLATFORM'] != 'osmesa':
     raise EnvironmentError(f'PyOpenGL backened should be "osmesa". '
                            f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
+
 OpenGL.USE_ACCELERATE = True
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GL.framebufferobjects import *
 from OpenGL.arrays import *
 from OpenGL.osmesa import *
+
 log_proc.info('OSMesa rendering enabled.')
 
 __all__ = ['init_object', 'init_ctx', 'init_opengl', '_render_mesh_coords',
@@ -276,7 +279,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
     if physical_scale is not None:
         draw_scale(physical_scale)
-    c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
+    c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None,])
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
     for m in range(1, nb_views):
@@ -287,7 +290,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         if enable_lightning:
             glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
-        c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
+        c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None,])
         glPopMatrix()
     OSMesaDestroyContext(ctx)
     return np.concatenate(c_views)
@@ -345,7 +348,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
         if len(curr_vert) == 0:
             continue
         m = MeshObject(object_type, curr_ind, curr_vert, curr_norm,
-                             colors[object_type], sv_mesh.bounding_box)
+                       colors[object_type], sv_mesh.bounding_box)
         norm = np.concatenate([norm, m.normals])
         col = np.concatenate([col, m.colors])
         ind.append(m.indices)
@@ -367,7 +370,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
     if physical_scale is not None:
         draw_scale(physical_scale)
     c_views.append(screen_shot(ws, True, depth_map=depth_map,
-                               triangulation=triangulation)[None, ])
+                               triangulation=triangulation)[None,])
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
     for m in range(1, nb_views):
@@ -381,7 +384,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
             glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         c_views.append(screen_shot(ws, True, depth_map=depth_map,
-                                   triangulation=triangulation)[None, ])
+                                   triangulation=triangulation)[None,])
         glPopMatrix()
     OSMesaDestroyContext(ctx)
     return np.concatenate(c_views)
@@ -477,8 +480,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
 
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        glOrtho(-edge_lengths[0]/2, edge_lengths[0]/2, edge_lengths[1]/2,
-                -edge_lengths[1]/2, -edge_lengths[2]/2, edge_lengths[2]/2)
+        glOrtho(-edge_lengths[0] / 2, edge_lengths[0] / 2, edge_lengths[1] / 2,
+                -edge_lengths[1] / 2, -edge_lengths[2] / 2, edge_lengths[2] / 2)
         glMatrixMode(GL_MODELVIEW)
 
         transformed_c = mesh.transform_external_coords([c])[0]
@@ -489,7 +492,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         glMatrixMode(GL_MODELVIEW)
         for m in range(0, nb_views):
             if nb_views == 2:
-                rot_angle = (-1)**(m+1)*25  # views are orthogonal
+                rot_angle = (-1) ** (m + 1) * 25  # views are orthogonal
             else:
                 rot_angle = 360. / nb_views * m  # views are equi-angular
             glPushMatrix()
@@ -603,7 +606,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=None,
     if verbose:
         end = time.time()
         log_proc.debug("Finished rendering mesh of type %s at %d locations after"
-                       " %0.2fs" % (views_key,len(mviews), end - start))
+                       " %0.2fs" % (views_key, len(mviews), end - start))
     OSMesaDestroyContext(ctx)
     if return_rot_matrices:
         return mviews, rot_matrices

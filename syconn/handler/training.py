@@ -31,7 +31,7 @@ def worker_train(args):
     q_in = Queue()
     for el in args:
         q_in.put(el)
-    trainers = [Process(target=start_training, args=(q_in, )) for _ in range(n_worker)]
+    trainers = [Process(target=start_training, args=(q_in,)) for _ in range(n_worker)]
     for t in trainers:
         t.start()
     for t in trainers:

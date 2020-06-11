@@ -4,12 +4,13 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..reps import super_segmentation as ss
-from ..reps import super_segmentation_helper as ssh
-from ..proc import log_proc
+import os
 
 import numpy as np
-import os
+
+from ..proc import log_proc
+from ..reps import super_segmentation as ss
+from ..reps import super_segmentation_helper as ssh
 
 
 def generate_clf_data_thread(args):

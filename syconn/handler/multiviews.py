@@ -8,9 +8,11 @@ try:
     import open3d as o3d
 except ImportError:
     pass  # for sphinx build
+from typing import TYPE_CHECKING
+
 from .prediction import str2int_converter
 from ..proc.graphs import bfs_smoothing
-from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..reps import super_segmentation
 
@@ -21,7 +23,7 @@ from scipy import spatial
 
 
 def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.SuperSegmentationObject',
-                                   gt_type: str,  n_voting: int = 40) -> np.ndarray:
+                                   gt_type: str, n_voting: int = 40) -> np.ndarray:
     """
 
     Args:
@@ -100,15 +102,15 @@ def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) -> np.ndarra
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
     background_label = len(palette)
     # convention: Use highest ID as background
-    remapped_label_views = np.ones((len(label_view_flat), ),
+    remapped_label_views = np.ones((len(label_view_flat),),
                                    dtype=np.uint16) * background_label
     for kk in range(len(label_view_flat)):
         if np.all(label_view_flat[kk] == 255):  # background
             continue
         for i in range(len(palette)):
             if (label_view_flat[kk, 0] == palette[i, 0]) and \
-               (label_view_flat[kk, 1] == palette[i, 1]) and \
-               (label_view_flat[kk, 2] == palette[i, 2]):
+                    (label_view_flat[kk, 1] == palette[i, 1]) and \
+                    (label_view_flat[kk, 2] == palette[i, 2]):
                 remapped_label_views[kk] = i
                 break
     return remapped_label_views.reshape(rgb_view.shape[:-1])
@@ -173,7 +175,7 @@ def id2rgb_array(id_arr: np.ndarray):
         Unique RGB value for every ID [N, 3].
 
     """
-    if np.max(id_arr) > 256**3:
+    if np.max(id_arr) > 256 ** 3:
         raise ValueError("Overflow in vertex ID array.")
     if id_arr.ndim == 1:
         id_arr = id_arr[:, None]
@@ -203,7 +205,7 @@ def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
     nb_ids = len(id_arr)
-    if nb_ids >= 256**3:
+    if nb_ids >= 256 ** 3:
         raise ValueError("Overflow in vertex ID array.")
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
@@ -232,10 +234,10 @@ def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
     nb_ids = len(id_arr)
-    if nb_ids < 256**3 - 1:
+    if nb_ids < 256 ** 3 - 1:
         rgb_arr = id2rgb_array_contiguous(id_arr)
         return np.concatenate([rgb_arr, np.zeros((nb_ids, 1))], axis=1)
-    if nb_ids >= 256**4 - 1:  # highest value is reserved for background
+    if nb_ids >= 256 ** 4 - 1:  # highest value is reserved for background
         raise ValueError("Overflow in vertex ID array.")
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
@@ -263,7 +265,7 @@ def rgb2id(rgb: np.ndarray) -> np.ndarray:
     red = rgb[0]
     green = rgb[1]
     blue = rgb[2]
-    vertex_id = red + green*256 + blue*(256**2)
+    vertex_id = red + green * 256 + blue * (256 ** 2)
     return np.array([vertex_id], dtype=np.uint32)
 
 
@@ -292,10 +294,10 @@ def rgb2id_array(rgb_arr: np.ndarray) -> np.ndarray:
         if mask_arr[ii]:
             continue
         rgb = rgb_arr_flat[ii]
-        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2)
+        id_arr[ii] = rgb[0] + rgb[1] * 256 + rgb[2] * (256 ** 2)
     # convention: The highest index value in index view will correspond to the background
     # background_ix = np.max(id_arr) + 1
-    background_ix = 256**3 - 2
+    background_ix = 256 ** 3 - 2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 
@@ -326,10 +328,10 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
         if mask_arr[ii]:
             continue
         rgb = rgb_arr_flat[ii]
-        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2) + rgb[3]*(256**3)
+        id_arr[ii] = rgb[0] + rgb[1] * 256 + rgb[2] * (256 ** 2) + rgb[3] * (256 ** 3)
     # convention: The highest index value in index view will correspond to the background
     # background_ix = np.max(id_arr) + 1
-    background_ix = 256**4 - 2
+    background_ix = 256 ** 4 - 2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 

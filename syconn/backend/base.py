@@ -5,14 +5,14 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
+import os
+import shutil
+import time
+from pickle import UnpicklingError
+
+from .. import global_params
 from ..extraction import log_extraction
 from ..handler.basics import write_obj2pkl, load_pkl2obj
-from .. import global_params
-
-import os
-import time
-import shutil
-from pickle import UnpicklingError
 
 try:
     from lz4.block import compress, decompress
@@ -20,6 +20,7 @@ except ImportError:
     from lz4 import compress, decompress
 try:  # TODO: check in global_params.py
     import fasteners
+
     LOCKING = True
 except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
@@ -27,6 +28,8 @@ except ImportError:
     LOCKING = False
 
 __all__ = ['FSBase', 'BTBase']
+
+
 # TODO: adapt to new class interface all-over syconn
 
 
@@ -34,6 +37,7 @@ class StorageBase(dict):
     """
     Interface class for data IO.
     """
+
     def __init__(self, cache_decomp):
         super(StorageBase, self).__init__()
         self._cache_decomp = cache_decomp
@@ -120,6 +124,7 @@ class FSBase(StorageBase):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
+
     def __init__(self, inp_p: str, cache_decomp: bool = False,
                  read_only: bool = True, max_delay: int = 100,
                  timeout: int = 1000, disable_locking: bool = True,
@@ -260,7 +265,7 @@ class FSBase(StorageBase):
                 else:
                     break
             if not gotten:
-                msg = "Unable to acquire file lock for {} after {:.0f}s.".format(source, time.time()-start)
+                msg = "Unable to acquire file lock for {} after {:.0f}s.".format(source, time.time() - start)
                 log_extraction.warning(msg)
                 raise RuntimeError(msg)
         if os.path.isfile(source):
@@ -274,4 +279,3 @@ class FSBase(StorageBase):
             self._dc_intern = {}
         if self.read_only and not self.disable_locking:
             self.a_lock.release()
-

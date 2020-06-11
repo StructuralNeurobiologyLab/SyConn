@@ -4,23 +4,24 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
-    VoxelStorage, SkeletonStorage, VoxelStorageDyn
-from ..handler.basics import chunkify
-from ..mp.mp_utils import start_multiprocess_imap
-from . import rep_helper as rh
-from . import log_reps
-from .. import global_params
-from .rep_helper import surface_samples
-from ..handler.multiviews import generate_rendering_locs
-from ..proc.graphs import create_graph_from_coords
-
 import glob
 import os
 from collections import defaultdict
-import numpy as np
-from scipy import ndimage
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable, Any
+
+import numpy as np
+
+from . import log_reps
+from . import rep_helper as rh
+from .rep_helper import surface_samples
+from .. import global_params
+from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
+    VoxelStorage, SkeletonStorage
+from ..handler.basics import chunkify
+from ..handler.multiviews import generate_rendering_locs
+from ..mp.mp_utils import start_multiprocess_imap
+from ..proc.graphs import create_graph_from_coords
+
 if TYPE_CHECKING:
     from ..reps.segmentation import SegmentationObject
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
@@ -56,6 +57,24 @@ def glia_pred_so(so: 'SegmentationObject', thresh: float,
     if glia_votes > int(len(preds) * 0.7):
         return 1
     return 0
+
+
+def glia_proba_so(so: 'SegmentationObject', pred_key_appendix: str) -> float:
+    """
+    Get mean glia probability of a cell supervoxel (0: neuron, 1: glia).
+
+    Args:
+        so: The cell supervoxel object.
+        pred_key_appendix: Additional prediction key.
+
+    Returns:
+
+    """
+    assert so.type == "sv"
+    pred_key = "glia_probas" + pred_key_appendix
+    if pred_key not in so.attr_dict:
+        so.load_attr_dict()
+    return np.mean(so.attr_dict[pred_key][:, 1])
 
 
 def acquire_obj_ids(sd: 'SegmentationDataset'):
@@ -158,8 +177,8 @@ def load_voxels_depr(so: 'SegmentationObject',
         so._size += np.sum(bin_arrs[i_bin_arr])
 
         voxels[box[0][0]: box[1][0],
-               box[0][1]: box[1][1],
-               box[0][2]: box[1][2]][bin_arrs[i_bin_arr]] = True
+        box[0][1]: box[1][1],
+        box[0][2]: box[1][2]][bin_arrs[i_bin_arr]] = True
 
     return voxels
 
@@ -256,21 +275,21 @@ def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
                                disable_locking=True)[so.id]
             if len(mesh) == 2:
                 indices, vertices = mesh
-                normals = np.zeros((0, ), dtype=np.float32)
+                normals = np.zeros((0,), dtype=np.float32)
             elif len(mesh) == 3:
                 indices, vertices, normals = mesh
                 col = np.zeros(0, dtype=np.uint8)
             elif len(mesh) == 4:
                 indices, vertices, normals, col = mesh
         except Exception as e:
-            msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)"\
+            msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)" \
                   "with id %d.".format(e, so.type, so.id)
             log_reps.error(msg)
-            return [np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))]
+            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,))]
     else:
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
-            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))]
+            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,))]
         indices, vertices, normals = so.mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
@@ -297,7 +316,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
 
     """
     empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int), edges=np.zeros((0, 2)),
-                      diameters=np.zeros((0, )).astype(np.int))
+                      diameters=np.zeros((0,)).astype(np.int))
     if not recompute and so.skeleton_exists:
         try:
             skeleton_dc = SkeletonStorage(so.skeleton_path, disable_locking=not so.enable_locking)
@@ -311,7 +330,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
                            " of SO ({}) with id {}.".format(e, so.type, so.id))
             return empty_skel
     elif recompute:
-        skel = generate_skeleton_sv
+        skel = generate_skeleton_sv(so)
     else:
         msg = f"Skeleton of {so} (size: {so.size}) not found.\n"
         if so.type == "sv":

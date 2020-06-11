@@ -5,17 +5,18 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
-from ..backend import log_backend
-from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
-from ..handler.basics import kd_factory
 from ..backend import StorageClass
+from ..backend import log_backend
+from ..handler.basics import kd_factory
+from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
 
 from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, Dict, List
+from typing import Any, Tuple, Optional, Union, List
 
 import numpy as np
 
@@ -25,6 +26,7 @@ class AttributeDict(StorageClass):
     General purpose dictionary class inherited from
     :class:`syconn.backend.base.StorageClass`.
     """
+
     def __init__(self, inp_p, **kwargs):
         super(AttributeDict, self).__init__(inp_p, **kwargs)
 
@@ -52,6 +54,7 @@ class CompressedStorage(StorageClass):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
+
     def __init__(self, inp: str, **kwargs):
         super(CompressedStorage, self).__init__(inp, **kwargs)
 
@@ -428,9 +431,9 @@ class MeshStorage(StorageClass):
             [indices, vertices, normals, colors/labels]
         """
         if len(mesh) == 2:
-            mesh.append(np.zeros((0, ), dtype=np.float32))
+            mesh.append(np.zeros((0,), dtype=np.float32))
         if len(mesh) == 3:
-            mesh.append(np.zeros((0, ), dtype=np.uint8))
+            mesh.append(np.zeros((0,), dtype=np.uint8))
         if self._cache_decomp:
             self._cache_dc[key] = mesh
         if len(mesh[1]) != len(mesh[2]) > 0:

@@ -24,7 +24,7 @@ possible within these steps. `from_ids_to_objects` starts at step 4.
 by applying a Gaussian smoothing (optional) and threshold first (see method `object_segmentation(...)`).
 Note that the default procedure with smoothing and a subsequent thresholding can be replaced by
  passing a custom-method to the method via the kwargs `transform_func=None, func_kwargs=None`. The provided method has to
- obey the function signature of `_gauss_threshold_connected_components_thread`.
+ obey the function signature of `_object_segmentation_thread`.
 2. `make_unique_labels` reassignes globally **unique labels** to all segments
 3. `make_stitch_list` collects information of which segments in different
 chunks are in fact the same and `make_merge_list` resolves this to a global **mergelist** that is then applied by `apply_merge_list`.

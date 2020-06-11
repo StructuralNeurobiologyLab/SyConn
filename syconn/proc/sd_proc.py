@@ -5,25 +5,26 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from .. import global_params
-from .image import single_conn_comp_img
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage, CompressedStorage
-from ..reps import segmentation, segmentation_helper
-from ..reps import rep_helper
-from ..handler import basics
-from ..proc.meshes import mesh_chunk, find_meshes
-from . import log_proc
-from ..extraction import object_extraction_wrapper as oew
-from .meshes import mesh_area_calc, merge_meshes_incl_norm
-
+import gc
 import glob
 import os
-import tqdm
-import time
 import sys
-import gc
+import time
+
+import tqdm
+
+from . import log_proc
+from .image import single_conn_comp_img
+from .meshes import mesh_area_calc, merge_meshes_incl_norm
+from .. import global_params
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage, CompressedStorage
+from ..extraction import object_extraction_wrapper as oew
+from ..handler import basics
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..proc.meshes import mesh_chunk, find_meshes
+from ..reps import rep_helper
+from ..reps import segmentation
 
 try:
     import cPickle as pkl
@@ -95,7 +96,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
             except ValueError as e:
                 if attribute not in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                         'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
+                                     'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
                     log_proc.warn('ValueError {} encountered when writing numpy'
                                   ' array caches in "dataset_analysis", this is '
                                   'currently caught by using `dtype=object`'
@@ -388,7 +389,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     step_names = []
     dict_paths_tmp = []
 
-
     # extract mapping
     start = time.time()
     # random assignment to improve workload balance
@@ -664,7 +664,7 @@ def _map_subcell_extract_props_thread(args):
             obj_ids_bdry[organelle] = obj_bdry
             dt_times_dc['data_io'] += time.time() - start
             # add auxiliary axis
-            subcell_d.append(subc_d[None, ])
+            subcell_d.append(subc_d[None,])
         subcell_d = np.concatenate(subcell_d)
         start = time.time()
         cell_d = kd_cell.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
@@ -1243,7 +1243,6 @@ def _write_props_to_sv_thread(args):
 
 
 def merge_meshes_dict(m_storage, tmp_dict):
-
     """ Merge meshes dictionaries:
 
     m_storage: list dictionary
@@ -1255,7 +1254,6 @@ def merge_meshes_dict(m_storage, tmp_dict):
 
 
 def merge_meshes_single(m_storage, obj_id, tmp_dict):
-
     """ Merge meshes dictionaries:
     m_storage: objec of type MeshStorage
     tmp_dict: list dictionary
@@ -1395,8 +1393,8 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
         pbar = tqdm.tqdm(total=len(sos), leave=False)
     for ch in so_chs:
         views = sm.start_multiprocess_obj("load_views", [[sv, {"woglia": woglia,
-                                          "raw_only": raw_only}]
-                                          for sv in ch], nb_cpus=nb_cpus)
+                                                               "raw_only": raw_only}]
+                                                         for sv in ch], nb_cpus=nb_cpus)
         proba = predict_views(model, views, ch, pred_key, verbose=False,
                               single_cc_only=single_cc_only,
                               return_proba=return_proba, nb_cpus=nb_cpus)
@@ -1460,7 +1458,6 @@ def multi_probas_saver(args):
 
 
 def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
-
     block_size = np.array([block_edge_length] * 3)
 
     grid_c = []

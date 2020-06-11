@@ -5,27 +5,29 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from ..mp import batchjob_utils as qu, mp_utils as sm
-from ..proc.general import cut_array_in_one_dim
-from ..reps import segmentation, rep_helper as rh
-from ..handler import basics, log_handler, compression
-from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
-from ..proc.image import apply_morphological_operations, get_aniso_struct
-from .. import global_params
-from ..handler.basics import kd_factory
-from ..reps.rep_helper import find_object_properties
-from .block_processing_C import extract_cs_syntype, relabel_vol
 import glob
-import os
 import itertools
+import os
+import pickle as pkl
 import shutil
 from collections import defaultdict
-import pickle as pkl
+
 import networkx as nx
-import scipy.ndimage
 import numpy as np
+import scipy.ndimage
 import skimage.segmentation
-from knossos_utils import knossosdataset, chunky
+from knossos_utils import chunky
+
+from .block_processing_C import relabel_vol
+from .. import global_params
+from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
+from ..handler import basics, log_handler, compression
+from ..handler.basics import kd_factory
+from ..mp import batchjob_utils as qu, mp_utils as sm
+from ..proc.general import cut_array_in_one_dim
+from ..proc.image import apply_morphological_operations, get_aniso_struct
+from ..reps import segmentation, rep_helper as rh
+from ..reps.rep_helper import find_object_properties
 
 try:
     import vigra
@@ -135,7 +137,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     stitch overlap: np.array
     """
     if transform_func is None:
-        transform_func = _gauss_threshold_connected_components_thread
+        transform_func = _object_segmentation_thread
 
     if thresholds is None:
         thresholds = np.zeros(len(hdf5names))
@@ -194,11 +196,10 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                 results_as_list.append(entry)
 
     else:
-        assert transform_func == _gauss_threshold_connected_components_thread,\
-            "QSUB currently only supported for gaussian threshold CC."
+        assert transform_func == _object_segmentation_thread, "batch jobs currently only supported for " \
+                                                              "`_object_segmentation_thread`."
         path_to_out = qu.batchjob_script(
-            multi_params, "gauss_threshold_connected_components", n_cores=nb_cpus,
-            use_dill=True, suffix=filename)
+            multi_params, "object_segmentation", n_cores=nb_cpus, use_dill=True, suffix=filename)
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
@@ -209,7 +210,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     return results_as_list, [overlap, stitch_overlap]
 
 
-def _gauss_threshold_connected_components_thread(args):
+def _object_segmentation_thread(args):
     """
     Default worker of object_segmentation. Performs a gaussian blur with
      subsequent thresholding to extract connected components of a probability
@@ -255,7 +256,7 @@ def _gauss_threshold_connected_components_thread(args):
 
     for chunk in chunks:
         box_offset = np.array(chunk.coordinates) - np.array(overlap)
-        size = np.array(chunk.size) + 2*np.array(overlap)
+        size = np.array(chunk.size) + 2 * np.array(overlap)
 
         if swapdata:
             size = basics.switch_array_entries(size, [0, 2])
@@ -301,9 +302,9 @@ def _gauss_threshold_connected_components_thread(args):
             offset = offset.astype(np.int)
             if np.any(offset < 0):
                 offset = np.array([0, 0, 0])
-            tmp_data = tmp_data[offset[0]: tmp_data_shape[0]-offset[0],
-                                offset[1]: tmp_data_shape[1]-offset[1],
-                                offset[2]: tmp_data_shape[2]-offset[2]]
+            tmp_data = tmp_data[offset[0]: tmp_data_shape[0] - offset[0],
+                       offset[1]: tmp_data_shape[1] - offset[1],
+                       offset[2]: tmp_data_shape[2] - offset[2]]
 
             if np.sum(sigmas[nb_hdf5_name]) != 0:
                 tmp_data = gaussianSmoothing(tmp_data, sigmas[nb_hdf5_name])
@@ -313,28 +314,27 @@ def _gauss_threshold_connected_components_thread(args):
                                                            hdf5_name_membrane)[0]
                 membrane_data_shape = membrane_data.shape
                 offset = (np.array(membrane_data_shape) - np.array(tmp_data.shape)) / 2
-                membrane_data = membrane_data[offset[0]: membrane_data_shape[0]-offset[0],
-                                              offset[1]: membrane_data_shape[1]-offset[1],
-                                              offset[2]: membrane_data_shape[2]-offset[2]]
-                tmp_data[membrane_data > 255*.4] = 0
+                membrane_data = membrane_data[offset[0]: membrane_data_shape[0] - offset[0],
+                                offset[1]: membrane_data_shape[1] - offset[1],
+                                offset[2]: membrane_data_shape[2] - offset[2]]
+                tmp_data[membrane_data > 255 * .4] = 0
+                del membrane_data
             elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:
                 kd_bar = kd_factory(membrane_kd_path)
                 membrane_data = kd_bar.load_raw(size=size, offset=box_offset,
                                                 mag=1).swapaxes(0, 2)
-                tmp_data[membrane_data > 255*.4] = 0
-
+                tmp_data[membrane_data > 255 * .4] = 0
+                del membrane_data
             if thresholds[nb_hdf5_name] != 0 and not load_from_kd_overlaycubes:
-                tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name],
-                                    dtype=np.uint8)
+                tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
             if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
                 mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
                                                           mop_kwargs=dict(structure=struct))
                 if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1]:
-                    distance = distanceTransform(tmp_data.astype(np.uint32), background=False,
-                                                 pixel_pitch=scaling.astype(np.uint32))
                     # combine remaining fragments
-                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0], ['binary_closing']).astype(np.uint32)
+                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0],
+                                                             ['binary_closing']).astype(np.uint32)
                     # remove small fragments and 0; this will also delete objects bigger than min_size as
                     # this threshold is applied after N binary erosion!
                     if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
@@ -355,6 +355,8 @@ def _gauss_threshold_connected_components_thread(args):
                         # in-place modification of markers array
                         relabel_vol(markers, label_m)
 
+                    distance = distanceTransform(tmp_data.astype(np.uint32, copy=False), background=False,
+                                                 pixel_pitch=scaling.astype(np.uint32))
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
                     max_label = np.max(this_labels_data)
                 else:
@@ -367,6 +369,7 @@ def _gauss_threshold_connected_components_thread(args):
         h5_fname = chunk.folder + filename + "_connected_components%s.h5" % suffix
         os.makedirs(os.path.split(h5_fname)[0], exist_ok=True)
         compression.save_to_h5py(labels_data, h5_fname, hdf5names)
+        del labels_data
     return nb_cc_list
 
 
@@ -445,9 +448,9 @@ def _make_unique_labels_thread(func_args):
             matrix[matrix > 0] += this_max_nb_dict[hdf5_name]
 
         compression.save_to_h5py(cc_data_list,
-                            chunk.folder + filename +
-                            "_unique_components%s.h5"
-                            % suffix, hdf5names)
+                                 chunk.folder + filename +
+                                 "_unique_components%s.h5"
+                                 % suffix, hdf5names)
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
@@ -605,9 +608,11 @@ def _make_stitch_list_thread(args):
                         if (pair not in map_dict[hdf5_name]) and (pair not in ignore_ids):
                             if overlap_thresh > 0:
                                 obj_coord_intern = np.transpose(np.nonzero(cc_data_list[nb_hdf5_name] == this_id))
-                                obj_coord_intern_compare = np.transpose(np.nonzero(cc_data_list_to_compare[nb_hdf5_name] == compare_id))
+                                obj_coord_intern_compare = np.transpose(
+                                    np.nonzero(cc_data_list_to_compare[nb_hdf5_name] == compare_id))
                                 c1 = chunk.coordinates - chunk.overlap + obj_coord_intern + np.array([1, 1, 1])
-                                c2 = compare_chunk.coordinates - compare_chunk.overlap + obj_coord_intern_compare + np.array([1, 1, 1])
+                                c2 = compare_chunk.coordinates - compare_chunk.overlap + obj_coord_intern_compare + np.array(
+                                    [1, 1, 1])
                                 from scipy import spatial
                                 kdt = spatial.cKDTree(c1)
                                 dists, ixs = kdt.query(c2)
@@ -734,15 +739,15 @@ def _apply_merge_list_thread(args):
             offset = (np.array(this_shape) - chunk.size) // 2  # offset needs to be integer
 
             this_cc = this_cc[offset[0]: this_shape[0] - offset[0],
-                              offset[1]: this_shape[1] - offset[1],
-                              offset[2]: this_shape[2] - offset[2]]
+                      offset[1]: this_shape[1] - offset[1],
+                      offset[2]: this_shape[2] - offset[2]]
             this_cc = id_changer[this_cc]
             cc_data_list[nb_hdf5_name] = np.array(this_cc, dtype=np.uint32)
 
         compression.save_to_h5py(cc_data_list,
-                            chunk.folder + filename +
-                            "_stitched_components%s.h5" % postfix,
-                            hdf5names)
+                                 chunk.folder + filename +
+                                 "_stitched_components%s.h5" % postfix,
+                                 hdf5names)
 
 
 def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
@@ -884,7 +889,7 @@ def _extract_voxels_thread(args):
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
                 except:
-                    this_segmentation = kd.load_seg(size=chunk.size,  offset=chunk.coordinates,
+                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 
             uniqueID_coords_dict = defaultdict(list)  # {sv_id: [(x0,y0,z0),(x1,y1,z1),...]}
@@ -984,7 +989,6 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None, n_folders_fs=10000
 
         voxel_rel_path_dict = {}
         for voxel_rel_path in voxel_rel_paths:
-
             end_id = "00000" + "".join(voxel_rel_path.strip('/').split('/'))
             end_id = end_id[-int(np.log10(n_folders_fs)):]
             voxel_rel_path_dict[end_id] = {}
@@ -1029,7 +1033,7 @@ def _combine_voxels_thread(args):
 
     dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
 
-    segdataset = segmentation.SegmentationDataset(obj_type=dataset_name,  working_dir=workfolder,
+    segdataset = segmentation.SegmentationDataset(obj_type=dataset_name, working_dir=workfolder,
                                                   version=dataset_version, n_folders_fs=n_folders_fs)
 
     for i_voxel_rel_path, voxel_rel_path in enumerate(voxel_rel_paths):
@@ -1163,37 +1167,37 @@ def _extract_voxels_combined_thread_NEW(args):
                                                       n_folders_fs=n_folders_fs)
 
         for i_chunk, chunk in enumerate(chunks):
-                kd = kd_factory(overlaydataset_path)
-                try:
-                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
-                                                    mag=1).swapaxes(0, 2)
-                except:
-                    this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
-                                                    datatype=np.uint32, mag=1).swapaxes(0, 2)
-                # returns 3 dicts: rep coord, bounding box, size
-                segobj_res = find_object_properties(this_segmentation)
-                rep_coords = segobj_res[0]
-                bbs = segobj_res[1]
-                sizes = segobj_res[2]
-                for sv_id, bb in bbs.items():
-                    seg_obj = segdataset.get_segmentation_object(sv_id)
-                    voxel_dc = VoxelStorageDyn(seg_obj.voxel_path,
-                                               voxel_mode=False, voxeldata_path=overlaydataset_path,
-                                               read_only=False, disable_locking=False)
-                    offset = chunk.coordinates.astype(np.int)
-                    bb += offset
-                    rep_coord = rep_coords[sv_id] + offset
-                    if sv_id in voxel_dc:
-                        bb_old = voxel_dc[sv_id]
-                        voxel_dc[sv_id] = np.concatenate([bb_old, bb[None, ]])  # shape: N, 2, 3
-                    else:
-                        # adapt shape to be: [1, 2. 3], i.e. first bounding box (1, ), minimum and maximum (2, )
-                        # vectors (3 spatial dimensions)
-                        voxel_dc[sv_id] = bb[None, ]
-                    # TODO: make use of these stored properties downstream during the reduce step
-                    voxel_dc.increase_object_size(sv_id, sizes[sv_id])
-                    voxel_dc.set_object_repcoord(sv_id, rep_coord)
-                    voxel_dc.push()
+            kd = kd_factory(overlaydataset_path)
+            try:
+                this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                mag=1).swapaxes(0, 2)
+            except:
+                this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
+                                                datatype=np.uint32, mag=1).swapaxes(0, 2)
+            # returns 3 dicts: rep coord, bounding box, size
+            segobj_res = find_object_properties(this_segmentation)
+            rep_coords = segobj_res[0]
+            bbs = segobj_res[1]
+            sizes = segobj_res[2]
+            for sv_id, bb in bbs.items():
+                seg_obj = segdataset.get_segmentation_object(sv_id)
+                voxel_dc = VoxelStorageDyn(seg_obj.voxel_path,
+                                           voxel_mode=False, voxeldata_path=overlaydataset_path,
+                                           read_only=False, disable_locking=False)
+                offset = chunk.coordinates.astype(np.int)
+                bb += offset
+                rep_coord = rep_coords[sv_id] + offset
+                if sv_id in voxel_dc:
+                    bb_old = voxel_dc[sv_id]
+                    voxel_dc[sv_id] = np.concatenate([bb_old, bb[None,]])  # shape: N, 2, 3
+                else:
+                    # adapt shape to be: [1, 2. 3], i.e. first bounding box (1, ), minimum and maximum (2, )
+                    # vectors (3 spatial dimensions)
+                    voxel_dc[sv_id] = bb[None,]
+                # TODO: make use of these stored properties downstream during the reduce step
+                voxel_dc.increase_object_size(sv_id, sizes[sv_id])
+                voxel_dc.set_object_repcoord(sv_id, rep_coord)
+                voxel_dc.push()
 
 
 def _extract_voxels_combined_thread_OLD(args):

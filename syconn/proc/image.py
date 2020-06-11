@@ -4,9 +4,10 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+import numpy as np
+
 from ..proc import log_proc
 
-import numpy as np
 __cv2__ = True
 try:
     from cv2 import createCLAHE
@@ -43,10 +44,10 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
         return np.zeros((0, 3))
     tree_a = spatial.cKDTree(coords_a)
     tree_b = spatial.cKDTree(coords_b)
-    for i in range(1, max_hull_dist+1):
+    for i in range(1, max_hull_dist + 1):
         contact_ids = tree_a.query_ball_tree(tree_b, i)
         num_neighbours = np.array([len(sublist) for sublist in contact_ids])
-        if np.sum(num_neighbours>0) >= 1:
+        if np.sum(num_neighbours > 0) >= 1:
             break
     contact_coords_a = coords_a[num_neighbours > 0]
     contact_ids_b = set([id for sublist in contact_ids for id in sublist])
@@ -108,12 +109,12 @@ def single_conn_comp(sv, max_dist=2, ref_coord=None, return_bool=False):
     #     return sv
     nb_cc, labels = conn_comp(sv, max_dist)
     if ref_coord is None:
-        max_comp = np.argmax([np.count_nonzero(labels==i) for i in range(nb_cc)])
+        max_comp = np.argmax([np.count_nonzero(labels == i) for i in range(nb_cc)])
         if return_bool:
             return labels == max_comp
         return sv[labels == max_comp]
     else:
-        min_dist_ix = np.argmin(np.linalg.norm(sv-ref_coord, axis=1))
+        min_dist_ix = np.argmin(np.linalg.norm(sv - ref_coord, axis=1))
         min_label = labels[min_dist_ix]
         if return_bool:
             return labels == min_label
@@ -292,16 +293,16 @@ def remove_outlier(sv, edge_size):
     np.array
     """
     inlier = (sv[:, 0] >= 0) & (sv[:, 0] < edge_size) & (sv[:, 1] >= 0) & \
-              (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
+             (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
     nb_outlier = np.sum(~inlier)
     if (float(nb_outlier) / len(sv)) > 0.5:
         log_proc.warn("Found %d/%d outlier after PCA while preprocessing"
                       "supervoexl. Removing %d%% of voxels" % (nb_outlier,
-                      len(sv), int(float(nb_outlier)/len(sv)*100)))
+                                                               len(sv), int(float(nb_outlier) / len(sv) * 100)))
     new_sv = sv[inlier]
     assert np.all(np.min(new_sv, axis=0) >= 0), \
         "%s" % np.min(new_sv, axis=0)
-    assert np.all(np.max(new_sv, axis=0) < edge_size),\
+    assert np.all(np.max(new_sv, axis=0) < edge_size), \
         "Mins: %s \nMaxs: %s" % (np.min(new_sv, axis=0),
                                  np.max(new_sv, axis=0))
     return new_sv
@@ -326,7 +327,7 @@ def normalize_vol(sv, edge_size, center_coord):
     translation = np.ones(3) * edge_size / 2. - center_coord
     assert isinstance(edge_size, np.int)
     sv = sv.astype(np.float32)
-    sv = sv + translation    # center
+    sv = sv + translation  # center
     sv = remove_outlier(sv, edge_size)
     return sv.astype(np.uint)
 
@@ -427,7 +428,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
     for ix in unique_ixs:
         if verbose:
             pbar.update(1)
-        obj_slice = objslices[int(ix-1)]
+        obj_slice = objslices[int(ix - 1)]
         sub_vol = overlay[obj_slice]
         # pad with zeros to prevent boundary artifacts in the original data array
         if "closing" in mop_func.__name__ or "dilation" in mop_func.__name__:
@@ -440,13 +441,13 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         else:
             res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
         # remove overlap
-        if "closing" in mop_func.__name__ or "dilation" in mop_func.__name__ :
+        if "closing" in mop_func.__name__ or "dilation" in mop_func.__name__:
             res = res[n_iters:-n_iters, n_iters:-n_iters,
-                      n_iters:-n_iters]
+                  n_iters:-n_iters]
             binary_mask = binary_mask[n_iters:-n_iters, n_iters:-n_iters,
-                                      n_iters:-n_iters]
+                          n_iters:-n_iters]
             sub_vol = sub_vol[n_iters:-n_iters, n_iters:-n_iters,
-                              n_iters:-n_iters]
+                      n_iters:-n_iters]
         # only dilate/erode background/the objects itself
         if "erosion" in mop_func.__name__ or "binary_opening" in mop_func.__name__:
             if verbose:
@@ -454,8 +455,8 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
                     log_proc.debug("Object with ID={} and size={} is not present after"
                                    " erosion with N={}.".format(ix, nb_occ, n_iters))
             overlay[obj_slice][binary_mask == 1] = res[binary_mask == 1] * ix
-        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__) or\
-             ("fill_holes" in mop_func.__name__):
+        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__) or \
+                ("fill_holes" in mop_func.__name__):
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
             overlay[obj_slice][proc_mask] = res[proc_mask] * ix
         else:
@@ -513,7 +514,7 @@ def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
 
 
 def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str],
-                                   mop_kwargs: Optional[dict] = None)\
+                                   mop_kwargs: Optional[dict] = None) \
         -> np.ndarray:
     """
     Applies morphological operations on the input volume. String identifier in

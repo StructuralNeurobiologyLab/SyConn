@@ -5,22 +5,23 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 
-import numpy as np
-import networkx as nx
 import time
-from typing import Optional
 from multiprocessing import Queue, Process
+from typing import Optional
 
-from syconn.reps.segmentation_helper import find_missing_sv_views
-from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.proc.graphs import create_ccsize_dict
-from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
+import networkx as nx
+import numpy as np
+
 from syconn import global_params
 from syconn.handler.basics import chunkify
-from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
+from syconn.proc.graphs import create_ccsize_dict
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.segmentation_helper import find_missing_sv_views
+from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 
 
 def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
@@ -152,10 +153,10 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     Notes:
         Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
-    log = initialize_logging('neuron_view_rendering',
+    log = initialize_logging('neuron_rendering',
                              global_params.config.working_dir + '/logs/')
-    ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),
-          Process(target=_run_neuron_rendering_small_helper, args=(max_n_jobs, ))]
+    ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs,)),
+          Process(target=_run_neuron_rendering_small_helper, args=(max_n_jobs,))]
     for p in ps:
         p.start()
         time.sleep(10)
@@ -219,7 +220,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
         max_n_jobs = global_params.config.ngpu_total * 4 if \
             global_params.config['pyopengl_platform'] == 'egl' \
             else global_params.config.ncore_total * 4
-    log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=True)
     log.info("Preparing RAG.")
     np.random.seed(0)

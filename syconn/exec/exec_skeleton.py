@@ -6,14 +6,16 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import os
-import numpy as np
 from typing import Optional
-from syconn.mp import batchjob_utils as qu
-from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
+
+import numpy as np
+
+from syconn import global_params
 from syconn.handler.basics import chunkify
 from syconn.handler.config import initialize_logging
+from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
-from syconn import global_params
+from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
 def run_skeleton_generation(max_n_jobs: Optional[int] = None,
@@ -28,13 +30,10 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
 
     """
     if map_myelin is None:
-        map_myelin = os.path.isdir(global_params.config.working_dir +
-                                   '/knossosdatasets/myelin/')
+        map_myelin = os.path.isdir(global_params.config.working_dir + '/knossosdatasets/myelin/')
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
-    log = initialize_logging('skeleton_generation',
-                             global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+    log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job

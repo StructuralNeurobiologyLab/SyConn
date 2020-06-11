@@ -5,31 +5,29 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from . import log_handler
-from .. import global_params
-
 import collections
+import contextlib
+import gc
+import glob
 import os
+import pickle as pkl
+import re
 import shutil
+import signal
 import tempfile
 import zipfile
 from collections import defaultdict
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-import re
-import gc
-import signal
-import contextlib
-import glob
-import tqdm
-import numpy as np
-import networkx as nx
 from typing import List, Union
-from plyfile import PlyData
-from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
+
+import networkx as nx
+import numpy as np
+import tqdm
 from knossos_utils import KnossosDataset
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
+from plyfile import PlyData
+
+from . import log_handler
+from .. import global_params
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):

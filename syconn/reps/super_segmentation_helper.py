@@ -8,25 +8,26 @@ import copy
 import os
 import time
 
-from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
+from . import log_reps
 from . import segmentation
+from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton, find_missing_sv_views,\
+from .segmentation_helper import load_skeleton, find_missing_sv_views, \
     find_missing_sv_attributes, find_missing_sv_skeletons, load_so_attr_bulk
-from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+from .. import global_params
 from ..handler.basics import kd_factory
 from ..handler.multiviews import generate_rendering_locs
-from . import log_reps
-from .. import global_params
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+from ..proc.graphs import create_graph_from_coords, stitch_skel_nx
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
-from ..proc.graphs import create_graph_from_coords, stitch_skel_nx
 
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
+
 if TYPE_CHECKING:
     from . import super_segmentation
 
@@ -38,9 +39,10 @@ import numpy as np
 import scipy
 import scipy.ndimage
 from scipy import spatial
-from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
+from knossos_utils.skeleton_utils import annotation_to_nx_graph, \
     load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
 from collections.abc import Iterable
+
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -75,11 +77,11 @@ def majority_vote(anno, prop, max_dist):
             if int(new_node.data["axoness_pred"]) == 2:
                 new_node.data["axoness_pred"] = 2
                 continue
-        property_val = [int(n.data[prop+'_pred']) for n in nodes if
-                        int(n.data[prop+'_pred']) != 2]
+        property_val = [int(n.data[prop + '_pred']) for n in nodes if
+                        int(n.data[prop + '_pred']) != 2]
         counter = Counter(property_val)
         new_ax = counter.most_common()[0][0]
-        new_node.setDataElem(prop+'_pred', new_ax)
+        new_node.setDataElem(prop + '_pred', new_ax)
 
 
 def nodes_in_pathlength(anno, max_path_len):
@@ -146,7 +148,7 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     inp_d = naive_view_normalization_new(inp_d)
     if global_params.config.syntype_available and use_syntype:
         synsign_ratio = np.array([[syn_sign_ratio_celltype(sso, comp_types=[1, ]),
-                                  syn_sign_ratio_celltype(sso, comp_types=[0, ])]]
+                                   syn_sign_ratio_celltype(sso, comp_types=[0, ])]]
                                  * len(inp_d))
         res = model.predict_proba((inp_d, synsign_ratio))
     else:
@@ -201,7 +203,7 @@ def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
     assert views.shape[1] > 0
     if views.shape[1] < nb_views:
-        rand_ixs = np.random.choice(np.arange(views.shape[1]), nb_views - views.shape[1])
+        rand_ixs = np.random.choice(views.shape[1], nb_views - views.shape[1])
         views = np.append(views, views[:, rand_ixs], axis=1)
     nb_samples = np.floor(views.shape[1] / nb_views)
     assert nb_samples > 0
@@ -237,7 +239,7 @@ def radius_correction_found_vertices(sso: 'super_segmentation.SuperSegmentationO
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) * 2 / 10
 
-    sso.skeleton['diameters'] = diameters*plump_factor
+    sso.skeleton['diameters'] = diameters * plump_factor
     return sso.skeleton
 
 
@@ -515,7 +517,7 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
             np.random.seed(0)
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
-            ixs = ixs[:int(0.5*len(ixs))]
+            ixs = ixs[:int(0.5 * len(ixs))]
             if use_new_renderings_locs:
                 locs = generate_rendering_locs(verts[ixs], 1000)
             else:
@@ -548,7 +550,7 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
 
 def map_myelin2coords(coords: np.ndarray,
                       cube_edge_avg: np.ndarray = np.array([21, 21, 11]),
-                      thresh_proba: float = 255//2, thresh_majority: float = 0.1,
+                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.1,
                       mag: int = 1) -> np.ndarray:
     """
     Retrieves a myelin prediction at every location in `coords`. The classification
@@ -673,15 +675,19 @@ def sparsify_skeleton_fast(g: nx.Graph, scal: Optional[np.ndarray] = None,
             if skel_nx.degree(visiting_node) == 2:
                 left_node = neighbours[0]
                 right_node = neighbours[1]
-                vector_left_node = np.array([int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_left_node = np.array(
+                    [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for
+                     ix in range(3)]) * scal
                 vector_right_node = np.array([int(skel_nx.node[right_node]['position'][ix]) -
-                                              int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                                              int(skel_nx.node[visiting_node]['position'][ix]) for ix in
+                                              range(3)]) * scal
 
-                dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
-                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+                dot_prod = np.dot(vector_left_node / np.linalg.norm(vector_left_node),
+                                  vector_right_node / np.linalg.norm(vector_right_node))
+                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scal[ix]) - int(
+                    skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
 
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
-
                     skel_nx.remove_node(visiting_node)
                     skel_nx.add_edge(left_node, right_node)
                     change += 1
@@ -922,10 +928,11 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True, max_dist_th
             max_dist_thresh=max_dist_thresh_iter2)
     start = time.time()
     for e in skel_nx.edges:
-        w = np.linalg.norm((skel_nx.node[e[0]]['position'] - skel_nx.node[e[1]]['position']) * global_params.config['scaling'])
+        w = np.linalg.norm(
+            (skel_nx.node[e[0]]['position'] - skel_nx.node[e[1]]['position']) * global_params.config['scaling'])
         skel_nx[e[0]][e[1]]['weight'] = w
     skel_nx = nx.minimum_spanning_tree(skel_nx)
-    log_reps.debug(f'mst took {time.time()-start:.0f} s')
+    log_reps.debug(f'mst took {time.time() - start:.0f} s')
     sso = from_netkx_to_sso(sso, skel_nx)
     # reset weighted graph
     sso._weighted_graph = None
@@ -934,7 +941,7 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True, max_dist_th
     # Estimating the radii
     start = time.time()
     sso.skeleton = radius_correction_found_vertices(sso)
-    log_reps.debug(f'radius estimation took {time.time()-start:.0f} s')
+    log_reps.debug(f'radius estimation took {time.time() - start:.0f} s')
 
     return sso
 
@@ -945,7 +952,7 @@ def glia_pred_exists(so):
 
 
 def views2tripletinput(views):
-    views = views[:, :, :1] # use first view only
+    views = views[:, :, :1]  # use first view only
     out_d = np.concatenate([views,
                             np.ones_like(views),
                             np.ones_like(views)], axis=2)
@@ -971,7 +978,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
     views = sso.load_views()
     latent = t_net.predict_proba(views2tripletinput(views))
     latent = pca.transform(latent)
-    col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0)-latent.min(axis=0))
+    col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0) - latent.min(axis=0))
     col = np.concatenate([col, np.ones_like(col)[:, :1]], axis=1)
     for ii, (a, b) in enumerate([[0, 1], [0, 2], [1, 2]]):
         fig, ax = plt.subplots()
@@ -998,12 +1005,12 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
                        length=4, width=3, right="off", top="off", pad=10)
         ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
                        length=4, width=3, right="off", top="off", pad=10)
-        plt.xlabel(r"$Z_%d$" % (a+1), fontsize=ls)
-        plt.ylabel(r"$Z_%d$" % (b+1), fontsize=ls)
+        plt.xlabel(r"$Z_%d$" % (a + 1), fontsize=ls)
+        plt.ylabel(r"$Z_%d$" % (b + 1), fontsize=ls)
         ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
         ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
         plt.tight_layout()
-        plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
+        plt.savefig(dest_dir + "/%d_pca_%d%d.png" % (sso.id, a + 1, b + 1), dpi=400)
         plt.close()
 
 
@@ -1075,7 +1082,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
 
         # box feature
         edge_len = feature_context_nm * 2
-        bb = [ssv.skeleton["nodes"][this_i_node], np.array([edge_len,] * 3)]
+        bb = [ssv.skeleton["nodes"][this_i_node], np.array([edge_len, ] * 3)]
         vol_tot = feature_context_nm ** 3
         node_density = np.sum(in_bounding_box(ssv.skeleton["nodes"], bb)) / vol_tot
         this_features.append(node_density)
@@ -1171,10 +1178,10 @@ def write_axpred_cnn(ssv, pred_key_appendix, dest_path=None, k=1):
         log_reps.info("Couldn't find specified axoness prediction. Falling back "
                       "to default.")
         preds = np.array(start_multiprocess_obj("axoness_preds",
-                                                   [[sv, {
-                                                       "pred_key_appendix": pred_key_appendix}]
-                                                    for sv in ssv.svs],
-                                                   nb_cpus=ssv.nb_cpus))
+                                                [[sv, {
+                                                    "pred_key_appendix": pred_key_appendix}]
+                                                 for sv in ssv.svs],
+                                                nb_cpus=ssv.nb_cpus))
         preds = np.concatenate(preds)
     else:
         preds = ssv.lookup_in_attribute_dict(pred_key)
@@ -1218,12 +1225,12 @@ def cnn_axoness2skel(sso: 'super_segmentation.SuperSegmentationObject',
         sso.load_skeleton()
     proba_key = "axoness_probas_cnn%s" % pred_key_appendix
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or\
+    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or \
             force_reload:
         preds = np.array(start_multiprocess_obj(
             "axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
                               for sv in sso.svs],
-                                                   nb_cpus=sso.nb_cpus))
+            nb_cpus=sso.nb_cpus))
         probas = np.array(start_multiprocess_obj(
             "axoness_probas", [[sv, {"pred_key_appendix": pred_key_appendix}]
                                for sv in sso.svs], nb_cpus=sso.nb_cpus))
@@ -1350,7 +1357,7 @@ def majority_vote_compartments(sso, ax_pred_key='axoness'):
     Returns:
 
     """
-    g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
+    g = sso.weighted_graph(add_node_attr=(ax_pred_key,))
     soma_free_g = g.copy()
     for n, d in g.nodes(data=True):
         if d[ax_pred_key] == 2:
@@ -1787,7 +1794,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
     inp_d = naive_view_normalization_new(inp_d)
     if use_syntype:
         synsign_ratio = np.array([[syn_sign_ratio_celltype(sso, comp_types=[1, ]),
-                                  syn_sign_ratio_celltype(sso, comp_types=[0, ])]] * len(inp_d))
+                                   syn_sign_ratio_celltype(sso, comp_types=[0, ])]] * len(inp_d))
         res = model.predict_proba((inp_d, synsign_ratio), bs=40)
     else:
         res = model.predict_proba(inp_d, bs=40)
@@ -1824,7 +1831,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
     for an alternative which uses file-system cached views.
     By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph_ct`. Note that `latent_morph` is inferred locally via `
+    and `latent_morph`.
 
     Args:
         sso:
@@ -1835,13 +1842,11 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
             to infer pixel size).
         pred_key_appendix:
         verbose: Adds progress bars for view generation.
-        overwrite:
+        overwrite: Overwrite existing views in temporary view dictionary. Key: ``'tmp_views' + pred_key_appendix``.
 
     """
-    pred_key = "latent_morph_ct" + pred_key_appendix
-    sso.load_attr_dict()
-    if not overwrite and pred_key in sso.attr_dict:
-        return
+    pred_key = "latent_morph"
+    pred_key += pred_key_appendix
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
@@ -1851,8 +1856,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
-        rendering_locs = generate_rendering_locs(verts,
-                                                 comp_window / 3)  # three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
 
         # overwrite default rendering locations (used later on for the view generation)
         sso._sample_locations = rendering_locs
@@ -1866,9 +1870,14 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
     inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
     # return dist1, dist2, inp1, inp2, inp3 latent
-    _, _, latent, _, _ = model.predict_proba(inp, bs=5)  # only use first view for now
-    # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
-    sso.save_attributes([pred_key], [latent])
+    _, _, latent, _, _ = model.predict_proba(inp)  # only use first view for now
+
+    # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
+    sso.load_skeleton()
+    hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))  # view location ordering same as views / latent
+    dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
+    sso.skeleton[pred_key] = latent[ixs]
+    sso.save_skeleton()
 
 
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
@@ -2138,7 +2147,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     if 'spiness' not in sso.skeleton:
         log_reps.warn(f'"spiness" not available in skeleton of SSO {sso.id}. '
                       f'Skipping.')
-        sso.skeleton['spinehead_vol'] = np.zeros((len(sso.skeleton['nodes']), )).astype(np.float32)
+        sso.skeleton['spinehead_vol'] = np.zeros((len(sso.skeleton['nodes']),)).astype(np.float32)
         return
     ssv_svids = set(sso.sv_ids)
     sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness']).astype(np.float32)
@@ -2197,8 +2206,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices
         maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
-            k=global_params.config['spines']['semseg2coords_spines']['k'],
-            return_color=False, nb_cpus=sso.nb_cpus)
+                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
+                                       return_color=False, nb_cpus=sso.nb_cpus)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
@@ -2208,8 +2217,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         max_id = 1
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0]-20):(c[0]+21), (c[1]-20):(c[1]+21),
-                 (c[2]-10):(c[2]+11)]
+            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21),
+                 (c[2] - 10):(c[2] + 11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]

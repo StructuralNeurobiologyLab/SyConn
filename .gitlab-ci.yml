@@ -9,9 +9,11 @@ test:
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
-    - pytest
+    - pytest --cache-clear
   except:
     - master
+  tags:
+    - default
 
 build:
   stage: build
@@ -21,6 +23,8 @@ build:
     - conda activate pysyintegration_m
   only:
     - master
+  tags:
+    - master
 
 test-full:
   stage: test
@@ -28,8 +32,10 @@ test-full:
     - source ~/.bashrc
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
-    - pytest -c tests/full_run.ini
+    - pytest --cache-clear -c tests/full_run.ini
   only:
+    - master
+  tags:
     - master
 
 cleanup:
@@ -38,6 +44,8 @@ cleanup:
     - conda remove --yes -n pysyintegration_m --all
   when: always
   only:
+    - master
+  tags:
     - master
 
 pylint:
@@ -54,4 +62,6 @@ pylint:
     paths:
       - ./pylint/
     expire_in: 2 yrs
+  tags:
+    - default
   allow_failure: true

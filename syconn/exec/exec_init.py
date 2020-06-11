@@ -5,26 +5,28 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-import time
 import os
 import shutil
+import time
 from logging import Logger
-from typing import Optional, Callable, Tuple, Dict, Any
 from multiprocessing import Process
+from typing import Optional, Callable, Tuple, Dict, Any
+
 import networkx as nx
 import numpy as np
+
 from syconn import global_params
+from syconn.exec import exec_skeleton
 from syconn.extraction import object_extraction_wrapper as oew
-from syconn.proc import sd_proc
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.handler.basics import chunkify, kd_factory
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
-from syconn.proc.graphs import create_ccsize_dict
-from syconn.handler.basics import chunkify, kd_factory
-from syconn.exec import exec_skeleton
 from syconn.mp.mp_utils import start_multiprocess_imap
+from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
+from syconn.proc.graphs import create_ccsize_dict
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
 def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
@@ -38,7 +40,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
         optionally :func:`~run_glia_splitting`.
     """
-    log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
 
@@ -145,7 +147,7 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     multi_params = [[par, so_kwargs] for par in multi_params]
 
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
-       global_params.config.allow_mesh_gen_cells)):
+                                                                    global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
             multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
 
@@ -237,15 +239,13 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
             XYZ).
         overwrite: If True, will overwrite existing data.
     """
-    log = initialize_logging('create_sds', global_params.config.working_dir +
+    log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
         transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
     if chunk_size is None:
-        chunk_size_kdinit = [1024, 1024, 512]
         chunk_size = [512, 512, 512]
-    else:
-        chunk_size_kdinit = chunk_size
+    chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
         # loading cached data or adapt number of jobs/cache size dynamically,
@@ -303,7 +303,7 @@ def run_create_rag():
         stores pruned RAG at ``global_params.config.working_dir + /glia/neuron_rag.bz2``,
         required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
-    log = initialize_logging('create_rag', global_params.config.working_dir +
+    log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
     G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint)

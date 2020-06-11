@@ -6,29 +6,30 @@
 # Authors: Philipp Schubert
 
 import os
-import numpy as np
 import shutil
 from typing import Optional
+
 import networkx as nx
+import numpy as np
 
 from syconn import global_params
 from syconn.handler.basics import chunkify
-from syconn.reps.segmentation import SegmentationDataset
+from syconn.handler.config import initialize_logging
+from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd
+from syconn.mp import batchjob_utils as qu
+from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_glia_rag, transform_rag_edgelist2pkl
 from syconn.proc.graphs import create_ccsize_dict
+from syconn.proc.graphs import split_subcc_join
+from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationDataset
-from syconn.handler.config import initialize_logging
-from syconn.mp import batchjob_utils as qu
-from syconn.proc.graphs import split_subcc_join
-from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
-    write_glia_rag, transform_rag_edgelist2pkl
-from syconn.handler.prediction_pts import predict_glia_ssv
 
 
 def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     """
     Infer local morphology embeddings for all neuron reconstructions base on
     triplet-loss trained cellular morphology learning network (tCMN).
+    The point based model is trained with the pts_loader_scalar (used for celltypes)
 
     Args:
         max_n_jobs: Number of parallel jobs.
@@ -45,20 +46,22 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     pred_key_appendix = ""
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
-                               in ssd.ssv_ids])
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     # sort ssv ids according to their number of SVs (descending)
     multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
-    multi_params = chunkify(multi_params, max_n_jobs)
-    # add ssd parameters
-    multi_params = [(ssv_ids, ssd.version, ssd.version_dict,
-                     pred_key_appendix) for ssv_ids in multi_params]
-    qu.batchjob_script(multi_params, "generate_morphology_embedding",
-                       n_cores=global_params.config['ncores_per_node'] //
-                               global_params.config['ngpus_per_node'],
-                       log=log, suffix="", additional_flags="--gres=gpu:1",
-                       remove_jobfolder=True)
-    log.info('Finished extraction of cell morphology embedding.')
+
+    if not qu.batchjob_enabled() and global_params.config.use_point_models:
+        ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
+        ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
+        infere_cell_morphology_ssd(ssv_params)
+    else:
+        multi_params = chunkify(multi_params, max_n_jobs)
+        # add ssd parameters
+        multi_params = [(ssv_ids, pred_key_appendix) for ssv_ids in multi_params]
+        qu.batchjob_script(multi_params, "generate_morphology_embedding",
+                           n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
+                           log=log, suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
+    log.info('Finished extraction of cell morphology embeddings.')
 
 
 def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
@@ -76,17 +79,19 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    np.random.seed(0)
     multi_params = ssd.ssv_ids
-    np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, max_n_jobs_gpu)
-    # job parameter will be read sequentially, i.e. in order to provide only
-    # one list as parameter one needs an additonal axis
-    multi_params = [(ixs, ) for ixs in multi_params]
-
-    qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
-                       n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                       remove_jobfolder=True)
+    if not qu.batchjob_enabled() and global_params.config.use_point_models:
+        predict_celltype_ssd(ssd_kwargs=dict(working_dir=global_params.config.working_dir), ssv_ids=multi_params)
+    else:
+        np.random.seed(0)
+        np.random.shuffle(multi_params)
+        multi_params = chunkify(multi_params, max_n_jobs_gpu)
+        # job parameter will be read sequentially, i.e. in order to provide only
+        # one list as parameter one needs an additonal axis
+        multi_params = [(ixs,) for ixs in multi_params]
+        qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
+                           n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
+                           remove_jobfolder=True)
     log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
 
 
@@ -114,7 +119,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
     else:
         n_cores = global_params.config['ncores_per_node']
-    log = initialize_logging('axoness_prediction', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     np.random.seed(0)
@@ -123,10 +128,9 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     multi_params = chunkify(multi_params, max_n_jobs_gpu)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
-    multi_params = [(ixs, ) for ixs in multi_params]
+    multi_params = [(ixs,) for ixs in multi_params]
 
-    predict_func = 'predict_axoness_semseg'
-    path_to_out = qu.batchjob_script(multi_params, predict_func, log=log,
+    path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
                                      suffix="", additional_flags="--gres=gpu:1",
                                      n_cores=n_cores, remove_jobfolder=False)
     log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
@@ -142,7 +146,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
-    log = initialize_logging('spine_identification', global_params.config.working_dir
+    log = initialize_logging('compartment_prediction', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     np.random.seed(0)
@@ -151,12 +155,12 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     multi_params = chunkify(multi_params, max_n_jobs_gpu)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additional axis
-    multi_params = [(ixs, ) for ixs in multi_params]
+    multi_params = [(ixs,) for ixs in multi_params]
 
     predict_func = 'predict_spiness_semseg'
     qu.batchjob_script(multi_params, predict_func, log=log,
                        n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                       suffix="",  additional_flags="--gres=gpu:1", remove_jobfolder=True)
+                       suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished spine prediction.')
 
 
@@ -172,7 +176,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     """
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.config.ngpu_total * 10
-    log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/', overwrite=False)
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/', overwrite=False)
     pred_key = "glia_probas"
 
     log.info("Preparing RAG.")
@@ -213,7 +217,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
         ssv_params = []
         partitioned = dict()
         for sv_ids, g, was_partitioned in multi_params:
-            ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g))
+            ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g, version='tmp'))
             partitioned[sv_ids[0]] = was_partitioned
         postproc_kwargs = dict(pred_key=pred_key, lo_first_n=lo_first_n, partitioned=partitioned)
         predict_glia_ssv(ssv_params, postproc_kwargs=postproc_kwargs)
@@ -233,7 +237,7 @@ def run_glia_prediction():
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
         :func:`~run_glia_rendering`.
     """
-    log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # only append to this key if needed (e.g. different versions)
     pred_key = "glia_probas"
@@ -293,7 +297,7 @@ def run_glia_splitting():
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds`,
         :func:`~run_glia_rendering` and :func:`~run_glia_prediction`.
     """
-    log = initialize_logging('glia_splitting', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
     log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
@@ -313,6 +317,6 @@ def run_glia_splitting():
     # # here use reconnected RAG or initial rag
     recon_nx = G
     # create glia / neuron RAGs
-    write_glia_rag(recon_nx, global_params.config['glia']['min_cc_size_ssv'])
+    write_glia_rag(recon_nx, global_params.config['glia']['min_cc_size_ssv'], log=log)
     log.info("Finished glia splitting. Resulting neuron and glia RAGs are stored at {}."
              "".format(global_params.config.working_dir + "/glia/"))

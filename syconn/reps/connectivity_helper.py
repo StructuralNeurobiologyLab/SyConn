@@ -4,15 +4,19 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..reps import segmentation
+import time
+from logging import Logger
+from typing import Optional
+
+import matplotlib
+import networkx as nx
+import numpy as np
+
 from . import log_reps
 from .. import global_params
 from ..handler.prediction import int2str_converter
+from ..reps import segmentation
 
-import time
-import numpy as np
-import networkx as nx
-import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -57,7 +61,7 @@ def connectivity_to_nx_graph(cd_dict):
         nxg.add_edge(u, v)
         # for each synapse create edge with attributes
     log_reps.debug('Done with graph ({1} nodes) construction, took {0}'.format(
-        time.time()-start, nxg.number_of_nodes()))
+        time.time() - start, nxg.number_of_nodes()))
 
     return nxg
 
@@ -91,7 +95,7 @@ def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
     cd_dict = dict()
     cd_dict['ids'] = csd.load_cached_data('id')
     # in um2, overlap of cs and sj
-    cd_dict['syn_size'] =\
+    cd_dict['syn_size'] = \
         csd.load_cached_data('mesh_area') / 2  # as used in export_matrix
     cd_dict['synaptivity_proba'] = \
         csd.load_cached_data('syn_prob')
@@ -146,7 +150,7 @@ def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
     return cd_dict
 
 
-def generate_wiring_array(**load_cached_data_dict_kwargs):
+def generate_wiring_array(log: Optional[Logger] = None, **load_cached_data_dict_kwargs):
     """
     Creates a 2D wiring array with quadratic shape (#cells x #cells) sorted by
     cell type. X-axis: post-synaptic partners, y: pre-synaptic partners.
@@ -158,6 +162,7 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
         * Work-in-progress.
 
     Args:
+        log: Logger.
         **load_cached_data_dict_kwargs: See :func:`~load_cached_data_dict`
 
     Returns:
@@ -167,7 +172,8 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
     if 'axodend_only=True' in load_cached_data_dict_kwargs:
         raise ValueError("'axodend_only=False' is not supported!")
     cd_dict = load_cached_data_dict(**load_cached_data_dict_kwargs)
-
+    if log is None:
+        log = log_reps
     # analyze scope of underlying data
     all_ssv_ids = set(cd_dict['ssv_partner_0'].tolist()).union(set(cd_dict['ssv_partner_1']))
     n_cells = len(all_ssv_ids)
@@ -210,14 +216,12 @@ def generate_wiring_array(**load_cached_data_dict_kwargs):
         syns_neg = np.abs(np.sum([syn for syn in syns if syn < 0]))
         sign = -1 if syns_neg > syns_pos else 1
         wiring[post_ix, pre_ix] = sign * (syns_pos + syns_neg)
-    ct_borders = [(int2str_converter(celltypes[ii], gt_type='ctgt_v2'), borders[ii]) for ii in
-                   range(len(celltypes))]
-    log_reps.info(f'Found the following cell types (label, starting index in '
-                  f'wiring diagram: {ct_borders}')
+    ct_borders = [(int2str_converter(celltypes[ii], gt_type='ctgt_v2'), borders[ii]) for ii in range(len(celltypes))]
+    log.info(f'Found the following cell types (label, starting index in wiring diagram: {ct_borders}')
     return wiring, borders[:-1]
 
 
-def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0):
+def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, log: Optional[Logger] = None):
     """Plot type sorted connectivity matrix. Saved in folder given by `path`.
 
     Notes:
@@ -227,20 +231,18 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
     Parameters
     ----------
     path: Path to directory.
-    wiring : np.array
-        quadratic 2D array of size #cells x #cells, x-axis: dendrite partners,
-         y: axon partners.
-    den_borders:
-        cell type borders on post synaptic site
-    ax_borders:
-        cell type borders on pre synaptic site
+    wiring : Quadratic 2D array of size #cells x #cells, x-axis: dendrite partners, y: axon partners.
+    den_borders: Cell type borders on post synaptic site. Used to split the connectivity matrix into quadrants.
+    ax_borders: Cell type borders on pre synaptic site. Used to split the connectivity matrix into quadrants.
+    cumul: Accumulate quadrant values.
+    log: Logger.
     """
+    if log is None:
+        log = log_reps
     if cumul:
         entry_width = 1
     else:
         entry_width = int(np.max([20 / 29297 * wiring.shape[0], 1]))
-    log_reps.info(f'Increasing the matrix entries from pixels of edge length 1'
-                  f' to {entry_width} by convolution.')
     intensity_plot = np.array(wiring)
     intensity_plot_neg = intensity_plot < 0
     intensity_plot_pos = intensity_plot > 0
@@ -269,12 +271,13 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
     # balance max values
     intensity_plot[intensity_plot > 0] = intensity_plot[intensity_plot > 0] / int_cut_pos
     intensity_plot[intensity_plot < 0] = intensity_plot[intensity_plot < 0] / int_cut_neg
-    log_reps.info(f'1-sigma cut-off for excitatory cells: {int_cut_pos}')
-    log_reps.info(f'1-sigma cut-off for inhibitory cells: {int_cut_neg}')
-    log_reps.debug(f'Initial wiring diagram shape: {intensity_plot.shape}')
+    log.info(f'1-sigma cut-off for excitatory cells: {int_cut_pos}')
+    log.info(f'1-sigma cut-off for inhibitory cells: {int_cut_neg}')
+    log.debug(f'Initial wiring diagram shape: {intensity_plot.shape}')
 
     if not cumul:
         # TODO: refactor, this becomes slow for shapes > (10k, 10k)
+        log_reps.debug(f'Increasing the matrix entries from pixels of edge length 1 to {entry_width} .')
         for k, b in enumerate(den_borders):
             b += k * entry_width
             intensity_plot = np.concatenate(
@@ -287,11 +290,9 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
                 (intensity_plot[:, :b], np.zeros((intensity_plot.shape[0], entry_width)),
                  intensity_plot[:, b:]), axis=1)
 
-        log_reps.debug(f'Wiring diagram shape after adding hline columns and '
-                       f'rows: {intensity_plot.shape}')
+        log.debug(f'Wiring diagram shape after adding hline columns and rows: {intensity_plot.shape}')
     else:
-        log_reps.debug(f'Wiring diagram shape after adding hline columns and '
-                       f'rows: {intensity_plot.shape}')
+        log.debug(f'Wiring diagram shape after adding hline columns and rows: {intensity_plot.shape}')
 
     # TODO: becomes slow for large entry_width
     bin_intensity_plot = intensity_plot != 0
@@ -342,12 +343,11 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
     plt.close()
 
     if cumul:
-        mat_name = "/matrix_cum_%d_%d_%d" % \
-                   (cumul_size, int(int_cut_neg*100000), int(int_cut_pos*100000))
+        mat_name = "/matrix_cum_%d_%d" % (int(int_cut_neg * 100000), int(int_cut_pos * 100000))
         fig.savefig(path + mat_name + '.png', dpi=600)
     else:
         mat_name = "/matrix_%d_%d_%d" % (
-            intensity_plot.shape[0], int(int_cut_neg*100000), int(int_cut_pos*100000))
+            intensity_plot.shape[0], int(int_cut_neg * 100000), int(int_cut_pos * 100000))
         fig.savefig(path + mat_name + '.png', dpi=600)
     # TODO: refine summary log
     sum_str = f"Cut value negative: {int_cut_neg}\n"
@@ -358,7 +358,7 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, cumul_size=0
         f.write(sum_str)
 
 
-def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0):
+def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0, log: Optional[Logger] = None):
     """
     Synaptic area between cell type pairs. Synaptic areas are summed and then
     divided by the number of cell pairs to compute the average cumulated synaptic area
@@ -373,14 +373,10 @@ def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0):
         wiring:
         borders:
         min_cumul_synarea:
-
-    Returns:
-
+        log: Logger.
     """
     cumul_matrix = np.zeros([len(borders) + 1, len(borders) + 1])
-
     borders = [0] + list(borders) + [wiring.shape[1]]
-
     for i_ax_border in range(1, len(borders)):
         for i_de_border in range(1, len(borders)):
             ax_start = borders[i_ax_border - 1]
@@ -397,9 +393,9 @@ def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0):
             else:
                 # convert to density (average cumul. synaptic area between cell pairs)
                 cumul /= (ax_end - ax_start) * (de_end - de_start)
-            cumul_matrix[i_de_border-1, i_ax_border-1] = cumul
-    plot_wiring(path, cumul_matrix, list(range(1, len(borders)+1)), list(range(1, len(borders)+1)),
-                cumul=True, cumul_size=wiring.shape[0])
+            cumul_matrix[i_de_border - 1, i_ax_border - 1] = cumul
+    plot_wiring(path, cumul_matrix, list(range(1, len(borders) + 1)), list(range(1, len(borders) + 1)), cumul=True,
+                log=log)
 
 
 def make_colormap(seq):
@@ -419,8 +415,8 @@ def make_colormap(seq):
     return mcolors.LinearSegmentedColormap('CustomMap', cdict)
 
 
-def diverge_map(high=(239/255., 65/255., 50/255.),
-                low=(39/255., 184/255., 148/255.)):
+def diverge_map(high=(239 / 255., 65 / 255., 50 / 255.),
+                low=(39 / 255., 184 / 255., 148 / 255.)):
     """Low and high are colors that will be used for the two
     ends of the spectrum. they can be either color strings
     or rgb color tuples

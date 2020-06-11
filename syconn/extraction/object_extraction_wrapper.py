@@ -5,18 +5,19 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
+import os
+import shutil
+import time
+from logging import Logger
+from typing import Optional, Dict, List, Tuple, Union, Callable
+
+import numpy as np
+from knossos_utils import chunky, knossosdataset
+
+from . import object_extraction_steps as oes
 from .. import global_params
 from ..extraction import log_extraction
 from ..handler import basics
-from . import object_extraction_steps as oes
-
-import time
-import os
-import shutil
-import numpy as np
-from typing import Optional, Dict, List, Tuple, Union, Callable
-from logging import Logger
-from knossos_utils import chunky, knossosdataset
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
@@ -48,11 +49,11 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
     chunk_list = []
     translator = {}
-    for x in range(offset[0], offset[0]+size[0], cset.chunk_size[0]):
-        for y in range(offset[1], offset[1]+size[1], cset.chunk_size[1]):
-            for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
+    for x in range(offset[0], offset[0] + size[0], cset.chunk_size[0]):
+        for y in range(offset[1], offset[1] + size[1], cset.chunk_size[1]):
+            for z in range(offset[2], offset[2] + size[2], cset.chunk_size[2]):
                 chunk_list.append(cset.coord_dict[tuple([x, y, z])])
-                translator[chunk_list[-1]] = len(chunk_list)-1
+                translator[chunk_list[-1]] = len(chunk_list) - 1
     return chunk_list, translator
 
 
@@ -141,7 +142,8 @@ def generate_subcell_kd_from_proba(
     if load_cellorganelles_from_kd_overlaycubes:  # no thresholds needed
         prob_threshs = None
     from_probabilities_to_kd(global_params.config.kd_organelle_seg_paths, cd,
-                             "_".join(subcell_names),  # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
+                             "_".join(subcell_names),
+                             # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                              prob_kd_path_dict=prob_kd_path_dict, thresholds=prob_threshs,
                              hdf5names=subcell_names, size=size, offset=offset,
                              load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
@@ -209,7 +211,7 @@ def from_probabilities_to_kd(
         suffix: Suffix used for the intermediate processing steps.
         transform_func: [WIP] Segmentation method which is applied, currently
           only func:`~syconn.extraction.object_extraction_steps.
-          _gauss_threshold_connected_components_thread`
+          _object_segmentation_thread`
           is supported for batch jobs.
         func_kwargs: keyword arguments for `transform_func`.
         n_chunk_jobs: Number of jobs.
@@ -597,12 +599,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         time_start = time.time()
         chunky.save_dataset(cset)
         oes.export_cset_to_kd_batchjob({hdf5names[0]: target_kd.conf_path},
-            cset, '{}_stitched_components'.format(filename), hdf5names,
-            offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-            orig_dtype=np.uint64, unified_labels=False)
+                                       cset, '{}_stitched_components'.format(filename), hdf5names,
+                                       offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
+                                       orig_dtype=np.uint64, unified_labels=False)
         all_times.append(time.time() - time_start)
         step_names.append("export KD")
-    # --------------------------------------------------------------------------
+        # --------------------------------------------------------------------------
         time_start = time.time()
         oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
                                     chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
