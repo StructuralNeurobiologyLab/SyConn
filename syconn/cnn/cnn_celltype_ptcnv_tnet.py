@@ -104,7 +104,7 @@ if __name__ == '__main__':
     track_running_stats = False
     use_norm = 'gn'
     act = 'swish'
-    dataset = 'j0126'
+    dataset = 'j0251'
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}'

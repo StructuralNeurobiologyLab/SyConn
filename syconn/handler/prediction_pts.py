@@ -1524,7 +1524,7 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     n_classes = 8
     if 'j0251' in mpath:
-        n_classes = 11
+        n_classes = 10
     try:
         m = ModelNet40(5, n_classes, **mkwargs).to(device)
     except RuntimeError as e:
@@ -1652,7 +1652,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
                                mpath=mpath, ssv_ids=ssv_ids, **loader_kwargs, **default_kwargs)
     for ssv in ssd.get_super_segmentation_object(out_dc.keys()):
         logit = np.concatenate(out_dc[ssv.id])
-        if da_equals_tan:
+        if 'j0126' in ssd.config.working_dir and da_equals_tan:
             # accumulate evidence for DA and TAN
             logit[:, 1] += logit[:, 6]
             # remove TAN in proba array

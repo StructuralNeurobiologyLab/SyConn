@@ -10,9 +10,9 @@ if __name__ == '__main__':
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
     ssd_kwargs = dict(working_dir=wd)
-    mdir = base_dir + '/glia_pts_scale1500_nb20000_ctx15000_swish_gn_eval0/'
+    mdir = base_dir + '/glia_pts_scale500_nb10000_ctx5000_swish_gn_eval0/'
 
-    mpath = f'{mdir}/state_dict_final.pth'
+    mpath = f'{mdir}/state_dict.pth'
     assert mpath
 
     ssd = SuperSegmentationDataset(**ssd_kwargs)
