@@ -81,7 +81,7 @@ if __name__ == '__main__':
     ssv_labels = np.array([str2int_label[el] for el in str_labels], dtype=np.uint16)
     # base_dir = '/wholebrain/scratch/pschuber/e3trainings_BAK/ptconv_2020_06_03/celltype_eval0_sp50k/'
     # mdir = base_dir + '/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval0/'
-    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_pts_j0251_scale1500_nb30000_ctx15000_swish_gn_CV0_eval0/'
+    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_pts_j0251_scale2000_nb50000_ctx20000_swish_gn_CV0_eval0/'
     mdir = base_dir
 
     CV = 0
