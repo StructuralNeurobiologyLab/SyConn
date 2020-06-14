@@ -1669,15 +1669,18 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 # -------------------------------------------- COMPARTMENT PREDICTION ---------------------------------------------#
 
 
-def predict_cmpt_ssd(ssv_params: List[dict], mpath: Optional[str] = None, pred_types: List[str] = None):
+def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None,
+                     ssv_ids: Optional[Iterable[int]] = None,
+                     pred_types: List[str] = None):
     """
     Performs compartment predictions on the ssv's given with ``ssv_params``. The kwargs for predict_pts_plain are
     organized as dicts with the respective values, keyed by the pred_type (see Args below). This enables the pred
     worker to apply multiple different models at once.
 
     Args:
-         ssv_params: List of ssv_params with which ssv's can be initialized.
+         ssd_kwargs: Keyword arguments which specify the ssd in use.
          mpath: Path to model folder (which contains models with model identifier) or to single model file.
+         ssv_ids: Ids of ssv objects which should get processed.
          pred_types: List of model identifiers (e.g. ['ads', 'abt', 'dnh'] for axon, dendrite, soma; axon, bouton,
             terminal; dendrite, neck, head; models.
     """
@@ -1708,7 +1711,11 @@ def predict_cmpt_ssd(ssv_params: List[dict], mpath: Optional[str] = None, pred_t
                 scale_fact[p_t] = kwargs['scale_fact']
     kwargs = dict(ctx_size=ctx_size, npoints=npoints, scale_fact=scale_fact)
     loader_kwargs = dict(pred_types=pred_types)
-    out_dc = predict_pts_plain(ssv_params,
+    ssd = SuperSegmentationDataset(**ssd_kwargs)
+    if ssv_ids is None:
+        ssv_ids = ssd.ssv_ids
+    out_dc = predict_pts_plain(ssd_kwargs,
+                               ssv_ids=ssv_ids,
                                nloader=10,
                                npredictor=5,
                                bs=10,
@@ -1720,7 +1727,7 @@ def predict_cmpt_ssd(ssv_params: List[dict], mpath: Optional[str] = None, pred_t
                                loader_kwargs=loader_kwargs,
                                model_loader_kwargs=loader_kwargs,
                                **kwargs)
-    if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
+    if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
         raise ValueError('Invalid output during compartment prediction.')
 
 

@@ -45,8 +45,8 @@ if __name__ == '__main__':
         ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
-        ('ncores_per_node', 20),
-        ('ngpus_per_node', 2),
+        ('ncores_per_node', 5),
+        ('ngpus_per_node', 1),
         ('nnodes_total', 1),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
