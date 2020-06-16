@@ -1793,7 +1793,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
         ssv_params: Parameters of the ssvs which should get processed.
         pred_types: List of prediction types, e.g. ['ads', 'abt', dnh'] for axon, dendrite, soma; ...
         batchsize: Number of samples in one batch.
-        npoints: Dict with numbers of sample points keyed by the respective prediction key.
+        npoints: Dict with numbers of sample points (extracted from subset) keyed by the respective prediction key.
         ctx_size: Dict with context sizes, keyed by the respective prediction key.
         transform: Dict of transformations, keyed by the respective prediction key.
         use_subcell: Flag for using cell organelles
@@ -1974,9 +1974,8 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         sso_preds = np.ones((len(sso_vertices), 1))*-1
         sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
-        # TODO: Uncomment sso prediction writing when safe
-    #     ld[p_t] = sso_preds
-    # ld.push()
+        ld[p_t] = sso_preds
+    ld.push()
     return [sso.id], [True]
 
 
