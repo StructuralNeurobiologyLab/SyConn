@@ -368,16 +368,10 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         # redundancy, default: 3 * npoints / #vertices
         ssv_n_vertices = start_multiprocess_imap(_vert_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
                                                  nb_cpus=None)
-        # TODO: remove workaround for npoints with pred_type dict
-        cached_npoints = npoints
-        if type(npoints) == dict:
-            npoints = npoints[loader_kwargs['pred_types'][0]]
         if type(redundancy) is tuple:
             ssv_redundancy = [min(max(nverts // npoints, redundancy[0]), redundancy[1]) for nverts in ssv_n_vertices]
         else:
             ssv_redundancy = [max(nverts // npoints, redundancy) for nverts in ssv_n_vertices]
-        if type(npoints) == dict:
-            npoints = cached_npoints
         ssv_redundancy = np.array(ssv_redundancy)
         sorted_ix = np.argsort(ssv_redundancy)[::-1]
         ssv_redundancy = ssv_redundancy[sorted_ix]
@@ -408,9 +402,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                  for ii in range(nloader)]
     for p in producers:
         p.start()
-    consumers = [
-        Process(target=worker_pred, args=(ii, q_postproc, d_postproc, q_progress, q_load, model_loader, pred_func,
-                                          nloader, npostptroc, device, mpath, bs)) for ii in range(npredictor)]
+    consumers = [Process(target=worker_pred, args=(ii, q_postproc, d_postproc, q_progress, q_load, model_loader,
+                                                   pred_func, nloader, npostptroc, device, mpath, bs,
+                                                   model_loader_kwargs)) for ii in range(npredictor)]
     for c in consumers:
         c.start()
     postprocs = [Process(target=worker_postproc, args=(q_out, q_postproc, d_postproc, postproc_func, postproc_kwargs,
@@ -1725,11 +1719,12 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None,
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
+    ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
     out_dc = predict_pts_plain(ssd_kwargs,
-                               ssv_ids=ssv_ids,
-                               nloader=4,
-                               npredictor=2,
-                               bs=10,
+                               nloader=1,
+                               npredictor=4,
+                               npostptroc=1,
+                               bs=8,
                                model_loader=get_cpmt_model_pts,
                                loader_func=pts_loader_cpmt,
                                pred_func=pts_pred_cmpt,
@@ -1755,6 +1750,7 @@ def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: O
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
+    mpath = os.path.expanduser(mpath)
     if os.path.isdir(mpath):
         # multiple models
         mpaths = glob.glob(mpath + '*.pth')
@@ -1787,8 +1783,7 @@ def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: O
 
 
 def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: dict, ctx_size: dict, transform: dict,
-                    use_subcell: bool = True, use_myelin: bool = False, ssd_kwargs: Optional[dict] = None,
-                    seeded = None):
+                    use_subcell: bool = True, use_myelin: bool = False, ssd_kwargs: Optional[dict] = None):
     """ Given multiple ssvs, defined by ssv_params, this function produces samples for each ssv which are
         later processed by the prediction function. Different models of the pred_func need different contexts.
         Therefore, this function splits each ssv multiple times, depending on the entries in the given dicts,
@@ -1830,7 +1825,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
         ssv.clear_cache()
         for p_t in pred_types:
             # choose base nodes with context overlap
-            base_node_dst = ctx_size[p_t] / 3
+            base_node_dst = ctx_size[p_t] / 1
             # select source nodes for context extraction
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
@@ -1874,12 +1869,8 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
                     cnt += 1
                 batch_progress = ii + 1
                 # each batch is defined by its ssv_params (id), the batch progress and the prediction type
-                if batch_progress == 1:
-                    yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), \
-                          (batch_progress, n_batches, p_t, pred_types)
-                else:
-                    yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), \
-                          (batch_progress, n_batches, p_t)
+                yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), \
+                      (batch_progress, n_batches, p_t, pred_types)
 
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
@@ -1913,19 +1904,16 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
                 out = out[masks]
             res.append(out)
     # batch_progress: (batch_progress, n_batches, p_t, pred_types), or (batch_progress, n_batches, p_t)
-    if batch_progress[0] == 1:
-        res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
-                   batch_progress=batch_progress, idcs_voxel=idcs_voxel)
-    else:
-        res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
-                   batch_progress=batch_progress)
-    q_cnt.put(1./batch_progress[1])
-    if batch_progress[0] == 1:
-        q_out.put(ssv_params['ssv_id'])
+    res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
+               batch_progress=batch_progress, idcs_voxel=idcs_voxel)
+    q_cnt.put(1./batch_progress[1]/len(batch_progress[3]))
+    pred_types = batch_progress[3]
+    if batch_progress[0] == 1 and batch_progress[2] == pred_types[0]:
+        q_out.put(ssv_params)
     d_out[ssv_params['ssv_id']].append(res)
 
 
-def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None, version: Optional[str] = None):
+def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     """
     Receives predictions from the prediction queue, waits until all predictions for one sso have been received and
     then concatenates and evaluates all the predictions (taking the majority vote over all predictions per vertex).
@@ -1933,13 +1921,11 @@ def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None
     in the original sso object.
 
     Args:
-        sso_id: Id of sso object for which the predictions should get evaluated.
-        d_in: The dict in which the predictions have been saved.
-        working_dir: The working directory from which sso objects should get loaded.
-        version: sso / ssd version.
+        sso_params: Params of sso object for which the predictions should get evaluated.
+        d_in: Dict with prediction results
     """
     curr_ix = 0
-    sso = SuperSegmentationObject(ssv_id=sso_id, working_dir=working_dir, version=version)
+    sso = SuperSegmentationObject(**sso_params)
     preds = {}
     preds_idcs = {}
     # indices of vertices which were chosen during voxelization (allows mapping between hc and sso)
@@ -1948,10 +1934,10 @@ def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None
     pred_types = None
     p_t_done = {}
     while True:
-        if len(d_in[sso_id]) < curr_ix + 1:
+        if len(d_in[sso.id]) < curr_ix + 1:
             time.sleep(0.5)
             continue
-        res = d_in[sso_id][curr_ix]
+        res = d_in[sso.id][curr_ix]
         if voxel_idcs is None:
             voxel_idcs = res['idcs_voxel']
         if pred_types is None:
@@ -1963,7 +1949,7 @@ def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None
         p_t = res['batch_progress'][2]
         preds[p_t].append(np.argmax(res['preds'], axis=1))
         preds_idcs[p_t].append(res['idcs'])
-        d_in[sso_id][curr_ix] = None
+        d_in[sso.id][curr_ix] = None
         curr_ix += 1
         # check if all predictions for this sso were received (all pred_types must evaluate to True)
         if res['batch_progress'][0] == res['batch_progress'][1]:
@@ -1973,24 +1959,24 @@ def pts_postproc_cpmt(sso_id: int, d_in: dict, working_dir: Optional[str] = None
                 done = done and p_t_done[p_t]
             if done:
                 break
-    del d_in[sso_id]
-
+    del d_in[sso.id]
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))
-    ld = sso.label_dict('vertex')
+    # TODO: Uncomment sso prediction writing when safe
+    # ld = sso.label_dict('vertex')
     for p_t in pred_types:
         preds[p_t] = np.concatenate(preds[p_t])
         preds_idcs[p_t] = np.concatenate(preds_idcs[p_t])
         pred_labels = np.ones((len(voxel_idcs), 1))*-1
         evaluate_preds(preds_idcs[p_t], preds[p_t], pred_labels)
         # pred labels now contain the prediction with respect to the hc vertices
-        sso_preds = np.ones((len(sso_vertices), 1))*-1
-        sso_preds[voxel_idcs] = pred_labels
+        # sso_preds = np.ones((len(sso_vertices), 1))*-1
+        # sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
         # ld[p_t] = sso_preds
     # ld.push()
-    return [sso_id], [True]
+    return [sso.id], [True]
 
 
 # ------------------------------------------------- HELPER METHODS --------------------------------------------------#

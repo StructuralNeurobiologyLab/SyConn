@@ -30,7 +30,6 @@ if __name__ == '__main__':
              10961702, 10868575]
     g = nx.generators.classic.complete_graph(nodes)
     ssv_params.append(dict(ssv_id=nodes[0], sv_ids=nodes, sv_graph=g, version='tmp', **ssd_kwargs))
-
     # nodes = [10864918, 10958215, 10958277, 10958221, 10864571, 10951524, 10875873]
     # g = nx.generators.classic.complete_graph(nodes)
     # ssv_params.append(dict(ssv_id=nodes[0], sv_ids=nodes, sv_graph=g, version='tmp', **ssd_kwargs))
