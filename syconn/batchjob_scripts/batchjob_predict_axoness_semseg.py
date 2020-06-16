@@ -36,8 +36,10 @@ ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_p
 view_props = global_params.config['compartments']['view_properties_semsegax']
 
 if global_params.config.use_point_models:
+    # TODO: move pred_types and mpath to global params
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch)
+    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, mpath='~/thesis/current_work/paper/test_models/',
+                     pred_types=['ads', 'abt', 'dnh'])
 else:
     n_worker = 2
     params = [(ch_sub, view_props, ncpus, map_properties,

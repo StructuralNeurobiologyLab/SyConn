@@ -1854,7 +1854,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
                     hc_sub, idcs_sub = extract_subset(hc, node_ids)
                     hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
                     # get vertex indices respective to total hc
-                    global_idcs = idcs_sub[idcs_sample]
+                    global_idcs = idcs_sub[idcs_sample.astype(int)]
                     # prepare masks for filtering sv vertices
                     bounds = hc.obj_bounds['sv']
                     sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
@@ -1960,21 +1960,22 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
             if done:
                 break
     del d_in[sso.id]
+
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))
-    # TODO: Uncomment sso prediction writing when safe
-    # ld = sso.label_dict('vertex')
+    ld = sso.label_dict('vertex')
     for p_t in pred_types:
         preds[p_t] = np.concatenate(preds[p_t])
         preds_idcs[p_t] = np.concatenate(preds_idcs[p_t])
         pred_labels = np.ones((len(voxel_idcs), 1))*-1
         evaluate_preds(preds_idcs[p_t], preds[p_t], pred_labels)
         # pred labels now contain the prediction with respect to the hc vertices
-        # sso_preds = np.ones((len(sso_vertices), 1))*-1
-        # sso_preds[voxel_idcs] = pred_labels
+        sso_preds = np.ones((len(sso_vertices), 1))*-1
+        sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
-        # ld[p_t] = sso_preds
+        # TODO: Uncomment sso prediction writing when safe
+    #     ld[p_t] = sso_preds
     # ld.push()
     return [sso.id], [True]
 
