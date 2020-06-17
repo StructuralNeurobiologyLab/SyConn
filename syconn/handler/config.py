@@ -482,10 +482,10 @@ class DynConfig(Config):
             Path to model trained on prediction cell types from point data.
         """
         mpath = glob.glob(self.model_dir + '/pts/*celltype*/state_dict.pth')
-        ixs = [int('j0126' in m) for m in mpath]
+        ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
         if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
             return mpath[ixs.index(1)]
-        ixs = [int('j0251' in m) for m in mpath]
+        ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
         if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
             return mpath[ixs.index(1)]
         # assume its j0126

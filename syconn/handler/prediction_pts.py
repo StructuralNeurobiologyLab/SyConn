@@ -108,14 +108,14 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
                     stops_received.add(inp)
                 else:
                     q_postproc.put(inp)
-                    time.sleep(np.random.randint(25) / 10)
+                    time.sleep(np.random.randint(2))
                 if len(stops_received) == n_worker_pred:
                     break
                 continue
         else:
             if len(stops_received) == n_worker_pred:
                 break
-            time.sleep(0.5)
+            time.sleep(0.1)
             continue
         q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
     log_handler.debug(f'Worker postproc done.')
@@ -368,16 +368,16 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         # redundancy, default: 3 * npoints / #vertices
         ssv_n_vertices = start_multiprocess_imap(_vert_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
                                                  nb_cpus=None)
+        ssv_n_vertices = np.array(ssv_n_vertices)
         if type(redundancy) is tuple:
-            ssv_redundancy = [min(max(nverts // npoints, redundancy[0]), redundancy[1]) for nverts in ssv_n_vertices]
+            ssv_redundancy = {ssv_ids[ii]: min(max(ssv_n_vertices[ii] // npoints, redundancy[0]), redundancy[1])
+                              for ii in range(len(ssv_ids))}
         else:
-            ssv_redundancy = [max(nverts // npoints, redundancy) for nverts in ssv_n_vertices]
-        ssv_redundancy = np.array(ssv_redundancy)
-        sorted_ix = np.argsort(ssv_redundancy)[::-1]
-        ssv_redundancy = ssv_redundancy[sorted_ix]
+            ssv_redundancy = {ssv_ids[ii]: max(ssv_n_vertices[ii] // npoints, redundancy) for ii in range(len(ssv_ids))}
+        sorted_ix = np.argsort(ssv_n_vertices)[::-1]
         ssv_ids = ssv_ids[sorted_ix]
-        ssv_ids = np.concatenate([np.array([ssv_ids[ii]] * ssv_redundancy[ii], dtype=np.uint)
-                                  for ii in range(len(ssv_ids))])
+        ssv_ids = np.concatenate([np.array([ssv_id] * ssv_redundancy[ssv_id], dtype=np.uint)
+                                  for ssv_id in ssv_ids])
         params_in = [{**params_kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
             ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
     else:
@@ -725,7 +725,7 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
     celltype_probas = []
     while True:
         if len(d_in[sso.id]) < curr_ix + 1:
-            time.sleep(0.5)
+            time.sleep(0.1)
             continue
         # res: [(dict(probas=.., batch_process)]
         res = d_in[sso.id][curr_ix]
@@ -1644,7 +1644,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=10, npredictor=4, bs=10, redundancy=(25, 100))
+    default_kwargs = dict(nloader=10, npredictor=4, bs=10, redundancy=(20, 20))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:

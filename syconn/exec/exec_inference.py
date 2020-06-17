@@ -75,7 +75,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
         Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd` and :func:`~run_neuron_rendering`.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
+        max_n_jobs_gpu = global_params.config.ngpu_total * 5 if qu.batchjob_enabled() else 1
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)

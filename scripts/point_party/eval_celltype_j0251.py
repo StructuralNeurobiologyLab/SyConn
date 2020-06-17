@@ -104,7 +104,7 @@ if __name__ == '__main__':
     assert os.path.isfile(mpath)
 
     res_dc = predict_celltype_wd(ssd_kwargs, mpath, ssv_ids=ssv_ids, bs=10, nloader=8, npredictor=4, use_test_aug=False,
-                                 seeded=True, **loader_kwargs)
+                                 seeded=True, redundancy=(20, 20), **loader_kwargs)
     basics.write_obj2pkl(fname_pred, res_dc)
 
     target_ids, pts_preds, certainty = [], [], []
