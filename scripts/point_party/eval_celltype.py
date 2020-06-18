@@ -101,17 +101,17 @@ if __name__ == '__main__':
     n_cv = 10
     nclasses = 8
     da_equals_tan = True
-    overwrite = True
-    n_runs = 2
+    overwrite = False
+    n_runs = 3
     state_dict_fname = 'state_dict.pth'
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_pts25000_ctx10000/'
+    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts25000_ctx10000/'
     # mfold = base_dir + '/celltype_eval{}_sp25k/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
-    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_pts2500_ctx10000/'
-    # mfold = base_dir + '/celltype_eval{}_sp2k/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
-    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts50000_ctx20000_eval{}/'
-    mfold = base_dir + '/celltype_pts50000_ctx20000/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
+    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts2500_ctx10000/'
+    mfold = base_dir + '/celltype_eval{}_sp2k/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
+    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts50000_ctx20000/'
+    # mfold = base_dir + '/celltype_pts50000_ctx20000_eval{}/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
     for run in range(n_runs):
         for CV in range(ncv_min, n_cv):
             mpath = f'{mfold.format(run, CV, run)}/{state_dict_fname}'
@@ -139,11 +139,11 @@ if __name__ == '__main__':
     ssd_kwargs = dict(working_dir=wd, version=gt_version)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     mkwargs, loader_kwargs = get_pt_kwargs(mfold)
-    for redundancy in [1, 10, 20, 50]:
+    for redundancy in [1, 10, 20, 50, 100]:
         perf_res_dc = collections.defaultdict(list)  # collect for each run
         for run in range(n_runs):
             npoints = loader_kwargs['npoints']
-            log = config.initialize_logging(f'log_eval{run}_sp{npoints}k_redun{redundancy}', base_dir.format(run))
+            log = config.initialize_logging(f'log_eval{run}_sp{npoints}k_redun{redundancy}', base_dir)
             log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
                      f'model_kwargs={mkwargs} and da_equals_tan={da_equals_tan}.\n'
                      f'GT: version={gt_version} at wd={wd}\n')
@@ -154,17 +154,17 @@ if __name__ == '__main__':
                 assert os.path.isfile(mpath)
                 mkwargs['mpath'] = mpath
                 log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
-                fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
+                fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl'
                 if overwrite or not os.path.isfile(fname_pred):
                     res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, redundancy=(redundancy, redundancy), bs=10,
-                                                 nloader=10, device='cuda', seeded=True, ssv_ids=split_dc['valid'],
+                                                 nloader=10, device='cuda:1', seeded=True, ssv_ids=split_dc['valid'],
                                                  npredictor=5, use_test_aug=False, **loader_kwargs)
                     basics.write_obj2pkl(fname_pred, res_dc)
             valid_ids, valid_ls, valid_preds, valid_certainty = [], [], [], []
 
             for CV in range(ncv_min, n_cv):
                 mpath = f'{mfold.format(run, CV, run)}/{state_dict_fname}'
-                res_dc = basics.load_pkl2obj(f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl')
+                res_dc = basics.load_pkl2obj(f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl')
                 split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                                f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
                 valid_ids_local, valid_ls_local, valid_preds_local = [], [], []
@@ -189,39 +189,29 @@ if __name__ == '__main__':
             class_rep = classification_report(valid_ls, valid_preds, labels=np.arange(nclasses), target_names=target_names,
                                               output_dict=True)
             for ii, k in enumerate(target_names):
-                perf_res_dc[f'fscore_class_{ii}'].append([class_rep[k]['f1-score']])
+                perf_res_dc[f'fscore_class_{ii}'].append(class_rep[k]['f1-score'])
             perf_res_dc['fscore_macro'].append(f1_score(valid_ls, valid_preds, average='macro'))
             perf_res_dc['accuracy'].append(accuracy_score(valid_ls, valid_preds))
             perf_res_dc['cert_correct'].append(valid_certainty[valid_preds == valid_ls])
             perf_res_dc['cert_incorrect'].append(valid_certainty[valid_preds != valid_ls])
-            basics.write_obj2pkl(f"{base_dir.format(run)}/prediction_results_redun{redundancy}.pkl", perf_res_dc)
             log.info(classification_report(valid_ls, valid_preds, labels=np.arange(nclasses), target_names=target_names))
             log.info(confusion_matrix(valid_ls, valid_preds, labels=np.arange(nclasses)))
             log.info(f'Mean certainty correct:\t{np.mean(valid_certainty[valid_preds == valid_ls])}\n'
                      f'Mean certainty incorrect:\t{np.mean(valid_certainty[valid_preds != valid_ls])}')
-            for ix in range(len(valid_ls)):
-                curr_l = valid_ls[ix]
-                curr_pred = valid_preds[ix]
-                curr_id = valid_ids[ix]
-                curr_cert = valid_certainty[ix]
-                # if curr_pred != curr_l:
-                #     log.info(f'id: {curr_id} target: {curr_l} prediction: {curr_pred} certainty: {curr_cert:.2f}')
-                    # ssv = ssd.get_super_segmentation_object(curr_id)
-                    # print(syn_sign_ratio_celltype(ssv, comp_types=[0, ]), syn_sign_ratio_celltype(ssv, comp_types=[0, ]))
-                    # ssv.meshes2kzip(f'/wholebrain/scratch/pschuber/tmp/{ssv.id}_p{curr_pred}_t{curr_l}_cert{curr_cert>0.75}.k.zip', synssv_instead_sj=True)
-            # log.info('-------------------------------')
-
         # plot everything
-        fscores = np.concatenate([np.array(perf_res_dc[f'fscore_class_{ii}']).squeeze() for ii in range(nclasses)] +
+        basics.write_obj2pkl(f"{base_dir}/redun{redundancy}_prediction_results.pkl", perf_res_dc)
+        fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
                                  [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
-        df = pandas.DataFrame(data={'quantity': np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)] +
-                                                               [['f1_score_macro'] * n_runs + ['accuracy'] * n_runs]),
-                                    'f1score': fscores})
-        create_catplot(f"{base_dir.format(run)}/performances_redun{redundancy}.png", qs=df, x='quantity', y='f1score', size=10)
+        labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
+                                 np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
+
+        df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
+        create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
+                       size=10)
 
         cert_correct = np.concatenate(perf_res_dc['cert_correct'])
         cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
         df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
                                     'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
-        create_catplot(f"{base_dir.format(run)}/certainty_redun{redundancy}.png", qs=df, x='quantity', y='certainty', add_boxplot=True,
-                       size=4)
+        create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
+                       add_boxplot=True, size=4)

@@ -23,7 +23,7 @@ import scipy.special
 import tqdm
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting_v2
+from morphx.processing.objects import bfs_vertices, context_splitting_kdt
 from scipy import spatial
 from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
@@ -536,7 +536,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                     # This might be slow
                     while True:
                         if use_ctx_sampling:
-                            node_ids = context_splitting_v2(hc, source_node, ctx_size)
+                            node_ids = context_splitting_kdt(hc, source_node, ctx_size)
                         else:
                             node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                         hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
@@ -602,7 +602,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                 # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
                 while True:
                     if use_ctx_sampling:
-                        node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                        node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     else:
                         node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
@@ -845,7 +845,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
 
                 while True:
                     if use_ctx_sampling:
-                        node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                        node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     else:
                         node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
@@ -1129,7 +1129,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 # create local context
                 # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 while True:
-                    node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                    node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
@@ -1268,7 +1268,7 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
                 # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                node_ids = context_splitting_v2(hc, source_node, ctx_size_fluct)
+                node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
@@ -1850,7 +1850,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
                 cnt = 0
                 for source_node in source_nodes[ii::n_batches]:
                     # TODO: make splitting faster
-                    node_ids = context_splitting_v2(hc, source_node, ctx_size[p_t], 1000)
+                    node_ids = context_splitting_kdt(hc, source_node, ctx_size[p_t], 1000)
                     hc_sub, idcs_sub = extract_subset(hc, node_ids)
                     hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
                     # get vertex indices respective to total hc
