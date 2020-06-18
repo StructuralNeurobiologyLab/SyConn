@@ -5,5 +5,4 @@ if __name__ == '__main__':
     ssd_kwargs = dict(working_dir=wd)
     ssv_ids = [491527, 12179464]
     mpath = '~/thesis/current_work/paper/test_models/'
-    pred_types = ['ads', 'abt', 'dnh']
-    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ssv_ids, mpath=mpath, pred_types=pred_types)
+    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ssv_ids, mpath=mpath)
