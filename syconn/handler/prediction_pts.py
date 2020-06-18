@@ -14,6 +14,7 @@ import re
 import os
 import time
 import glob
+from collections import defaultdict
 from multiprocessing import Process, Queue, Manager
 from typing import Iterable, Union, Optional, Tuple, Callable, List
 import morphx.processing.clouds as clouds
@@ -1670,21 +1671,18 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 # -------------------------------------------- COMPARTMENT PREDICTION ---------------------------------------------#
 
 
-def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None,
-                     ssv_ids: Optional[Iterable[int]] = None,
-                     pred_types: List[str] = None):
+def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None):
     """
     Performs compartment predictions on the ssv's given with ``ssv_ids``, based on the dataset initialized with
     ``ssd_kwargs``. The kwargs for predict_pts_plain are organized as dicts with the respective values, keyed
-    by the pred_type (see Args below). This enables the pred worker to apply multiple different models at once.
-    E.g. ``ctx_size`` with pred_types = ['ads', 'abt', 'dnh'] would e.g. be {'ads': 20000, 'abt': 3000, 'dnh': 3000}.
+    by the pred_type which is inferred from the models at mpath. This enables the pred worker to apply multiple
+    different models at once. E.g. when mpath contains models with identifiers 'ads', 'abt' and 'dnh', ctx_size would
+    e.g. be {'ads': 20000, 'abt': 3000, 'dnh': 3000}.
 
     Args:
          ssd_kwargs: Keyword arguments which specify the ssd in use.
          mpath: Path to model folder (which contains models with model identifier) or to single model file.
          ssv_ids: Ids of ssv objects which should get processed.
-         pred_types: List of model identifiers (e.g. ['ads', 'abt', 'dnh'] for axon, dendrite, soma; axon, bouton,
-            terminal; dendrite, neck, head; models.
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -1693,27 +1691,25 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None,
         # multiple models
         mpaths = glob.glob(mpath + '*.pth')
     else:
-        # single model, must contain 'cmpt' in its name
+        # single model
         mpaths = [mpath]
-        if pred_types is None:
-            pred_types = ['cmpt']
-    if len(mpaths) != len(pred_types):
-        raise ValueError(f"{len(mpaths)} models were found, but {len(pred_types)} prediction types were given.")
     # These variables are needed in predict_pts_plain
-    ctx_size = {}
+    ctx_size = defaultdict(list)
     npoints = {}
     scale_fact = {}
     # find model with each identifier and pack all the loader parameters into the dicts which are then handed
     # over to predict_pts_plain
-    for p_t in pred_types:
-        for path in mpaths:
-            if p_t in path:
-                kwargs = get_cmpt_kwargs(path)[1]
-                if p_t in ctx_size:
-                    raise ValueError(f"Found multiple models for prediction type {p_t}.")
-                ctx_size[p_t] = kwargs['ctx_size']
-                npoints[p_t] = kwargs['npoints']
-                scale_fact[p_t] = kwargs['scale_fact']
+    pred_types = []
+    for path in mpaths:
+        kwargs = get_cmpt_kwargs(path)[1]
+        # infer pred_types from models at m_path
+        p_t = kwargs['pred_type']
+        if p_t in pred_types:
+            raise ValueError(f"Found multiple models for prediction type {p_t}.")
+        pred_types.append(p_t)
+        ctx_size[kwargs['ctx_size']].append(p_t)
+        npoints[p_t] = kwargs['npoints']
+        scale_fact[p_t] = kwargs['scale_fact']
     kwargs = dict(ctx_size=ctx_size, npoints=npoints, scale_fact=scale_fact)
     loader_kwargs = dict(pred_types=pred_types)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
@@ -1721,9 +1717,9 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None,
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
     out_dc = predict_pts_plain(ssd_kwargs,
-                               nloader=1,
+                               nloader=2,
                                npredictor=4,
-                               npostptroc=1,
+                               npostptroc=2,
                                bs=8,
                                model_loader=get_cpmt_model_pts,
                                loader_func=pts_loader_cpmt,
@@ -1823,9 +1819,11 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
         hc, voxel_dict = sso2hc(ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment',
                                 myelin=use_myelin)
         ssv.clear_cache()
-        for p_t in pred_types:
+        # pred_types with the same ctx_size use the same chunks (possibly with different sampling)
+        for ctx in ctx_size:
             # choose base nodes with context overlap
-            base_node_dst = ctx_size[p_t] / 1
+            # TODO: Move the base_node_dst determination to global params
+            base_node_dst = ctx / 2
             # select source nodes for context extraction
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
@@ -1841,36 +1839,44 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
             # collect contexts into batches (each batch contains every n_batches contexts
             # (e.g. every 4th if n_batches = 4)
             for ii in range(n_batches):
-                batch = np.zeros((batchsize, npoints[p_t], 3))
-                batch_f = np.zeros((batchsize, npoints[p_t], len(feat_dc)))
-                # used later for removing cell organelles
-                batch_mask = np.zeros((batchsize, npoints[p_t]), dtype=bool)
-                idcs_list = []
+                arr_list = []
+                # Splitting is the same for the same ctx size, but sampling and transform is different each time
+                for p_t in ctx_size[ctx]:
+                    batch = np.zeros((batchsize, npoints[p_t], 3))
+                    batch_f = np.zeros((batchsize, npoints[p_t], len(feat_dc)))
+                    # used later for removing cell organelles
+                    batch_mask = np.zeros((batchsize, npoints[p_t]), dtype=bool)
+                    idcs_list = []
+                    arr_list.append((batch, batch_f, batch_mask, idcs_list))
                 # generate contexts
                 cnt = 0
                 for source_node in source_nodes[ii::n_batches]:
                     # TODO: make splitting faster
-                    node_ids = context_splitting_v2(hc, source_node, ctx_size[p_t], 1000)
+                    node_ids = context_splitting_v2(hc, source_node, ctx, 1000)
                     hc_sub, idcs_sub = extract_subset(hc, node_ids)
-                    hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
-                    # get vertex indices respective to total hc
-                    global_idcs = idcs_sub[idcs_sample.astype(int)]
-                    # prepare masks for filtering sv vertices
-                    bounds = hc.obj_bounds['sv']
-                    sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
-                    hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
-                    if transform is not None:
-                        transform[p_t](hc_sample)
-                    batch[cnt] = hc_sample.vertices
-                    batch_f[cnt] = hc_sample.features
-                    # used later when mapping predictions back onto the cell surface during postprocessing
-                    idcs_list.append(global_idcs[sv_mask])
-                    batch_mask[cnt] = sv_mask
+                    for ix, p_t in enumerate(ctx_size[ctx]):
+                        hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
+                        # get vertex indices respective to total hc
+                        global_idcs = idcs_sub[idcs_sample.astype(int)]
+                        # prepare masks for filtering sv vertices
+                        bounds = hc.obj_bounds['sv']
+                        sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
+                        hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
+                        if transform is not None:
+                            transform[p_t](hc_sample)
+                        arr_list[ix][0][cnt] = hc_sample.vertices
+                        arr_list[ix][1][cnt] = hc_sample.features
+                        # masks get used later when mapping predictions back onto the cell surface during postprocessing
+                        arr_list[ix][2][cnt] = sv_mask
+                        arr_list[ix][3].append(global_idcs[sv_mask])
                     cnt += 1
                 batch_progress = ii + 1
-                # each batch is defined by its ssv_params (id), the batch progress and the prediction type
-                yield curr_ssv_params, (batch_f, batch), (idcs_list, batch_mask, voxel_dict['sv']), \
-                      (batch_progress, n_batches, p_t, pred_types)
+                # return samples with same ctx, but possibly different sampling and transform
+                for ix, p_t in enumerate(ctx_size[ctx]):
+                    # each batch is defined by its ssv_params (id), the batch progress and the prediction type
+                    yield curr_ssv_params, (arr_list[ix][1], arr_list[ix][0]), \
+                          (arr_list[ix][3], arr_list[ix][2], voxel_dict['sv']), \
+                          (batch_progress, n_batches, p_t, pred_types)
 
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
@@ -1986,7 +1992,6 @@ def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.nd
     """ ith entry in ``preds_idcs`` contains vertex index of prediction saved at ith entry of preds.
         Predictions for each vertex index are gathered and then evaluated by a majority vote.
         The result gets saved at the respective index in the pred_labels array. """
-    from collections import defaultdict
     pred_dict = defaultdict(list)
     u_preds_idcs = np.unique(preds_idcs)
     for i in range(len(preds_idcs)):
@@ -2011,10 +2016,11 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
     ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
     feat_dim = int(re.findall(r'_fdim(\d+)_', mdir)[0])
     class_num = int(re.findall(r'_cnum(\d+)_', mdir)[0])
+    pred_type = re.findall(r'_t([^_]+)_', mdir)[0]
     # TODO: Fix neighbor_nums or create extra model
     mkwargs = dict(input_channels=feat_dim, output_channels=class_num, use_norm=use_norm, use_bias=use_bias,
                    norm_type=norm_type)
-    loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints)
+    loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints, pred_type=pred_type)
     return mkwargs, loader_kwargs
 
 
