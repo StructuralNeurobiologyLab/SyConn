@@ -243,11 +243,11 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       postproc_kwargs: Optional[dict] = None,
                       output_func: Optional[Callable] = None,
                       mpath: Optional[str] = None,
-                      nloader: int = 4, npredictor: int = 2, npostptroc: int = 2,
+                      nloader: int = 4, npredictor: int = 2, npostproc: int = 2,
                       ssv_ids: Optional[Union[list, np.ndarray]] = None,
                       use_test_aug: bool = False,
                       seeded: bool = False,
-                      device: str = 'cuda', bs: int = 40,
+                      device: str = 'cuda', bs: Union[int, dict] = 40,
                       loader_kwargs: Optional[dict] = None,
                       model_loader_kwargs: Optional[dict] = None,
                       redundancy: Union[int, tuple] = (25, 100)) -> dict:
@@ -291,7 +291,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         nloader: Number of workers loading samples from the given cell IDs via `load_func`.
         npredictor: Number of workers which will call `model_loader` and process (via `pred_func`) the output of
             the "loaders", i.e. workers which retrieve samples via `loader_func`.
-        npostptroc: Optional worker for post processing, see `postproc_func`.
+        npostproc: Optional worker for post processing, see `postproc_func`.
         ssv_ids: IDs of cells to predict.
         use_test_aug: Use test-time augmentations. Currently this adds the following transformation
             to the basic transforms:
@@ -404,12 +404,12 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     for p in producers:
         p.start()
     consumers = [Process(target=worker_pred, args=(ii, q_postproc, d_postproc, q_progress, q_load, model_loader,
-                                                   pred_func, nloader, npostptroc, device, mpath, bs,
+                                                   pred_func, nloader, npostproc, device, mpath, bs,
                                                    model_loader_kwargs)) for ii in range(npredictor)]
     for c in consumers:
         c.start()
     postprocs = [Process(target=worker_postproc, args=(q_out, q_postproc, d_postproc, postproc_func, postproc_kwargs,
-                                                       npredictor)) for _ in range(npostptroc)]
+                                                       npredictor)) for _ in range(npostproc)]
     for c in postprocs:
         c.start()
     dict_out = collections.defaultdict(list)
@@ -418,7 +418,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     lsnr.start()
     while True:
         if q_out.empty():
-            if cnt_end == npostptroc:
+            if cnt_end == npostproc:
                 break
             time.sleep(0.5)
             continue
@@ -1671,7 +1671,8 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 # -------------------------------------------- COMPARTMENT PREDICTION ---------------------------------------------#
 
 
-def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None):
+def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
+                     ctx_dst_fac: Optional[int] = None, **add_kwargs):
     """
     Performs compartment predictions on the ssv's given with ``ssv_ids``, based on the dataset initialized with
     ``ssd_kwargs``. The kwargs for predict_pts_plain are organized as dicts with the respective values, keyed
@@ -1683,6 +1684,11 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
          ssd_kwargs: Keyword arguments which specify the ssd in use.
          mpath: Path to model folder (which contains models with model identifier) or to single model file.
          ssv_ids: Ids of ssv objects which should get processed.
+         ctx_dst_fac: Defines the redundancy of the predictions by determining the distance of the base nodes
+            used for context extraction. Higher ``ctx_dst_fac`` means smaller distance (ctx / ctx_dst_fac) and
+            therefore larger context overlap and longer processing time.
+         add_kwargs: Can for example contain parameter ``bs`` for batchsize. ``bs`` is supposed to be a factor
+            which gets multiplied with the model dependent batch sizes.
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -1695,6 +1701,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
         mpaths = [mpath]
     # These variables are needed in predict_pts_plain
     ctx_size = defaultdict(list)
+    batchsizes = {}
     npoints = {}
     scale_fact = {}
     # find model with each identifier and pack all the loader parameters into the dicts which are then handed
@@ -1702,32 +1709,41 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     pred_types = []
     for path in mpaths:
         kwargs = get_cmpt_kwargs(path)[1]
-        # infer pred_types from models at m_path
+        # infer pred_types and all other parameters from models at m_path
         p_t = kwargs['pred_type']
         if p_t in pred_types:
             raise ValueError(f"Found multiple models for prediction type {p_t}.")
         pred_types.append(p_t)
         ctx_size[kwargs['ctx_size']].append(p_t)
+        batchsizes[kwargs['ctx_size']] = kwargs['bs']
         npoints[p_t] = kwargs['npoints']
         scale_fact[p_t] = kwargs['scale_fact']
     kwargs = dict(ctx_size=ctx_size, npoints=npoints, scale_fact=scale_fact)
-    loader_kwargs = dict(pred_types=pred_types)
+    if ctx_dst_fac is None:
+        ctx_dst_fac = 2
+    loader_kwargs = dict(pred_types=pred_types, ctx_dst_fac=ctx_dst_fac)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
+    default_kwargs = dict(nloader=10, npredictor=5, npostproc=10, bs=batchsizes)
+    default_kwargs.update(add_kwargs)
+    if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
+        raise ValueError('Non default batch size is meant to be a factor (float) which is multiplied with the model'
+                         ' dependent batch sizes.')
+    if type(default_kwargs['bs']) == float:
+        for ctx in batchsizes:
+            batchsizes[ctx] = int(batchsizes[ctx]*default_kwargs['bs'])
+        default_kwargs['bs'] = batchsizes
     out_dc = predict_pts_plain(ssd_kwargs,
-                               nloader=2,
-                               npredictor=4,
-                               npostptroc=2,
-                               bs=8,
                                model_loader=get_cpmt_model_pts,
                                loader_func=pts_loader_cpmt,
                                pred_func=pts_pred_cmpt,
                                postproc_func=pts_postproc_cpmt,
                                mpath=mpath,
                                loader_kwargs=loader_kwargs,
-                               model_loader_kwargs=loader_kwargs,
+                               model_loader_kwargs=dict(pred_types=pred_types),
+                               **default_kwargs,
                                **kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
         raise ValueError('Invalid output during compartment prediction.')
@@ -1778,8 +1794,9 @@ def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: O
     return models
 
 
-def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: dict, ctx_size: dict, transform: dict,
-                    use_subcell: bool = True, use_myelin: bool = False, ssd_kwargs: Optional[dict] = None):
+def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints: dict, ctx_size: dict, transform: dict,
+                    ctx_dst_fac: int, use_subcell: bool = True, use_myelin: bool = False,
+                    ssd_kwargs: Optional[dict] = None):
     """ Given multiple ssvs, defined by ssv_params, this function produces samples for each ssv which are
         later processed by the prediction function. Different models of the pred_func need different contexts.
         Therefore, this function splits each ssv multiple times, depending on the entries in the given dicts,
@@ -1788,13 +1805,17 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
     Args:
         ssv_params: Parameters of the ssvs which should get processed.
         pred_types: List of prediction types, e.g. ['ads', 'abt', dnh'] for axon, dendrite, soma; ...
-        batchsize: Number of samples in one batch.
+        batchsize: Dict of batch sizes, keyed by the respective context size. Models with the same context size
+            will have the same batch size, no matter how many points are sampled from the contexts.
         npoints: Dict with numbers of sample points (extracted from subset) keyed by the respective prediction key.
         ctx_size: Dict with context sizes, keyed by the respective prediction key.
         transform: Dict of transformations, keyed by the respective prediction key.
         use_subcell: Flag for using cell organelles
         use_myelin: Flag for using myelin.
         ssd_kwargs: Keyword arguments to initialize the ssd.
+        ctx_dst_fac: Defines the redundancy of the predictions by determining the distance of the base nodes
+            used for context extraction. Higher ``ctx_dst_fac`` means smaller distance (ctx / ctx_dst_fac) and
+            therefore larger context overlap and longer processing time.
     """
     # TODO: Make batchsize model dependent => avoid memory errors
     if pred_types is None:
@@ -1822,19 +1843,18 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
         # pred_types with the same ctx_size use the same chunks (possibly with different sampling)
         for ctx in ctx_size:
             # choose base nodes with context overlap
-            # TODO: Move the base_node_dst determination to global params
-            base_node_dst = ctx / 2
+            base_node_dst = ctx / ctx_dst_fac
             # select source nodes for context extraction
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
             pcd, idcs = pcd.voxel_down_sample_and_trace(
                 base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
-            batchsize = min(len(source_nodes), batchsize)
-            n_batches = int(np.ceil(len(source_nodes) / batchsize))
+            bs = min(len(source_nodes), batchsize[ctx])
+            n_batches = int(np.ceil(len(source_nodes) / bs))
             # add additional source nodes to fill batches
-            if len(source_nodes) % batchsize != 0:
-                source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize),
+            if len(source_nodes) % bs != 0:
+                source_nodes = np.concatenate([np.random.choice(source_nodes, bs - len(source_nodes) % bs),
                                                source_nodes])
             # collect contexts into batches (each batch contains every n_batches contexts
             # (e.g. every 4th if n_batches = 4)
@@ -1842,10 +1862,10 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
                 arr_list = []
                 # Splitting is the same for the same ctx size, but sampling and transform is different each time
                 for p_t in ctx_size[ctx]:
-                    batch = np.zeros((batchsize, npoints[p_t], 3))
-                    batch_f = np.zeros((batchsize, npoints[p_t], len(feat_dc)))
+                    batch = np.zeros((bs, npoints[p_t], 3))
+                    batch_f = np.zeros((bs, npoints[p_t], len(feat_dc)))
                     # used later for removing cell organelles
-                    batch_mask = np.zeros((batchsize, npoints[p_t]), dtype=bool)
+                    batch_mask = np.zeros((bs, npoints[p_t]), dtype=bool)
                     idcs_list = []
                     arr_list.append((batch, batch_f, batch_mask, idcs_list))
                 # generate contexts
@@ -1876,7 +1896,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: int, npoints: 
                     # each batch is defined by its ssv_params (id), the batch progress and the prediction type
                     yield curr_ssv_params, (arr_list[ix][1], arr_list[ix][0]), \
                           (arr_list[ix][3], arr_list[ix][2], voxel_dict['sv']), \
-                          (batch_progress, n_batches, p_t, pred_types)
+                          (batch_progress, n_batches, p_t, pred_types, ctx)
 
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
@@ -1890,13 +1910,15 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
         d_out: Dict to save prediction results
         q_cnt: Queue for worker syncing
         device: Device to which models in m have been transfered
-        bs: Batchsize
+        bs: Dict of batch sizes, keyed by the respective context size. Models with the same context size
+            will have the same batch size, no matter how many points are sampled from the contexts.
     """
-    # TODO: Make batchsize model dependent
     ssv_params, model_inp, batch_info, batch_progress = inp
     idcs_list = batch_info[0]
     batch_mask = batch_info[1]
     idcs_voxel = batch_info[2]
+    # get context dependent batch size
+    bs = bs[batch_progress[4]]
     res = []
     with torch.no_grad():
         for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
@@ -1980,8 +2002,8 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         sso_preds = np.ones((len(sso_vertices), 1))*-1
         sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
-        ld[p_t] = sso_preds
-    ld.push()
+    #     ld[p_t] = sso_preds
+    # ld.push()
     return [sso.id], [True]
 
 
@@ -2017,10 +2039,11 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
     feat_dim = int(re.findall(r'_fdim(\d+)_', mdir)[0])
     class_num = int(re.findall(r'_cnum(\d+)_', mdir)[0])
     pred_type = re.findall(r'_t([^_]+)_', mdir)[0]
+    batchsize = int(re.findall(r'_bs(\d+)_', mdir)[0])
     # TODO: Fix neighbor_nums or create extra model
     mkwargs = dict(input_channels=feat_dim, output_channels=class_num, use_norm=use_norm, use_bias=use_bias,
                    norm_type=norm_type)
-    loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints, pred_type=pred_type)
+    loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints, pred_type=pred_type, bs=batchsize)
     return mkwargs, loader_kwargs
 
 
