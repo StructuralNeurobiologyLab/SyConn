@@ -1929,7 +1929,6 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             used for context extraction. Higher ``ctx_dst_fac`` means smaller distance (ctx / ctx_dst_fac) and
             therefore larger context overlap and longer processing time.
     """
-    # TODO: Make batchsize model dependent => avoid memory errors
     if pred_types is None:
         raise ValueError("pred_types is None. However, pred_types must at least contain one pred_type such as "
                          "'cmpt'")
