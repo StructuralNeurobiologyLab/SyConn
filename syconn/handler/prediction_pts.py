@@ -443,6 +443,10 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
 
 
 @functools.lru_cache(256)
+def _load_ssv_hc_cached(args):
+    return _load_ssv_hc(args)
+
+
 def _load_ssv_hc(args):
     ssv, feats, feat_labels, pt_type, radius = args
     vert_dc = dict()
@@ -571,7 +575,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
+            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(
                 feat_dc.values()), 'celltype', None))
             ssv.clear_cache()
             # fluctuate context size in 1/4 samples
@@ -804,7 +808,10 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
         curr_ssv_params = default_kwargs
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(**curr_ssv_params)
-        hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+        if train:
+            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+        else:
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
         ssv.clear_cache()
         if train:
             source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
@@ -1233,7 +1240,10 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
     for curr_ssv_params in ssv_params:
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
-        hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+        if train:
+            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+        else:
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
         ssv.clear_cache()
         npoints_ssv = min(len(hc.vertices), npoints)
         # add a +-10% fluctuation in the number of input and output points
