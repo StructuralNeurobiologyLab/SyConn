@@ -160,7 +160,7 @@ if __name__ == '__main__':
     # name += '_attention'
 
     model = TripletNet(model)
-    # model = nn.DataParallel(model)
+    model = nn.DataParallel(model)
 
     if use_cuda:
         model.to(device)

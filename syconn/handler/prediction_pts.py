@@ -24,13 +24,13 @@ import scipy.special
 import tqdm
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting_kdt
+from morphx.processing.objects import bfs_vertices, context_splitting_kdt, context_splitting_kdt_many
 from scipy import spatial
 from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
 from syconn import global_params
 from syconn.handler import log_handler
-from syconn.handler.basics import chunkify_successive
+from syconn.handler.basics import chunkify_successive, chunkify
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject
@@ -474,12 +474,108 @@ def _load_ssv_hc(args):
     return hc
 
 
+def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndarray], int],
+                            batchsize: int, npoints: int, ctx_size: float,
+                            transform: Optional[Callable] = None, seeded: bool = False,
+                            use_ctx_sampling: bool = True, redundancy: int = 20,
+                            ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Generator for SSV point cloud samples of size `npoints`. Currently used for
+    per-cell point-to-scalar tasks, e.g. cell type prediction.
+
+    Args:
+        ssd_kwargs: SuperSegmentationDataset keyword arguments specifying e.g.
+            working directory, version, etc.
+        ssv_ids: SuperSegmentationObject IDs and redundancy.
+        batchsize: Only used during training.
+        npoints: Number of points used to generate sample context.
+        ctx_size: Euclidean distance between the two most distant nodes in nm.
+            1/4 samples will fluctuate around factor 0.7+-0.2 (mean, s.d.) during training.
+        transform: Transformation/agumentation applied to every sample.
+        seeded: If True, will set the seed to ``hash(frozenset(ssv_id, n_samples, curr_batch_count))``.
+        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
+            until `npoints` have been collected.
+        redundancy: Number of samples generated from each SSV.
+
+    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
+
+    """
+    np.random.shuffle(ssv_ids)
+    ssd = SuperSegmentationDataset(**ssd_kwargs)
+    # TODO: add `use_syntype kwarg and cellshape only
+    feat_dc = dict(pts_feat_dict)
+    if 'syn_ssv' in feat_dc:
+        del feat_dc['syn_ssv']
+    for ssv_id in ssv_ids:
+        redundancy_ssv = int(redundancy)
+        n_batches = int(np.ceil(redundancy_ssv / batchsize))
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
+        ssv.clear_cache()
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(hc.nodes)
+        pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        nodes = np.max(idcs, axis=1)
+        source_nodes_all = np.random.choice(nodes, redundancy_ssv, replace=len(nodes) < redundancy_ssv)
+        rand_ixs = chunkify(np.random.choice(redundancy_ssv, redundancy_ssv, replace=False), n_batches)
+        npoints_ssv = min(len(hc.vertices), npoints)
+        if use_ctx_sampling:
+            node_ids_all = np.array(context_splitting_kdt_many(hc, source_nodes_all, ctx_size))
+        else:
+            node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all])
+        for ii in range(n_batches):
+            n_samples = min(redundancy_ssv, batchsize)
+            redundancy_ssv -= batchsize
+            if seeded:
+                np.random.seed(np.uint32(hash(frozenset((ssv_id, n_samples, ii)))))
+            batch = np.zeros((n_samples, npoints_ssv, 3))
+            batch_f = np.zeros((n_samples, npoints_ssv, len(feat_dc)))
+            cnt = 0
+            curr_batch_ixs = rand_ixs[ii]
+            source_nodes_batch = source_nodes_all[curr_batch_ixs]
+            node_ids_batch = node_ids_all[curr_batch_ixs]
+            for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
+                # This might be slow
+                while True:
+                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    sample_feats = hc_sub.features
+                    if len(sample_feats) > 0:
+                        break
+                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
+                    source_node = np.random.choice(source_nodes_batch)
+                    if use_ctx_sampling:
+                        node_ids = context_splitting_kdt_many(hc, source_node, ctx_size)
+                    else:
+                        node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                sample_feats = hc_sub.features
+                sample_pts = hc_sub.vertices
+                # make sure there is always the same number of points within a batch
+                sample_ixs = np.arange(len(sample_pts))
+                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                npoints_add = npoints_ssv - len(sample_pts)
+                idx = np.random.choice(len(sample_pts), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                # one hot encoding
+                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                hc_sub._vertices = sample_pts
+                hc_sub._features = sample_feats
+                if transform is not None:
+                    transform(hc_sub)
+                batch[cnt] = hc_sub.vertices
+                batch_f[cnt] = hc_sub.features
+                cnt += 1
+            assert cnt == n_samples
+            yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
+
+
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
                       batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None,
                       train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, seeded: bool = False,
-                      use_ctx_sampling: bool = True,
+                      use_ctx_sampling: bool = True, cache: Optional[bool] = True,
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -501,30 +597,34 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
         seeded: If True, will set the seed to ``hash(frozenset(ssv_id, n_samples, curr_batch_count))``.
         use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
             until `npoints` have been collected.
+        cache: Cache loaded SSVs.
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
     """
+    # TODO: refactor s.t. redundancy is passed together with the SSV ID; ensure that this call produces all batches of
+    # one cell!
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     # TODO: add `use_syntype kwarg and cellshape only
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
+    if cache is None:
+        cache = train
     if not train:
         if draw_local:
             raise NotImplementedError()
         for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
             n_batches = int(np.ceil(occ / batchsize))
+            ssv = ssd.get_super_segmentation_object(ssv_id)
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
+            ssv.clear_cache()
             for ii in range(n_batches):
                 n_samples = min(occ, batchsize)
                 occ -= batchsize
                 if seeded:
                     np.random.seed(np.uint32(hash(frozenset((ssv_id, n_samples, ii)))))
-                ssv = ssd.get_super_segmentation_object(ssv_id)
-                hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                    feat_dc.values()), 'celltype', None))
-                ssv.clear_cache()
                 npoints_ssv = min(len(hc.vertices), npoints)
                 batch = np.zeros((n_samples, npoints_ssv, 3))
                 batch_f = np.zeros((n_samples, npoints_ssv, len(feat_dc)))
@@ -575,8 +675,10 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
-            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values()), 'celltype', None))
+            if cache:
+                hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
+            else:
+                hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
             ssv.clear_cache()
             # fluctuate context size in 1/4 samples
             if np.random.randint(0, 4) == 0:
@@ -954,7 +1056,7 @@ def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
 
 def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: Optional[int] = None,
                       partitioned: Optional[bool] = False, apply_softmax: bool = True,
-                      sample_loc_ds: float = 100, pred2loc_knn: int = 5) -> Tuple[List[dict], List[bool]]:
+                      sample_loc_ds: float = 100, pred2loc_knn: int = 5) -> Tuple[List[int], List[bool]]:
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
     node_probas = []
@@ -1043,7 +1145,7 @@ def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
 
 
 def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str] = None
-                           ) -> Tuple[List[dict], List[bool]]:
+                           ) -> Tuple[List[int], List[bool]]:
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
     node_embedding = []

@@ -1,14 +1,17 @@
 import collections
+import glob
 import pandas
+import seaborn as sns
 from syconn.handler import basics, config
 from syconn.handler.prediction import certainty_estimate
 import numpy as np
+import re
 import matplotlib.pyplot as plt
 from sklearn.metrics.classification import classification_report
 from sklearn.metrics import confusion_matrix, f1_score, accuracy_score
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
-from syconn.handler.prediction_pts import predict_pts_plain,\
+from syconn.handler.prediction_pts import predict_pts_plain, pts_loader_scalar_infer,\
     pts_loader_scalar, pts_pred_scalar_nopostproc, get_celltype_model_pts, get_pt_kwargs
 import os
 
@@ -27,7 +30,7 @@ def predict_celltype_gt(ssd_kwargs, **kwargs):
     Returns:
 
     """
-    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar, pts_pred_scalar_nopostproc,
+    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar_infer, pts_pred_scalar_nopostproc,
                                **kwargs)
     for ssv_id in out_dc:
         logit = np.concatenate(out_dc[ssv_id])
@@ -45,7 +48,7 @@ def predict_celltype_gt(ssd_kwargs, **kwargs):
     return out_dc
 
 
-def create_catplot(dest_p, qs, ls=20, r=(0, 1.0), add_boxplot=False, legend=False, **kwargs):
+def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False, **kwargs):
     """
     https://matplotlib.org/api/_as_gen/matplotlib.pyplot.boxplot.html
      The box extends from the lower to upper quartile values of the data, with
@@ -70,9 +73,9 @@ def create_catplot(dest_p, qs, ls=20, r=(0, 1.0), add_boxplot=False, legend=Fals
     -------
 
     """
-    import seaborn as sns
     fig = plt.figure()
     c = '0.25'
+    size = 10
     if 'size' in kwargs:
         size = kwargs['size']
         del kwargs['size']
@@ -81,9 +84,8 @@ def create_catplot(dest_p, qs, ls=20, r=(0, 1.0), add_boxplot=False, legend=Fals
     ax = sns.swarmplot(data=qs, clip_on=False, color=c, size=size, **kwargs)
     if not legend:
         plt.gca().legend().set_visible(False)
-    # set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     ax.tick_params(axis='x', which='both', labelsize=ls, direction='out',
-                   length=4, width=3, right=False, top=False, pad=10)
+                   length=4, width=3, right=False, top=False, pad=10, rotation=45)
     ax.tick_params(axis='y', which='both', labelsize=ls, direction='out',
                    length=4, width=3, right=False, top=False, pad=10)
     ax.spines['left'].set_linewidth(3)
@@ -91,9 +93,41 @@ def create_catplot(dest_p, qs, ls=20, r=(0, 1.0), add_boxplot=False, legend=Fals
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
     plt.ylim(r)
-    fig.savefig(dest_p, dpi=300)
+    plt.tight_layout()
+    fig.savefig(dest_p, dpi=400)
     qs.to_excel(dest_p[:-4] + ".xlsx")
     plt.close()
+
+
+def plot_performance_summary_redun(bd):
+    res_dc_pths = glob.glob(bd + 'redun*_prediction_results.pkl', recursive=True)
+    fscores = []
+    labels = []
+    redundancies = [int(re.findall('redun(\d+)_', fp)[0]) for fp in res_dc_pths]
+    for fp in res_dc_pths[np.argsort(redundancies)]:
+        dc = basics.load_pkl2obj(fp)
+        res = list(dc[f'fscore_macro'])
+        fscores.extend(res)
+        labels.extend([dc['model_tag']] * len(res))
+    df = pandas.DataFrame(data={'fscores': fscores, 'labels': labels})
+    create_catplot(f"{bd}/performance_summary.png", qs=df, x='labels', y='fscores',
+                   add_boxplot=False)
+
+
+def plot_performance_summary_models(bd):
+
+    res_dc_pths = glob.glob(bd + 'redun*_prediction_results.pkl', recursive=True)
+    fscores = []
+    labels = []
+    res_dc_pths = [fp for fp in res_dc_pths if int(re.findall('redun(\d+)_', fp)[0]) == 20]
+    for fp in res_dc_pths:
+        dc = basics.load_pkl2obj(fp)
+        res = list(dc[f'fscore_macro'])
+        fscores.extend(res)
+        labels.extend([dc['model_tag']] * len(res))
+    df = pandas.DataFrame(data={'fscores': fscores, 'labels': labels})
+    create_catplot(f"{bd}/performance_summary.png", qs=df, x='labels', y='fscores',
+                   add_boxplot=False)
 
 
 if __name__ == '__main__':
@@ -101,15 +135,15 @@ if __name__ == '__main__':
     n_cv = 10
     nclasses = 8
     da_equals_tan = True
-    overwrite = False
+    overwrite = True
     n_runs = 3
     state_dict_fname = 'state_dict.pth'
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts25000_ctx10000/'
-    # mfold = base_dir + '/celltype_eval{}_sp25k/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
-    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts2500_ctx10000/'
-    mfold = base_dir + '/celltype_eval{}_sp2k/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
+    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts2500_ctx10000/'
+    # mfold = base_dir + '/celltype_eval{}_sp2k/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
+    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts25000_ctx10000/'
+    mfold = base_dir + '/celltype_eval{}_sp25k/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
     # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts50000_ctx20000/'
     # mfold = base_dir + '/celltype_pts50000_ctx20000_eval{}/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
     for run in range(n_runs):
@@ -139,10 +173,10 @@ if __name__ == '__main__':
     ssd_kwargs = dict(working_dir=wd, version=gt_version)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     mkwargs, loader_kwargs = get_pt_kwargs(mfold)
-    for redundancy in [1, 10, 20, 50, 100]:
+    npoints = loader_kwargs['npoints']
+    for redundancy in [10, 20, 50, 100, 1]:
         perf_res_dc = collections.defaultdict(list)  # collect for each run
         for run in range(n_runs):
-            npoints = loader_kwargs['npoints']
             log = config.initialize_logging(f'log_eval{run}_sp{npoints}k_redun{redundancy}', base_dir)
             log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
                      f'model_kwargs={mkwargs} and da_equals_tan={da_equals_tan}.\n'
@@ -156,9 +190,10 @@ if __name__ == '__main__':
                 log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
                 fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl'
                 if overwrite or not os.path.isfile(fname_pred):
-                    res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, redundancy=(redundancy, redundancy), bs=10,
+                    res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, redundancy=(1, 1), bs=10,
                                                  nloader=10, device='cuda:1', seeded=True, ssv_ids=split_dc['valid'],
-                                                 npredictor=5, use_test_aug=False, **loader_kwargs)
+                                                 npredictor=4, use_test_aug=False,
+                                                 loader_kwargs={'redundancy': redundancy}, **loader_kwargs)
                     basics.write_obj2pkl(fname_pred, res_dc)
             valid_ids, valid_ls, valid_preds, valid_certainty = [], [], [], []
 
@@ -199,6 +234,8 @@ if __name__ == '__main__':
             log.info(f'Mean certainty correct:\t{np.mean(valid_certainty[valid_preds == valid_ls])}\n'
                      f'Mean certainty incorrect:\t{np.mean(valid_certainty[valid_preds != valid_ls])}')
         # plot everything
+        perf_res_dc = dict(perf_res_dc)
+        perf_res_dc['model_tag'] = f'ctx{loader_kwargs["ctx_size"]}_nb{npoints}_red{redundancy}'
         basics.write_obj2pkl(f"{base_dir}/redun{redundancy}_prediction_results.pkl", perf_res_dc)
         fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
                                  [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
@@ -215,3 +252,5 @@ if __name__ == '__main__':
                                     'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
         create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
                        add_boxplot=True, size=4)
+    plot_performance_summary_redun(base_dir)
+    plot_performance_summary_models(base_dir)
