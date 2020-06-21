@@ -1838,12 +1838,12 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=10, npredictor=5, npostproc=10, bs=batchsizes)
-    default_kwargs.update(add_kwargs)
+    default_kwargs = dict(nloader=10, npredictor=4, npostproc=10, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor (float) which is multiplied with the model'
                          ' dependent batch sizes.')
-    if type(default_kwargs['bs']) == float:
+    default_kwargs.update(add_kwargs)
+    if 'bs' in add_kwargs:
         for ctx in batchsizes:
             batchsizes[ctx] = int(batchsizes[ctx]*default_kwargs['bs'])
         default_kwargs['bs'] = batchsizes
@@ -1967,6 +1967,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             if len(source_nodes) % bs != 0:
                 source_nodes = np.concatenate([np.random.choice(source_nodes, bs - len(source_nodes) % bs),
                                                source_nodes])
+            node_arrs = context_splitting_kdt_many(hc, source_nodes, ctx)
             # collect contexts into batches (each batch contains every n_batches contexts
             # (e.g. every 4th if n_batches = 4)
             for ii in range(n_batches):
@@ -1981,10 +1982,14 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
                     arr_list.append((batch, batch_f, batch_mask, idcs_list))
                 # generate contexts
                 cnt = 0
-                for source_node in source_nodes[ii::n_batches]:
-                    # TODO: make splitting faster
-                    node_ids = context_splitting_kdt(hc, source_node, ctx, 1000)
-                    hc_sub, idcs_sub = extract_subset(hc, node_ids)
+                for node_arr in node_arrs[ii::n_batches]:
+                    hc_sub, idcs_sub = extract_subset(hc, node_arr)
+                    # replace subsets with zero vertices by another subset (this is probably very rare)
+                    ix = 0
+                    while len(hc_sub.vertices) == 0:
+                        hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
+                        ix += 1
+                    # fill batches with sampled and transformed subsets
                     for ix, p_t in enumerate(ctx_size[ctx]):
                         hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
                         # get vertex indices respective to total hc
@@ -2071,6 +2076,7 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     voxel_idcs = None
     # predictions types which were forwarded from the loading function
     pred_types = None
+    p_t_progress = {}
     p_t_done = {}
     while True:
         if len(d_in[sso.id]) < curr_ix + 1:
@@ -2082,6 +2088,7 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         if pred_types is None:
             pred_types = res['batch_progress'][3]
             for p_t in pred_types:
+                p_t_progress[p_t] = 0
                 p_t_done[p_t] = False
                 preds[p_t] = []
                 preds_idcs[p_t] = []
@@ -2091,18 +2098,21 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         d_in[sso.id][curr_ix] = None
         curr_ix += 1
         # check if all predictions for this sso were received (all pred_types must evaluate to True)
-        if res['batch_progress'][0] == res['batch_progress'][1]:
+        p_t_progress[p_t] += 1
+        if p_t_progress[p_t] == res['batch_progress'][1]:
             p_t_done[p_t] = True
-            done = True
-            for p_t in p_t_done:
-                done = done and p_t_done[p_t]
-            if done:
-                break
+        done = True
+        for p_t in p_t_progress:
+            done = done and p_t_done[p_t]
+        if done:
+            break
+    assert len(d_in[sso.id]) == curr_ix
     del d_in[sso.id]
 
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))
+    np.save(os.path.expanduser(f'~/thesis/tmp/verts_{sso.id}.npy'), sso_vertices)
     ld = sso.label_dict('vertex')
     for p_t in pred_types:
         preds[p_t] = np.concatenate(preds[p_t])
@@ -2112,6 +2122,7 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         # pred labels now contain the prediction with respect to the hc vertices
         sso_preds = np.ones((len(sso_vertices), 1))*-1
         sso_preds[voxel_idcs] = pred_labels
+        np.save(os.path.expanduser(f'~/thesis/tmp/{p_t}_{sso.id}.npy'), sso_preds)
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
     #     ld[p_t] = sso_preds
     # ld.push()
