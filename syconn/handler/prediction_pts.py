@@ -1840,7 +1840,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
     default_kwargs = dict(nloader=10, npredictor=4, npostproc=10, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
-        raise ValueError('Non default batch size is meant to be a factor (float) which is multiplied with the model'
+        raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
     default_kwargs.update(add_kwargs)
     if 'bs' in add_kwargs:
@@ -2112,7 +2112,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))
-    np.save(os.path.expanduser(f'~/thesis/tmp/verts_{sso.id}.npy'), sso_vertices)
     ld = sso.label_dict('vertex')
     for p_t in pred_types:
         preds[p_t] = np.concatenate(preds[p_t])
@@ -2122,10 +2121,9 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         # pred labels now contain the prediction with respect to the hc vertices
         sso_preds = np.ones((len(sso_vertices), 1))*-1
         sso_preds[voxel_idcs] = pred_labels
-        np.save(os.path.expanduser(f'~/thesis/tmp/{p_t}_{sso.id}.npy'), sso_preds)
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
-    #     ld[p_t] = sso_preds
-    # ld.push()
+        ld[p_t] = sso_preds
+    ld.push()
     return [sso.id], [True]
 
 
