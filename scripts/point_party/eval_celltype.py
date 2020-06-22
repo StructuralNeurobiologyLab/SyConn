@@ -174,7 +174,7 @@ if __name__ == '__main__':
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     mkwargs, loader_kwargs = get_pt_kwargs(mfold)
     npoints = loader_kwargs['npoints']
-    for redundancy in [10, 20, 50, 100, 1]:
+    for redundancy in [100, 10, 20, 50, 1]:
         perf_res_dc = collections.defaultdict(list)  # collect for each run
         for run in range(n_runs):
             log = config.initialize_logging(f'log_eval{run}_sp{npoints}k_redun{redundancy}', base_dir)
@@ -191,7 +191,7 @@ if __name__ == '__main__':
                 fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl'
                 if overwrite or not os.path.isfile(fname_pred):
                     res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, redundancy=(1, 1), bs=10,
-                                                 nloader=10, device='cuda:1', seeded=True, ssv_ids=split_dc['valid'],
+                                                 nloader=10, device='cuda', seeded=True, ssv_ids=split_dc['valid'],
                                                  npredictor=4, use_test_aug=False,
                                                  loader_kwargs={'redundancy': redundancy}, **loader_kwargs)
                     basics.write_obj2pkl(fname_pred, res_dc)
