@@ -249,8 +249,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       seeded: bool = False,
                       device: str = 'cuda', bs: Union[int, dict] = 40,
                       loader_kwargs: Optional[dict] = None,
-                      model_loader_kwargs: Optional[dict] = None,
-                      redundancy: Union[int, tuple] = (25, 100)) -> dict:
+                      model_loader_kwargs: Optional[dict] = None) -> dict:
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions `npreds` per cell is calculated based on the
@@ -302,9 +301,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         device: pytorch device.
         bs: Batch size.
         loader_kwargs: Optional keyword arguments for loader func.
-        redundancy: Only used if redundancy is a dict, e.g. as for cell type prediction. If int it is used as minimum
-            redundancy, if tuple it is (min redundancy and max redundancy).
-        seeded:
+        seeded: Loader will hash ssv, sample and batch IDs to generate a random seed.
         model_loader_kwargs: Optional keyword arguments for model_loader func.
 
     Examples:
@@ -370,23 +367,17 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         ssv_n_vertices = start_multiprocess_imap(_vert_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
                                                  nb_cpus=None)
         ssv_n_vertices = np.array(ssv_n_vertices)
-        if type(redundancy) is tuple:
-            ssv_redundancy = {ssv_ids[ii]: min(max(ssv_n_vertices[ii] // npoints, redundancy[0]), redundancy[1])
-                              for ii in range(len(ssv_ids))}
-        else:
-            ssv_redundancy = {ssv_ids[ii]: max(ssv_n_vertices[ii] // npoints, redundancy) for ii in range(len(ssv_ids))}
         sorted_ix = np.argsort(ssv_n_vertices)[::-1]
         ssv_ids = ssv_ids[sorted_ix]
-        ssv_ids = np.concatenate([np.array([ssv_id] * ssv_redundancy[ssv_id], dtype=np.uint)
-                                  for ssv_id in ssv_ids])
-        params_in = [{**params_kwargs, **dict(ssv_ids=ch)} for ch in chunkify_successive(
-            ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
+        params_in = [{**params_kwargs, **dict(ssv_ids=ch)} for ch in chunkify(ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
     else:
         params_kwargs = dict(batchsize=bs, npoints=npoints, transform=transform, ctx_size=ctx_size, **loader_kwargs)
         params_in = [{**params_kwargs, **dict(ssv_params=[ch])} for ch in ssd_kwargs]
         ssv_ids = [el['ssv_id'] for el in ssd_kwargs]
 
     nsamples_tot = len(ssv_ids)
+    if 'redundancy' in loader_kwargs:
+        nsamples_tot *= loader_kwargs['redundancy']
 
     q_loader = Queue()
     for el in params_in:
@@ -613,8 +604,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
     if cache is None:
         cache = train
     if not train:
-        if draw_local:
-            raise NotImplementedError()
+        raise NotImplementedError()
         for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
             n_batches = int(np.ceil(occ / batchsize))
             ssv = ssd.get_super_segmentation_object(ssv_id)
@@ -772,7 +762,7 @@ def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
         res.append(out)
 
     del inp
-    res = dict(probas=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+    res = dict(probas=np.concatenate(res), n_batches=n_batches)
 
     q_cnt.put(n_samples)
 
@@ -811,7 +801,8 @@ def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
     q_out.put(([ssv_kwargs['ssv_id']] * n_samples, res))
 
 
-def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = None) -> Tuple[List[int], List[bool]]:
+def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = None,
+                        da_equals_tan: bool = True) -> Tuple[List[int], List[bool]]:
     """
     Framework is very similar to what will be needed for semantic segmentation of surface points.
     Requires adaptions in pts_loader_semseg and correct merge of vertex indices instead of skeleton node cKDTree.
@@ -820,6 +811,7 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
         ssv_kwargs:
         d_in:
         pred_key:
+        da_equals_tan: This flag is only applied if the working directory belongs to j0126.
 
     Returns:
 
@@ -839,17 +831,25 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
         celltype_probas.append(res['probas'])
         d_in[sso.id][curr_ix] = None
         curr_ix += 1
-        if res['batch_progress'][0] == res['batch_progress'][1]:
+        if curr_ix == res['n_batches']:
             break
 
     logit = np.concatenate(celltype_probas)
+
+    if 'j0126' in sso.config.working_dir and da_equals_tan:
+        # accumulate evidence for DA and TAN
+        logit[:, 1] += logit[:, 6]
+        # remove TAN in proba array
+        logit = np.delete(logit, [6], axis=1)
+        # INT is now at index 6 -> label 6 is INT
+
     cls = np.argmax(logit, axis=1).squeeze()
     cls_maj = collections.Counter(cls).most_common(1)[0][0]
 
     sso.save_attributes([pred_key], [cls_maj])
     sso.save_attributes([f"{pred_key}_probas"], [logit])
 
-    d_in[sso.id][curr_ix] = None
+    del d_in[sso.id]
     return [sso.id], [True]
 
 
@@ -1046,7 +1046,7 @@ def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
                 g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
                 out = m(*g_inp).cpu().numpy()
             res.append(out)
-    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
 
     q_cnt.put(1. / n_batches)
     if batch_progress == 1:
@@ -1073,7 +1073,7 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
         node_coords.append(res['t_pts'].reshape(-1, 3))
         d_in[sso.id][curr_ix] = None
         curr_ix += 1
-        if res['batch_progress'][0] == res['batch_progress'][1]:
+        if curr_ix == res['n_batches']:
             break
     del d_in[sso.id]
     node_probas = np.concatenate(node_probas)
@@ -1136,7 +1136,7 @@ def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
                 g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
                 out = m(g_inp, None, None).cpu().numpy()
             res.append(out)
-    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
 
     q_cnt.put(1. / n_batches)
     if batch_progress == 1:
@@ -1162,7 +1162,7 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
         node_coords.append(res['t_pts'].reshape(-1, 3))
         d_in[sso.id][curr_ix] = None
         curr_ix += 1
-        if res['batch_progress'][0] == res['batch_progress'][1]:
+        if curr_ix == res['n_batches']:
             break
     del d_in[sso.id]
     node_embedding = np.concatenate(node_embedding)
@@ -1459,7 +1459,7 @@ def pts_pred_semseg(m, inp, q_out, d_out, q_cnt, device, bs):
                 g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
                 out = m(*g_inp).cpu().numpy()
             res.append(out)
-    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), batch_progress=(batch_progress, n_batches))
+    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
 
     q_cnt.put(1. / n_batches)
     if batch_progress == 1:
@@ -1498,7 +1498,7 @@ def pts_postproc_semseg(ssv_id: int, d_in: dict, working_dir: Optional[str] = No
         node_preds.append(np.argmax(res['t_l'].reshape(-1, 2), axis=1)[..., None])
         # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
         node_coords.append(res['t_pts'].reshape(-1, 3))
-        if res['batch_progress'][0] == res['batch_progress'][1]:
+        if curr_ix == res['n_batches']:
             break
     node_preds = np.concatenate(node_preds)
     node_coords = np.concatenate(node_coords)
@@ -1757,25 +1757,14 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=10, npredictor=4, bs=10, redundancy=(20, 20))
+    default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(redundancy=20))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
-    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar, pts_pred_scalar_nopostproc,
-                               mpath=mpath, ssv_ids=ssv_ids, **loader_kwargs, **default_kwargs)
-    for ssv in ssd.get_super_segmentation_object(out_dc.keys()):
-        logit = np.concatenate(out_dc[ssv.id])
-        if 'j0126' in ssd.config.working_dir and da_equals_tan:
-            # accumulate evidence for DA and TAN
-            logit[:, 1] += logit[:, 6]
-            # remove TAN in proba array
-            logit = np.delete(logit, [6], axis=1)
-            # INT is now at index 6 -> label 6 is INT
-        cls = np.argmax(logit, axis=1).squeeze()
-        cls_maj = collections.Counter(cls).most_common(1)[0][0]
-        ssv.save_attributes([pred_key], [cls_maj])
-        ssv.save_attributes([f"{pred_key}_probas"], [logit])
+    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar_infer, pts_pred_scalar,
+                               postproc_func=pts_postproc_scalar, mpath=mpath, ssv_ids=ssv_ids,
+                               **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
         raise ValueError('Invalid output during cell type prediction.')
 

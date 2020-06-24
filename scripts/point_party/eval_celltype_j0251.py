@@ -8,7 +8,7 @@ from sklearn.metrics.classification import classification_report
 from sklearn.metrics import confusion_matrix
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.prediction_pts import predict_pts_plain, pts_pred_scalar_nopostproc, \
-    pts_loader_scalar, pts_pred_scalar, get_celltype_model_pts, get_pt_kwargs
+    pts_loader_scalar_infer, get_celltype_model_pts, get_pt_kwargs
 from syconn.handler.prediction import certainty_estimate
 
 
@@ -36,7 +36,7 @@ def predict_celltype_wd(ssd_kwargs, mpath, **kwargs):
     Returns:
 
     """
-    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar, pts_pred_scalar_nopostproc,
+    out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar_infer, pts_pred_scalar_nopostproc,
                                mpath=mpath, **kwargs)
     out_dc = dict(out_dc)
     for ssv_id in out_dc:
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     assert os.path.isfile(mpath)
 
     res_dc = predict_celltype_wd(ssd_kwargs, mpath, ssv_ids=ssv_ids, bs=10, nloader=8, npredictor=4, use_test_aug=False,
-                                 seeded=True, redundancy=(20, 20), **loader_kwargs)
+                                 seeded=True, loader_kwargs=dict(redundancy=20), **loader_kwargs)
     basics.write_obj2pkl(fname_pred, res_dc)
 
     target_ids, pts_preds, certainty = [], [], []

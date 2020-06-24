@@ -187,7 +187,7 @@ if __name__ == '__main__':
     # step_idents.append('Morphology extraction')
 
     log.info('Step 8/9 - Celltype analysis')
-    exec_inference.run_celltype_prediction()
+    # exec_inference.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 
