@@ -44,11 +44,14 @@ def labels2mesh(args):
     meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=False))
     label_map = [-1, 7, 8, 9]
     hcs = []
+    faces = None
     for ix, mesh in enumerate(meshes):
         indices, vertices, normals = mesh
         vertices = vertices.reshape((-1, 3))
         labels = np.ones((len(vertices), 1)) * label_map[ix]
         indices = indices.reshape((-1, 3))
+        if ix == 0:
+            faces = indices
         hc = HybridCloud(vertices=vertices, labels=labels)
         hcs.append(hc)
 
@@ -95,7 +98,8 @@ def labels2mesh(args):
             skel = sso.skeleton
             nodes = skel['nodes'] * sso.scaling
             edges = skel['edges']
-            hc = HybridCloud(vertices=vertices, labels=hm.labels, nodes=nodes, edges=edges, encoding=hm.encoding)
+            hc = HybridMesh(vertices=vertices, labels=hm.labels, nodes=nodes, edges=edges, encoding=hm.encoding,
+                            faces=faces)
         else:
             hcs[ix].set_encoding({obj_names[ix]: label_map[ix]})
             clouds[obj_names[ix]] = hcs[ix]
@@ -162,14 +166,14 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    # labels2mesh(params[0])
+    # labels2mesh(params[7])
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/gt/20_06_09/raw/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/annotations/"
+    destination = "/wholebrain/u/jklimesch/thesis/tmp/"
+    data_path = "/wholebrain/u/jklimesch/thesis/tmp/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
