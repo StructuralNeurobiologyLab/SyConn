@@ -332,6 +332,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
 
     """
+    global m_postproc
     if loader_kwargs is None:
         loader_kwargs = dict()
     if model_loader_kwargs is None:
@@ -430,6 +431,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     for c in postprocs:
         c.join()
         c.close()
+    # necessary for subsequent runs?
+    del m_postproc
+    m_postproc = Manager()
     return dict_out
 
 

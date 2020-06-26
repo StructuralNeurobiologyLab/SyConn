@@ -113,6 +113,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
+        # TODO: perform multiprocessed
         file_mask = np.zeros(len(out_files), dtype=np.int)
         for ii, p in enumerate(out_files):
             with open(p, 'rb') as f:
@@ -122,6 +123,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                     file_mask[ii] = n_el
                     if len(res_keys) == 0:
                         res_keys = list(res_dc.keys())
+        # TODO: perform multiprocessed [END]
         if len(res_keys) == 0:
             raise ValueError(f'No objects found during dataset_analysis of {sd}.')
         n_ids = np.sum(file_mask)
