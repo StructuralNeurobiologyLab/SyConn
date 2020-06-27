@@ -1832,7 +1832,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=10, npredictor=4, npostproc=10, bs=batchsizes)
+    default_kwargs = dict(nloader=10, npredictor=2, npostproc=10, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
