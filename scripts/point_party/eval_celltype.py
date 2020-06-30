@@ -6,21 +6,23 @@ import numpy as np
 from sklearn.metrics.classification import classification_report
 from syconn.handler.prediction_pts import predict_pts_plain, \
     pts_loader_scalar, pts_pred_scalar
+import os
 
 
 def load_model(mkwargs, device):
     from elektronn3.models.convpoint import ModelNet40
     from elektronn3.models.base import InferenceModel
     import torch
+    mpath = mkwargs['mpath']
+    del mkwargs['mpath']
     m = ModelNet40(5, 8, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     # pts_pred_scalar (pred_func used in predict_pts_plain) requires the model object to have a .predict method
     m = torch.nn.DataParallel(m)
-    m = InferenceModel(m)
     return m
 
 
-def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, nloader=4, npredictor=2,
+def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, ctx_size, nloader=4, npredictor=2,
                         ssv_ids=None, use_test_aug=False, device='cuda'):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
@@ -46,7 +48,7 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
     """
     out_dc = predict_pts_plain(ssd_kwargs, model_loader, pts_loader_scalar, pts_pred_scalar, mkwargs=mkwargs,
                                npoints=npoints, scale_fact=scale_fact, nloader=nloader, npredictor=npredictor,
-                               ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device)
+                               ssv_ids=ssv_ids, use_test_aug=use_test_aug, device=device, ctx_size=ctx_size)
     out_dc = dict(out_dc)
     for ssv_id in out_dc:
         logit = np.concatenate(out_dc[ssv_id])
@@ -63,20 +65,23 @@ def predict_celltype_wd(ssd_kwargs, model_loader, mkwargs, npoints, scale_fact, 
 
 
 if __name__ == '__main__':
+    """
+    
+celltype_eval0_sp25k/celltype_pts_scale30000_nb25000_swish_gn_moreAug4_CV7_eval0 """
     ncv_min = 0
     n_cv = 10
     da_equals_tan = True
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    # base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval{}_sp75k/'
-    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/'
+    base_dir_init = '/wholebrain/scratch/pschuber/e3_trainings_convpoint/celltype_eval0_sp25k/'
     for run in range(1):
         base_dir = base_dir_init.format(run)
         ssd_kwargs = dict(working_dir=wd, version=gt_version)
-        mdir = base_dir + '/celltype_pts_scale30000_nb25000_swish_noBN_moreAug4_CV{}_eval{}/'
+        mdir = base_dir + '/celltype_pts_scale30000_nb25000_swish_gn_moreAug4_CV{}_eval{}/'
         use_norm = False
         track_running_stats = False
         activation = 'relu'
+        ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
         if 'swish' in mdir:
             activation = 'swish'
         if '_noBN_' in mdir:
@@ -97,12 +102,14 @@ if __name__ == '__main__':
         for CV in range(ncv_min, n_cv):
             split_dc = basics.load_pkl2obj(f'/wholebrain/songbird/j0126/areaxfs_v6/ssv_ctgt_v4'
                                            f'/ctgt_v4_splitting_cv{CV}_10fold.pkl')
-            mpath = f'{mdir.format(CV, run)}/state_dict_minlr_step124000.pth'
+            mpath = f'{mdir.format(CV, run)}/state_dict_final.pth'
+            mkwargs['mpath'] = mpath
             log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
             fname_pred = f'{base_dir}/ctgt_v4_splitting_cv{CV}_10fold_PRED.pkl'
+            assert os.path.isfile(mpath)
 
             res_dc = predict_celltype_wd(ssd_kwargs, load_model, mkwargs, npoints, scale_fact, ssv_ids=split_dc['valid'],
-                                         nloader=2, npredictor=1, use_test_aug=True)
+                                         nloader=2, npredictor=1, use_test_aug=True, ctx_size=ctx)
             basics.write_obj2pkl(fname_pred, res_dc)
 
         # compare to GT

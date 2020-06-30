@@ -95,7 +95,7 @@ model = UNet(
     normalization='group8',
 ).to(device)
 
-example_input = torch.randn(1, 1, 16, 96, 96)
+example_input = torch.randn(1, 1, 32, 144, 144)
 
 enable_save_trace = False if args.jit == 'disabled' else True
 if args.jit == 'onsave':
@@ -111,17 +111,16 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # USER PATHS
-save_root = os.path.expanduser('~/train_data/')
+save_root = args.sr
 os.makedirs(save_root, exist_ok=True)
 
-data_root = os.path.expanduser('/wholebrain/songbird/j0126/GT/ER-ground_truth/')
+data_root = os.path.expanduser('/wholebrain/scratch/pschuber/GT_ER/')
 fnames = sorted([f for f in os.listdir(data_root) if f.endswith('.h5')])
 input_h5data = [(os.path.join(data_root, f), 'raw') for f in fnames]
 target_h5data = [(os.path.join(data_root, f), 'label') for f in fnames]
 
 # use training data for validation too
 valid_indices = [3, 4, 5]
-
 max_steps = args.max_steps
 max_runtime = args.max_runtime
 
@@ -166,7 +165,7 @@ valid_transform = transforms.Compose(common_transforms + [])
 aniso_factor = 2  # Anisotropy in z dimension. E.g. 2 means half resolution in z dimension.
 common_data_kwargs = {  # Common options for training and valid sets.
     'aniso_factor': aniso_factor,
-    'patch_shape': (16, 96, 96),
+    'patch_shape': (32, 144, 144),
     'in_memory': True  # Uncomment to avoid disk I/O (if you have enough host memory for the data)
 }
 train_dataset = PatchCreator(
@@ -179,7 +178,6 @@ train_dataset = PatchCreator(
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
         'warp_amount': 0.5,
-        'lock_z': True
     },
     transform=train_transform,
     **common_data_kwargs
@@ -224,9 +222,9 @@ if out_channels > 2:
         f'val_IoU_c{i}': metrics.Accuracy(i)
         for i in range(out_channels)
     })
-
-crossentropy = nn.CrossEntropyLoss()  # weight=torch.tensor((0.2, 0.8)))
-dice = DiceLoss()  # weight=torch.tensor((0.2, 0.8)), apply_softmax=True)
+weight=torch.tensor((0.3, 0.7))
+crossentropy = nn.CrossEntropyLoss(weight)
+dice = DiceLoss(weight=weight)
 criterion = CombinedLoss([crossentropy, dice], weight=[0.5, 0.5], device=device)
 
 # Create trainer
@@ -237,7 +235,7 @@ trainer = Trainer(
     device=device,
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
-    batch_size=1,
+    batch_size=2,
     num_workers=2,
     save_root=save_root,
     exp_name=args.exp_name,

@@ -3,7 +3,7 @@
 # Copyright (c) 2019 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
-from syconn.cnn.TrainData import CellCloudGlia
+from syconn.cnn.TrainData import CloudDataSemseg
 
 import os
 import torch
@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall
+from elektronn3.models.convpoint import SegSmall, SegSmall2
 from elektronn3.training import Trainer3d, Backup, metrics
 try:
     from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -28,12 +28,12 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=30000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=1500, help='Scale factor for normalization')
+parser.add_argument('--bs', type=int, default=4, help='Batch size')
+parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=1000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -70,15 +70,16 @@ max_steps = 300000
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
 use_syntype = False
-dr = 0.3
+dr = 0.2
 track_running_stats = False
 use_norm = 'gn'
-num_classes = 2
-use_subcell = False
+# 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
+num_classes = 7
+use_subcell = True
 act = 'swish'
 
 if name is None:
-    name = f'glia_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -109,14 +110,13 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=False)
+model = SegSmall2(input_channels, num_classes, dropout=dr, use_norm=use_norm,
+                  track_running_stats=track_running_stats, act=act, use_bias=False)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
 
-if use_cuda:
-    model.to(device)
+model.to(device)
 
 example_input = (torch.ones(batch_size, npoints, input_channels).to(device),
                  torch.ones(batch_size, npoints, 3).to(device))
@@ -134,18 +134,18 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-50, 50), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
                                   clouds.Normalization(scale_norm),
                                   clouds.Center(),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.075, distr='normal')])
+                                  clouds.RandomScale(distr_scale=0.05, distr='normal')])
 valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
                                   clouds.Center()])
 
-train_ds = CellCloudGlia(npoints=npoints, transform=train_transform,
-                         batch_size=batch_size, ctx_size=ctx)
-valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False,
-                         batch_size=batch_size, ctx_size=ctx)
+train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform,
+                           batch_size=batch_size, ctx_size=ctx)
+valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False,
+                           batch_size=batch_size, ctx_size=ctx)
 
 # PREPARE AND START TRAINING #
 
@@ -172,9 +172,8 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 #     mode='exp_range',
 #     gamma=0.99994,
 # )
-criterion = torch.nn.CrossEntropyLoss()
-if use_cuda:
-    criterion.cuda()
+class_weights = torch.tensor([1, 1, 1, 2, 2, 2, 2.], dtype=torch.float32, device=device)
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
@@ -183,6 +182,12 @@ valid_metrics = {  # mean metrics
     'val_DSC_mean': metrics.DSC(),
     'val_IoU_mean': metrics.IoU(),
 }
+if num_classes > 2:
+    # Add separate per-class accuracy metrics only if there are more than 2 classes
+    valid_metrics.update({
+        f'val_IoU_c{i}': metrics.Accuracy(i)
+        for i in range(num_classes)
+    })
 
 # Create trainer
 # it seems pytorch 1.1 does not support batch_size=None to enable batched dataloader, instead

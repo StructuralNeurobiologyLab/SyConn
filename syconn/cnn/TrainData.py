@@ -8,20 +8,25 @@
 # ELEKTRONN2 architectures
 import open3d as o3d
 import matplotlib
+import re
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
+import functools
 from knossos_utils import KnossosDataset
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
-from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, pts_feat_dict, pts_loader_glia
+from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, \
+    pts_loader_glia, load_hc_pkl, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
+from morphx.preprocessing.voxel_down import voxel_down
+from morphx.classes.hybridcloud import HybridCloud
 try:
     from vigra.filters import boundaryVectorDistanceTransform
     import vigra
@@ -58,7 +63,7 @@ if elektronn3_avail:
         Loader for cell vertices.
         """
         def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, cv_val=0, cellshape_only=False, use_syntype=True,
+                     train=True, cv_val=0, cellshape_only=False, ctx_size=20000, use_syntype=True,
                      onehot=True, batch_size=1):
             """
 
@@ -68,6 +73,7 @@ if elektronn3_avail:
                 train :  True, or False (-> validation data will be used with key 'valid')
                 transform : transformations which are applied in `__getitem__`.
                 cv_val : Cross validation value.
+                ctx_size:
                 use_syntype: If True, uses different features for symmetric and asymmetric
                     synapses,
             """
@@ -85,6 +91,7 @@ if elektronn3_avail:
             else:
                 self.ssd_kwargs = dict(working_dir='/wholebrain/songbird/j0126/areaxfs_v6/',
                                        version='ctgt_v4')
+            self.ctx_size = ctx_size
             ssd = SuperSegmentationDataset(**self.ssd_kwargs)
             gt_dir = ssd.path
 
@@ -110,7 +117,6 @@ if elektronn3_avail:
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
-            self._feat_dc = pts_feat_dict
             if use_syntype:
                 self._num_obj_types = 5
             else:
@@ -179,11 +185,13 @@ if elektronn3_avail:
             if draw_local:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
-                    self.num_pts, transform=self.transform, train=True, draw_local=True)][0]
+                    self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
+                    train=True, draw_local=True)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
-                    self.num_pts, transform=self.transform, train=True)][0]
+                    self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
+                    train=True)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -245,7 +253,7 @@ if elektronn3_avail:
         """
 
         def __init__(self, npoints=20000, transform: Callable = Identity(),
-                     train=True, batch_size=1, use_subcell=False):
+                     train=True, batch_size=1, use_subcell=False, ctx_size=15000):
             """
 
             Args:
@@ -267,7 +275,7 @@ if elektronn3_avail:
             csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint), nonglia_ssv_ids])
-
+            self.ctx_size = ctx_size
             self.sso_params = [(sso.id, sso.ssd_kwargs) for sso in
                                ssd.get_super_segmentation_object(nonglia_ssv_ids)]
             ssd_glia = SuperSegmentationDataset(working_dir=wd_path, version='gliagt')
@@ -296,7 +304,6 @@ if elektronn3_avail:
             self._curr_ssv_id = None
             self._curr_ssd_kwargs = None
             self._curr_ssv_label = None
-            self._feat_dc = pts_feat_dict
             self.transform = transform
 
         def __getitem__(self, item):
@@ -345,11 +352,72 @@ if elektronn3_avail:
             self._curr_ssv_label = self.label_dc[self.sso_params[item][0]]
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
                 [*pts_loader_glia(self.sso_params[item:item+1], [self._curr_ssv_label], self._batch_size,
-                self.num_pts, transform=self.transform, use_subcell=self.use_subcell)][0]
+                 self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
+                                  train=True, ctx_size=self.ctx_size)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:
                 return sample_pts, sample_feats, out_pts, out_labels
+
+
+    class CloudDataSemseg(Dataset):
+        def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
+                     train=True, batch_size=1, use_subcell=True, ctx_size=20000):
+            if source_dir is None:
+                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt'
+                              '_2020/2020_05//hc_out/')
+            self.source_dir = source_dir
+            self.fnames = glob.glob(f'{source_dir}/*.pkl')
+            ssv_ids_proof = [491527, 2734465, 2854913, 8339462, 10919937, 15933443, 15982592,
+                             16096256, 16113665, 18571264, 23144450, 24414208, 26501121, 33581058,
+                             34811392, 37558272, 46319619]  # + [1090051, 2091009, 3447296, 8003584, 12806659]  # sparse GT
+            self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
+                           in ssv_ids_proof]
+            print(f'Using {len(self.fnames)} cells for training.')
+            if use_subcell:  # TODO: add syntype
+                self._num_obj_types = 4
+            else:
+                self._num_obj_types = 1
+            self.ctx_size = ctx_size
+            self.use_subcell = use_subcell
+            self.train = train
+            self.num_pts = npoints
+            self._batch_size = batch_size
+            self.transform = transform
+
+        def __getitem__(self, item):
+            item = np.random.randint(0, len(self.fnames))
+            sample_pts, sample_feats, out_pts, out_labels = self.load_sample(item)
+            pts = torch.from_numpy(sample_pts).float()
+            feats = torch.from_numpy(sample_feats).float()
+            out_pts = torch.from_numpy(out_pts).float()
+            lbs = torch.from_numpy(out_labels).long()
+            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': lbs}
+
+        def __len__(self):
+            if self.train:
+                # make use of the underlying LRU cache with high epoch size,
+                # worker instances of the pytorch loader will reset after each epoch
+                return len(self.fnames) * 100
+            else:
+                return max(len(self.fnames), 1)
+
+        def load_sample(self, item):
+            """
+            Deterministic data loader.
+
+            Args:
+                item: Index in `py:attr:~fnames`.
+
+            Returns:
+                Numpy arrays of points, point features, target points and target labels.
+            """
+            p = self.fnames[item]
+            (sample_feats, sample_pts), (out_pts, out_labels) = \
+                [*pts_loader_semseg_train([p], self._batch_size, self.num_pts,
+                                          transform=self.transform, ctx_size=self.ctx_size,
+                                          use_subcell=self.use_subcell)][0]
+            return sample_pts, sample_feats, out_pts, out_labels
 
 
     class MultiviewDataCached(Dataset):

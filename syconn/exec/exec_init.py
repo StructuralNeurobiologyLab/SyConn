@@ -44,13 +44,12 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
             global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
-            multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
-            n_max_co_processes=global_params.config.ncore_total, log=log)
+            multi_params, "mesh_caching", suffix=co, remove_jobfolder=False, log=log)
 
     if co == "sv":
         _ = qu.batchjob_script(
             multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True,
-            n_max_co_processes=global_params.config.ncore_total, log=log)
+            log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
     if not global_params.config.use_new_meshing:

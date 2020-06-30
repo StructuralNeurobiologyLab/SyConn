@@ -134,8 +134,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
              f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
-    cps.map_objects_from_synssv_partners(global_params.config.working_dir,
-                                         log=log, n_max_co_processes=max_n_jobs)
+    cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
@@ -174,7 +173,6 @@ def run_spinehead_volume_calc():
     multi_params = [(ixs, ) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
-                    n_max_co_processes=global_params.config.ncore_total,
                     remove_jobfolder=True)
     log.info('Finished processing of {} SSVs.'
              ''.format(len(ordering)))

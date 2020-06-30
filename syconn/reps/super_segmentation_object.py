@@ -1916,8 +1916,7 @@ class SuperSegmentationObject(object):
             qu.batchjob_script(
                 params, "render_views_partial", suffix="_SSV{}".format(self.id),
                 n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True,
-                additional_flags="--gres=gpu:1")
+                remove_jobfolder=True, additional_flags="--gres=gpu:1")
         else:
             # render raw data
             rot_mat = render_sampled_sso(
@@ -3121,7 +3120,7 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             largeFoV=False):
+                             onthefly_views=False):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3134,20 +3133,18 @@ class SuperSegmentationObject(object):
             view_props: Optional[dict]
                 Dictionary which contains view properties. If None, default defined in
                 `global_params.py` will be used.
-            largeFoV: bool
+            onthefly_views: bool
 
         Returns:
 
         """
-        if not largeFoV:
-            if view_props is None:
-                view_props = {}
+        if view_props is None:
+            view_props = {}
+        if not onthefly_views:
             # reuse small, local views via bootstrapping
             ssh.predict_sso_celltype(
                 self, model, pred_key_appendix=pred_key_appendix, **view_props)
         else:
-            if view_props is None:
-                view_props = global_params.config['celltype']['view_properties_large']
             ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
                                         overwrite=False, **view_props)
         if model_tnet is not None:
@@ -3395,30 +3392,21 @@ def celltype_predictor(args):
     Returns:
 
     """
-    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3
+    from ..handler.prediction import get_celltype_model_e3
     ssv_ids = args
     # randomly initialize gpu
     m = get_celltype_model_e3()
-    m_tnet = get_tripletnet_model_e3()
-    pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
         ssv._view_caching = True
         try:
-            if global_params.config.use_large_fov_views_ct:
-                view_props = global_params.config['celltype']['view_properties_large']
-                ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
-                ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
-            else:
-                ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
-        except Exception as e:
-            missing_ssvs.append((ssv.id, str(e)))
+            ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
+        except RuntimeError as e:
+            missing_ssvs.append(ssv.id)
             msg = 'ERROR during celltype prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
-        pbar.update(1)
-    pbar.close()
     return missing_ssvs
 
 
@@ -3433,23 +3421,19 @@ def semsegaxoness_predictor(args):
 
     """
     from ..handler.prediction import get_semseg_axon_model
-    ssv_ids, nb_cpus = args
     m = get_semseg_axon_model()
+    ssv_ids, nb_cpus = args
     missing_ssvs = []
     view_props = global_params.config['compartments']['view_properties_semsegax']
-    pbar = tqdm.tqdm(total=len(ssv_ids))
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
             ssh.semseg_of_sso_nocache(ssv, m, **view_props)
-        except Exception as e:
+        except RuntimeError as e:
             missing_ssvs.append((ssv.id, str(e)))
             msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
-        pbar.update()
-    pbar.close()
     return missing_ssvs
-
 

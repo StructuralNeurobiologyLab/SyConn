@@ -163,7 +163,7 @@ skeleton:
     spiness: 1000
 
 views:
-  use_large_fov_views_ct:
+  use_onthefly_views_ct: False
   use_new_renderings_locs:
   # TODO: move all default view parameters here
   nb_views: 2  # used for default view rendering (glia separation, spine detection)

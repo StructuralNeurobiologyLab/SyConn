@@ -355,6 +355,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
         glPopMatrix()
     eglDestroyContext(*ctx)
+    eglTerminate(ctx[0])
     return np.concatenate(c_views)
 
 
@@ -449,6 +450,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
                                    triangulation=triangulation)[None, ])
         glPopMatrix()
     eglDestroyContext(*ctx)
+    eglTerminate(ctx[0])
     return np.concatenate(c_views)
 
 
@@ -663,6 +665,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         log_proc.debug("Finished rendering mesh of type %s at %d locations after"
                        " %0.2fs" % (views_key,len(mviews), end - start))
     eglDestroyContext(*ctx)
+    eglTerminate(ctx[0])
     if return_rot_matrices:
         return mviews, rot_matrices
     return mviews

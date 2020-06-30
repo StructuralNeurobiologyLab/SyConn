@@ -597,7 +597,7 @@ class main_class(QtGui.QDialog):
 
         self.direct_ssv_id_input = QtGui.QLineEdit()
         self.direct_ssv_id_input.setValidator(QtGui.QIntValidator())
-        self.direct_ssv_id_input.setMaxLength(8)
+        #self.direct_ssv_id_input.setMaxLength(8)
 
         self.direct_syn_id_input = QtGui.QLineEdit()
         self.direct_syn_id_input.setValidator(QtGui.QIntValidator())
@@ -908,9 +908,9 @@ class main_class(QtGui.QDialog):
         params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
                   (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
                   (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
-                  # (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
-                  (self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
-                  (self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
+                  (self, ssv_id, sym_id, 'sj', (240, 50, 50, 255))]
+                  #(self, ssv_id, sym_id, 'syn_ssv_sym', (50, 50, 240, 255)),
+                  #(self, ssv_id, asym_id, 'syn_ssv_asym', (240, 50, 50, 255))]
         start = time.time()
 
         # add all meshes to download queue
@@ -933,40 +933,42 @@ class main_class(QtGui.QDialog):
         if signal_block:
             signalsBlocked = KnossosModule.knossos_global_skeletonizer.blockSignals(
                 True)
-        k_tree = KnossosModule.skeleton.find_tree_by_id(ssv_id)
-        if k_tree is None:
-            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-        skel = self.syconn_gate.get_ssv_skel(ssv_id)
-        #skel = None
-        if skel is None:
-            print("Loaded skeleton is None.")
-            return
-        # add nodes
-        nx_knossos_id_map = dict()
-        for ii, n_coord in enumerate(skel["nodes"]):
-            # newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
-            n_proeprties = {}
-            for k in skel:
-                if k in ["nodes", "edges", "diameters"]:
-                    continue
-                n_proeprties[k] = float(skel[k][ii])
-            k_node = KnossosModule.skeleton.add_node(
-                [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree,
-                n_proeprties)
-            KnossosModule.skeleton.set_radius(k_node.node_id(),
-                                              skel["diameters"][ii] / 2)
-            nx_knossos_id_map[ii] = k_node.node_id()
+        try:
+            k_tree = KnossosModule.skeleton.find_tree_by_id(ssv_id)
+            if k_tree is None:
+                k_tree = KnossosModule.skeleton.add_tree(ssv_id)
+            skel = self.syconn_gate.get_ssv_skel(ssv_id)
+            #skel = None
+            if skel is None:
+                print("Loaded skeleton is None.")
+                return
+            # add nodes
+            nx_knossos_id_map = dict()
+            for ii, n_coord in enumerate(skel["nodes"]):
+                # newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
+                n_proeprties = {}
+                for k in skel:
+                    if k in ["nodes", "edges", "diameters"]:
+                        continue
+                    n_proeprties[k] = float(skel[k][ii])
+                k_node = KnossosModule.skeleton.add_node(
+                    [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree,
+                    n_proeprties)
+                KnossosModule.skeleton.set_radius(k_node.node_id(),
+                                                  skel["diameters"][ii] / 2)
+                nx_knossos_id_map[ii] = k_node.node_id()
 
-        # add edges
-        for nx_src, nx_tgt in skel["edges"]:
-            KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src],
-                                               nx_knossos_id_map[nx_tgt])
+            # add edges
+            for nx_src, nx_tgt in skel["edges"]:
+                KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src],
+                                                   nx_knossos_id_map[nx_tgt])
+        finally:
 
-        # enable signals again
-        if signal_block:
-            KnossosModule.knossos_global_skeletonizer.blockSignals(
-                signalsBlocked)
-            KnossosModule.knossos_global_skeletonizer.resetData()
+            # enable signals again
+            if signal_block:
+                KnossosModule.knossos_global_skeletonizer.blockSignals(
+                    signalsBlocked)
+                KnossosModule.knossos_global_skeletonizer.resetData()
         print('Skel down and to K took {}'.format(time.time()-start))
         return
 

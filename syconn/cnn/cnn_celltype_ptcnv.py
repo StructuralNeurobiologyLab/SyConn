@@ -29,11 +29,12 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=30000, help='Scale factor for normalization')
+parser.add_argument('--bs', type=int, default=10, help='Batch size')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
+parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -63,20 +64,21 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 cval = args.cval
+ctx = args.ctx
 
 if cval is None:
     cval = 0
 
 lr = 5e-4
-lr_stepsize = 1000
-lr_dec = 0.995
-max_steps = 125000
+lr_stepsize = 100
+lr_dec = 0.992
+max_steps = 150000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
 use_syntype = True
-dr = 0.2
+dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
 num_classes = 8
@@ -84,7 +86,7 @@ onehot = True
 act = 'swish'
 
 if name is None:
-    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_{act}'
+    name = f'celltype_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -118,7 +120,6 @@ save_root = os.path.expanduser(save_root)
 # Model selection
 model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act)
-name += '_moreAug4'
 
 name += f'_CV{cval}_eval{eval_nr}'
 model = nn.DataParallel(model)
@@ -152,10 +153,11 @@ valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
 
 train_ds = CellCloudData(npoints=npoints, transform=train_transform, cv_val=cval,
                          cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size)
+                         onehot=onehot, batch_size=batch_size, ctx_size=ctx)
 valid_ds = CellCloudData(npoints=npoints, transform=valid_transform, train=False,
                          cv_val=cval, cellshape_only=cellshape_only,
-                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size)
+                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+                         ctx_size=ctx)
 
 # PREPARE AND START TRAINING #
 
@@ -170,9 +172,9 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 # )
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
-# lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
+# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,
@@ -182,7 +184,9 @@ lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
 #     mode='exp_range',
 #     gamma=0.99994,
 # )
-criterion = torch.nn.CrossEntropyLoss()
+# extra weight for HVC and LMAN
+# STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
+criterion = torch.nn.CrossEntropyLoss(weight=torch.Tensor([1, 1, 1, 2, 2, 1, 1, 1]))
 if use_cuda:
     criterion.cuda()
 
@@ -205,7 +209,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=10,
+    num_workers=5,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
@@ -213,7 +217,8 @@ trainer = Trainer3d(
     schedulers={"lr": lr_sched},
     num_classes=num_classes,
     # example_input=example_input,
-    dataloader_kwargs=dict(collate_fn=lambda x: x[0])
+    dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
+    nbatch_avg=5
 )
 
 # Archiving training script, src folder, env info

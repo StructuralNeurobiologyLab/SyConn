@@ -37,8 +37,7 @@ from .meshes import mesh_area_calc, merge_meshes_incl_norm
 from zmesh import Mesher
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
-                     compute_meshprops=False):
+def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -53,9 +52,6 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     :param nb_cpus: int
         number of cores used for multithreading
         number of cores per worker for qsub jobs
-    :param n_max_co_processes: int
-        max number of workers running at the same time when using qsub
-    :param compute_meshprops: bool
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
@@ -77,8 +73,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     # Running workers
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=n_max_co_processes,
-                                             debug=False)
+                                             multi_params, debug=False)
         # Creating summaries
         attr_dict = {}
         for this_attr_dict in results:
@@ -117,11 +112,11 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
 
     else:
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-                                         n_max_co_processes=n_max_co_processes,
                                          suffix=sd.type)
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
+        # TODO: do this multi-processed
         file_mask = np.zeros(len(out_files), dtype=np.int)
         for ii, p in enumerate(out_files):
             with open(p, 'rb') as f:
@@ -134,7 +129,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         if len(res_keys) == 0:
             raise ValueError(f'No objects found during dataset_analysis of {sd}.')
         n_ids = np.sum(file_mask)
-        log_proc.debug(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
+        log_proc.info(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
                        f'dataset_analysis:\n{res_keys}')
         out_files = out_files[file_mask > 0]
         params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
@@ -154,11 +149,13 @@ def _dataset_analysis_collect(args):
     try:
         tmp_res = np.concatenate(tmp_res)
         assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
-        np.save(sd_path + "/%ss.npy" % attribute, tmp_res)
+        np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
     except ValueError as e:
-        if attribute in ['sj_ids', 'cs_ids']:
+        # allow dtype=object only for the following attributes with ragged shape:
+        if attribute in ['sj_ids', 'cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios',
+                         'mapping_vc_ids', 'mapping_vc_ratios']:
             tmp_res = np.array(tmp_res, dtype=np.object)
-            np.save(sd_path + "/%ss.npy" % attribute, tmp_res)
+            np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
         else:
             log_proc.error(
                 f'ValueError {e} encountered when writing numpy array '
@@ -174,6 +171,7 @@ def _load_attr_helper(args):
             dc = pkl.load(f)
             if len(dc['id']) == 0:
                 continue
+
             value = dc[attr]
             if attr == 'id':
                 value = np.array(value, np.uint)
@@ -197,8 +195,7 @@ def _dataset_analysis_thread(args):
     working_dir = args[3]
     recompute = args[4]
     compute_meshprops = args[5]
-    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
-                            mesh_area=[])
+    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[])
     for p in paths:
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
@@ -308,7 +305,6 @@ def _cache_storage_paths(args):
 def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                               n_folders_fs: int = 1000, n_folders_fs_sc: int = 1000,
                               n_chunk_jobs: Optional[int] = None, n_cores: int = 1,
-                              n_max_co_processes: Optional[int] = None,
                               cube_of_interest_bb: Optional[tuple] = None,
                               chunk_size: Optional[Union[tuple, np.ndarray]] = None,
                               log: Logger = None, overwrite=False):
@@ -328,7 +324,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         n_folders_fs_sc:
         n_chunk_jobs:
         n_cores:
-        n_max_co_processes:
         cube_of_interest_bb:
         chunk_size:
         log:
@@ -416,8 +411,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     # TODO: refactor write-out (and read in batchjob_enabled)
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
-            multi_params, "map_subcell_extract_props", n_cores=n_cores,
-            n_max_co_processes=n_max_co_processes)
+            multi_params, "map_subcell_extract_props", n_cores=n_cores)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -467,7 +461,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
             dict_paths_tmp += [sc_prop_worker_dc]
     else:
         results = sm.start_multiprocess_imap(
-            _map_subcell_extract_props_thread, multi_params, nb_cpus=n_max_co_processes,
+            _map_subcell_extract_props_thread, multi_params,
             verbose=False, debug=False)
 
         for worker_nr, ref_mesh_dc in tqdm.tqdm(results, leave=False):
@@ -556,10 +550,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
-                           n_max_co_processes=global_params.config.ncore_total,
                            remove_jobfolder=True, n_cores=1)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
@@ -579,10 +572,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_sv",
-                           n_max_co_processes=global_params.config.ncore_total,
                            remove_jobfolder=True)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
@@ -814,7 +806,7 @@ def _map_subcell_extract_props_thread(args):
     if global_params.config.use_new_meshing:
         dt_times_dc['overall'] = time.time() - start_all
         dt_str = ["{:<20}".format(f"{k}: {v:.2f}s") for k, v in dt_times_dc.items()]
-        log_proc.debug('{}'.format("".join(dt_str)))
+        # log_proc.debug('{}'.format("".join(dt_str)))
     return worker_nr, ref_mesh_dict
 
 
@@ -1400,7 +1392,7 @@ def merge_map_dicts(map_dicts):
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
-                      nb_cpus=None, n_max_co_processes=None):
+                      nb_cpus=None):
     paths = cs_sd.so_dir_paths
 
     # Partitioning the work
@@ -1416,7 +1408,6 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
 
     else:
         qu.batchjob_script(multi_params, "binary_filling_cs", n_cores=nb_cpus,
-                           n_max_co_processes=n_max_co_processes,
                            remove_jobfolder=True)
 
 
@@ -1555,8 +1546,7 @@ def multi_probas_saver(args):
     so.save_attributes([key], [probas])
 
 
-def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10,
-                                n_max_co_processes=100):
+def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
 
     block_size = np.array([block_edge_length] * 3)
 
@@ -1601,7 +1591,6 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10,
 
     else:
         _ = qu.batchjob_script(multi_params, "export_sd_to_knossosdataset",
-                               n_max_co_processes=n_max_co_processes,
                                remove_jobfolder=True)
 
 

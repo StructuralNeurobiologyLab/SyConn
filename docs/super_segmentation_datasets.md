@@ -24,7 +24,7 @@ to the constructor (kwarg: 'sv_mapping'). The `version` kwarg is used to disting
                                       version=VERSION, ssd_type="ssv",
                                       sv_mapping=AGG_SOURCE)
     ssd.save_dataset_shallow()
-    ssd.save_dataset_deep(n_max_co_processes=100)
+    ssd.save_dataset_deep()
     # alternatively for small datasets: ssd.save_dataset_deep(nb_cpus=20)
 
 It is recommended to cache the SSV meshes, which means that they are copied together from the meshes of the underlying SVs. For this use:

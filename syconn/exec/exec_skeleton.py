@@ -53,14 +53,12 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
     log.info('Started skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
     qu.batchjob_script(multi_params, "export_skeletons_new", log=log,
-                       n_max_co_processes=global_params.config.ncore_total,
                        remove_jobfolder=True, n_cores=2)
 
     log.info('Finished skeleton generation.')
     # # run skeleton feature extraction # Not needed anymore, will be kept in
     # case skeleton features should remain a feature of SyConn
     # qu.batchjob_script(multi_params, "preproc_skelfeature",
-    #                    n_max_co_processes=global_params.config.ncore_total,
     #                    remove_jobfolder=True)
 
 
@@ -96,7 +94,6 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
     log.info('Starting myelin mapping of {} SSVs.'.format(
         len(ssd.ssv_ids)))
     qu.batchjob_script(multi_params, "map_myelin2skel", log=log,
-                       n_max_co_processes=global_params.config.ncore_total,
                        remove_jobfolder=True, n_cores=2)
 
     log.info('Finished myelin mapping.')

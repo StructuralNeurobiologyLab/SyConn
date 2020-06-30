@@ -74,8 +74,7 @@ if len(ssvs_small) != 0:
     multi_params = [(ixs, wd, render_kwargs) for ixs in multi_params]
     path_out = batchjob_script(
         multi_params, "render_views", suffix="_SSV{}".format(ssvs_small[0].id),
-        n_cores=1, disable_batchjob=True, overwrite=True,
-        n_max_co_processes=n_parallel_jobs)
+        n_cores=1, disable_batchjob=True, overwrite=True)
     folder_del = os.path.abspath(path_out + "/../")
     shutil.rmtree(folder_del, ignore_errors=True)
 print(f'Finished rendering of {len(ssvs_small)} small SSVs.')
