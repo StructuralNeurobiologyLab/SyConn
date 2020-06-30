@@ -124,15 +124,15 @@ def kimimaro_mergeskels(path_list, cell_id):
         dust_threshold=1000,  # physical units
         tick_threshold=3500  # physical units
     )
-
+    skel = skel.downsample(4)  # better suited in function above with part of skels. Doesn't work there.
     # Split input skeletons into connected components and
     # then join the two nearest vertices within `radius` distance
     # of each other until there is only a single connected component
     # or no pairs of points nearer than `radius` exist.
     # Fuse all remaining components into a single skeleton.
-    skel = kimimaro.join_close_components(skel_list, radius=None)  # no threshold
+    skel = kimimaro.join_close_components(skel, radius=None)  # no threshold
     #cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-    skel = skel.downsample(4) #better suited in function above with part of skels. Doesn't work there.
+    #skel = skel.downsample(4) #better suited in function above with part of skels. Doesn't work there.
     degree_dict = {i: 0 for i, iv in enumerate(skel.vertices)}
     neighbour_dict = {i: [] for i in list(degree_dict.keys())}
 
