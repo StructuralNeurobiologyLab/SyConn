@@ -5,13 +5,16 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 import dill  # supports pickling of lambda expressions
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+
+from . import log_mp
+from .mp_utils import start_multiprocess_imap
+from .. import global_params
+from ..handler.basics import temp_seed, str_delta_sec
+from ..handler.config import initialize_logging
+
+import pickle as pkl
 import getpass
 import glob
-import numpy as np
 import os
 import io
 import re
@@ -23,14 +26,9 @@ import subprocess
 import tqdm
 import sys
 import time
+import numpy as np
 from multiprocessing import cpu_count
 from logging import Logger
-
-from ..handler.basics import temp_seed, str_delta_sec
-from ..handler.config import initialize_logging
-from .. import global_params
-from .mp_utils import start_multiprocess_imap
-from . import log_mp
 
 
 def batchjob_enabled():
@@ -130,6 +128,14 @@ def batchjob_script(params: list, name: str,
             raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". '
                                   f'Please make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
+
+    # Check if fallback is required
+    if disable_batchjob or not batchjob_enabled():
+        return batchjob_fallback(params, name, n_cores, suffix,
+                                 script_folder, python_path, show_progress=show_progress,
+                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
+                                 job_folder=batchjob_folder)
+
     if log is None:
         log_batchjob = initialize_logging("{}".format(name + suffix),
                                           log_dir=batchjob_folder)
@@ -139,13 +145,13 @@ def batchjob_script(params: list, name: str,
         path_to_scripts = script_folder
     else:
         path_to_scripts = path_to_scripts_default
+    path_to_script = f'{path_to_scripts}/QSUB_{name}.py'
+    if not os.path.exists(path_to_script):
+        if os.path.exists(f'{path_to_scripts}/batchjob_{name}.py'):
+            path_to_script = f'{path_to_scripts}/batchjob_{name}.py'
+        else:
+            raise FileNotFoundError(f'Specified script does not exist: {path_to_script}')
 
-    # Check if fallback is required
-    if disable_batchjob or not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path, show_progress=show_progress,
-                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
-                                 job_folder=batchjob_folder)
     if global_params.config['batch_proc_system'] != 'SLURM':
         msg = ('"batchjob_script" currently does not support any other batch processing '
                'system than SLURM.')
@@ -163,8 +169,7 @@ def batchjob_script(params: list, name: str,
     if job_name == "default":
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
-            job_name = "".join([letters[l] for l in
-                                np.random.randint(0, len(letters), 8)])
+            job_name = "".join([letters[l] for l in np.random.randint(0, len(letters), 8)])
     log_batchjob.info(
         'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks, each'
         ' using {} core(s).'.format(name, job_name, suffix, len(params), n_cores))
@@ -174,7 +179,6 @@ def batchjob_script(params: list, name: str,
         raise ValueError(msg)
 
     # Create folder structure
-    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
     path_to_storage = "%s/storage/" % batchjob_folder
     path_to_sh = "%s/sh/" % batchjob_folder
     path_to_log = "%s/log/" % batchjob_folder
@@ -265,7 +269,7 @@ def batchjob_script(params: list, name: str,
         except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
             log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
                                  f'again, SLURM cache might have been delayed.')
-            time.sleep(1.5*sleep_time)
+            time.sleep(1.5 * sleep_time)
             js_dc = jobstates_slurm(job_name, starttime)
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         # all jobs which are not running, completed or pending have failed for
@@ -421,16 +425,21 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
     n_max_co_processes = np.min([cpu_count() // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
-    log_batchjob.debug(f'Started BatchJobFallback script "{name}" with {len(params)} tasks'
-                       f' using {n_max_co_processes} parallel jobs, each using {n_cores} core(s).')
+    log_batchjob.info(f'Started BatchJobFallback script "{name}" with {len(params)} tasks'
+                      f' using {n_max_co_processes} parallel jobs, each using {n_cores} core(s).')
     start = time.time()
 
     if script_folder is not None:
         path_to_scripts = script_folder
     else:
         path_to_scripts = path_to_scripts_default
+    path_to_script = f'{path_to_scripts}/QSUB_{name}.py'
+    if not os.path.exists(path_to_script):
+        if os.path.exists(f'{path_to_scripts}/batchjob_{name}.py'):
+            path_to_script = f'{path_to_scripts}/batchjob_{name}.py'
+        else:
+            raise FileNotFoundError(f'Specified script does not exist: {path_to_script}')
 
-    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
     path_to_storage = "%s/storage/" % job_folder
     path_to_sh = "%s/sh/" % job_folder
     path_to_log = "%s/log/" % job_folder
@@ -467,7 +476,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
     out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
-                                      show_progress=show_progress)
+                                      show_progress=show_progress, nb_cpus=n_max_co_processes)
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
         # report errors
@@ -500,9 +509,9 @@ def fallback_exec(cmd_exec):
     out_str = ""
     reported = False
     if 'error' in out.decode().lower() or 'error' in err.decode().lower() \
-    or 'killed' in out.decode().lower() or 'killed' in err.decode().lower() \
-    or 'segmentation fault' in out.decode().lower() \
-    or 'segmentation fault' in err.decode().lower():
+            or 'killed' in out.decode().lower() or 'killed' in err.decode().lower() \
+            or 'segmentation fault' in out.decode().lower() \
+            or 'segmentation fault' in err.decode().lower():
         reported = True
         out_str = out.decode() + err.decode()
     if not reported and ('warning' in out.decode().lower() or

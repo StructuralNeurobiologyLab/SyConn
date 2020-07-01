@@ -6,33 +6,32 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
-import open3d as o3d
-import matplotlib
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
+import os
 import re
+import matplotlib
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
-import functools
-from knossos_utils import KnossosDataset
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
-from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
-from syconn.handler.prediction_pts import generate_pts_sample, pts_loader_scalar, \
-    pts_loader_glia, load_hc_pkl, pts_loader_semseg_train
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
+from syconn.handler.prediction_pts import pts_loader_scalar, \
+    pts_loader_local_skel, load_hc_pkl, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
-from morphx.preprocessing.voxel_down import voxel_down
-from morphx.classes.hybridcloud import HybridCloud
 try:
     from vigra.filters import boundaryVectorDistanceTransform
     import vigra
 except ImportError as e:
     log_cnn.error(str(e))
-import os
 import threading
 from sklearn.model_selection import train_test_split
 try:
@@ -93,23 +92,28 @@ if elektronn3_avail:
                                        version='ctgt_v4')
             self.ctx_size = ctx_size
             ssd = SuperSegmentationDataset(**self.ssd_kwargs)
+            self.ssd = ssd
+            self.sso_ids = None
             gt_dir = ssd.path
 
             log_cnn.info(f'Set {ssd} as GT source.')
-
-            if cv_val is -1:
-                log_cnn.critical(f'"cval_val" was set to -1. training will also '
-                                 f'include validation data.')
-                split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
-                split_dc = load_pkl2obj(split_dc_path)
-                split_dc['train'].extend(split_dc['valid'])
+            split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
+            if os.path.isfile(split_dc_path):
+                if cv_val is -1:
+                    log_cnn.critical(f'"cval_val" was set to -1. training will also '
+                                     f'include validation data.')
+                    split_dc = load_pkl2obj(split_dc_path)
+                    split_dc['train'].extend(split_dc['valid'])
+                else:
+                    split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv{cv_val}_10fold.pkl'
+                    split_dc = load_pkl2obj(split_dc_path)
+                    # Do not use validation split during training. Use training samples for validation
+                    # error instead (should still be informative due to missing augmentations)
+                    split_dc['valid'] = split_dc['train']
+                label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
             else:
-                split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv{cv_val}_10fold.pkl'
-                split_dc = load_pkl2obj(split_dc_path)
-                # Do not use validation split during training. Use training samples for validation
-                # error instead (should still be informative due to missing augmentations)
-                split_dc['valid'] = split_dc['train']
-            label_dc = load_pkl2obj(f'{gt_dir}/ctgt_v4_labels.pkl')
+                split_dc = None
+                label_dc = None
             self.train = train
             self.num_pts = npoints
             self._batch_size = batch_size
@@ -117,22 +121,23 @@ if elektronn3_avail:
             self.cellshape_only = cellshape_only
             self.use_syntype = use_syntype
             self.onehot = onehot
+            self.transform = transform
             if use_syntype:
                 self._num_obj_types = 5
             else:
                 self._num_obj_types = 4
             self.label_dc = label_dc
             self.splitting_dict = split_dc
-            self.sso_ids = self.splitting_dict['train'] if train else self.splitting_dict['valid']
-            for ix in self.sso_ids:
-                if ix not in ssd.ssv_ids:
-                    raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
-            self.transform = transform
-            print(f'Using splitting dict at "{split_dc_path}".')
-            for k, v in self.splitting_dict.items():
-                classes, c_cnts = np.unique([self.label_dc[ix] for ix in
-                                             self.splitting_dict[k]], return_counts=True)
-                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+            if self.splitting_dict is not None and self.label_dc is not None:
+                self.sso_ids = self.splitting_dict['train'] if train else self.splitting_dict['valid']
+                for ix in self.sso_ids:
+                    if ix not in ssd.ssv_ids:
+                        raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
+                print(f'Using splitting dict at "{split_dc_path}".')
+                for k, v in self.splitting_dict.items():
+                    classes, c_cnts = np.unique([self.label_dc[ix] for ix in
+                                                 self.splitting_dict[k]], return_counts=True)
+                    print(f"{k} [labels, counts]: {classes}, {c_cnts}")
 
         def __getitem__(self, item):
             """
@@ -151,8 +156,7 @@ if elektronn3_avail:
             item = np.random.randint(0, len(self.sso_ids))
             self._curr_ssv_id = self.sso_ids[item]
             pts, feats = self.load_ssv_sample(item)
-            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size,
-                           dtype=np.int)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size, dtype=np.int)
             pts = torch.from_numpy(pts).float()
             lbs = torch.from_numpy(lbs[..., None]).long()
             feats = torch.from_numpy(feats).float()
@@ -186,12 +190,12 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True)][0]
+                    train=True, draw_local=True, cache=False)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True)][0]
+                    train=True, cache=False)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -204,7 +208,7 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, draw_local: bool=True, **kwargs):
+        def __init__(self, draw_local: bool = True, **kwargs):
             """
 
             Args:
@@ -213,6 +217,11 @@ if elektronn3_avail:
                 **kwargs:
             """
             super().__init__(**kwargs)
+            if self.sso_ids is None:
+                bb = self.ssd.load_cached_data('bounding_box') * self.ssd.scaling  # N, 2, 3
+                bb = np.linalg.norm(bb[:, 1] - bb[:, 0], axis=1)
+                self.sso_ids = self.ssd.ssv_ids[bb > 2 * self.ctx_size]
+                print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
             self._curr_ssv_id_altern = None
             self.draw_local = draw_local
 
@@ -246,6 +255,43 @@ if elektronn3_avail:
             x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
             return x0, x1, x2
 
+        def __len__(self):
+            return 20000
+
+
+    class CellCloudDataJ0251(CellCloudData):
+        """
+        Uses the same data for train and valid set.
+        """
+        def __init__(self, **kwargs):
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+
+            super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
+            # load GT
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v0.csv"
+            df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
+            ssv_ids = df[:, 0].astype(np.uint)
+            if len(np.unique(ssv_ids)) != len(ssv_ids):
+                raise ValueError('Multi-usage of IDs!')
+            str_labels = df[:, 1]
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251') for el in str_labels], dtype=np.uint16)
+            self.sso_ids = ssv_ids
+            self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
+            self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}
+            self.sso_ids = self.splitting_dict['train']
+            for k, v in self.splitting_dict.items():
+                classes, c_cnts = np.unique([self.label_dc[ix] for ix in
+                                             self.splitting_dict[k]], return_counts=True)
+                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+
+        def __len__(self):
+            if self.train:
+                # make use of the underlying LRU cache with high epoch size,
+                # worker instances of the pytorch loader will reset after each epoch
+                return len(self.sso_ids) * 60
+            else:
+                return max(len(self.sso_ids) // 5, 1)
+
 
     class CellCloudGlia(Dataset):
         """
@@ -276,15 +322,16 @@ if elektronn3_avail:
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint), nonglia_ssv_ids])
             self.ctx_size = ctx_size
-            self.sso_params = [(sso.id, sso.ssd_kwargs) for sso in
-                               ssd.get_super_segmentation_object(nonglia_ssv_ids)]
+            self.sso_params = {sso.id: dict(**sso.ssv_kwargs) for sso in ssd.get_super_segmentation_object(nonglia_ssv_ids)}
             ssd_glia = SuperSegmentationDataset(working_dir=wd_path, version='gliagt')
-            self.sso_params += [(sso.id, sso.ssd_kwargs) for sso in ssd_glia.ssvs]
+            self.sso_params.update({sso.id: dict(**sso.ssv_kwargs) for sso in ssd_glia.ssvs})
             log_cnn.info(f'Set {ssd} as GT source.')
 
             # get dataset statistics
             self.label_dc = {sso_id: 0 for sso_id in nonglia_ssv_ids}
-            self.label_dc.update({sso_id: 1 for sso_id in ssd_glia.ssv_ids})
+            self._label_dc_neuron = self.label_dc.copy()
+            self._label_dc_glia = {sso_id: 1 for sso_id in ssd_glia.ssv_ids}
+            self.label_dc.update(self._label_dc_glia)
             classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                          self.label_dc], return_counts=True)
             size_cnt_glia = [sso.size for sso in ssd_glia.ssvs]
@@ -301,8 +348,7 @@ if elektronn3_avail:
             self.train = train
             self.num_pts = npoints
             self._batch_size = batch_size
-            self._curr_ssv_id = None
-            self._curr_ssd_kwargs = None
+            self._curr_ssv_params = None
             self._curr_ssv_label = None
             self.transform = transform
 
@@ -320,13 +366,31 @@ if elektronn3_avail:
                 Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
-            item = np.random.randint(0, len(self.sso_params))
-            pts, feats, out_pts, out_l = self.load_ssv_sample(item)
+            if np.random.randint(3) == 1:
+                # reduce context and merge glia and neuron samples
+                orig_ctx = self.ctx_size
+                orig_npts = self.num_pts
+                self.ctx_size *= 0.75
+                self.num_pts = int(0.5 * self.num_pts)
+                item = np.random.choice(list(self._label_dc_neuron.keys()))
+                pts, feats, out_pts, out_l = self.load_ssv_sample(item)
+                item = np.random.choice(list(self._label_dc_glia.keys()))
+                pts_g, feats_g, out_pts_g, out_l_g = self.load_ssv_sample(item)
+                conc_axis = 1 if self._batch_size > 1 else 0
+                pts = np.concatenate([pts, pts_g], axis=conc_axis)
+                feats = np.concatenate([feats, feats_g], axis=conc_axis)
+                out_pts = np.concatenate([out_pts, out_pts_g], axis=conc_axis)
+                out_l = np.concatenate([out_l, out_l_g], axis=conc_axis)
+                self.ctx_size = orig_ctx
+                self.num_pts = orig_npts
+            else:
+                item = np.random.choice(list(self.label_dc.keys()))
+                pts, feats, out_pts, out_l = self.load_ssv_sample(item)
             pts = torch.from_numpy(pts).float()
             feats = torch.from_numpy(feats).float()
             out_pts = torch.from_numpy(out_pts).float()
-            lbs = torch.from_numpy(out_l).long()
-            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': lbs}
+            out_l = torch.from_numpy(out_l).long()
+            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': out_l}
 
         def __len__(self):
             if self.train:
@@ -348,12 +412,12 @@ if elektronn3_avail:
             Returns:
                 point and feature array; if batch size is 1, the first axis is removed.
             """
-            self._curr_ssv_id, self._curr_ssd_kwargs = self.sso_params[item]
-            self._curr_ssv_label = self.label_dc[self.sso_params[item][0]]
+            self._curr_ssv_params = self.sso_params[item]
+            self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
-                [*pts_loader_glia(self.sso_params[item:item+1], [self._curr_ssv_label], self._batch_size,
-                 self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
-                                  train=True, ctx_size=self.ctx_size)][0]
+                [*pts_loader_local_skel([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
+                                        self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
+                                        train=True, ctx_size=self.ctx_size)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:
@@ -1234,7 +1298,7 @@ class CelltypeViews(MultiViewData):
             self.sample_weights[source] = compute_class_weight('balanced',
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
-        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=True)
+        ixs = np.random.choice(len(self.view_cache[source]), batch_size, replace=True)
         d, l, syn_signs = transform_celltype_data_views_alternative(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
             [self.syn_sign_cache[source][ix] for ix in ixs], batch_size, self.nb_views)
@@ -1320,7 +1384,7 @@ class CelltypeViews(MultiViewData):
             self.sample_weights[source] = compute_class_weight('balanced',
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
-        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
+        ixs = np.random.choice(len(self.view_cache[source]), batch_size, replace=False)
         d, l = transform_celltype_data_views_alternative_noscal(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
             batch_size, self.nb_views)
@@ -1490,8 +1554,7 @@ def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
         curr_nb_samples = np.max([curr_nb_samples, 1])
         if curr_nb_samples == 0:
             continue
-        view_sampling = np.random.choice(np.arange(views.shape[1]),
-                                         curr_nb_samples*nb_views, replace=False)
+        view_sampling = np.random.choice(views.shape[1], curr_nb_samples*nb_views, replace=False)
         orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
                                                                                  nb_views, 128, 256)).swapaxes(1, 0)
         new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]

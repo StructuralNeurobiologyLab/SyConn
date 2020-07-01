@@ -4,18 +4,20 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-import numpy as np
-import time
-from knossos_utils import chunky, knossosdataset
+
 import os
 import shutil
-from typing import Optional, Dict, List, Tuple, Union, Callable
+import time
 from logging import Logger
+from typing import Optional, Dict, List, Tuple, Union, Callable
 
+import numpy as np
+from knossos_utils import chunky, knossosdataset
+
+from . import object_extraction_steps as oes
 from .. import global_params
 from ..extraction import log_extraction
 from ..handler import basics
-from . import object_extraction_steps as oes
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
@@ -47,11 +49,11 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
     chunk_list = []
     translator = {}
-    for x in range(offset[0], offset[0]+size[0], cset.chunk_size[0]):
-        for y in range(offset[1], offset[1]+size[1], cset.chunk_size[1]):
-            for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
+    for x in range(offset[0], offset[0] + size[0], cset.chunk_size[0]):
+        for y in range(offset[1], offset[1] + size[1], cset.chunk_size[1]):
+            for z in range(offset[2], offset[2] + size[2], cset.chunk_size[2]):
                 chunk_list.append(cset.coord_dict[tuple([x, y, z])])
-                translator[chunk_list[-1]] = len(chunk_list)-1
+                translator[chunk_list[-1]] = len(chunk_list) - 1
     return chunk_list, translator
 
 
@@ -140,7 +142,8 @@ def generate_subcell_kd_from_proba(
     if load_cellorganelles_from_kd_overlaycubes:  # no thresholds needed
         prob_threshs = None
     from_probabilities_to_kd(global_params.config.kd_organelle_seg_paths, cd,
-                             "_".join(subcell_names),  # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
+                             "_".join(subcell_names),
+                             # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                              prob_kd_path_dict=prob_kd_path_dict, thresholds=prob_threshs,
                              hdf5names=subcell_names, size=size, offset=offset,
                              load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
@@ -160,7 +163,7 @@ def from_probabilities_to_kd(
         offset: Optional[np.ndarray] = None, size: Optional[np.ndarray] = None,
         suffix: str = "", transform_func: Optional[Callable] = None,
         func_kwargs: Optional[dict] = None, n_cores: Optional[int] = None,
-        n_erosion: Optional[int] = 0, overlap_thresh: Optional[int] = 0,
+        overlap_thresh: Optional[int] = 0,
         stitch_overlap: Optional[int] = None, membrane_filename: str = None,
         membrane_kd_path: str = None, hdf5_name_membrane: str = None,
         n_chunk_jobs: int = None):
@@ -208,16 +211,13 @@ def from_probabilities_to_kd(
         suffix: Suffix used for the intermediate processing steps.
         transform_func: [WIP] Segmentation method which is applied, currently
           only func:`~syconn.extraction.object_extraction_steps.
-          _gauss_threshold_connected_components_thread`
+          _object_segmentation_thread`
           is supported for batch jobs.
         func_kwargs: keyword arguments for `transform_func`.
         n_chunk_jobs: Number of jobs.
         n_cores: Number of cores used for each job in
           :func:`syconn.extraction.object_extraction_steps.object_segmentation`
           if batch jobs is enabled.
-        n_erosion: Number of erosions applied to the segmentation of
-          unique_components to avoid segmentation artifacts caused by start
-          location dependency in chunk data array.
         overlap_thresh: Overlap fraction of object in different chunks to be
           considered stitched. If zero this behavior is disabled.
         stitch_overlap: Volume evaluated during stitching procedure.
@@ -254,7 +254,6 @@ def from_probabilities_to_kd(
         for ii in range(len(cset.chunk_dict)):
             chunk_translator[ii] = ii
 
-    # TODO: hacky
     if thresholds is not None and thresholds[0] <= 1.:
         thresholds = np.array(thresholds)
         thresholds *= 255
@@ -309,10 +308,8 @@ def from_probabilities_to_kd(
         max_nb_dict[hdf5_name][0] = 0
         for nb_chunk in range(1, len(chunk_list)):
             max_nb_dict[hdf5_name][nb_chunk] = \
-                max_nb_dict[hdf5_name][nb_chunk - 1] + \
-                nb_cc_dict[hdf5_name][nb_chunk - 1]
-        max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + \
-                                    nb_cc_dict[hdf5_name][-1])
+                max_nb_dict[hdf5_name][nb_chunk - 1] + nb_cc_dict[hdf5_name][nb_chunk - 1]
+        max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("max labels")
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
@@ -335,7 +332,7 @@ def from_probabilities_to_kd(
     time_start = time.time()
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
-                                       suffix=suffix, n_erosion=n_erosion,
+                                       suffix=suffix,
                                        overlap_thresh=overlap_thresh,
                                        n_chunk_jobs=n_chunk_jobs, nb_cpus=n_cores)
     all_times.append(time.time() - time_start)
@@ -381,7 +378,7 @@ def from_probabilities_to_kd(
     log.debug("--------------------------")
 
 
-def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
+def from_probabilities_to_objects(cset, filename, hdf5names,
                                   overlap="auto", sigmas=None, thresholds=None,
                                   debug=False, swapdata=0, target_kd=None,
                                   offset=None, size=None, prob_kd_path_dict=None,
@@ -396,13 +393,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     # TODO: Merge this method with mapping (e.g. iterate over chunks of cell SV segm. and over all
             objects to extract bounding boxes and overlap (i.e. mapping) at the same time
     Main function for the object extraction step; combines all needed steps
-    # TODO: change object_names to dataset_names as in other methods
 
     Parameters
     ----------
     cset : chunkdataset instance
     filename : str
-        Filename of the prediction in the chunkdataset
+        Filename of the prediction in the ChunkDataset.
     hdf5names: List[str]
         List of names/ labels to be extracted and processed from the prediction
         file
@@ -420,9 +416,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     thresholds: list of float
         Threshold for cutting the probability map. Has to be the same length as
         hdf5names. If None zeros are used instead (not recommended!)
-    chunk_list: List[int]
-        Selective list of chunks for which this function should work on. If None
-        all chunks are used.
+    target_kd:
     debug: boolean
         If true multiprocessed steps only operate on one core using 'map' which
         allows for better error messages
@@ -574,7 +568,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     time_start = time.time()
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
-                                       suffix=suffix, n_erosion=n_erosion,
+                                       suffix=suffix,
                                        overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
@@ -605,12 +599,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         time_start = time.time()
         chunky.save_dataset(cset)
         oes.export_cset_to_kd_batchjob({hdf5names[0]: target_kd.conf_path},
-            cset, '{}_stitched_components'.format(filename), hdf5names,
-            offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-            orig_dtype=np.uint64, unified_labels=False)
+                                       cset, '{}_stitched_components'.format(filename), hdf5names,
+                                       offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
+                                       orig_dtype=np.uint64, unified_labels=False)
         all_times.append(time.time() - time_start)
         step_names.append("export KD")
-    # --------------------------------------------------------------------------
+        # --------------------------------------------------------------------------
         time_start = time.time()
         oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
                                     chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,

@@ -7,10 +7,7 @@
 
 import sys
 import numpy as np
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
 from syconn.handler.multiviews import generate_rendering_locs
 from syconn.reps.rep_helper import surface_samples
@@ -34,7 +31,6 @@ so_kwargs = args[1]
 
 working_dir = so_kwargs['working_dir']
 global_params.wd = working_dir
-# TODO: preprocess meshes in case they dont exist and then load mesh dict next to the attribute dict
 for p in so_chunk_paths:
     # get SV IDs stored in this storage
     attr_dc_p = p + "/attr_dict.pkl"
@@ -51,12 +47,12 @@ for p in so_chunk_paths:
     for so in sos:
         try:
             ix = so.id
-            if not ix in md.keys():
+            if ix not in md.keys():
                 verts = so.mesh[1].reshape(-1, 3)
             else:
                 verts = md[ix][1].reshape(-1, 3)
             if len(verts) == 0:
-                coords = np.array([so.rep_coord, ], dtype=np.float32)
+                coords = np.array([so.rep_coord, ], dtype=np.float32) * so.scaling
             else:
                 if global_params.config.use_new_renderings_locs:
                     coords = generate_rendering_locs(verts, 2000).astype(np.float32, copy=False)

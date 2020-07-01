@@ -4,19 +4,18 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-from syconn import global_params
-from syconn.handler.config import generate_default_conf, initialize_logging
-
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
-import numpy as np
 import os
 import glob
 import shutil
 import sys
 import time
 import argparse
+import numpy as np
+
+from syconn import global_params
+from syconn.handler.config import generate_default_conf, initialize_logging
+
+from knossos_utils import knossosdataset
 
 
 if __name__ == '__main__':
@@ -43,17 +42,20 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
-        ('ncores_per_node', 20),
-        ('ngpus_per_node', 2),
+        ('ncores_per_node', 5),
+        ('ngpus_per_node', 1),
         ('nnodes_total', 1),
         ('log_level', log_level),
-        # # these will be created during synapse type prediction (
-        # # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
+        # these will be created during synapse type prediction (
+        # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
         # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
-        # ('cell_objects', {'asym_label': 1, 'sym_label': 2})
+        ('cell_objects', {
+          # 'sym_label': 1, 'asym_label': 2,
+          })
     ]
     if example_cube_id == 1:
         chunk_size = (256, 256, 128)
@@ -78,9 +80,7 @@ if __name__ == '__main__':
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 
-    generate_default_conf(example_wd, scale,
-                          key_value_pairs=key_val_pairs_conf,
-                          force_overwrite=False)
+    generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf, force_overwrite=False)
 
     if global_params.config.working_dir is not None and global_params.config.working_dir != example_wd:
         msg = f'Active working directory is already set to "{example_wd}". Aborting.'
@@ -92,11 +92,11 @@ if __name__ == '__main__':
 
     # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
-    from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
+    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
     from syconn.handler.compression import load_from_h5py
 
     # PREPARE TOY DATA
-    log.info('Step 0/8 - Preparation')
+    log.info(f'Step 0/9 - Preparation')
 
     time_stamps = [time.time()]
     step_idents = ['t-0']
@@ -134,9 +134,8 @@ if __name__ == '__main__':
                                   offset=offset, boundary=bd, fast_downsampling=True,
                                   data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
-        seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-        kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
-                                fast_downsampling=False, as_raw=False)
+        seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0].swapaxes(0, 2)  # xyz -> zyx
+        kd.save_seg(offset=offset, mags=[1, 2, 4], data=seg_d, data_mag=1)
         del kd, seg_d
         kd_sym = knossosdataset.KnossosDataset()
         kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
@@ -167,16 +166,13 @@ if __name__ == '__main__':
         time_stamps.append(time.time())
         step_idents.append('Preparation')
 
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(bd))
+    log.info('Finished example cube initialization (shape: {}). Starting SyConn pipeline.'.format(bd))
 
     # START SyConn
     log.info('Example data will be processed in "{}".'.format(example_wd))
-
-    # # START SyConn
-    log.info('Step 0/8 - Predicting sub-cellular structures')
-    # TODO: launch all inferences in parallel
-    # exec_dense_prediction.predict_myelin()
+    log.info('Step 1/9 - Predicting sub-cellular structures')
+    # TODO: launch all predictions in parallel
+    exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
@@ -184,59 +180,59 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
 
-    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
                                     n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
-
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
+    log.info('Step 3/9 - Glia separation')
     if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
-        exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction()
-        exec_multiview.run_glia_splitting()
+        if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+        else:
+            exec_inference.run_glia_prediction_pts()
+        exec_inference.run_glia_splitting()
         time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+    else:
+        log.info('Glia separation disabled. Skipping.')
+    step_idents.append('Glia separation')
 
-    log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd()
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    exec_init.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
-    # TODO: launch steps 3 and 4 in parallel
-    # TODO: use syn_ssv for rendering
-    log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering()
-    time_stamps.append(time.time())
-    step_idents.append('Neuron rendering')
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Step 4.5/9 - Neuron rendering')
+        exec_render.run_neuron_rendering()
+        time_stamps.append(time.time())
+        step_idents.append('Neuron rendering')
 
-    log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size,
-                                 n_folders_fs=n_folders_fs_sc)
+    log.info('Step 5/9 - Synapse detection')
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 
-    log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_semsegaxoness_prediction()
-    exec_multiview.run_semsegaxoness_mapping()
+    log.info('Step 6/9 - Compartment prediction')
+    exec_inference.run_semsegaxoness_prediction()
     time_stamps.append(time.time())
-    step_idents.append('Axon prediction')
 
-    log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction()
+    if not global_params.config.use_point_models:
+        exec_inference.run_semsegspiness_prediction()
     exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
-    step_idents.append('Spine prediction')
+    step_idents.append('Compartment prediction')
 
     log.info('Step 7/9 - Morphology extraction')
-    exec_multiview.run_morphology_embedding()
+    exec_inference.run_morphology_embedding()
     time_stamps.append(time.time())
     step_idents.append('Morphology extraction')
 
     log.info('Step 8/9 - Celltype analysis')
-    exec_multiview.run_celltype_prediction()
+    exec_inference.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 
@@ -249,17 +245,14 @@ if __name__ == '__main__':
     dts = time_stamps[1:] - time_stamps[:-1]
     dt_tot = time_stamps[-1] - time_stamps[0]
     dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-                       " {}.\n".format(experiment_name, dt_tot_str)
+    time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
     n_steps = len(step_idents[1:]) - 1
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "{:<10}{:<25}{:<20}{:<4s}\n".format(
-            f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_perc}%')
+        step_dt_per = int(dts[i] / dt_tot * 100)
+        step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
         time_summary_str += step_str
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconst'
-             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
+             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
     os.system(f'syconn.server --working_dir={example_wd} --port=10001')

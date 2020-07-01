@@ -3,17 +3,15 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert
 
 import sys
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_views
-from syconn.handler.prediction import NeuralNetworkInterface
 from syconn.backend.storage import AttributeDict, CompressedStorage
 from syconn import global_params
+from syconn.handler import prediction
+
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -27,7 +25,7 @@ with open(path_storage_file, 'rb') as f:
             break
 
 so_chunk_paths = args[0]
-model_kwargs = args[1]
+model_getter = args[1]
 so_kwargs = args[2]
 pred_kwargs = args[3]
 
@@ -43,7 +41,8 @@ if 'raw_only' in pred_kwargs:
 else:
     raw_only = False
 
-model = NeuralNetworkInterface(**model_kwargs)
+model = getattr(prediction, model_getter)()
+
 for p in so_chunk_paths:
     view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
     view_dc = CompressedStorage(view_dc_p, disable_locking=True)

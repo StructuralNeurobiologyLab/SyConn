@@ -36,7 +36,6 @@ def labels2mesh(args):
     """
     kzip_path, out_path, version = args
     sso_id = int(re.findall(r"/(\d+)\.", kzip_path)[0])
-
     # load annotation object
     a_obj = load_skeleton(kzip_path)
     if len(a_obj) == 1:
@@ -64,10 +63,12 @@ def labels2mesh(args):
 
     # get sso skeleton nodes which are close to GT nodes
     # 0: not close to a labeled GT node, 1: close to an annotated node
-    kdt = cKDTree(a_node_coords[a_node_labels != 33])
-    node_labels = np.zeros((len(nodes), 1))
+    kdt = cKDTree(a_node_coords)
+    node_labels = np.ones((len(nodes), 1))
     dists, ixs = kdt.query(nodes, distance_upper_bound=1000)
-    node_labels[(dists < np.inf)] = 1
+    node_labels[dists == np.inf] = 0
+    dists, ixs = kdt.query(nodes)
+    node_labels[a_node_labels[ixs] == 33] = 0
 
     kdt = cKDTree(a_node_coords)
     # load cell and cell organelles
@@ -186,7 +187,7 @@ def gt_generation(kzip_paths, out_path, version: str = None):
     params = [(p, out_path, version) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=True)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":

@@ -4,14 +4,16 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import numpy as np
-from scipy import spatial
+import os
 from collections import Counter
 from typing import Tuple, Optional, Union, List, Dict, Any
 
-from ..reps import log_reps
+import numpy as np
+from scipy import spatial
+
 from .. import global_params
+from ..handler.config import DynConfig
+from ..reps import log_reps
 
 
 def knossos_ml_from_svixs(sv_ixs: Union[np.ndarray, List],
@@ -178,7 +180,7 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     -------
     str
     """
-    assert n_folders in [10**i for i in range(6)]
+    assert n_folders in [10 ** i for i in range(6)]
 
     order = int(np.log10(n_folders))
 
@@ -322,7 +324,7 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     """
     if colors is None:
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                           [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+                                    [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
     else:
         if np.max(colors) <= 1.0:
             colors = np.array(colors) * 255
@@ -422,7 +424,7 @@ def surface_samples(coords: np.ndarray,
         thresh_val = np.sort(H.flatten())[::-1][nb_smaples]
         H[H <= thresh_val] = 0
     # get vertices closest to grid bins with density != 0
-    max_dens_locs = (np.array(np.where(H != 0)).swapaxes(1, 0) + 0.5)\
+    max_dens_locs = (np.array(np.where(H != 0)).swapaxes(1, 0) + 0.5) \
                     * bin_sizes
     dists, ixs = query_tree.query(max_dens_locs)
     samples = coords[ixs]
@@ -449,7 +451,7 @@ def find_object_properties(cube: np.ndarray) -> \
         coordinate pointing to an object voxel, bounding box, size (in voxels).
     """
     try:
-        from . find_object_properties_C import find_object_propertiesC
+        from .find_object_properties_C import find_object_propertiesC
         return find_object_propertiesC(cube)
     except ImportError:
         return _find_object_properties(cube)
@@ -504,3 +506,59 @@ def _find_object_properties(cube: np.ndarray) -> \
         rep_coords[
             obj_id] = min_vec + rand_obj_coord
     return rep_coords, bbs, sizes
+
+
+class SegmentationBase:
+    _scaling = None
+    _working_dir = None
+    _config = None
+
+    def _setup_working_dir(self, working_dir: Optional[str], config: Optional[DynConfig],
+                           version: Optional[str], scaling: Optional[np.ndarray]):
+        """
+        Set private attributes for working_dir, config and scaling. Version must be handled outside.
+
+        Args:
+            working_dir: Working directory.
+            config: Configuration object.
+            version: Version.
+            scaling: Voxel size in nm.
+        """
+        if working_dir is None:
+            if config is not None:
+                self._working_dir = config.working_dir
+                self._config = config
+            elif version == 'tmp' or global_params.config.working_dir is not None:
+                self._working_dir = global_params.config.working_dir
+                self._config = global_params.config
+            else:
+                msg = ("No working directory (wd) given. It has to be specified either in global_params, via kwarg "
+                       "`working_dir` or `config`.")
+                log_reps.error(msg)
+                raise ValueError(msg)
+        else:
+            self._working_dir = os.path.abspath(working_dir)
+            if self._config is None:
+                self._config = DynConfig(self._working_dir, fix_config=True)
+            else:
+                if os.path.abspath(self._config.working_dir) != os.path.abspath(self._working_dir):
+                    msg = 'Inconsistent working directories in `config` and `working_dir` kwargs.'
+                    log_reps.error(msg)
+                    raise ValueError(msg)
+
+        if self._working_dir is not None and not self._working_dir.endswith("/"):
+            self._working_dir += "/"
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
+
+        if scaling is None:
+            try:
+                self._scaling = np.array(self._config['scaling'])
+            except KeyError:
+                msg = (f'Scaling not set and could not be found in config ("{self._config.path_config}") '
+                       f'with entries: {self._config.entries}')
+                log_reps.error(msg)
+                raise KeyError(msg)
+        else:
+            self._scaling = scaling

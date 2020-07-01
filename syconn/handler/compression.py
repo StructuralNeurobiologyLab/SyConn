@@ -4,24 +4,29 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+import os
+from typing import List, Tuple, Optional, Iterable, Union, Dict
+
+import h5py
+import numpy as np
+
+from ..handler import log_handler
+
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
 from lz4.block import LZ4BlockError
+
 try:
     import fasteners
+
     LOCKING = True
 except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
-from typing import List, Tuple, Optional, Iterable, Union, Dict
-import numpy as np
-import h5py
-import os
 
-from ..handler import log_handler
 __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
            'save_lz4_compressed', 'load_from_h5py',
            'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']
@@ -65,7 +70,7 @@ def lz4stringtoarr(string: bytes, dtype: np.dtype = np.float32,
         N-dimensional numpy array.
     """
     if len(string) == 0:
-        return np.zeros((0, ), dtype=dtype)
+        return np.zeros((0,), dtype=dtype)
     try:
         arr_1d = np.frombuffer(decompress(string), dtype=dtype)
     except TypeError:  # python3 compatibility
@@ -94,8 +99,7 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     # catch Value error which is thrown in py3 lz4 version
     except (OverflowError, ValueError, LZ4BlockError):
         half_ix = len(arr) // 2
-        str_lst = arrtolz4string_list(arr[:half_ix]) + \
-                  arrtolz4string_list(arr[half_ix:])
+        str_lst = arrtolz4string_list(arr[:half_ix]) + arrtolz4string_list(arr[half_ix:])
     return str_lst
 
 
@@ -113,7 +117,7 @@ def lz4string_listtoarr(str_lst: List[bytes], dtype: np.dtype = np.float32,
         1d numpy array.
     """
     if len(str_lst) == 0:
-        return np.zeros((0, ), dtype=dtype)
+        return np.zeros((0,), dtype=dtype)
     arr_lst = []
     for string in str_lst:
         arr_lst.append(lz4stringtoarr(string, dtype=dtype, shape=shape))
@@ -189,7 +193,7 @@ def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
 # ---------------------------- HDF5
 # ------------------------------------------------------------------------------
 def load_from_h5py(path: str, hdf5_names: Optional[Iterable[str]] = None,
-                   as_dict: bool = False)\
+                   as_dict: bool = False) \
         -> Union[Dict[str, np.ndarray], List[np.ndarray]]:
     """
     Loads data from a h5py File.

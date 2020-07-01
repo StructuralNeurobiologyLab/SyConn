@@ -3,20 +3,18 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Joergen Kornfeld
+import itertools
+from typing import List, Any, Optional
 
-from scipy import spatial
-from typing import List, Optional, Dict, Any
 import networkx as nx
 import numpy as np
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import tqdm
-import itertools
+from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from scipy import spatial
 
-from ..mp.mp_utils import start_multiprocess_obj
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
-from . import log_proc
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
@@ -99,20 +97,19 @@ def chunkify_contiguous(l, n):
         yield l[i:i + n]
 
 
-def split_subcc_join(g: nx.Graph, subgraph_size: int,
-                     lo_first_n: int = 1) -> List[List[Any]]:
+def split_subcc_join(g: nx.Graph, subgraph_size: int, lo_first_n: int = 1) -> List[List[Any]]:
     """
     Creates a subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
 
     Args:
-        g: Graph
-        subgraph_size: int
-        lo_first_n: int
-            leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
-            nodes, i.e. not use them as new starting nodes.
+        g: Supervoxel graph
+        subgraph_size: Size of subgraphs. The difference between `subgraph_size` and `lo_first_n` defines the
+            supervoxel overlap.
+        lo_first_n: Leave out first n nodes: will collect `subgraph_size` nodes starting from center node and then
+            omit the first lo_first_n nodes, i.e. not use them as new starting nodes.
 
-    Returns: dict
+    Returns:
 
     """
     start_node = list(g.nodes())[0]
@@ -170,8 +167,7 @@ def merge_nodes(G, nodes, new_node):
         G.remove_node(n)
 
 
-def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
-                     nb_cpus=1, pred_key_appendix="", verbose=False):
+def split_glia_graph(nx_g, thresh, clahe=False, nb_cpus=1, pred_key_appendix=""):
     """
     Split graph into glia and non-glua CC's.
 
@@ -179,9 +175,6 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
         nx_g: nx.Graph
         thresh: float
         clahe: bool
-        shortest_paths_dest_dir: str
-            None (default), else path to directory to write shortest paths
-            between neuron type SV end nodes
         nb_cpus: int
         pred_key_appendix: str
         verbose: bool
@@ -196,12 +189,10 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     glia_key += pred_key_appendix
     glianess, size = get_glianess_dict(list(nx_g.nodes()), thresh, glia_key,
                                        nb_cpus=nb_cpus)
-    return remove_glia_nodes(nx_g, size, glianess, return_removed_nodes=True,
-                             shortest_paths_dest_dir=shortest_paths_dest_dir)
+    return remove_glia_nodes(nx_g, size, glianess, return_removed_nodes=True)
 
 
-def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
-               pred_key_appendix="", verbose=False):
+def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     """
     Split SuperSegmentationObject into glia and non glia
     SegmentationObjects.
@@ -210,12 +201,8 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
         sso: SuperSegmentationObject
         thresh: float
         clahe: bool
-        shortest_paths_dest_dir: str
-            None (default), else path to directory to write shortest paths
-            between neuron type SV end nodes
         pred_key_appendix: str
             Defines type of glia predictions
-        verbose: bool
 
     Returns: list, list (of SegmentationObject)
         Neuron, glia nodes
@@ -223,9 +210,7 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     """
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
-                            nb_cpus=sso.nb_cpus, shortest_paths_dest_dir=
-                            shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix,
-                                             verbose=verbose)
+                                             nb_cpus=sso.nb_cpus, pred_key_appendix=pred_key_appendix)
     return nonglia_ccs, glia_ccs
 
 
@@ -236,7 +221,8 @@ def create_ccsize_dict(g, sizes, is_connected_components=False):
         ccs = g
     node2cssize_dict = {}
     for cc in ccs:
-        mesh_bbs = np.concatenate([sizes[n] for n in cc])
+        # if ID is not in sizes, then i
+        mesh_bbs = np.concatenate([sizes[n] for n in cc if n in sizes])
         cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0) -
                                  np.min(mesh_bbs, axis=0), ord=2)
         for n in cc:
@@ -260,7 +246,7 @@ def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
 
 def glia_loader_helper(args):
     so, glia_key, thresh, use_sv_volume = args
-    if not glia_key in so.attr_dict.keys():
+    if glia_key not in so.attr_dict.keys():
         so.load_attr_dict()
     curr_glianess = so.glia_pred(thresh)
     if not use_sv_volume:
@@ -270,8 +256,7 @@ def glia_loader_helper(args):
     return curr_glianess, curr_size
 
 
-def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
-                      shortest_paths_dest_dir=None):
+def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
     """
     Calculate distance weights for shortest path analysis or similar, based on
     glia and size vertex properties and removes unsupporting glia nodes.
@@ -281,7 +266,6 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         size_dict:
         glia_dict:
         return_removed_nodes: bool
-        shortest_paths_dest_dir:
 
     Returns: list of list of nodes
         Remaining connected components of type neuron
@@ -306,9 +290,8 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     if np.all(np.array(list(neuron2ccsize_dict.values())) <=
-              global_params.config['glia']['min_cc_size_ssv']): # no
-    # significant
-        # neuron SV
+              global_params.config['glia']['min_cc_size_ssv']):
+        # no significant neuron SV
         if return_removed_nodes:
             return [], [list(g.nodes())]
         return []
@@ -320,7 +303,8 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
     if np.all(np.array(list(glia2ccsize_dict.values())) <=
-              global_params.config['glia']['min_cc_size_ssv']): # no significant glia SV
+              global_params.config['glia']['min_cc_size_ssv']):
+        # no significant glia SV
         if return_removed_nodes:
             return [list(g.nodes())], []
         return [list(g.nodes())]
@@ -420,7 +404,7 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
                     dist = curr_dist
                 else:  # only take path through glia into account
                     dist = 0
-                g.add_edge(kk+curr_ind, curr_ix+curr_ind, weights=dist)
+                g.add_edge(kk + curr_ind, curr_ix + curr_ind, weights=dist)
         curr_ind += len(vert_resh)
     start_ix = 0  # choose any index of the first mesh
     end_ix = curr_ind - 1  # choose any index of the last mesh
@@ -436,7 +420,7 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
 
 
 def eucl_dist(a, b):
-    return np.linalg.norm(a-b)
+    return np.linalg.norm(a - b)
 
 
 def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
@@ -478,7 +462,7 @@ def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
             if np.all(sv_ixs == el_ixs):
                 glia_nodes_already_exist = True
                 break
-        if glia_nodes_already_exist: # check if same glia path exists already
+        if glia_nodes_already_exist:  # check if same glia path exists already
             continue
         glia_paths.append(paths[a][b])
         glia_svixs_in_paths.append(np.array([so.id for so in glia_nodes]))
@@ -515,14 +499,14 @@ def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
         anno.addNode(n)
         rep_nodes.append(n)
     for i in range(1, len(rep_nodes)):
-        anno.addEdge(rep_nodes[i-1], rep_nodes[i])
+        anno.addEdge(rep_nodes[i - 1], rep_nodes[i])
     if comment is not None:
         anno.setComment(comment)
     skel.add_annotation(anno)
     skel.to_kzip(dest_path)
 
 
-def coordpath2anno(coords, scaling=None):
+def coordpath2anno(coords: np.ndarray, scaling: Optional[np.ndarray] = None) -> SkeletonAnnotation:
     """
     Creates skeleton from scaled coordinates, assume coords are in order for
     edge creation.
@@ -540,56 +524,44 @@ def coordpath2anno(coords, scaling=None):
     anno.scaling = scaling
     rep_nodes = []
     for c in coords:
-        n = SkeletonNode().from_scratch(anno, c[0]/scaling[0], c[1]/scaling[1],
-                                        c[2]/scaling[2])
+        n = SkeletonNode().from_scratch(anno, c[0] / scaling[0], c[1] / scaling[1],
+                                        c[2] / scaling[2])
         anno.addNode(n)
         rep_nodes.append(n)
     for i in range(1, len(rep_nodes)):
-        anno.addEdge(rep_nodes[i-1], rep_nodes[i])
+        anno.addEdge(rep_nodes[i - 1], rep_nodes[i])
     return anno
 
 
-def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
-                            mst=False):
+def create_graph_from_coords(coords: np.ndarray, max_dist: float = 6000, force_single_cc: bool = True,
+                             mst: bool = False) -> nx.Graph:
     """
-    Generate skeleton from sample locations by adding edges between points
-    with a maximum distance and then pruning the skeleton using MST.
+    Generate skeleton from sample locations by adding edges between points with a maximum distance and then pruning
+    the skeleton using MST. Nodes will have a 'position' attribute.
 
     Args:
-        coords: np.array
-        max_dist: float
-        force_single_cc: bool
-            force that the tree generated from coords is a single connected
-            component
-        mst:
+        coords: Coordinates.
+        max_dist: Add edges between two nodes that are within this distance.
+        force_single_cc: Force that the tree generated from coords is a single connected component.
+        mst: Compute the minimum spanning tree.
 
-    Returns: np. array
-        edge list of nodes (coords) using the ordering of coords, i.e. the
+    Returns:
+        Networkx graph. Edge between nodes (coord indices) using the ordering of coords, i.e. the
         edge (1, 2) connects coordinate coord[1] and coord[2].
 
     """
     g = nx.Graph()
     if len(coords) == 1:
         g.add_node(0)
-        # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
         g.add_weighted_edges_from([[0, 0, 0]])
         return g
     kd_t = spatial.cKDTree(coords)
     pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    if force_single_cc and len(coords) > 1:
-        cnt = 0
-        n_nodes = len(np.unique(pairs))
-        while not n_nodes == len(coords) and cnt < 100:
-            cnt += 1
-            max_dist += max_dist / 3
-            log_proc.debug("Generated skeleton ({} edges, {} nodes) is not a single connected "
-                           "component (#coords: {})). Increasing maximum node distance"
-                           " to {}".format(len(pairs), n_nodes, len(coords), max_dist))
-            pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    g.add_nodes_from(np.arange(len(coords)))
-    weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)#np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
-    # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
+    g.add_nodes_from([(ix, dict(position=coord)) for ix, coord in enumerate(coords)])
+    weights = np.linalg.norm(coords[pairs[:, 0]] - coords[pairs[:, 1]], axis=1)
     g.add_weighted_edges_from([[pairs[i][0], pairs[i][1], weights[i]] for i in range(len(pairs))])
+    if force_single_cc:  # make sure its a connected component
+        g = stitch_skel_nx(g)
     if mst:
         g = nx.minimum_spanning_tree(g)
     return g
@@ -631,7 +603,8 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
         for n in G.nodes():
             glianess[n] = ext_glia[n.id]
     plt.figure()
-    n_size = np.array([size[n]**(1./3) for n in G.nodes()]).astype(np.float32)  # reduce cubic relation to a linear one
+    n_size = np.array([size[n] ** (1. / 3) for n in G.nodes()]).astype(
+        np.float32)  # reduce cubic relation to a linear one
     # n_size = np.array([np.linalg.norm(size[n][1]-size[n][0]) for n in G.nodes()])
     if node_size_cap == "max":
         node_size_cap = np.max(n_size)
@@ -704,3 +677,39 @@ def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
     skel.add_annotation(anno)
     skel.to_kzip(kzip_path)
     pbar.close()
+
+
+def stitch_skel_nx(skel_nx: nx.Graph) -> nx.Graph:
+    """
+    Stitch connected components within a graph by recursively adding edges between the closest components.
+
+    Args:
+        skel_nx: Networkx graph. Nodes require 'position' attribute.
+
+    Returns:
+        Single connected component graph.
+    """
+    no_of_seg = nx.number_connected_components(skel_nx)
+    if no_of_seg == 1:
+        return skel_nx
+
+    skel_nx_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.int)
+    new_nodes = skel_nx_nodes.copy()
+    while no_of_seg != 1:
+        rest_nodes = []
+        current_set_of_nodes = []
+        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_nx), key=len, reverse=True)])
+        for single_rest_graph in list_of_comp[1:]:
+            rest_nodes = rest_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+        for single_rest_graph in list_of_comp[:1]:
+            current_set_of_nodes = current_set_of_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+        tree = spatial.cKDTree(rest_nodes, 1)
+        thread_lengths, indices = tree.query(current_set_of_nodes)
+        start_thread_index = np.argmin(thread_lengths)
+        stop_thread_index = indices[start_thread_index]
+        start_thread_node = \
+            np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
+        skel_nx.add_edge(start_thread_node, stop_thread_node)
+        no_of_seg -= 1
+    return skel_nx

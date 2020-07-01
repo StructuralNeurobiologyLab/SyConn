@@ -5,10 +5,14 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
+from logging import Logger
+from typing import Optional, Union
+
 import networkx as nx
 import numpy as np
 
-from ..backend.storage import AttributeDict
+from . import log_proc
+from .graphs import create_ccsize_dict
 from .. import global_params
 from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
@@ -17,8 +21,6 @@ from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from ..reps.rep_helper import knossos_ml_from_ccs
 from ..reps.segmentation import SegmentationDataset
 from ..reps.super_segmentation_object import SuperSegmentationObject
-from .graphs import create_ccsize_dict
-from . import log_proc
 
 
 def qsub_glia_splitting():
@@ -50,7 +52,7 @@ def collect_glia_sv():
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
     # get SSV glia splits
-    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node']*10)
+    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'] * 10)
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
                                                  nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")
@@ -78,19 +80,20 @@ def collect_gliaSV_helper(cc_ixs):
     return np.array(glia_svids, dtype=np.uint)
 
 
-def write_glia_rag(rag, min_ssv_size, suffix=""):
+def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str = "",
+                   log: Optional[Logger] = None):
     """
-    Stores glia and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx
-    edge list and as knossos merge list.
+    Stores glia and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx edge list and as knossos merge list.
 
     Parameters
     ----------
-    rag : str or nx.Graph
-    min_ssv_size : float
-        Bounding box diagonal in NM
-    suffix : str
-        Suffix for saved RAGs
+    rag : SV agglomeration
+    min_ssv_size : Bounding box diagonal in NM
+    suffix : Suffix for saved RAGs
+    log: Logger
     """
+    if log is None:
+        log = log_proc
     if type(rag) is str:
         assert os.path.isfile(rag), "RAG has to be given."
         g = nx.read_edgelist(rag, nodetype=np.uint, delimiter=',')
@@ -107,15 +110,14 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         glia_g.remove_node(ix)
 
     # create dictionary with CC sizes (BBD)
-    log_proc.info("Finished neuron and glia RAG, now preparing CC size dict.")
+    log.info("Finished neuron and glia RAG, now preparing CC size dict.")
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
     bbs = sds.load_cached_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(g, sv_size_dict)
-    log_proc.info("Finished preparation of SSV size dictionary based "
-                  "on bounding box diagonal of corresponding SVs.")
+    log.info("Finished preparation of SSV size dictionary based on bounding box diagonal of corresponding SVs.")
 
     # add CCs with single neuron SV manually
     neuron_ids = list(neuron_g.nodes())
@@ -124,39 +126,36 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     missing_neuron_svs = set(all_neuron_ids).difference(set(neuron_ids))
     if len(missing_neuron_svs) > 0:
         msg = "Missing %d glia CCs with one SV." % len(missing_neuron_svs)
-        log_proc.error(msg)
+        log.error(msg)
         raise ValueError(msg)
     before_cnt = len(neuron_g.nodes())
     for ix in neuron_ids:
         if ccsize_dict[ix] < min_ssv_size:
             neuron_g.remove_node(ix)
-    log_proc.info("Removed %d neuron CCs because of size." %
-          (before_cnt - len(neuron_g.nodes())))
+    log.info("Removed %d neuron CCs because of size." % (before_cnt - len(neuron_g.nodes())))
     ccs = list(nx.connected_components(neuron_g))
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt,
-                   "mergelist.txt")
+    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt, "mergelist.txt")
     nx.write_edgelist(neuron_g, global_params.config.working_dir + "/glia/neuron_rag%s.bz2" % suffix)
-    log_proc.info("Nb neuron CCs: {}".format(len(ccs)))
-    log_proc.info("Nb neuron SVs: {}".format(len([n for cc in ccs for n in cc])))
+    log.info("Nb neuron CCs: {}".format(len(ccs)))
+    log.info("Nb neuron SVs: {}".format(len([n for cc in ccs for n in cc])))
 
     # add glia CCs with single SV
     glia_ids = list(glia_g.nodes())
     missing_glia_svs = set(glia_svs).difference(set(glia_ids))
     if len(missing_glia_svs) > 0:
         msg = "Missing %d glia CCs with one SV." % len(missing_glia_svs)
-        log_proc.error(msg)
+        log.error(msg)
         raise ValueError(msg)
     before_cnt = len(glia_g.nodes())
     for ix in glia_ids:
         if ccsize_dict[ix] < min_ssv_size:
             glia_g.remove_node(ix)
-    log_proc.info("Removed %d glia CCs because of size." %
-                  (before_cnt - len(glia_g.nodes())))
+    log.info("Removed %d glia CCs because of size." % (before_cnt - len(glia_g.nodes())))
     ccs = list(nx.connected_components(glia_g))
-    log_proc.info("Nb glia CCs: {}".format(len(ccs)))
-    log_proc.info("Nb glia SVs: {}".format(len([n for cc in ccs for n in cc])))
+    log.info("Nb glia CCs: {}".format(len(ccs)))
+    log.info("Nb glia SVs: {}".format(len([n for cc in ccs for n in cc])))
     nx.write_edgelist(glia_g, global_params.config.working_dir + "/glia/glia_rag%s.bz2" % suffix)
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)

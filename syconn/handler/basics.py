@@ -5,29 +5,27 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from collections import defaultdict
 import collections
-import numpy as np
-import h5py
+import contextlib
+import gc
+import glob
 import os
+import pickle as pkl
+import re
 import shutil
+import signal
 import tempfile
 import zipfile
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
-from knossos_utils import KnossosDataset
-import re
-import gc
-import signal
-import networkx as nx
-import contextlib
-import glob
-import tqdm
+from collections import defaultdict
 from typing import List, Union
+
+import networkx as nx
+import numpy as np
+import tqdm
+from knossos_utils import KnossosDataset
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 from plyfile import PlyData
+
 from . import log_handler
 from .. import global_params
 
@@ -111,7 +109,6 @@ def group_ids_to_so_storage(ids, params, significant_digits=5):
         for i_param in range(len(params)):
             param_dicts[i_param][this_id_str[-significant_digits:]].\
                 append(params[i_param][i_id])
-
     return [id_dict] + param_dicts
 
 
@@ -552,7 +549,8 @@ def chunkify_weighted(lst, n, weights):
 
 def chunkify_weighted(lst, n, weights):
     """
-    splits list into n-subists according to weights
+    splits list into n sub-lists according to weights.
+
     Args:
         lst: list
         n: int
@@ -563,7 +561,7 @@ def chunkify_weighted(lst, n, weights):
     """
     if len(lst) < n:
         n = len(lst)
-        return [lst[i::n] for i in range(n)] #no weighting needed
+        return [lst[i::n] for i in range(n)]  # no weighting needed
     ordered = np.argsort(weights)
     lst = lst[ordered[::-1]]
     return [lst[i::n] for i in range(n)]

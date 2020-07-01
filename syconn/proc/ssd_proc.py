@@ -4,24 +4,25 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from . import log_proc
+from .. import global_params
+from ..handler import basics
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..proc.meshes import mesh_creator_sso
+from ..reps import segmentation, super_segmentation
+from ..reps.super_segmentation import SuperSegmentationObject, \
+    SuperSegmentationDataset
+
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from typing import Iterable, List, Tuple
+from typing import Iterable, Tuple
 import numpy as np
 from collections import Counter
-from typing import Optional, Union, Callable, List, Dict
+from typing import Optional, List
 from logging import Logger
-from .. import global_params
-from . import log_proc
-from ..handler import basics
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..reps.super_segmentation import SuperSegmentationObject, \
-    SuperSegmentationDataset
-from ..reps import segmentation, super_segmentation
-from ..proc.meshes import mesh_creator_sso
 
 
 def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
@@ -219,7 +220,7 @@ def _apply_mapping_decisions_thread(args):
                 id_mask[obj_ratios > upper_ratio] = False
 
             candidate_ids = \
-            np.array(ssv.attr_dict["mapping_%s_ids" % obj_type])[id_mask]
+                np.array(ssv.attr_dict["mapping_%s_ids" % obj_type])[id_mask]
 
             ssv.attr_dict[obj_type] = []
             for candidate_id in candidate_ids:
@@ -271,7 +272,7 @@ def map_synssv_objects(synssv_version: Optional[str] = None,
 
 def map_synssv_objects_thread(args):
     ssv_obj_ids, version, version_dict, working_dir, \
-        ssd_type, synssv_version, syn_threshold = args
+    ssd_type, synssv_version, syn_threshold = args
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
                                                       ssd_type=ssd_type,
@@ -289,20 +290,19 @@ def map_synssv_objects_thread(args):
     ssv_partners = ssv_partners[syn_prob > syn_threshold]
 
     for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, False)
+        # enable of SegmentationObjects, including their meshes -> reuse in typedsyns2mesh call
+        ssv = ssd.get_super_segmentation_object(ssv_id, caching=True)
         ssv.load_attr_dict()
 
         curr_synssv_ids = synssv_ids[np.in1d(ssv_partners[:, 0], ssv.id)]
         curr_synssv_ids = np.concatenate([curr_synssv_ids,
                                           synssv_ids[np.in1d(ssv_partners[:, 1], ssv.id)]])
-        # key has to be the same as the SegmentationDataset name to enable automatic mesh retrieval in syconn/gate/server.py
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
         # cache syn_ssv mesh and typed meshes if available
-        # TODO: this takes long for large data sets
-        # ssv.load_mesh('syn_ssv')
-        # if global_params.config.syntype_available:
-        #     ssv.typedsyns2mesh()
+        ssv.load_mesh('syn_ssv')
+        if global_params.config.syntype_available:
+            ssv.typedsyns2mesh()
 
 
 def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,
@@ -331,15 +331,15 @@ def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,
                                nb_cpus=nb_cpus, debug=False)
 
 
-def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int])\
+def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
         -> Tuple[SuperSegmentationObject, SuperSegmentationObject]:
     """Splits an SuperSegmentationObject into two."""
 
-    if ssv._dataset is None:
+    if ssv._ssd is None:
         raise ValueError('SSV dataset has to be defined. Use "get_superseg'
                          'mentation_object" method to instantiate SSO objects,'
-                         ' or assign "_dataset" yourself accordingly.')
-    ssd = ssv._dataset
+                         ' or assign "_dataset".')
+    ssd = ssv._ssd
     orig_ids = set(ssv.sv_ids)
     # TODO: Support ssv.rag splitting
     splitted_sv_ids = set(splitted_sv_ids)
@@ -357,7 +357,7 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int])\
     return ssv1, ssv2
 
 
-def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset)\
+def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset) \
         -> SuperSegmentationObject:
     """Initializes an SuperSegmentationObject and caches all relevant data.
     Cell organelles and supervoxel SegmentationDatasets must be initialized."""
