@@ -586,7 +586,7 @@ class DynConfig(Config):
             return True
 
     @property
-    def use_point_models(self) -> bool:
+    def use_large_fov_views_ct(self) -> bool:
         """
         Use point cloud based models instead of multi-views.
 

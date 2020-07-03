@@ -14,8 +14,15 @@ from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
-from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn import global_params
+from knossos_utils.chunky import ChunkDataset
+from knossos_utils import knossosdataset
+import os
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
 def run_skeleton_generation(max_n_jobs: Optional[int] = None,
@@ -119,7 +126,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
         max_n_jobs: Number of parallel jobs.
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
         :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
-        kd_path: path to knossos dataset
+        working_dir: path to knossos dataset
 
     """
     tmp_dir = global_params.config.temp_path + '/skel_gen/'
@@ -129,16 +136,14 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
                              global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
-    from knossos_utils.chunky import ChunkDataset
-    from knossos_utils import knossosdataset
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
     cube_size = np.array([1024, 1024, 512])
     cd = ChunkDataset()
     overlap = np.array([100, 100, 50])
     boundary = (kd.boundary/2).astype(int)
-    #if later working on mag=2
-    if np.all(cube_size > boundary) == True:
+    # if later working on mag=2
+    if np.all(cube_size > boundary) is True:
         cube_size = boundary
     cd.initialize(kd, boundary, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=[0, 0, 0],
@@ -158,14 +163,13 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
-    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-
+    # list of SSV IDs and SSD parameters need to be given to each batch job
     path_dic = {ssv_id: [] for ssv_id in ssd.ssv_ids}
     for f in os.listdir(out_dir):
         partial_skels = load_pkl2obj(out_dir + "/" + f)
         for cell_id in partial_skels:
             path_dic[cell_id].append(out_dir + "/" + f)
-    pathdict_filepath = ("%s/excube1_path_dict.pkl" % global_params.config.working_dir)
+    pathdict_filepath = ("%s/excube1_path_dict.pkl" % tmp_dir)
     write_obj2pkl(pathdict_filepath, path_dic)
     multi_params = ssd.ssv_ids
     ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
