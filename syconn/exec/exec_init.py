@@ -76,10 +76,6 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None,kimima
     for ssv_id, cc in cc_dict.items():
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
-    if kimimaro == True:
-        exec_skeleton.run_kimimaro_skelgen()
-    else:
-        exec_skeleton.run_skeleton_generation()
 
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         g_p, len(cc_dict), len(cc_dict_inv)))
@@ -97,7 +93,10 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None,kimima
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    exec_skeleton.run_skeleton_generation()
+    if kimimaro == True:
+        exec_skeleton.run_kimimaro_skelgen()
+    else:
+        exec_skeleton.run_skeleton_generation()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
