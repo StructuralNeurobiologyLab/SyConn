@@ -15,6 +15,7 @@ from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
+from syconn import global_params
 
 
 def run_skeleton_generation(max_n_jobs: Optional[int] = None,
@@ -110,7 +111,7 @@ def run_skeleton_axoness():
 
 
 
-def run_kimimaro_skelgen(curr_dir = None, max_n_jobs: Optional[int] = None , map_myelin: bool = True):
+def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = True):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
 
@@ -121,8 +122,7 @@ def run_kimimaro_skelgen(curr_dir = None, max_n_jobs: Optional[int] = None , map
         kd_path: path to knossos dataset
 
     """
-    if curr_dir is None:
-        curr_dir = global_params.config.working_dir
+    tmp_dir = global_params.config.temp_path + '/skel_gen/'
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
     log = initialize_logging('skeleton_generation',
@@ -140,13 +140,12 @@ def run_kimimaro_skelgen(curr_dir = None, max_n_jobs: Optional[int] = None , map
     #if later working on mag=2
     if np.all(cube_size > boundary) == True:
         cube_size = boundary
-    cd.initialize(kd, boundary, cube_size, '~/cd_tmp/',
+    cd.initialize(kd, boundary, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True, list_of_coords=[])
     multi_params = [(cube_size, offset, overlap, boundary) for offset in cd.coord_dict]
 
-    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log,
-                   n_max_co_processes=global_params.config.ncore_total, remove_jobfolder=False)
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False)
 
     import os
     try:
@@ -173,7 +172,7 @@ def run_kimimaro_skelgen(curr_dir = None, max_n_jobs: Optional[int] = None , map
     multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
 
     # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
-    zipname = ("%s/excube1_kimimaro_skels_binaryfillingc100dps4/" % curr_dir)
+    zipname = ("%s/excube1_kimimaro_skels_binaryfillingc100dps4/" % tmp_dir)
     if not os.path.exists(zipname):
         os.mkdir(zipname)
     multi_params = [(pathdict_filepath, ssv_id, zipname) for ssv_id in multi_params]
@@ -181,11 +180,13 @@ def run_kimimaro_skelgen(curr_dir = None, max_n_jobs: Optional[int] = None , map
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
     qu.batchjob_script(multi_params, "kimimaromerge", log=log,
-                   n_max_co_processes=global_params.config.ncore_total,
                    remove_jobfolder=True, n_cores=2)
 
-    #if map_myelin:
-        #map_myelin_global()
+    if map_myelin:
+        map_myelin_global()
+
+    shutil.rmtree(tmp_dir)
+
     log.info('Finished skeleton generation.')
 
 
