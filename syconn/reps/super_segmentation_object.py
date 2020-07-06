@@ -31,8 +31,10 @@ from ..handler.prediction import certainty_estimate
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
-from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
+from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, mesh2obj_file, write_meshes2kzip, \
+    _calc_pca_components
 from ..proc.rendering import render_sampled_sso, load_rendering_func, render_sso_coords, render_sso_coords_index_views
+from ..proc.image import normalize_img
 from ..proc.sd_proc import predict_sos_views
 from ..reps import log_reps
 
@@ -2730,6 +2732,30 @@ class SuperSegmentationObject(SegmentationBase):
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "nonglia_cc%d.ply" % kk)
 
+    def morphembed2mesh(self, dest_path, pred_key='latent_morph', whiten=True):
+        """
+
+        Args:
+            dest_path:
+            pred_key:
+            whiten:
+
+        Returns:
+
+        """
+        if self.skeleton is None:
+            self.load_skeleton()
+        d = self.skeleton[pred_key]
+        if whiten:
+            d -= d.mean(axis=0)
+        eig = _calc_pca_components(d)
+        d_transf = np.dot(d, eig[:, :3])
+        d_transf -= d_transf.min(axis=0)
+        d_transf /= d_transf.max(axis=0)
+        vert_col = colorcode_vertices(self.mesh[1].reshape((-1, 3)), self.skeleton['nodes'] * self.scaling,
+                                      np.arange(len(self.skeleton['nodes'])), normalize_img(d_transf))
+        self.mesh2kzip(dest_path, ext_color=vert_col)
+
     def write_gliapred_cnn(self, dest_path=None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
@@ -3127,6 +3153,18 @@ class SuperSegmentationObject(SegmentationBase):
                 del view_props['use_syntype']
             ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
                                               overwrite=True, **view_props)
+
+    def predict_cell_morphology_pts(self, **kwargs):
+        """
+        Store local cell morphology with key 'latent_morph' (+ `pred_key_appendix`) in the SSV skeleton.
+
+        Args:
+            **kwargs:
+        """
+        from syconn.handler.prediction_pts import infere_cell_morphology_ssd
+        ssd_kwargs = dict(working_dir=self.working_dir, config=self.config)
+        ssv_params = [dict(ssv_id=self.id, **ssd_kwargs)]
+        infere_cell_morphology_ssd(ssv_params, **kwargs)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv",)):

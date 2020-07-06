@@ -379,8 +379,6 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-    if base_id == 0:
-        base_id = 1
     syn_ssv_id = base_id
 
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
@@ -1728,9 +1726,10 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])])
                )
-    wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
-    plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
-    plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
+    # # super high memory consumption for j0251
+    # wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
+    # plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
+    # plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
 
     if export_kzip:
         ax_labels = np.array(["N/A", "D", "A", "S"])  # TODO: this is already defined in handler.multiviews!

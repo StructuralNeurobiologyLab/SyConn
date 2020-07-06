@@ -237,17 +237,18 @@ def map_synssv_objects(synssv_version: Optional[str] = None,
                        nb_cpus=None, n_jobs=None,
                        syn_threshold=None):
     """
-    Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
+    Map syn_ssv objects and merge their meshes for all SSO objects contained in SSV SuperSegmentationDataset.
+
+    Notes:
+        * Stores meshes with keys: 'syn_ssv' and 'syn_ssv_sym', syn_ssv_asym (if synapse type is available). This may
+          take a while.
 
     Args:
-        synssv_version: str
-        n_jobs: int
-        log:
-        nb_cpus: int
-        syn_threshold: float
-
-    Returns:
-
+        synssv_version: String identifier.
+        n_jobs: Number of jobs.
+        log: Logger.
+        nb_cpus: Number of cpus for local multi-processing.
+        syn_threshold: Probability threshold applied during the mapping of syn_ssv objects.
     """
     if n_jobs is None:
         n_jobs = 4 * global_params.config.ncore_total

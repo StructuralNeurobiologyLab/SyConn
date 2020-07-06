@@ -1710,6 +1710,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
     fraction of the total number of vertices over ``npoints`` times two, but at least 5.
     Every point set is constructed by collecting the vertices associated with skeleton within a
     breadth-first search up to a maximum of ``npoints``.
+    Result is stored with key 'latent_morph' (+ `pred_key_appendix`) in the SSV skeleton.
 
 
     Args:
