@@ -165,6 +165,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
 
     # list of SSV IDs and SSD parameters need to be given to each batch job
     path_dic = {ssv_id: [] for ssv_id in ssd.ssv_ids}
+    raise ValueError
     for f in os.listdir(out_dir):
         partial_skels = load_pkl2obj(out_dir + "/" + f)
         for cell_id in partial_skels:

@@ -181,8 +181,7 @@ if __name__ == '__main__':
     step_idents.append('Dense predictions')
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc)
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
     time_stamps.append(time.time())
     step_idents.append('SD generation')

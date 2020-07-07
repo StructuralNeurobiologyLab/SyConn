@@ -1365,8 +1365,8 @@ class SuperSegmentationObject(SegmentationBase):
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
-            if global_params.config.allow_skel_gen:
-                run_kimimaro_skelgen(curr_dir = global_params.config.working_dir)
+            if global_params.config.allow_ssv_skel_gen:
+                run_kimimaro_skelgen()
                 return True
             return False
 
