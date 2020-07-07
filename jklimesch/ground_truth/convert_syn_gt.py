@@ -37,7 +37,7 @@ if __name__ == '__main__':
     kzips = glob.glob(gt_path + '*.k.zip')
     total = {}
     for kzip in kzips:
-        sso_id = v32v6(int(re.findall(r"_(\d+).", kzip)[0]))
+        sso_id = int(re.findall(r"_(\d+).", kzip)[0])
         sso = SuperSegmentationObject(sso_id)
         a_obj = load_skeleton(kzip)
         if len(a_obj) != 1:
@@ -48,6 +48,6 @@ if __name__ == '__main__':
         a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
         total[str(sso_id) + '_c'] = a_node_coords[a_node_labels != -1]
         total[str(sso_id) + '_l'] = a_node_labels[a_node_labels != -1]
-    f = open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted.pkl'), 'wb')
+    f = open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v3.pkl'), 'wb')
     pkl.dump(total, f)
     f.close()
