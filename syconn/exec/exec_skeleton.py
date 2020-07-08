@@ -130,7 +130,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
         working_dir: path to knossos dataset
 
     """
-    if not os.path.exist(global_params.config.temp_path):
+    if not os.path.exists(global_params.config.temp_path):
         os.mkdir(global_params.config.temp_path)
     tmp_dir = global_params.config.temp_path + '/skel_gen/'
     if not os.path.exists(tmp_dir):
