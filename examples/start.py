@@ -39,7 +39,7 @@ if __name__ == '__main__':
     experiment_name = 'j0126_example'
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
-    prior_glia_removal = True
+    prior_glia_removal = False
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('use_point_models', True),
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     step_idents.append('Glia separation')
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    exec_init.run_create_neuron_ssd()
+    exec_init.run_create_neuron_ssd(kimimaro=global_params.config.allow_kimimaro)
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 

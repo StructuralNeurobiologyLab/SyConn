@@ -10,6 +10,7 @@ import os
 from typing import Optional
 from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
+from syconn.reps.super_segmentation_object import SuperSegmentationObject
 from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
@@ -17,7 +18,7 @@ from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
 from knossos_utils.chunky import ChunkDataset
 from knossos_utils import knossosdataset
-import os
+import shutil
 try:
     import cPickle as pkl
 except ImportError:
@@ -129,6 +130,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
         working_dir: path to knossos dataset
 
     """
+    import os
     tmp_dir = global_params.config.temp_path + '/skel_gen/'
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
@@ -145,6 +147,8 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
     # if later working on mag=2
     if np.all(cube_size > boundary) is True:
         cube_size = boundary
+    if not os.path.exists(tmp_dir):
+        os.mkdir(tmp_dir)
     cd.initialize(kd, boundary, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True, list_of_coords=[])
@@ -152,20 +156,10 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
 
     out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False)
 
-    import os
-    try:
-        import cPickle as pkl
-    except ImportError:
-        import pickle as pkl
-    from syconn.handler.basics import load_pkl2obj, write_obj2pkl
-    import shutil
-    from syconn.reps.super_segmentation_object import SuperSegmentationObject
-
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     # list of SSV IDs and SSD parameters need to be given to each batch job
     path_dic = {ssv_id: [] for ssv_id in ssd.ssv_ids}
-    raise ValueError
     for f in os.listdir(out_dir):
         partial_skels = load_pkl2obj(out_dir + "/" + f)
         for cell_id in partial_skels:
@@ -191,6 +185,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
         map_myelin_global()
 
     shutil.rmtree(tmp_dir)
+    shutil.rmtree(out_dir)
 
     log.info('Finished skeleton generation.')
 

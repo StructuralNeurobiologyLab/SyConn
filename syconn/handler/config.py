@@ -568,6 +568,19 @@ class DynConfig(Config):
             res = self.entries['skeleton']['allow_skel_gen']
         return res
 
+    @property
+    def allow_kimimaro(self) -> bool:
+        """
+        Controls if skeletons should be generated with kimimaro
+        Returns: value stores in config.yml file
+
+        """
+        try:
+            res = self.entries['skeleton']['allow_kimimaro']
+        except KeyError:  # backwards compat.
+            res = self.entries['skeleton']['allow_kimimaro']
+        return res
+
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
     def syntype_available(self) -> bool:

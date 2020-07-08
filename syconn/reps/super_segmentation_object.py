@@ -1366,7 +1366,11 @@ class SuperSegmentationObject(SegmentationBase):
             return True
         except:
             if global_params.config.allow_ssv_skel_gen:
-                run_kimimaro_skelgen()
+                if global_params.config.allow_kimimaro:
+                    #add per ssv skeleton generation for kimimaro
+                    raise NotImplementedError('Individual cells cannot be processed with kimimaro.')
+                else:
+                    self.calculate_skeleton
                 return True
             return False
 
