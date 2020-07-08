@@ -130,8 +130,11 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
         working_dir: path to knossos dataset
 
     """
-    import os
+    if not os.path.exist(global_params.config.temp_path):
+        os.mkdir(global_params.config.temp_path)
     tmp_dir = global_params.config.temp_path + '/skel_gen/'
+    if not os.path.exists(tmp_dir):
+        os.mkdir(tmp_dir)
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
     log = initialize_logging('skeleton_generation',
@@ -147,8 +150,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
     # if later working on mag=2
     if np.all(cube_size > boundary) is True:
         cube_size = boundary
-    if not os.path.exists(tmp_dir):
-        os.mkdir(tmp_dir)
+
     cd.initialize(kd, boundary, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=[0, 0, 0],
                   fit_box_size=True, list_of_coords=[])
