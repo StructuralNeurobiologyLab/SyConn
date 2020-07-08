@@ -318,7 +318,7 @@ def get_rotmatrix_from_points(points: np.ndarray) -> np.ndarray:
 
 def _calc_pca_components(pts: np.ndarray) -> np.ndarray:
     """
-    Retrieve principal components from input array.
+    Retrieve Eigenvalue sorted Eigenvectors from input array.
 
     Args:
         pts: Input points.

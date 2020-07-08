@@ -61,7 +61,6 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
-
     multi_params = []
 
     for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
@@ -93,8 +92,9 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             multi_params, "from_cell_to_syn_dict", remove_jobfolder=True)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.working_dir) for ssv_id in ssd.ssv_ids],
-                               nb_cpus=global_params.config['ncores_per_node'])
+    # TODO: start as thread!
+    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.config) for ssv_id in ssd.ssv_ids],
+                               nb_cpus=None)
     log_extraction.debug('Deleted all cache dictionaries.')
 
 
@@ -230,8 +230,8 @@ def _from_cell_to_syn_dict(args):
 
 
 def _delete_all_cache_dc(args):
-    ssv_id, working_dir = args
-    ssv_o = super_segmentation.SuperSegmentationObject(ssv_id, working_dir=working_dir)
+    ssv_id, config = args
+    ssv_o = super_segmentation.SuperSegmentationObject(ssv_id, config=config)
     if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
         os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
 
@@ -379,8 +379,6 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-    if base_id == 0:
-        base_id = 1
     syn_ssv_id = base_id
 
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
@@ -1192,7 +1190,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
         log = log_extraction
     log.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.working_dir) for ssv_id in ssd.ssv_ids],
+    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.config) for ssv_id in ssd.ssv_ids],
                                nb_cpus=global_params.config['ncores_per_node'])
     log.debug('Deleted all cache dictionaries.')
 
@@ -1728,9 +1726,10 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])])
                )
-    wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
-    plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
-    plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
+    # # super high memory consumption for j0251
+    # wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
+    # plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
+    # plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
 
     if export_kzip:
         ax_labels = np.array(["N/A", "D", "A", "S"])  # TODO: this is already defined in handler.multiviews!

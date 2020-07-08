@@ -451,7 +451,8 @@ def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['Segment
             sub2ids[subf].append(so.id)
         else:
             md_out[so.id] = so._mesh
-    for subfold, ids in sub2ids.items():
+    import tqdm
+    for subfold, ids in tqdm.tqdm(sub2ids.items(), total=len(sub2ids)):
         mesh_path = f'{base_path}/{subfold}/mesh.pkl'
         md = MeshStorage(mesh_path, disable_locking=True,
                          cache_decomp=cache_decomp)

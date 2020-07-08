@@ -100,7 +100,7 @@ def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False
 
 
 def plot_performance_summary_redun(bd):
-    res_dc_pths = glob.glob(bd + 'redun*_prediction_results.pkl', recursive=True)
+    res_dc_pths = np.array(glob.glob(bd + 'redun*_prediction_results.pkl', recursive=True))
     fscores = []
     labels = []
     redundancies = [int(re.findall('redun(\d+)_', fp)[0]) for fp in res_dc_pths]
@@ -110,13 +110,12 @@ def plot_performance_summary_redun(bd):
         fscores.extend(res)
         labels.extend([dc['model_tag']] * len(res))
     df = pandas.DataFrame(data={'fscores': fscores, 'labels': labels})
-    create_catplot(f"{bd}/performance_summary.png", qs=df, x='labels', y='fscores',
+    create_catplot(f"{bd}/performance_summary_redun.png", qs=df, x='labels', y='fscores',
                    add_boxplot=False)
 
 
 def plot_performance_summary_models(bd):
-
-    res_dc_pths = glob.glob(bd + 'redun*_prediction_results.pkl', recursive=True)
+    res_dc_pths = glob.glob(bd + '*/redun*_prediction_results.pkl', recursive=True)
     fscores = []
     labels = []
     res_dc_pths = [fp for fp in res_dc_pths if int(re.findall('redun(\d+)_', fp)[0]) == 20]
@@ -140,12 +139,13 @@ if __name__ == '__main__':
     state_dict_fname = 'state_dict.pth'
     wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     gt_version = "ctgt_v4"
-    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts2500_ctx10000/'
+    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/'
+    # base_dir = f'{bbase_dir}//celltype_pts2500_ctx10000/'
     # mfold = base_dir + '/celltype_eval{}_sp2k/celltype_pts_scale1000_nb2500_ctx10000_swish_gn_CV{}_eval{}/'
-    base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts25000_ctx10000/'
-    mfold = base_dir + '/celltype_eval{}_sp25k/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
-    # base_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/celltype_pts50000_ctx20000/'
-    # mfold = base_dir + '/celltype_pts50000_ctx20000_eval{}/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
+    # base_dir = f'{bbase_dir}/celltype_pts25000_ctx10000/'
+    # mfold = base_dir + '/celltype_eval{}_sp25k/celltype_pts_scale1000_nb25000_ctx10000_swish_gn_CV{}_eval{}/'
+    base_dir = f'{bbase_dir}//celltype_pts50000_ctx20000/'
+    mfold = base_dir + '/celltype_pts50000_ctx20000_eval{}/celltype_pts_scale2000_nb50000_ctx20000_swish_gn_CV{}_eval{}/'
     for run in range(n_runs):
         for CV in range(ncv_min, n_cv):
             mpath = f'{mfold.format(run, CV, run)}/{state_dict_fname}'
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     mkwargs, loader_kwargs = get_pt_kwargs(mfold)
     npoints = loader_kwargs['npoints']
-    for redundancy in [100, 10, 20, 50, 1]:
+    for redundancy in [100, ]:  # [50, 1, 20, 10]:
         perf_res_dc = collections.defaultdict(list)  # collect for each run
         for run in range(n_runs):
             log = config.initialize_logging(f'log_eval{run}_sp{npoints}k_redun{redundancy}', base_dir)
@@ -253,4 +253,4 @@ if __name__ == '__main__':
         create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
                        add_boxplot=True, size=4)
     plot_performance_summary_redun(base_dir)
-    plot_performance_summary_models(base_dir)
+    plot_performance_summary_models(bbase_dir)

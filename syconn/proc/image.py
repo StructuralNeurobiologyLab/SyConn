@@ -257,28 +257,6 @@ def apply_pca(sv, pca=None):
     return sv
 
 
-def get_pc(sv):
-    """
-    Calculates principle components and return eigenvectors of
-    covariance matrix.
-
-    Parameters
-    ----------
-    sv : np.array [N x 3]
-        coordinates of voxels in super voxel
-
-    Returns
-    -------
-    np.array [3, 3]
-        eigenvectors of input data
-    """
-    assert sv.ndim == 2, "Insert array of N x 3"
-    assert sv.shape[1] == 3, "Insert array of N x 3"
-    cov_mat = np.cov([sv[:, 0], sv[:, 1], sv[:, 2]])
-    eig_val_cov, eig_vec_cov = np.linalg.eig(cov_mat)
-    return eig_vec_cov
-
-
 def remove_outlier(sv, edge_size):
     """
     Removes outlier in array sv beyond [0, edge_sizes]

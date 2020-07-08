@@ -1050,13 +1050,22 @@ def get_myelin_cnn():
 
 
 def get_knn_tnet_embedding_e3():
+    """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
+    """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
+
+
+def get_pca_tnet_embedding_pts():
+    raise NotImplementedError
+    # collect all embedding vectors
+    # TODO!
+    return pca_tnet_embedding()
 
 
 def naive_view_normalization(d):
