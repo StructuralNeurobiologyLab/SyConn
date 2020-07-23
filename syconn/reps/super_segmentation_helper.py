@@ -48,7 +48,7 @@ try:
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tool
 
-from skimage.morphology import watershed
+from skimage.segmentation import watershed
 from skimage.feature import peak_local_max
 from scipy import ndimage
 

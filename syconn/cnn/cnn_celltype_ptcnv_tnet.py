@@ -134,7 +134,7 @@ if __name__ == '__main__':
         ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_'
                                       'agglo_cbsplit')
     elif dataset == 'j0251':
-        ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+        ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
     else:
         raise NotImplementedError
     name += f'_{dataset}'
