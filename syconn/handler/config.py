@@ -426,10 +426,10 @@ class DynConfig(Config):
         """
         mpath = glob.glob(self.model_dir + '/pts/*tnet*/state_dict.pth')
         if len(mpath) > 1:
-            ixs = [int('j0126' in m) for m in mpath]
+            ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
             if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
                 return mpath[ixs.index(1)]
-            ixs = [int('j0251' in m) for m in mpath]
+            ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
             if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
                 return mpath[ixs.index(1)]
         assert len(mpath) == 1
