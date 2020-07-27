@@ -79,12 +79,12 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 """ Merges ads and dnh prediction. """
 if __name__ == "__main__":
     gt_path = os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/')
-    global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    with open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v3.pkl'), 'rb') as f:
+    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    with open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v6_no_outlier.pkl'), 'rb') as f:
         data = pkl.load(f)
     total_gt = np.empty((1, 1))
     total_preds = np.empty((1, 1))
-    nn = 20
+    nn = 50
     print(nn)
     for key in data:
         if '_l' not in key:
@@ -92,7 +92,7 @@ if __name__ == "__main__":
             sso = SuperSegmentationObject(sso_id)
 
             pc = replace_preds(sso, 'ads', [(0, 'dnh', [(1, 5), (2, 6)]), (1, 'abt', [(0, 3), (2, 4)])])
-            pc_syn = replace_preds(sso, 'ads', [(2, 'ads', [(2, 3)]), (0, 'dnh', [(1, 0)])])
+            pc_syn = replace_preds(sso, 'ads', [(2, 'ads', [(2, 3)]), (0, 'dnh', [(1, 2)])])
 
             # pc.save2pkl(os.path.expanduser(f'~/thesis/tmp/{sso_id}_pure.pkl'))
             # pc_syn.save2pkl(os.path.expanduser(f'~/thesis/tmp/{sso_id}_syn.pkl'))

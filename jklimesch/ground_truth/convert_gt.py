@@ -41,7 +41,7 @@ def labels2mesh(args):
     # load cell and cell organelles
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh]
     # load new synapse version
-    meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=False))
+    meshes.append(sso._load_obj_mesh('sj', rewrite=False))
     label_map = [-1, 7, 8, 9]
     hcs = []
     faces = None
@@ -77,6 +77,7 @@ def labels2mesh(args):
     a_edges = np.array(g.edges)
     # propagate labels, nodes with no label get label from nearest node with label
     if -1 in a_node_labels:
+        print("label_search")
         cached_labels = a_node_labels.copy()
         for node in g.nodes:
             if g.nodes[node]['label'] == -1:
@@ -172,12 +173,12 @@ def gt_generation(kzip_paths, out_path, version: str = None):
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/tmp/"
-    data_path = "/wholebrain/u/jklimesch/thesis/tmp/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/raw/"
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/annotations/v3/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
-    # global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    # gt_generation(file_paths, destination, version='spgt')
+    global_params.wd = "/wholebrain/scratch/areaxfs3/"
+    gt_generation(file_paths, destination, version='spgt')
     # axon GT
-    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    gt_generation(file_paths, destination)
+    # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    # gt_generation(file_paths, destination)
