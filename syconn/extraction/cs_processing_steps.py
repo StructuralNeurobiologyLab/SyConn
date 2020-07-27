@@ -378,8 +378,6 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-    if base_id == 0:
-        base_id = 1
     syn_ssv_id = base_id
 
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)

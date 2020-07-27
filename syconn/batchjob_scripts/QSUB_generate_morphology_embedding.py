@@ -33,6 +33,7 @@ version_dict = args[2]
 pred_key_appendix = args[3]
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
 n_worker = 2
+
 params = basics.chunkify(ssv_ids, n_worker * 4)
 res = start_multiprocess_imap(exctract_ssv_morphology_embedding,
                               [(p, ncpus, version, version_dict, pred_key_appendix) for p in params],
