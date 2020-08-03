@@ -13,12 +13,12 @@ Before you can set up SyConn, ensure that the
 package manager is installed on your system. Then you can install SyConn
 and all of its dependencies into a new conda
 [environment](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html)
-named "pysy" by running:
+named "syco" by running:
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn
     cd SyConn
-    conda env create -f environment.yml -n pysy
-    conda activate pysy
+    conda env create -f environment.yml -n syco python=3.7
+    conda activate syco
     pip install --no-deps -v -e .
 
 
@@ -31,9 +31,9 @@ command with:
     pip install --no-deps -v .
 
 
-To update the pysy environment after the environment file changed, use:
+To update the environment, e.g. if the environment file changed, use:
 
-    conda env update --name pysy --file environment.yml --prune
+    conda env update --name syco --file environment.yml --prune
 
 ## Example run
 Place the example and model data (provided upon request) in `SyConn/scripts/example_run/`,
@@ -103,7 +103,7 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 After initialization of the SDs (cell and sub-cellular structures, step 1 in the example run) and the SSD
 containing the agglomerated cell SVs (step 3), several analysis steps can be applied:
 
-* [Optional] [Glia removal](glia_removal.md)
+* \[Optional] [Glia removal](glia_removal.md)
 
 * [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
 compartments (e.g. axons and spines) and to perform morphology based cell type classification (steps 3-7).
