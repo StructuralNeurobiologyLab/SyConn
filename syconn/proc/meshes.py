@@ -40,7 +40,6 @@ from skimage.measure import mesh_surface_area
 try:
     # set matplotlib backend to offscreen
     import matplotlib
-
     matplotlib.use('agg')
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:

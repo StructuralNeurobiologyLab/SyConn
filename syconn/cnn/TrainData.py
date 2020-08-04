@@ -12,8 +12,6 @@ except ImportError:
     pass  # for sphinx build
 import os
 import re
-import matplotlib
-matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
@@ -21,7 +19,7 @@ import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
 from syconn.handler.prediction_pts import pts_loader_scalar, \
-    pts_loader_local_skel, load_hc_pkl, pts_loader_semseg_train
+    pts_loader_local_skel, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
