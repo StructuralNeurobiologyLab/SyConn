@@ -1,7 +1,7 @@
 # Dependencies marked with "(optional)" are not required for core functionality
 # and can be commented out if there are conflicts.
 
-name: pysy
+name: syco
 channels:
   - pytorch
   - conda-forge

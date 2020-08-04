@@ -402,11 +402,15 @@ class SyConnBackend(object):
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         label = ""
+        # TODO: generalize!
+        gt_type = 'ctgt_v2'
+        if 'j0251' in self.ssd.working_dir:
+            gt_type = 'ctgt_j0251_v2'
         if "celltype_cnn_e3_probas" in ssv.attr_dict:  # new prediction
             l = ssv.attr_dict["celltype_cnn_e3"]
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
-            label = int2str_converter(l, gt_type='ctgt_v2')
+            label = int2str_converter(l, gt_type=gt_type)
             certainty = ssv.certainty_celltype()
         elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
