@@ -1854,10 +1854,10 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
-        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # ~3 views per comp window
 
         # overwrite default rendering locations (used later on for the view generation)
-        sso._sample_locations = rendering_locs
+        sso._sample_locations = rendering_locs[None, ]  # requires auxiliary axis
         views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
     else:

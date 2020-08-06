@@ -28,7 +28,7 @@ if __name__ == '__main__':
         ('ngpus_per_node', 2),
         ('nnodes_total', 5),
         ('mem_per_node', 208990),
-        ('use_point_models', True),
+        ('use_point_models', False),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024])
+    cube_size = np.array([2048, 2048, 1024]) * 2
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size{'_'.join(map(str, cube_size))}"
@@ -168,7 +168,8 @@ if __name__ == '__main__':
         step_idents.append('Neuron rendering')
 
     log.info('Step 4/9 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
+                                 cube_of_interest_bb=cube_of_interest_bb)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 
@@ -189,7 +190,7 @@ if __name__ == '__main__':
     step_idents.append('Morphology extraction')
 
     log.info('Step 8/9 - Celltype analysis')
-    # exec_inference.run_celltype_prediction()
+    exec_inference.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 

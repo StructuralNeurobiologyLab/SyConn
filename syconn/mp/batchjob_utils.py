@@ -127,23 +127,21 @@ def batchjob_script(params: list, name: str,
             job_name = "".join([letters[le] for le in np.random.randint(0, len(letters), 8)])
 
     if batchjob_folder is None:
-        batchjob_folder = f"{global_params.config.qsub_work_folder}/{name}_{suffix}_{job_name}/"
+        batchjob_folder = f"{global_params.config.qsub_work_folder}/{name}{suffix}_{job_name}/"
     if os.path.exists(batchjob_folder):
         if not overwrite:
-            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". '
-                                  f'Please make sure it is safe for deletion, then set overwrite=True')
+            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". Please'
+                                  f' make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
     batchjob_folder = batchjob_folder.rstrip('/')
     # Check if fallback is required
     if disable_batchjob or not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path, show_progress=show_progress,
-                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
-                                 job_folder=batchjob_folder)
+        return batchjob_fallback(params, name, n_cores, suffix, script_folder, python_path,
+                                 show_progress=show_progress, remove_jobfolder=remove_jobfolder,
+                                 log=log, overwrite=True, job_folder=batchjob_folder)
 
     if log is None:
-        log_batchjob = initialize_logging("{}".format(name + suffix),
-                                          log_dir=batchjob_folder)
+        log_batchjob = initialize_logging("{}".format(name + suffix), log_dir=batchjob_folder)
     else:
         log_batchjob = log
     if script_folder is not None:
@@ -238,9 +236,10 @@ def batchjob_script(params: list, name: str,
             out_str, err = process.communicate()
             if process.returncode != 0:
                 if max_relaunch_cnt == 5:
-                    raise RuntimeError(f'Could not launch job with ID {job_id} and command '
-                                       f'"{job_cmd}".')
-                log_mp.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
+                    msg = f'Could not launch job with ID {job_id} and command "{job_cmd}".'
+                    log_batchjob.error(msg)
+                    raise RuntimeError(msg)
+                log_batchjob.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
                                f'for the {max_relaunch_cnt}. time.'
                                f'Attempting again in 5s. Error raised: {err}')
                 max_relaunch_cnt += 1
@@ -295,11 +294,11 @@ def batchjob_script(params: list, name: str,
                 out_str, err = process.communicate()
                 if process.returncode != 0:
                     if max_relaunch_cnt == 5:
-                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) and '
-                                           f'command "{job_cmd}".')
-                    log_mp.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) with command "{job_cmd}"'
-                                   f'for the {max_relaunch_cnt}. time.'
-                                   f'Attempting again in 5s. Error raised: {err}')
+                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) '
+                                           f'and command "{job_cmd}".')
+                    log_batchjob.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
+                                         f'with command "{job_cmd}" for the {max_relaunch_cnt}. '
+                                         f'time. Attempting again in 5s. Error raised: {err}')
                     max_relaunch_cnt += 1
                     time.sleep(5)
                 else:
