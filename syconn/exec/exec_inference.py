@@ -128,10 +128,8 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     np.random.shuffle(multi_params)
 
     if not qu.batchjob_enabled():
-        # TODO: move mpath to global params
         ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-        predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=multi_params,
-                         mpath='~/thesis/current_work/paper/test_models/', bs=2)
+        predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=multi_params, bs=2)
     else:
         multi_params = chunkify(multi_params, max_n_jobs_gpu)
         # job parameter will be read sequentially, i.e. in order to provide only

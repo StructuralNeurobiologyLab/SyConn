@@ -2137,6 +2137,7 @@ def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.nd
         pred_labels[u_ix] = np.argmax(counts)
 
 
+# TODO: Merge with get_pt_kwargs
 def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
     use_norm = True
     use_bias = True
@@ -2164,6 +2165,7 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
 # -------------------------------------------- SSO TO MORPHX CONVERSION ---------------------------------------------#
 
 
+# TODO: Merge with _load_ssv_hc
 @functools.lru_cache(256)
 def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: Union[Tuple, int], pt_type: str, myelin: bool = False,
            radius: int = None, label_remove: List[int] = None, label_mappings: List[Tuple[int, int]] = None):

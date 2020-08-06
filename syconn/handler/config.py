@@ -465,9 +465,10 @@ class DynConfig(Config):
             Path to model trained on detecting axon, terminal and en-passant boutons,
             dendritic shaft, spine head and neck, and soma from point data.
         """
-        mpath = glob.glob(self.model_dir + '/pts/*semseg*/state_dict.pth')
-        assert len(mpath) == 1
-        return mpath[0]
+        return self.model_dir + '/compartment_pts/'
+        # mpath = glob.glob(self.model_dir + '/pts/*semseg*/state_dict.pth')
+        # assert len(mpath) == 1
+        # return mpath[0]
 
     @property
     def mpath_celltype_e3(self) -> str:
