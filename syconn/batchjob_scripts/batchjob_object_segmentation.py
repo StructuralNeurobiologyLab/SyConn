@@ -6,12 +6,10 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.ssd_processing import dataset_proc as dp
+import dill
+import numpy as np  # needed for transfer function
+import pickle as pkl
+from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -20,11 +18,11 @@ with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
-            args.append(pkl.load(f))
+            args.append(dill.load(f))
         except EOFError:
             break
 
-out = dp._reskeletonize_objects_big_ones_thread(args)
+out = oes._object_segmentation_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

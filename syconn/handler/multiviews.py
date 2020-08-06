@@ -4,19 +4,26 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from knossos_utils.skeleton_utils import load_skeleton
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
+from typing import TYPE_CHECKING
+
+from .prediction import str2int_converter
 from ..proc.graphs import bfs_smoothing
-import numpy as np
-from numba import jit
-from scipy import spatial
-from typing import Optional, Union, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from ..reps import super_segmentation
 
+from knossos_utils.skeleton_utils import load_skeleton
+import numpy as np
+from numba import jit
+from scipy import spatial
 
-def parse_skelnodes_labels_to_mesh(kzip_path: str,
-                                   sso: 'super_segmentation.SuperSegmentationObject',
-                                   gt_type: str,  n_voting: int = 40):
+
+def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.SuperSegmentationObject',
+                                   gt_type: str, n_voting: int = 40) -> np.ndarray:
     """
 
     Args:
@@ -31,7 +38,7 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str,
 
 
     Returns:
-
+        Vertex label array.
     """
     # # Load mesh
     indices, vertices, normals = sso.mesh
@@ -45,7 +52,7 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str,
     skel_nodes = list(skel.getNodes())
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
-    node_labels = np.array([str2intconverter(n.getComment(), gt_type)
+    node_labels = np.array([str2int_converter(n.getComment(), gt_type)
                             for n in skel_nodes], dtype=np.int)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
@@ -81,8 +88,7 @@ def generate_palette(nr_classes: int, return_rgba: bool = True) -> np.ndarray:
 
 
 @jit
-def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) \
-        -> np.ndarray:
+def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) -> np.ndarray:
     """
 
     Args:
@@ -96,112 +102,18 @@ def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) \
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
     background_label = len(palette)
     # convention: Use highest ID as background
-    remapped_label_views = np.ones((len(label_view_flat), ),
+    remapped_label_views = np.ones((len(label_view_flat),),
                                    dtype=np.uint16) * background_label
     for kk in range(len(label_view_flat)):
         if np.all(label_view_flat[kk] == 255):  # background
             continue
         for i in range(len(palette)):
             if (label_view_flat[kk, 0] == palette[i, 0]) and \
-               (label_view_flat[kk, 1] == palette[i, 1]) and \
-               (label_view_flat[kk, 2] == palette[i, 2]):
+                    (label_view_flat[kk, 1] == palette[i, 1]) and \
+                    (label_view_flat[kk, 2] == palette[i, 2]):
                 remapped_label_views[kk] = i
                 break
     return remapped_label_views.reshape(rgb_view.shape[:-1])
-
-
-# create function that converts information in string type to the
-# information in integer type
-def str2intconverter(comment: str, gt_type: str):
-    if gt_type == "axgt":
-        if comment == "gt_axon":
-            return 1
-        elif comment == "gt_dendrite":
-            return 0
-        elif comment == "gt_soma":
-            return 2
-        elif comment == "gt_bouton":
-            return 3
-        elif comment == "gt_terminal":
-            return 4
-        else:
-            return -1
-    elif gt_type == "spgt":
-        if "head" in comment:
-            return 1
-        elif "neck" in comment:
-            return 0
-        elif "shaft" in comment:
-            return 2
-        elif "other" in comment:
-            return 3
-        else:
-            return -1
-    else: raise ValueError("Given groundtruth type is not valid.")
-
-
-def int2str_converter(label: int, gt_type: str):
-    """
-    TODO: remove redundant definitions.
-    Converts integer label into semantic string.
-
-    Args:
-        label: int
-        gt_type: str
-            e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
-
-    Returns: str
-
-    """
-    if type(label) == str:
-        label = int(label)
-    if gt_type == "axgt":
-        if label == 1:
-            return "gt_axon"
-        elif label == 0:
-            return "gt_dendrite"
-        elif label == 2:
-            return "gt_soma"
-        elif label == 3:
-            return "gt_bouton"
-        elif label == 4:
-            return "gt_terminal"
-        else:
-            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
-    elif gt_type == "spgt":
-        if label == 1:
-            return "head"
-        elif label == 0:
-            return "neck"
-        elif label == 2:
-            return "shaft"
-        elif label == 3:
-            return "other"
-        else:
-            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
-    elif gt_type == 'ctgt':
-        if label == 1:
-            return "MSN"
-        elif label == 0:
-            return "EA"
-        elif label == 2:
-            return "GP"
-        elif label == 3:
-            return "INT"
-        else:
-            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
-    elif gt_type == 'ctgt_v2':
-        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`,
-        # `predict_celltype_sso
-        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
-        l_dc = {v: k for k, v in l_dc_inv.items()}
-        try:
-            return l_dc[label]
-        except KeyError:
-            print('Unknown label "{}"'.format(label))
-            return -1
-    else:
-        raise ValueError("Given ground truth type is not valid.")
 
 
 def img_rand_coloring(img: np.ndarray) -> np.ndarray:
@@ -263,7 +175,7 @@ def id2rgb_array(id_arr: np.ndarray):
         Unique RGB value for every ID [N, 3].
 
     """
-    if np.max(id_arr) > 256**3:
+    if np.max(id_arr) > 256 ** 3:
         raise ValueError("Overflow in vertex ID array.")
     if id_arr.ndim == 1:
         id_arr = id_arr[:, None]
@@ -293,7 +205,7 @@ def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
     nb_ids = len(id_arr)
-    if nb_ids >= 256**3:
+    if nb_ids >= 256 ** 3:
         raise ValueError("Overflow in vertex ID array.")
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
@@ -322,10 +234,10 @@ def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
     nb_ids = len(id_arr)
-    if nb_ids < 256**3 - 1:
+    if nb_ids < 256 ** 3 - 1:
         rgb_arr = id2rgb_array_contiguous(id_arr)
         return np.concatenate([rgb_arr, np.zeros((nb_ids, 1))], axis=1)
-    if nb_ids >= 256**4 - 1:  # highest value is reserved for background
+    if nb_ids >= 256 ** 4 - 1:  # highest value is reserved for background
         raise ValueError("Overflow in vertex ID array.")
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
@@ -353,7 +265,7 @@ def rgb2id(rgb: np.ndarray) -> np.ndarray:
     red = rgb[0]
     green = rgb[1]
     blue = rgb[2]
-    vertex_id = red + green*256 + blue*(256**2)
+    vertex_id = red + green * 256 + blue * (256 ** 2)
     return np.array([vertex_id], dtype=np.uint32)
 
 
@@ -382,10 +294,10 @@ def rgb2id_array(rgb_arr: np.ndarray) -> np.ndarray:
         if mask_arr[ii]:
             continue
         rgb = rgb_arr_flat[ii]
-        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2)
+        id_arr[ii] = rgb[0] + rgb[1] * 256 + rgb[2] * (256 ** 2)
     # convention: The highest index value in index view will correspond to the background
     # background_ix = np.max(id_arr) + 1
-    background_ix = 256**3 - 2
+    background_ix = 256 ** 3 - 2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 
@@ -416,39 +328,28 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
         if mask_arr[ii]:
             continue
         rgb = rgb_arr_flat[ii]
-        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2) + rgb[3]*(256**3)
+        id_arr[ii] = rgb[0] + rgb[1] * 256 + rgb[2] * (256 ** 2) + rgb[3] * (256 ** 3)
     # convention: The highest index value in index view will correspond to the background
     # background_ix = np.max(id_arr) + 1
-    background_ix = 256**4 - 2
+    background_ix = 256 ** 4 - 2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 
 
 def generate_rendering_locs(verts: np.ndarray, ds_factor: float) -> np.ndarray:
     """
+    Generate rendering locations by downsampling the input points. Locations will be a subset of the input
+    locations.
 
     Args:
-        verts: np.ndarray
-            Vertices [N, 3].
-        ds_factor: float
-            volume (ds_factor^3) for which a rendering location is returned.
+        verts: Vertices [N, 3].
+        ds_factor: Volume (ds_factor^3) for which a rendering location is returned.
 
-    Returns: np.ndarray
-        rendering locations.
+    Returns:
+        Rendering locations.
 
     """
-    # get unique array of downsampled vertex locations (scaled back to nm)
-    verts_ixs = np.arange(len(verts))
-    np.random.seed(0)
-    np.random.shuffle(verts_ixs)
-    ds_locs_encountered = {}
-    rendering_locs = []
-    for kk, c in enumerate(verts[verts_ixs]):
-        ds_loc = tuple((c / ds_factor).astype(np.int))
-        # always gets first coordinate which is in downsampled voxel, the others are skipped
-        if ds_loc in ds_locs_encountered:
-            continue
-        rendering_locs.append(c)
-        ds_locs_encountered[ds_loc] = None
-    rendering_locs = np.array(rendering_locs)
-    return rendering_locs
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(verts)
+    pcd = pcd.voxel_down_sample(ds_factor)
+    return np.asarray(pcd.points)

@@ -5,23 +5,25 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from ctypes import sizeof, c_float, c_void_p, c_uint
-from PIL import Image
-import time
 import os
-import tqdm
+import time
+from ctypes import sizeof, c_float, c_void_p, c_uint
+
 import numpy as np
+import tqdm
+from PIL import Image
 from scipy.ndimage.filters import gaussian_filter
 
-from .image import rgb2gray, apply_clahe
 from . import log_proc
-from .. import global_params
+from .image import rgb2gray, apply_clahe
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
+from .. import global_params
 
 if os.environ['PYOPENGL_PLATFORM'] != 'egl':
     raise EnvironmentError(f'PyOpenGL backened should be "egl". '
                            f'Found "{os.environ["PYOPENGL_PLATFORM"]}".')
 import OpenGL
+
 OpenGL.USE_ACCELERATE = True
 from OpenGL.GL import *
 from OpenGL.GLU import *
@@ -29,6 +31,7 @@ from OpenGL.GL.framebufferobjects import *
 from OpenGL.arrays import *
 from OpenGL.EGL import *
 from .egl_ext import eglQueryDevicesEXT
+
 log_proc.info('EGL rendering enabled.')
 
 __all__ = ['init_object', 'init_ctx', 'init_opengl', '_render_mesh_coords',
@@ -208,10 +211,10 @@ def init_ctx(ws, depth_map):
         config_attr = arrays.GLintArray.asArray(
             [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8,
              EGL_GREEN_SIZE, 8,
-             EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE, #EGL_LUMINANCE_BUFFER,
+             EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,  # EGL_LUMINANCE_BUFFER,
              EGL_RGB_BUFFER,
              EGL_RENDERABLE_TYPE,
-             EGL_OPENGL_BIT,  EGL_NONE])   #EGL_CONFORMANT, EGL_OPENGL_BIT,
+             EGL_OPENGL_BIT, EGL_NONE])  # EGL_CONFORMANT, EGL_OPENGL_BIT,
     else:
         config_attr = arrays.GLintArray.asArray(
             [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8,
@@ -224,8 +227,8 @@ def init_ctx(ws, depth_map):
 
     # Bind EGL to the OpenGL API
     eglBindAPI(EGL_OPENGL_API)
-    #attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
-     #          EGL_NO_RESET_NOTIFICATION]
+    # attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
+    #          EGL_NO_RESET_NOTIFICATION]
     attrbls = None
 
     # Create an EGL context
@@ -341,7 +344,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
     if physical_scale is not None:
         draw_scale(physical_scale)
-    c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
+    c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None,])
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
     for m in range(1, nb_views):
@@ -352,7 +355,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         if enable_lightning:
             glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
-        c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
+        c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None,])
         glPopMatrix()
     eglDestroyContext(*ctx)
     eglTerminate(ctx[0])
@@ -411,7 +414,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
         if len(curr_vert) == 0:
             continue
         m = MeshObject(object_type, curr_ind, curr_vert, curr_norm,
-                             colors[object_type], sv_mesh.bounding_box)
+                       colors[object_type], sv_mesh.bounding_box)
         norm = np.concatenate([norm, m.normals])
         col = np.concatenate([col, m.colors])
         ind.append(m.indices)
@@ -433,7 +436,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
     if physical_scale is not None:
         draw_scale(physical_scale)
     c_views.append(screen_shot(ws, True, depth_map=depth_map,
-                               triangulation=triangulation)[None, ])
+                               triangulation=triangulation)[None,])
     glPopMatrix()
     glMatrixMode(GL_MODELVIEW)
     for m in range(1, nb_views):
@@ -447,7 +450,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
             glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         c_views.append(screen_shot(ws, True, depth_map=depth_map,
-                                   triangulation=triangulation)[None, ])
+                                   triangulation=triangulation)[None,])
         glPopMatrix()
     eglDestroyContext(*ctx)
     eglTerminate(ctx[0])
@@ -455,7 +458,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
 
 
 def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
-                           ws=(256, 128), views_key="raw", nb_simplices=3,
+                           ws=None, views_key="raw", nb_simplices=3,
                            depth_map=True, clahe=False, smooth_shade=True,
                            verbose=False, wire_frame=False, egl_args=None,
                            nb_views=None, triangulation=True):
@@ -492,8 +495,11 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         Returns array of views, else None
 
     """
+    view_props_default = global_params.config['views']['view_properties']
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
+    if ws is None:
+        ws = view_props_default['ws']
     # center data
     assert isinstance(edge_lengths, np.ndarray)
     assert nb_simplices in [3, 4]
@@ -540,8 +546,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
 
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        glOrtho(-edge_lengths[0]/2, edge_lengths[0]/2, edge_lengths[1]/2,
-                -edge_lengths[1]/2, -edge_lengths[2]/2, edge_lengths[2]/2)
+        glOrtho(-edge_lengths[0] / 2, edge_lengths[0] / 2, edge_lengths[1] / 2,
+                -edge_lengths[1] / 2, -edge_lengths[2] / 2, edge_lengths[2] / 2)
         glMatrixMode(GL_MODELVIEW)
 
         transformed_c = mesh.transform_external_coords([c])[0]
@@ -552,7 +558,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         glMatrixMode(GL_MODELVIEW)
         for m in range(0, nb_views):
             if nb_views == 2:
-                rot_angle = (-1)**(m+1)*25  # views are orthogonal
+                rot_angle = (-1) ** (m + 1) * 25  # views are orthogonal
             else:
                 rot_angle = 360. / nb_views * m  # views are equi-angular
             glPushMatrix()
@@ -574,7 +580,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                 if len(np.unique(cv)) == 1:
                     n_empty_views += 1
                     continue  # check at most one occurrence
-    if n_empty_views / len(res) > 0.1:  # more than 10% locations contain at least one empty view
+    if n_empty_views / len(res) > 0.5:  # more than 10% locations contain at least one empty view
         log_proc.critical(
             "WARNING: Found {}/{} locations with empty views.\t'{}'-mesh with "
             "{} vertices. Example location: {}".format(n_empty_views, len(coords), views_key,
@@ -602,7 +608,7 @@ def draw_scale(size):
     glEnd()
 
 
-def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
+def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=None,
                         rot_matrices=None, views_key="raw",
                         return_rot_matrices=False, depth_map=True,
                         smooth_shade=True, wire_frame=False, nb_views=None,
@@ -634,8 +640,11 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         views at each coordinate
 
     """
+    view_props_default = global_params.config['views']['view_properties']
     if nb_views is None:
-        nb_views = global_params.config['views']['nb_views']
+        nb_views = view_props_default['nb_views']
+    if ws is None:
+        ws = view_props_default['ws']
     if np.isscalar(comp_window):
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:
@@ -663,7 +672,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     if verbose:
         end = time.time()
         log_proc.debug("Finished rendering mesh of type %s at %d locations after"
-                       " %0.2fs" % (views_key,len(mviews), end - start))
+                       " %0.2fs" % (views_key, len(mviews), end - start))
     eglDestroyContext(*ctx)
     eglTerminate(ctx[0])
     if return_rot_matrices:

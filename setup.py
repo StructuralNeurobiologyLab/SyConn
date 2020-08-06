@@ -62,7 +62,7 @@ setup(
     ],
     platforms=["Linux", ],
     keywords='connectomics machinelearning imageprocessing',
-    packages=find_packages(exclude=['scripts']),
+    packages=find_packages(exclude=['scripts', 'tests']),
     python_requires='>=3.6, <4',
     package_data={'syconn': ['handler/config.yml']},
     include_package_data=True,

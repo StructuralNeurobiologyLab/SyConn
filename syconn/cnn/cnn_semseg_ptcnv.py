@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall, SegSmall2
+from elektronn3.models.convpoint import SegSmall, SegSmall2, SegSmall3
 from elektronn3.training import Trainer3d, Backup, metrics
 try:
     from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -29,10 +29,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=4, help='Batch size')
-parser.add_argument('--sp', type=int, default=5000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=10000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=1000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
+parser.add_argument('--use_bias', default=False, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
@@ -60,6 +61,7 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
+use_bias = args.use_bias
 
 lr = 5e-4
 lr_stepsize = 100
@@ -72,14 +74,14 @@ cellshape_only = False
 use_syntype = False
 dr = 0.2
 track_running_stats = False
-use_norm = 'gn'
+use_norm = 'bn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
 act = 'swish'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights_SegSmall3'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -100,6 +102,9 @@ if use_cuda:
 else:
     device = torch.device('cpu')
 
+if not use_bias:
+    name += '_noBias'
+
 print(f'Running on device: {device}')
 
 # set paths
@@ -110,8 +115,8 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall2(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                  track_running_stats=track_running_stats, act=act, use_bias=False)
+model = SegSmall3(input_channels, num_classes, dropout=dr, use_norm=use_norm,
+                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -135,12 +140,11 @@ elif args.jit == 'train':
 
 # Transformations to be applied to samples before feeding them to the network
 train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
-                                  clouds.Normalization(scale_norm),
                                   clouds.Center(),
+                                  clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
-                                  clouds.RandomScale(distr_scale=0.05, distr='normal')])
-valid_transform = clouds.Compose([clouds.Normalization(scale_norm),
-                                  clouds.Center()])
+                                  clouds.RandomScale(distr_scale=0.1, distr='uniform')])
+valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform,
                            batch_size=batch_size, ctx_size=ctx)

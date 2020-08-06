@@ -1,12 +1,13 @@
 # Dependencies marked with "(optional)" are not required for core functionality
 # and can be commented out if there are conflicts.
 
-name: pysy
+name: syco
 channels:
   - pytorch
   - conda-forge
   - defaults
   - menpo
+  - open3d-admin
 dependencies:
   # From -c pytorch
   - pytorch =1.3  # (provides backwards compat. to trained models)
@@ -37,7 +38,7 @@ dependencies:
   - scikit-learn =0.21
   - scikit-image
   - opencv
-  - numba <0.46  # =0.48 lead to freeze when importing elektronn3.data
+  - numba <0.46  # =0.48 led to freeze when importing elektronn3.data
   - openmesh-python
   - prompt_toolkit
   - vtki
@@ -52,6 +53,9 @@ dependencies:
 
   # From -c menpo
   - osmesa
+
+  # From -c open3d-admin; 0.10.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
+  - open3d =0.9.0
 
   # For tests (optional):
   - pytest
@@ -68,7 +72,6 @@ dependencies:
   - pip:
     - zmesh
     - plyfile
-    - open3d
     # For importing the latest cell type model.
     - adabound
 
@@ -77,8 +80,10 @@ dependencies:
     # TODO: Move these up to conda once they work again
     - tensorflow
     - tensorboard
+    #for skeletonisation
+    - kimimaro
 
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil_convpoint#egg=elektronn3
-    - git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
-    - git+https://github.com/StructuralNeurobiologyLab/MorphX
+    - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
+    - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx

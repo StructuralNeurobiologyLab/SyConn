@@ -1,4 +1,3 @@
-# TODO: refactor and remove tags
 stages:
   - build
   - test
@@ -10,23 +9,8 @@ test:
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
-    - pytest
+    - pytest --cache-clear
   except:
-    - master
-  tags:
-    - default
-
-test-full:
-  stage: test
-  script:
-    - source ~/.bashrc
-    - conda activate pysyintegration_m
-    - pip install --upgrade --no-deps -v -e .
-    - pytest
-    - pytest tests/test_run.py  # full example run
-  only:
-    - master
-  tags:
     - master
 
 build:
@@ -37,7 +21,15 @@ build:
     - conda activate pysyintegration_m
   only:
     - master
-  tags:
+
+test-full:
+  stage: test
+  script:
+    - source ~/.bashrc
+    - conda activate pysyintegration_m
+    - pip install --upgrade --no-deps -v -e .
+    - pytest --cache-clear -c tests/full_run.ini
+  only:
     - master
 
 cleanup:
@@ -47,8 +39,6 @@ cleanup:
   when: always
   only:
     - master
-  tags:
-    - master
 
 pylint:
   stage: test
@@ -56,7 +46,7 @@ pylint:
     - pip install pylint pylint-exit anybadge
   script:
     - mkdir ./pylint
-    - pylint --ignore=syconn/ui --ignore=syconn/batchjob_scripts --ignore=syconn/cnn --output-format=text syconn | tee ./pylint/pylint.log || pylint-exit $?
+    - pylint --output-format=text syconn | tee ./pylint/pylint.log || pylint-exit $?
     - PYLINT_SCORE=$(sed -n 's/^Your code has been rated at \([-0-9.]*\)\/.*/\1/p' ./pylint/pylint.log)
     - anybadge --label=Pylint --file=pylint/pylint.svg --value=$PYLINT_SCORE 2=red 4=orange 8=yellow 10=green
     - echo "Pylint score is $PYLINT_SCORE"
@@ -64,6 +54,4 @@ pylint:
     paths:
       - ./pylint/
     expire_in: 2 yrs
-  tags:
-    - default
   allow_failure: true

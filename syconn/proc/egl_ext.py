@@ -19,7 +19,9 @@
 """Extends OpenGL.EGL with definitions necessary for headless rendering."""
 
 import ctypes
+
 from OpenGL.platform import ctypesloader  # pylint: disable=g-bad-import-order
+
 try:
   # Nvidia driver seems to need libOpenGL.so (as opposed to libGL.so)
   # for multithreading to work properly. We load this in before everything else.

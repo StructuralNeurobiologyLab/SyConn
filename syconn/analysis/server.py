@@ -19,7 +19,7 @@ from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
 from syconn.handler.logger import log_main as log_gate
-from syconn.handler.multiviews import int2str_converter
+from syconn.handler.prediction import int2str_converter
 from syconn.reps.segmentation import SegmentationDataset
 
 app = Flask(__name__)
@@ -60,15 +60,6 @@ def route_ssv_vert(ssv_id):
 def route_ssv_norm(ssv_id):
     d = sg_state.backend.ssv_norm(ssv_id)
     return d
-
-
-@app.route('/ssv_obj_mesh/<ssv_id>/<obj_type>', methods=['GET'])
-def ssv_obj_mesh(ssv_id, obj_type):
-    d = sg_state.backend.ssv_obj_mesh(ssv_id, obj_type)
-    start = time.time()
-    ret = json.dumps(d, cls=MyEncoder)
-    log_gate.debug("JSON dump: {}".format(time.time() - start))
-    return ret
 
 
 @app.route('/ssv_obj_vert/<ssv_id>/<obj_type>', methods=['GET'])
@@ -287,37 +278,6 @@ class SyConnBackend(object):
         except TypeError:  # contains str, not byte
             return "".join(mesh[2])
 
-    def ssv_obj_mesh(self, ssv_id, obj_type):
-        """
-        Get mesh of a specific obj type for ssv_id.
-        :param ssv_id: int
-        :param obj_type: str
-        :return: dict
-        """
-        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
-        ssv.nb_cpus = self.nb_cpus
-        ssv.load_attr_dict()
-        if obj_type == "sj":
-            try:
-                obj_type = "syn_ssv"
-                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
-                log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
-                               "{}.".format(obj_type, ssv_id))
-            except KeyError:
-                pass
-        # if not existent, create mesh
-        _ = ssv.load_mesh(obj_type)
-        mesh = ssv._load_obj_mesh_compr(obj_type)
-        if mesh is None:
-            return None
-        ret = {'vertices': mesh[1],
-               'indices': mesh[0],
-               # TODO: examine the existing normals more closely -> find_meshes seems to create
-               #  different normals than K (face orientation is correct though)
-               # 'normals': mesh[2] if len(mesh) == 2 else []}
-               'normals': []}
-        return ret
-
     def ssv_obj_ind(self, ssv_id, obj_type):
         """
         Get mesh indices of a specific obj type for ssv_id.
@@ -338,9 +298,9 @@ class SyConnBackend(object):
                 log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
                                "{}.".format(obj_type, ssv_id))
             except KeyError:
-                pass
-        # # Now assumes all object meshes do already exist
-        # _ = ssv.load_mesh(obj_type)
+                obj_type = "sj"
+        # Now assumes all object meshes do already exist
+        _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
@@ -389,8 +349,6 @@ class SyConnBackend(object):
         :param obj_type: str
         :return: dict
         """
-        # TODO: examine the existing normals more closely -> find_meshes seems to create
-        #  different normals than K (face orientation is correct though)
         return b""
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh normals'
@@ -405,7 +363,7 @@ class SyConnBackend(object):
                 log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
                                "{}.".format(obj_type, ssv_id))
             except KeyError:
-                pass
+                obj_type = "sj"
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
@@ -437,19 +395,22 @@ class SyConnBackend(object):
     def ct_of_ssv(self, ssv_id):
         """
         Returns the CT for a given SSV ID.
-        :param sv_id:
+        :param ssv_id:
         :return:
         """
-        # TODO: changed to new cell type predictions, work this in everywhere
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         label = ""
+        # TODO: generalize!
+        gt_type = 'ctgt_v2'
+        if 'j0251' in self.ssd.working_dir:
+            gt_type = 'ctgt_j0251_v2'
         if "celltype_cnn_e3_probas" in ssv.attr_dict:  # new prediction
             l = ssv.attr_dict["celltype_cnn_e3"]
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
-            label = int2str_converter(l, gt_type='ctgt_v2')
+            label = int2str_converter(l, gt_type=gt_type)
             certainty = ssv.certainty_celltype()
         elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
@@ -667,7 +628,7 @@ def main():
     # context = ('cert.crt', 'key.key') enable later
     app.run(host=server_host,  # do not run this on a non-firewalled machine!
             port=server_port,  # ssl_context=context,
-            threaded=True, debug=True, use_reloader=True)
+            threaded=False, debug=False, use_reloader=False)
 
 
 if __name__ == '__main__':
