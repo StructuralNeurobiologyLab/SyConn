@@ -6,12 +6,10 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
 
-import matplotlib
 import numpy as np
 
 from . import log_proc
 
-matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker

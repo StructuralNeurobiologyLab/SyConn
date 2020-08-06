@@ -17,7 +17,6 @@ from .. import global_params
 from ..handler.prediction import int2str_converter
 from ..reps import segmentation
 
-matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
