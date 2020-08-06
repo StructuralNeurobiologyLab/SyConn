@@ -432,6 +432,9 @@ class DynConfig(Config):
             ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
             if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
                 return mpath[ixs.index(1)]
+            # assume its j0126
+            if 'j0251' not in global_params.config.working_dir and np.sum(ixs) == 1:
+                mpath.pop(ixs.index(1))
         assert len(mpath) == 1
         return mpath[0]
 
@@ -569,16 +572,16 @@ class DynConfig(Config):
         return res
 
     @property
-    def allow_kimimaro(self) -> bool:
+    def use_kimimaro(self) -> bool:
         """
         Controls if skeletons should be generated with kimimaro
         Returns: value stores in config.yml file
 
         """
         try:
-            res = self.entries['skeleton']['allow_kimimaro']
+            res = self.entries['skeleton']['use_kimimaro']
         except KeyError:  # backwards compat.
-            res = self.entries['skeleton']['allow_kimimaro']
+            res = False
         return res
 
     # New config attributes, enable backwards compat. in case these entries do not exist

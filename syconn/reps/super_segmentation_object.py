@@ -1361,18 +1361,17 @@ class SuperSegmentationObject(SegmentationBase):
         Returns:
             True if successfully loaded/generated skeleton, else False.
         """
-        from syconn.exec.exec_skeleton import run_kimimaro_skelgen
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
             if global_params.config.allow_ssv_skel_gen:
-                if global_params.config.allow_kimimaro:
-                    #add per ssv skeleton generation for kimimaro
+                if global_params.config.use_kimimaro:
+                    # add per ssv skeleton generation for kimimaro
                     raise NotImplementedError('Individual cells cannot be processed with kimimaro.')
                 else:
-                    self.calculate_skeleton
+                    self.calculate_skeleton()
                 return True
             return False
 

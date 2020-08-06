@@ -32,7 +32,7 @@ for ssv_id in ssv_ids:
     sso.skeleton["neighbours"] = neighbour_dict
     if combined_skel.vertices.size > 0:
         sso.skeleton["nodes"] = combined_skel.vertices / scaling  # to fit voxel coordinates
-        sso.skeleton["diameters"] = (combined_skel.radii / np.mean(scaling)) * 2
+        sso.skeleton["diameters"] = (combined_skel.radii / scaling[0]) * 2  # divide by x scale
         # kimimaro_skels_tokzip(combined_skel, ssv_id, zipname)
     else:
         sso.skeleton["nodes"] = combined_skel.vertices

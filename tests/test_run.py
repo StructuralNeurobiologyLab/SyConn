@@ -15,6 +15,8 @@ import numpy as np
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
 
+# TODO: add FileTimer; even better: re-use start.py here
+
 
 def test_full_run():
     example_cube_id = 1
@@ -179,7 +181,7 @@ def test_full_run():
         step_idents.append('Glia separation')
 
     log.info('Step 3/9 - Creating SuperSegmentationDataset')
-    exec_init.run_create_neuron_ssd(kimimaro = global_params.config.allow_kimimaro)
+    exec_init.run_create_neuron_ssd(kimimaro=global_params.config.use_kimimaro)
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 

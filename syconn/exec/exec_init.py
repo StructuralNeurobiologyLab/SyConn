@@ -29,7 +29,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None,kimimaro = True):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimimaro=True):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -93,7 +93,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None,kimima
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    if kimimaro == True:
+    if kimimaro is True:
         exec_skeleton.run_kimimaro_skelgen()
     else:
         exec_skeleton.run_skeleton_generation()

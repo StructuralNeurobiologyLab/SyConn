@@ -118,16 +118,18 @@ def run_skeleton_axoness():
     sbc.classifier_production(ft_context, nb_cpus=global_params.config['ncores_per_node'])
 
 
-
-def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = True):
+def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = True,
+                         cube_size: np.ndarray = None):
     """
-    Generate the cell reconstruction skeletons with the kimimaro tool. functions are in proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
+    Generate the cell reconstruction skeletons with the kimimaro tool. functions are in
+    proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
 
     Args:
         max_n_jobs: Number of parallel jobs.
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
-        :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
-        working_dir: path to knossos dataset
+            :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
+        cube_size: Cube size used within each worker. This should be as big as possible to prevent
+            un-centered skeletons in cell compartments with big diameters.
 
     """
     if not os.path.exists(global_params.config.temp_path):
@@ -143,8 +145,9 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
 
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
-    cube_size = np.array([1024, 1024, 512])
     cd = ChunkDataset()
+    if cube_size is None:
+        cube_size = np.array([1024, 1024, 512])
     overlap = np.array([100, 100, 50])
     boundary = (kd.boundary/2).astype(int)
     # if later working on mag=2
@@ -181,7 +184,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
     qu.batchjob_script(multi_params, "kimimaromerge", log=log,
-                   remove_jobfolder=True, n_cores=2)
+                       remove_jobfolder=True, n_cores=2)
 
     if map_myelin:
         map_myelin_global()
@@ -190,6 +193,3 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None , map_myelin: bool = T
     shutil.rmtree(out_dir)
 
     log.info('Finished skeleton generation.')
-
-
-
