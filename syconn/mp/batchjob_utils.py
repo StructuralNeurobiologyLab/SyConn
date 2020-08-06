@@ -341,6 +341,9 @@ def batchjob_script(params: list, name: str,
             batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
             log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
                                  f'{batchjob_folder_old}')
+            if os.path.exists(os.path.dirname(batchjob_folder_old)):
+                shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
+            os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)
             if os.path.exists(batchjob_folder_old):
                 shutil.rmtree(batchjob_folder_old, ignore_errors=True)
             shutil.move(batchjob_folder, batchjob_folder_old)
@@ -511,6 +514,9 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, py
             job_folder_old = f"{os.path.dirname(job_folder)}/DEL/{os.path.basename(job_folder)}_DEL"
             log_batchjob.warning(f'Deletion of job folder "{job_folder}" was not complete. Moving to '
                                  f'{job_folder_old}')
+            if os.path.exists(os.path.dirname(job_folder_old)):
+                shutil.rmtree(os.path.dirname(job_folder_old), ignore_errors=True)
+            os.makedirs(os.path.dirname(job_folder_old), exist_ok=True)
             if os.path.exists(job_folder_old):
                 shutil.rmtree(job_folder_old, ignore_errors=True)
             shutil.move(job_folder, job_folder_old)
@@ -522,8 +528,7 @@ def fallback_exec(cmd_exec):
     """
     Helper function to execute commands via ``subprocess.Popen``.
     """
-    ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE)
+    ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = ps.communicate()
     out_str = ""
     reported = False
