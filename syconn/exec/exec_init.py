@@ -29,7 +29,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimimaro=True):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -76,6 +76,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     for ssv_id, cc in cc_dict.items():
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
+
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         g_p, len(cc_dict), len(cc_dict_inv)))
 
@@ -92,7 +93,10 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    exec_skeleton.run_skeleton_generation()
+    if kimimaro is True:
+        exec_skeleton.run_kimimaro_skelgen()
+    else:
+        exec_skeleton.run_skeleton_generation()
 
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')

@@ -974,7 +974,9 @@ class SuperSegmentationObject(SegmentationBase):
     def _load_obj_mesh(self, obj_type: str = "sv", rewrite: bool = False) -> MeshType:
         """
         Load the mesh of a given `obj_type`. If :func:`~mesh_exists` is False,
-        loads the meshes from the underlying supervoxel objects.
+        loads the meshes from the underlying sueprvoxel objects.
+        TODO: Currently does not support color array!
+        TODO: add support for sym. asym synapse type
 
         Parameters
         ----------
@@ -1363,9 +1365,13 @@ class SuperSegmentationObject(SegmentationBase):
             self.skeleton = load_pkl2obj(self.skeleton_path)
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
-        except (KeyError, FileNotFoundError):
-            if self.config.allow_ssv_skel_gen or self._allow_skeleton_calc:
-                self.calculate_skeleton()
+        except:
+            if global_params.config.allow_ssv_skel_gen:
+                if global_params.config.use_kimimaro:
+                    # add per ssv skeleton generation for kimimaro
+                    raise NotImplementedError('Individual cells cannot be processed with kimimaro.')
+                else:
+                    self.calculate_skeleton()
                 return True
             return False
 

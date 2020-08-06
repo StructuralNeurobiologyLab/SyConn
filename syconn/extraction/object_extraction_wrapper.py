@@ -106,13 +106,15 @@ def generate_subcell_kd_from_proba(
     if os.path.isdir(cd_dir):
         if not overwrite:
             msg = f'Could not start generation of sub-cellular objects ' \
-                  f'"{subcell_names}" ChunkDataset because it already exists ' \
+                  f'"{subcell_names}" ChunkDataset because it already exists at "{cd_dir}" ' \
                   f'and overwrite was not set to True.'
             log_extraction.error(msg)
             raise FileExistsError(msg)
         log.debug('Found existing ChunkDataset at {}. Removing it now.'.format(cd_dir))
         shutil.rmtree(cd_dir)
     cd = chunky.ChunkDataset()
+    # TODO: possible to restrict ChunkDataset here already to report correct number of processed chunks? Check
+    #  coordinate frame work compatibility downstream in `from_probabilities_to_kd`
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True,
                   list_of_coords=[])
@@ -127,7 +129,7 @@ def generate_subcell_kd_from_proba(
         if os.path.isdir(path):
             if not overwrite:
                 msg = f'Could not start generation of sub-cellular object ' \
-                      f'"{co}" KnossosDataset because it already exists and overwrite ' \
+                      f'"{co}" KnossosDataset because it already exists at "{path}" and overwrite ' \
                       f'was not set to True.'
                 log_extraction.error(msg)
                 raise FileExistsError(msg)

@@ -164,6 +164,7 @@ skeleton:
   feature_context_rfc: # in nm
     axoness: 8000
     spiness: 1000
+  use_kimimaro: True
 
 use_point_models: False
 

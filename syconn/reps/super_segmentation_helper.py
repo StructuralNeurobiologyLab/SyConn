@@ -1964,8 +1964,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
 # TODO: figure out how to enable type hinting without explicitly importing the classes.
 def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
     """
-    Creates
-    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.reversed_mapping_dict`,
+    Creates,
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.mapping_dict` and
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.id_changer` and finally calls
     :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.save_dataset_shallow`.
@@ -1986,7 +1985,6 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
         else:
             raise Exception("sv_mapping has unknown type")
 
-    ssd.reversed_mapping_dict = mergelist
 
     for sv_id in mergelist.values():
         ssd.mapping_dict[sv_id] = []

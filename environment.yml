@@ -80,6 +80,8 @@ dependencies:
     # TODO: Move these up to conda once they work again
     - tensorflow
     - tensorboard
+    #for skeletonisation
+    - kimimaro
 
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil_convpoint#egg=elektronn3
