@@ -87,9 +87,9 @@ if __name__ == '__main__':
                      ' in `global_params.py` '
                      'is overwritten and set to "{}".'.format(working_dir))
 
-    generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
-                          kd_vc=vc_kd_path, kd_sj=sj_kd_path, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
-                          key_value_pairs=key_val_pairs_conf, force_overwrite=True)
+    # generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
+    #                       kd_vc=vc_kd_path, kd_sj=sj_kd_path, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
+    #                       key_value_pairs=key_val_pairs_conf, force_overwrite=True)
 
     global_params.wd = working_dir
     os.makedirs(global_params.config.temp_path, exist_ok=True)
@@ -180,34 +180,34 @@ if __name__ == '__main__':
     # exec_syns.run_spinehead_volume_calc()
     # time_stamps.append(time.time())
     # step_idents.append('Spine prediction')
-    #
+
     # log.info('Step 7/9 - Morphology extraction')
     # exec_inference.run_morphology_embedding()
     # time_stamps.append(time.time())
     # step_idents.append('Morphology extraction')
 
-    log.info('Step 8/9 - Celltype analysis')
+    # log.info('Step 8/9 - Celltype analysis')
     # exec_inference.run_celltype_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Celltype analysis')
+    # time_stamps.append(time.time())
+    # step_idents.append('Celltype analysis')
 
     log.info('Step 9/9 - Matrix export')
     exec_syns.run_matrix_export()
     time_stamps.append(time.time())
     step_idents.append('Matrix export')
-
-    time_stamps = np.array(time_stamps)
-    dts = time_stamps[1:] - time_stamps[:-1]
-    dt_tot = time_stamps[-1] - time_stamps[0]
-    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
-    n_steps = len(step_idents[1:]) - 1
-    for i in range(len(step_idents[1:])):
-        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_per = int(dts[i] / dt_tot * 100)
-        step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
-        time_summary_str += step_str
-    log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
-             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
+    #
+    # time_stamps = np.array(time_stamps)
+    # dts = time_stamps[1:] - time_stamps[:-1]
+    # dt_tot = time_stamps[-1] - time_stamps[0]
+    # dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+    # time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
+    # n_steps = len(step_idents[1:]) - 1
+    # for i in range(len(step_idents[1:])):
+    #     step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
+    #     step_dt_per = int(dts[i] / dt_tot * 100)
+    #     step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
+    #     time_summary_str += step_str
+    # log.info(time_summary_str)
+    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
+    #          'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # os.system(f'syconn.server --working_dir={working_dir} --port=10001')

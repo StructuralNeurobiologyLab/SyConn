@@ -66,8 +66,6 @@ class ViewContainer(object):
         return views
 
     def plot(self, fig=None, view_nb=0, perspective_nb=0):
-        import matplotlib
-        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         tick_spacing = 40
         if self.views is None:
@@ -108,8 +106,6 @@ class ViewContainer(object):
         ax.spines['bottom'].set_visible(False)
 
     def write_single_plot(self, dest_path, view_nb, perspective_nb=0, dpi=300):
-        import matplotlib
-        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         plt.ioff()
         fig = plt.figure()
@@ -142,8 +138,6 @@ def plot_n_views(view_array):
     ----------
     view_array : numpy.array
     """
-    import matplotlib
-    matplotlib.use("Agg", warn=False, force=True)
     import matplotlib.pyplot as plt
     nb_views = len(view_array)
     fig, ax = plt.subplots(5, 4)

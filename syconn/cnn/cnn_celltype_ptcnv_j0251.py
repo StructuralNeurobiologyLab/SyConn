@@ -83,12 +83,12 @@ cellshape_only = False
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
-num_classes = 10
+num_classes = 11
 onehot = True
 act = 'swish'
 
 if name is None:
-    name = f'celltype_pts_j0251_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:

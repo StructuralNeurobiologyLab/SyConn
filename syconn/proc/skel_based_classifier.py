@@ -26,9 +26,7 @@ except ImportError:
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 import joblib
-import matplotlib
 
-matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
 
 logger_skel = initialize_logging('skeleton')

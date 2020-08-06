@@ -12,8 +12,6 @@ except ImportError:
     pass  # for sphinx build
 import os
 import re
-import matplotlib
-matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
@@ -21,7 +19,7 @@ import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
 from syconn.handler.prediction_pts import pts_loader_scalar, \
-    pts_loader_local_skel, load_hc_pkl, pts_loader_semseg_train
+    pts_loader_local_skel, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -264,17 +262,18 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
 
             super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
             # load GT
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v0.csv"
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v2.csv"
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
-                raise ValueError('Multi-usage of IDs!')
+                ixs, cnt = np.unique(ssv_ids, return_counts=True)
+                raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
-            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251') for el in str_labels], dtype=np.uint16)
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
             self.sso_ids = ssv_ids
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}

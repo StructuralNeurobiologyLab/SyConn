@@ -1642,7 +1642,7 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     n_classes = 8
     if 'j0251' in mpath:
-        n_classes = 10
+        n_classes = 11
     try:
         m = ModelNet40(5, n_classes, **mkwargs).to(device)
     except RuntimeError as e:
@@ -1650,7 +1650,7 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
             mkwargs['use_bias'] = True
         else:
             raise RuntimeError(e)
-        m = ModelNet40(5, 8, **mkwargs).to(device)
+        m = ModelNet40(5, n_classes, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
     return m.eval()

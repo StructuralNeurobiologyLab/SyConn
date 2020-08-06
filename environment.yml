@@ -1,7 +1,7 @@
 # Dependencies marked with "(optional)" are not required for core functionality
 # and can be commented out if there are conflicts.
 
-name: pysy
+name: syco
 channels:
   - pytorch
   - conda-forge
@@ -38,7 +38,7 @@ dependencies:
   - scikit-learn =0.21
   - scikit-image
   - opencv
-  - numba <0.46  # =0.48 lead to freeze when importing elektronn3.data
+  - numba <0.46  # =0.48 led to freeze when importing elektronn3.data
   - openmesh-python
   - prompt_toolkit
   - vtki

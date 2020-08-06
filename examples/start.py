@@ -46,6 +46,7 @@ if __name__ == '__main__':
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 5),
+        ('mem_per_node', 249500),
         ('ngpus_per_node', 1),
         ('nnodes_total', 1),
         ('log_level', log_level),
