@@ -195,7 +195,7 @@ def batchjob_script(params: list, name: str,
         os.makedirs(path_to_out)
 
     # Submit jobs
-    log_batchjob.debug("Number of jobs for {}-script: {}".format(name, len(params)))
+    log_batchjob.debug("Number of jobs for {}-scsript: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
     dtime_sub = 0
     start_all = time.time()
@@ -336,7 +336,7 @@ def batchjob_script(params: list, name: str,
         # nfs might be slow and leaves .nfs files behind (possibly from the slurm worker)
         try:
             shutil.rmtree(batchjob_folder)
-        except OSError:
+        except OSError as e:
             batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
             log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
                                  f'{batchjob_folder_old}')

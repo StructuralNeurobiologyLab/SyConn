@@ -1,13 +1,9 @@
 import sys
+import pickle as pkl
 from syconn.handler.basics import load_pkl2obj
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 from syconn.proc.skeleton import kimimaro_mergeskels, kimimaro_skels_tokzip
 from syconn import global_params
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
-import numpy as np
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

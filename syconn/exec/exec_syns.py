@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import numpy as np
 
@@ -60,7 +60,8 @@ def run_matrix_export():
 
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
-                       max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None):
+                       max_n_jobs: Optional[int] = None,
+                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with

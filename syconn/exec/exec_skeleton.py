@@ -6,23 +6,19 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
+import shutil
 import os
-from typing import Optional
-from syconn.mp import batchjob_utils as qu
+from typing import Optional, Union
+
+from knossos_utils.chunky import ChunkDataset
+from knossos_utils import knossosdataset
+
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
-from syconn.reps.super_segmentation_object import SuperSegmentationObject
 from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
-from knossos_utils.chunky import ChunkDataset
-from knossos_utils import knossosdataset
-import shutil
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
@@ -69,39 +65,38 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
     #                    remove_jobfolder=True)
 
 
-def map_myelin_global(max_n_jobs: Optional[int] = None):
+def map_myelin_global(max_n_jobs: Optional[int] = None,
+                      cube_of_interest_bb: Union[Optional[tuple], np.ndarray] = None):
     """
     Stand-alone myelin mapping to cell reconstruction skeletons. See kwarg ``map_myelin``
     in :func:`run_skeleton_generation` for a mapping right after skeleton generation.
 
     Args:
         max_n_jobs: Number of parallel jobs.
+        cube_of_interest_bb: Optional bounding box (in mag 1 voxel coordinates). If given,
+            translates the skeleton nodes coordinates by the offset ``cube_of_interest_bb[0]`` to
+            match the coordinate frame of the complete data set volume.
 
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
-    log = initialize_logging('myelin_mapping',
-                             global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+    log = initialize_logging('myelin_mapping', global_params.config.working_dir + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
-                               for ssv_id in ssd.ssv_ids])
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
-    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
+    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir, cube_of_interest_bb)
                     for ssv_ids in multi_params]
 
     # create SSV skeletons, requires SV skeletons!
-    log.info('Starting myelin mapping of {} SSVs.'.format(
-        len(ssd.ssv_ids)))
-    qu.batchjob_script(multi_params, "map_myelin2skel", log=log,
-                       remove_jobfolder=True, n_cores=2)
+    log.info('Starting myelin mapping of {} SSVs.'.format(len(ssd.ssv_ids)))
+    qu.batchjob_script(multi_params, "map_myelin2skel", log=log, remove_jobfolder=True, n_cores=2)
 
     log.info('Finished myelin mapping.')
 
@@ -119,7 +114,7 @@ def run_skeleton_axoness():
 
 
 def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = True,
-                         cube_size: np.ndarray = None):
+                         cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in
     proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
@@ -130,6 +125,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
         cube_size: Cube size used within each worker. This should be as big as possible to prevent
             un-centered skeletons in cell compartments with big diameters.
+        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
 
     """
     if not os.path.exists(global_params.config.temp_path):
@@ -139,8 +135,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         os.mkdir(tmp_dir)
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
-    log = initialize_logging('skeleton_generation',
-                             global_params.config.working_dir + '/logs/',
+    log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
     kd = knossosdataset.KnossosDataset()
@@ -149,17 +144,22 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     if cube_size is None:
         cube_size = np.array([1024, 1024, 512])
     overlap = np.array([100, 100, 50])
-    boundary = (kd.boundary/2).astype(int)
+    if cube_of_interest_bb is not None:
+        cube_of_interest_bb = np.array(cube_of_interest_bb, dtype=np.int)
+    else:
+        cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int)
+
+    # TODO: factor 1/2 must be adapted if anisotropic downsampling is used in KD!
+    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0]) // 2
     # if later working on mag=2
-    if np.all(cube_size > boundary) is True:
-        cube_size = boundary
+    if np.all(cube_size > dataset_size):
+        cube_size = dataset_size
 
-    cd.initialize(kd, boundary, cube_size, f'{tmp_dir}/cd_tmp_skel/',
-                  box_coords=[0, 0, 0],
-                  fit_box_size=True, list_of_coords=[])
-    multi_params = [(cube_size, offset, overlap, boundary) for offset in cd.coord_dict]
-
-    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False)
+    # TODO: factor 1/2 in box_coords must be adapted if anisotropic downsampling is used in KD!
+    cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
+                  box_coords=cube_of_interest_bb[0] // 2, fit_box_size=True)
+    multi_params = [(cube_size, off, overlap, cube_of_interest_bb) for off in cd.coord_dict]
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False, n_cores=2)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -183,11 +183,10 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
-    qu.batchjob_script(multi_params, "kimimaromerge", log=log,
-                       remove_jobfolder=True, n_cores=2)
+    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=2)
 
     if map_myelin:
-        map_myelin_global()
+        map_myelin_global(cube_of_interest_bb=cube_of_interest_bb)
 
     shutil.rmtree(tmp_dir)
     shutil.rmtree(out_dir)

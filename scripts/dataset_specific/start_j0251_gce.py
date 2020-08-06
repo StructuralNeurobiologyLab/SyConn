@@ -9,11 +9,14 @@ import os
 import time
 import numpy as np
 import networkx as nx
+import shutil
 
+from syconn.handler.basics import FileTimer
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
 
+# TODO: set myelin knossosdataset - currently mapping of myelin to skeletons does not allow partial cubes
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
@@ -29,6 +32,7 @@ if __name__ == '__main__':
         ('nnodes_total', 5),
         ('mem_per_node', 208990),
         ('use_point_models', False),
+        ('skeleton', {'use_kimimaro': True}),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -45,6 +49,7 @@ if __name__ == '__main__':
           }
          )
     ]
+
     chunk_size = (512, 512, 256)
     n_folders_fs = 10000
     n_folders_fs_sc = 10000
@@ -69,24 +74,32 @@ if __name__ == '__main__':
                                       vc=lambda x: (x == 3).astype(np.uint8),
                                       sj=lambda x: (x == 2).astype(np.uint8))
 
-    # Preparing data
+    # Prepare data
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) * 2
+    cube_size = np.array([2048, 2048, 1024]) // 2
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
+    # cube_of_interest_bb = None  # process the entire cube!
     working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size{'_'.join(map(str, cube_size))}"
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
-    time_stamps = [time.time()]
-    step_idents = ['t-0']
-    log.info('Step 0/9 - Preparation')
+    ftimer = FileTimer(working_dir + '/.timing.pkl')
 
-    # Preparing config
-    # currently this is were SyConn looks for the neuron rag
+    log.info('Step 0/9 - Preparation')
+    ftimer.start('Preparation')
+    # figure out SyConn data path and copy models to working directory
+    for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
+                     os.path.abspath(os.path.curdir) + '/',
+                     os.path.expanduser('~/SyConn/')]:
+        if os.path.isdir(curr_dir + '/models'):
+            break
+    if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(working_dir + '/models/'):
+        shutil.copytree(curr_dir + '/models', working_dir + '/models/')
+
+    # Prepare config
     if global_params.wd is not None:
-        log.critical('Example run started. Original working directory defined'
-                     ' in `global_params.py` '
+        log.critical('Example run started. Original working directory defined in `global_params.py` '
                      'is overwritten and set to "{}".'.format(working_dir))
 
     generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
@@ -95,33 +108,35 @@ if __name__ == '__main__':
 
     global_params.wd = working_dir
     os.makedirs(global_params.config.temp_path, exist_ok=True)
-    start = time.time()
+
+    # create symlink to myelin predictions
+    if not os.path.exists(f'/mnt/j0251_data/myelin {working_dir}/knossosdatasets/'):
+        assert os.path.exists('/mnt/j0251_data/myelin')
+        os.system(f'ln -s /mnt/j0251_data/myelin {working_dir}/knossosdatasets/')
 
     # check model existence
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
-                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
-                      'mpath_tnet']:
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3', 'mpath_axonsem', 'mpath_glia_e3',
+                      'mpath_myelin', 'mpath_tnet']:
         mpath = getattr(global_params.config, mpath_key)
         if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
-            raise ValueError('Could not find model "{}". Make sure to copy the'
-                             ' "models" folder into the current working '
-                             'directory "{}".'.format(mpath, working_dir))
+            raise ValueError('Could not find model "{}". Make sure to copy the "models" folder into the current '
+                             'working directory "{}".'.format(mpath, working_dir))
+    ftimer.stop()
 
     # Start SyConn
     # --------------------------------------------------------------------------
     log.info('Finished example cube initialization (shape: {}). Starting'
              ' SyConn pipeline.'.format(cube_size))
     log.info('Example data will be processed in "{}".'.format(working_dir))
-    time_stamps.append(time.time())
-    step_idents.append('Preparation')
 
     log.info('Step 1/9 - Predicting sub-cellular structures')
-    # myelin is not needed before `run_create_neuron_ssd`
+    # ftimer.start('Myelin prediction')
+    # # myelin is not needed before `run_create_neuron_ssd`
     # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
-    time_stamps.append(time.time())
-    step_idents.append('Dense predictions')
+    # ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    ftimer.start('SD generation')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
                                     n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
                                     load_cellorganelles_from_kd_overlaycubes=True,
@@ -142,74 +157,63 @@ if __name__ == '__main__':
     nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
 
     exec_init.run_create_rag()
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
+    ftimer.stop()
 
     if global_params.config.prior_glia_removal:
         log.info('Step 2.5/9 - Glia separation')
+        ftimer.start('Glia separation')
         if not global_params.config.use_point_models:
             exec_render.run_glia_rendering()
             exec_inference.run_glia_prediction()
         else:
             exec_inference.run_glia_prediction_pts()
         exec_inference.run_glia_splitting()
-        time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+        ftimer.stop()
 
     log.info('Step 3/9 - Creating SuperSegmentationDataset')
-    exec_init.run_create_neuron_ssd()
-    time_stamps.append(time.time())
-    step_idents.append('SSD generation')
+    ftimer.start('SSD generation')
+    exec_init.run_create_neuron_ssd(cube_of_interest_bb=cube_of_interest_bb)
+    ftimer.stop()
 
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
         log.info('Step 3.5/9 - Neuron rendering')
+        ftimer.start('Neuron rendering')
         exec_render.run_neuron_rendering()
-        time_stamps.append(time.time())
-        step_idents.append('Neuron rendering')
+        ftimer.stop()
 
     log.info('Step 4/9 - Synapse detection')
+    ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
                                  cube_of_interest_bb=cube_of_interest_bb)
-    time_stamps.append(time.time())
-    step_idents.append('Synapse detection')
+    ftimer.stop()
 
     log.info('Step 5/9 - Axon prediction')
+    ftimer.start('Axon prediction')
     exec_inference.run_semsegaxoness_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Axon prediction')
+    ftimer.stop()
 
     log.info('Step 6/9 - Spine prediction')
+    ftimer.start('Spine prediction')
     exec_inference.run_semsegspiness_prediction()
     exec_syns.run_spinehead_volume_calc()
-    time_stamps.append(time.time())
-    step_idents.append('Spine prediction')
+    ftimer.stop()
 
     log.info('Step 7/9 - Morphology extraction')
+    ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
-    time_stamps.append(time.time())
-    step_idents.append('Morphology extraction')
+    ftimer.stop()
 
     log.info('Step 8/9 - Celltype analysis')
+    ftimer.start('Celltype analysis')
     exec_inference.run_celltype_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Celltype analysis')
+    ftimer.stop()
 
     log.info('Step 9/9 - Matrix export')
+    ftimer.start('Matrix export')
     exec_syns.run_matrix_export()
-    time_stamps.append(time.time())
-    step_idents.append('Matrix export')
+    ftimer.stop()
 
-    time_stamps = np.array(time_stamps)
-    dts = time_stamps[1:] - time_stamps[:-1]
-    dt_tot = time_stamps[-1] - time_stamps[0]
-    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
-    n_steps = len(step_idents[1:]) - 1
-    for i in range(len(step_idents[1:])):
-        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_per = int(dts[i] / dt_tot * 100)
-        step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
-        time_summary_str += step_str
+    time_summary_str = ftimer.prepare_report(experiment_name)
     log.info(time_summary_str)
     log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
              'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')

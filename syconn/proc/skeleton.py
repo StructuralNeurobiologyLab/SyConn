@@ -1,42 +1,54 @@
+import pickle as pkl
+from typing import Optional
 
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+import numpy as np
+import tqdm
+from scipy import ndimage
+import kimimaro
 from cloudvolume import PrecomputedSkeleton
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
-import numpy as np
-import kimimaro
-import tqdm
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.basics import load_pkl2obj, kd_factory
 from syconn.proc.image import multi_mop_backgroundonly
-from scipy import ndimage
 from syconn import global_params
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 
 
-def kimimaro_skelgen(cube_size, cube_offset, overlap, boundary):
+def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb):
     """
     code from https://pypi.org/project/kimimaro/
 
     Args:
-        cube_size: size of processed cube
-        cube_offset: starting point of cubes (in voxel data)
+        cube_size: size of processed cube in mag 2 voxels.
+        cube_offset: starting point of cubes (in mag 2 voxel coordinates)
+        overlap: In mag 2 voxels.
+        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
+            coord, upper coord)
 
-    Returns: skeleton with nodes, edges in physical parameters
+    Returns:
+        Skeleton with nodes, edges in physical parameters
 
     """
-    overlap = np.array(overlap)
+    # volume to be processed in mag!
+    # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
+    #  KnossosDataset
+    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0]) // 2
+
+    overlap = np.array(overlap, dtype=np.int)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
-    # TODO: the factor 2 must very likely be adapted when using anisotropic downsampling of the
-    #  KnossosDataset
-    if np.all(cube_size < boundary) is True:
+    if np.all(cube_size < dataset_size):
+        # this is in mag2!
         cube_size_ov = cube_size + 2 * overlap
+        # offset is converted to mag 2
+        # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
+        #  KnossosDataset
         cube_offset_ov = cube_offset - overlap
         seg = kd.load_seg(size=cube_size_ov*2, offset=np.array(cube_offset_ov)*2,
                           mag=2).swapaxes(0, 2)
     else:
+        # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
+        #  KnossosDataset
+        # converting mag 2 units to mag 1 (required by load_seg)
         seg = kd.load_seg(size=cube_size*2, offset=np.array(cube_offset)*2, mag=2).swapaxes(0, 2)
 
     seg_cell = np.zeros_like(seg)
@@ -50,7 +62,7 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, boundary):
 
     seg_cell = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg_cell, iterations=None)
 
-    if np.all(cube_size < boundary) is True:
+    if np.all(cube_size < dataset_size) is True:
         seg_cell = seg_cell[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
 
     # kimimaro code
@@ -74,7 +86,7 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, boundary):
         anisotropy=kd.scales[1],  # index 1 is mag 2
         fix_branching=True,  # default True
         fix_borders=True,  # default True
-        progress=True,  # default False, show progress bar
+        progress=False,  # show progress bar
         parallel=1,  # <= 0 all cpu, 1 single process, 2+ multiprocess
         parallel_chunk_size=100,  # how many skeletons to process before updating progress bar
     )
@@ -82,10 +94,13 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, boundary):
     for ii in skels:
         cell = skels[ii]
         for i, v in enumerate(cell.vertices):
-            c = cell.vertices[i]
-            # add cube_offset in physical coordinates
-            cell.vertices[i] = np.array([int(c[0]+cube_offset[0]*20), int(c[1]+cube_offset[1]*20),
-                                         int(c[2]+cube_offset[2]*40)])
+            c = cell.vertices[i]  # already in physical coordinates (nm)
+            # now add the offset in physical coordinates, both are originally in mag 2
+            # TODO: the factor 1/2 must be adapted when using anisotropic downsampling of the
+            #  KnossosDataset
+            c = np.array(c + (cube_offset - cube_of_interest_bb[0] // 2) * kd.scales[1],
+                         dtype=np.int)
+            cell.vertices[i] = c
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
         # cell = cell.downsample(2)
