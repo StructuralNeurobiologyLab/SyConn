@@ -2597,23 +2597,21 @@ class SuperSegmentationObject(SegmentationBase):
                                     comments=sv_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def _pred2mesh(self, pred_coords, preds, ply_fname=None, dest_path=None,
-                   colors=None, k=1):
+    def _pred2mesh(self, pred_coords: np.ndarray, preds: np.ndarray, ply_fname: Optional[str] = None,
+                   dest_path: Optional[str] = None, colors: Optional[Union[tuple, np.ndarray, list]] = None,
+                   k: int = 1, **kwargs):
         """
         If dest_path or ply_fname is None then indices, vertices, colors are
         returned. Else Mesh is written to k.zip file as specified.
 
         Args:
-            pred_coords: np.array
-                N x 3; scaled to nm
-            preds: np.array
-                N x 1
+            pred_coords: N x 3; scaled to nm
+            preds: Label array (N x 1).
             ply_fname: str
             dest_path: str
-            colors: np.array
-                Color for each possible prediction value (range(np.max(preds))
-            k: int
-                Number of nearest neighbors (average prediction)
+            colors: Color for each possible prediction value (range(np.max(preds))
+            k: Number of nearest neighbors (average prediction)
+            **kwargs: Keyword arguments passed to `colorcode_vertices`.
 
         Returns: None or [np.array, np.array, np.array]
 
@@ -2627,7 +2625,7 @@ class SuperSegmentationObject(SegmentationBase):
             raise ValueError(msg)
         mesh = self.mesh
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
-                                 preds, colors=colors, k=k)
+                                 preds, colors=colors, k=k, **kwargs)
         if dest_path is None:
             return mesh[0], mesh[1], col
         else:

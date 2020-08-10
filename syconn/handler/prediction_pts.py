@@ -42,7 +42,7 @@ try:
 except ImportError:
     pass
 # TODO: specify further, add to config
-pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
+pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2, sv_myelin=5)
 # in nm, should be replaced by Poisson disk sampling
 pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
@@ -443,19 +443,42 @@ def _load_ssv_hc_cached(args):
 
 
 def _load_ssv_hc(args):
-    ssv, feats, feat_labels, pt_type, radius = args
+    """
+
+    Args:
+        args:
+
+    Returns:
+
+    """
+    map_myelin = False
+    if len(args) == 5:
+        ssv, feats, feat_labels, pt_type, radius = args
+    else:
+        ssv, feats, feat_labels, pt_type, radius, map_myelin = args
     vert_dc = dict()
+    if not ssv.load_skeleton():
+        raise ValueError(f'Couldnt find skeleton of {ssv}')
+    if map_myelin:
+        _, _, myelinated = ssv._pred2mesh(ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['myelin_avg10000'],
+                                          return_colors=False)
     for k in feats:
         pcd = o3d.geometry.PointCloud()
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
-        vert_dc[k] = np.asarray(pcd.points)
+        if map_myelin and k == 'sv':
+            pcd, idcs = pcd.voxel_down_sample_and_trace(
+                pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(), pcd.get_max_bound())
+            vert_ixs = np.max(idcs, axis=1)
+            sv_verts = np.asarray(pcd.points)
+            vert_dc[k] = sv_verts[vert_ixs][myelinated[vert_ixs] == 0]
+            vert_dc['sv_myelin'] = sv_verts[vert_ixs][myelinated[vert_ixs] == 1]
+        else:
+            pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
+            vert_dc[k] = np.asarray(pcd.points)
     sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
                                    for ii, k in enumerate(feats)])
     sample_pts = np.concatenate([vert_dc[k] for k in feats])
-    if not ssv.load_skeleton():
-        raise ValueError(f'Couldnt find skeleton of {ssv}')
     nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
     hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
     # cache verts2node
@@ -472,7 +495,7 @@ def _load_ssv_hc(args):
 def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndarray], int],
                             batchsize: int, npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None, seeded: bool = False,
-                            use_ctx_sampling: bool = True, redundancy: int = 20,
+                            use_ctx_sampling: bool = True, redundancy: int = 20, map_myelin: bool = False,
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -491,6 +514,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
             until `npoints` have been collected.
         redundancy: Number of samples generated from each SSV.
+        map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -505,7 +529,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         redundancy_ssv = int(redundancy)
         n_batches = int(np.ceil(redundancy_ssv / batchsize))
         ssv = ssd.get_super_segmentation_object(ssv_id)
-        hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
+        hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin))
         ssv.clear_cache()
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
@@ -565,12 +589,10 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
 
 
-def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
-                      batchsize: int, npoints: int, ctx_size: float,
-                      transform: Optional[Callable] = None,
-                      train: bool = False, draw_local: bool = False,
-                      draw_local_dist: int = 1000, seeded: bool = False,
-                      use_ctx_sampling: bool = True, cache: Optional[bool] = True,
+def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchsize: int, npoints: int, ctx_size: float,
+                      transform: Optional[Callable] = None, train: bool = False, draw_local: bool = False,
+                      draw_local_dist: int = 1000, use_ctx_sampling: bool = True, cache: Optional[bool] = True,
+                      map_myelin: bool = False,
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -589,10 +611,10 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
         draw_local: Will draw similar contexts from approx.
             the same location, requires a single unique element in ssv_ids
         draw_local_dist: Maximum distance to similar source node in nm.
-        seeded: If True, will set the seed to ``hash(frozenset(ssv_id, n_samples, curr_batch_count))``.
         use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
             until `npoints` have been collected.
         cache: Cache loaded SSVs.
+        map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -608,71 +630,16 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray],
     if cache is None:
         cache = train
     if not train:
-        raise NotImplementedError()
-        for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
-            n_batches = int(np.ceil(occ / batchsize))
-            ssv = ssd.get_super_segmentation_object(ssv_id)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
-            ssv.clear_cache()
-            for ii in range(n_batches):
-                n_samples = min(occ, batchsize)
-                occ -= batchsize
-                if seeded:
-                    np.random.seed(np.uint32(hash(frozenset((ssv_id, n_samples, ii)))))
-                npoints_ssv = min(len(hc.vertices), npoints)
-                batch = np.zeros((n_samples, npoints_ssv, 3))
-                batch_f = np.zeros((n_samples, npoints_ssv, len(feat_dc)))
-                cnt = 0
-                pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-                pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
-                nodes = np.max(idcs, axis=1)
-                # nodes = hc.base_points(threshold=2500, source=len(hc.nodes) // 2)
-                # nodes = sparsify_skeleton_fast(hc.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=2500,
-                #                                max_dist_thresh=2500, dot_prod_thresh=0).nodes()
-                source_nodes = np.random.choice(nodes, n_samples, replace=len(nodes) < n_samples)
-                for source_node in source_nodes:
-                    # This might be slow
-                    while True:
-                        if use_ctx_sampling:
-                            node_ids = context_splitting_kdt(hc, source_node, ctx_size)
-                        else:
-                            node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                        hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                        sample_feats = hc_sub.features
-                        if len(sample_feats) > 0:
-                            break
-                        print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
-                        source_node = np.random.choice(source_nodes)
-                    sample_feats = hc_sub.features
-                    sample_pts = hc_sub.vertices
-                    # make sure there is always the same number of points within a batch
-                    sample_ixs = np.arange(len(sample_pts))
-                    sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                    sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                    npoints_add = npoints_ssv - len(sample_pts)
-                    idx = np.random.choice(len(sample_pts), npoints_add)
-                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                    # one hot encoding
-                    sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                    hc_sub._vertices = sample_pts
-                    hc_sub._features = sample_feats
-                    if transform is not None:
-                        transform(hc_sub)
-                    batch[cnt] = hc_sub.vertices
-                    batch_f[cnt] = hc_sub.features
-                    cnt += 1
-                assert cnt == n_samples
-                yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
+        raise NotImplementedError('Use "pts_loader_scalar_infer" for inference.')
     else:
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
+            args = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin)
             if cache:
-                hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
+                hc = _load_ssv_hc_cached(args)
             else:
-                hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None))
+                hc = _load_ssv_hc(args)
             ssv.clear_cache()
             # fluctuate context size in 1/4 samples
             if np.random.randint(0, 4) == 0:
@@ -1738,7 +1705,8 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
 
 
 def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
-                         da_equals_tan: bool = True, pred_key: Optional[str] = None, **add_kwargs):
+                         da_equals_tan: bool = True, pred_key: Optional[str] = None, map_myelin: bool = False,
+                         **add_kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1753,6 +1721,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         ssv_ids:
         da_equals_tan:
         pred_key:
+        map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
 
     Returns:
 
@@ -1762,7 +1731,8 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(redundancy=20))
+    default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
+                          postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
@@ -1832,7 +1802,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=10, npredictor=4, npostproc=10, bs=batchsizes)
+    default_kwargs = dict(nloader=10, npredictor=2, npostproc=10, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
@@ -2137,6 +2107,7 @@ def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.nd
         pred_labels[u_ix] = np.argmax(counts)
 
 
+# TODO: Merge with get_pt_kwargs
 def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
     use_norm = True
     use_bias = True
@@ -2164,6 +2135,7 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
 # -------------------------------------------- SSO TO MORPHX CONVERSION ---------------------------------------------#
 
 
+# TODO: Merge with _load_ssv_hc
 @functools.lru_cache(256)
 def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: Union[Tuple, int], pt_type: str, myelin: bool = False,
            radius: int = None, label_remove: List[int] = None, label_mappings: List[Tuple[int, int]] = None):

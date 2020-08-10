@@ -159,7 +159,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=cube_of_interest_bb[0] // 2, fit_box_size=True)
     multi_params = [(cube_size, off, overlap, cube_of_interest_bb) for off in cd.coord_dict]
-    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False, n_cores=2)
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False, n_cores=4)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 

@@ -16,6 +16,7 @@ from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
 
+
 # TODO: set myelin knossosdataset - currently mapping of myelin to skeletons does not allow partial cubes
 
 if __name__ == '__main__':
@@ -78,7 +79,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) // 2
+    cube_size = np.array([2048, 2048, 1024])
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
