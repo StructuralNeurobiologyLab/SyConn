@@ -336,16 +336,27 @@ def batchjob_script(params: list, name: str,
         # nfs might be slow and leaves .nfs files behind (possibly from the slurm worker)
         try:
             shutil.rmtree(batchjob_folder)
-        except OSError as e:
-            batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
-            log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
-                                 f'{batchjob_folder_old}')
-            if os.path.exists(os.path.dirname(batchjob_folder_old)):
-                shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
-            os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)
-            if os.path.exists(batchjob_folder_old):
-                shutil.rmtree(batchjob_folder_old, ignore_errors=True)
-            shutil.move(batchjob_folder, batchjob_folder_old)
+        except OSError:
+            try:
+                time.sleep(2)
+                shutil.rmtree(batchjob_folder)
+            except OSError as e:
+                p = subprocess.Popen([f'lsof', '/mnt/'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     stdin=subprocess.PIPE)
+                output = p.stdout.read()
+                p = subprocess.Popen([f'df', '-T {batchjob_folder}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     stdin=subprocess.PIPE)
+                output += p.stdout.read()
+                print(output)
+                batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
+                log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
+                                     f'{batchjob_folder_old}. Error: "{str(e)}".\n "lsof {batchjob_folder}": {output}')
+                if os.path.exists(os.path.dirname(batchjob_folder_old)):
+                    shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
+                os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)
+                if os.path.exists(batchjob_folder_old):
+                    shutil.rmtree(batchjob_folder_old, ignore_errors=True)
+                shutil.move(batchjob_folder, batchjob_folder_old)
     return path_to_out
 
 

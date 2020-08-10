@@ -15,6 +15,9 @@ with open(path_storage_file, 'rb') as f:
 cube_size, cube_offset, overlap, cube_of_interest_bb = args
 skels = kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb)
 
+with open(path_out_file[:-4] + '_ids.pkl', "wb") as f:
+    pkl.dump(list(skels.keys()), f)
+
 with open(path_out_file, "wb") as f:
     pkl.dump(skels, f)
 

@@ -165,12 +165,16 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
 
     # list of SSV IDs and SSD parameters need to be given to each batch job
     path_dic = {ssv_id: [] for ssv_id in ssd.ssv_ids}
-    for f in os.listdir(out_dir):
-        partial_skels = load_pkl2obj(out_dir + "/" + f)
+    # TODO: Each job needs to output a dictionary with IDs. Then create a global dict from these instead of loading
+    #  the entire skeleton output files.
+    log.info('Cube-wise skeleton generation finished. Generating cells-to-cubes dict.')
+    for fname in glob.glob(out_dir + '/*_ids.pkl'):
+        partial_skels = load_pkl2obj(fname)
         for cell_id in partial_skels:
-            path_dic[cell_id].append(out_dir + "/" + f)
-    pathdict_filepath = ("%s/excube1_path_dict.pkl" % tmp_dir)
+            path_dic[cell_id].append(fname[:-4] + '.pkl')
+    pathdict_filepath = f"{tmp_dir}/excube1_path_dict.pkl"
     write_obj2pkl(pathdict_filepath, path_dic)
+    del path_dic
     multi_params = ssd.ssv_ids
     ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
     multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
@@ -189,6 +193,6 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         map_myelin_global(cube_of_interest_bb=cube_of_interest_bb)
 
     shutil.rmtree(tmp_dir)
-    shutil.rmtree(out_dir)
+    shutil.rmtree(out_dir + '/../')
 
     log.info('Finished skeleton generation.')

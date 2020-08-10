@@ -13,7 +13,7 @@ from syconn.proc.image import multi_mop_backgroundonly
 from syconn import global_params
 
 
-def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb):
+def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> dict:
     """
     code from https://pypi.org/project/kimimaro/
 
