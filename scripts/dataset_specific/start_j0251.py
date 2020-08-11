@@ -12,12 +12,12 @@ import networkx as nx
 
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
+from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
+    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
@@ -28,7 +28,7 @@ if __name__ == '__main__':
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
-        ('use_point_models', True),
+        ('use_point_models', False),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -105,91 +105,92 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, working_dir))
 
-    # # Start SyConn
-    # # --------------------------------------------------------------------------
-    # log.info('Finished example cube initialization (shape: {}). Starting'
-    #          ' SyConn pipeline.'.format(bd))
-    # log.info('Example data will be processed in "{}".'.format(working_dir))
-    # time_stamps.append(time.time())
-    # step_idents.append('Preparation')
-    #
-    # log.info('Step 1/9 - Predicting sub-cellular structures')
-    # # myelin is not needed before `run_create_neuron_ssd`
-    # # exec_dense_prediction.predict_myelin(raw_kd_path)
-    # time_stamps.append(time.time())
-    # step_idents.append('Dense predictions')
-    #
-    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-    #                                 n_folders_fs=n_folders_fs,
-    #                                 load_cellorganelles_from_kd_overlaycubes=True,
-    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
-    #                                 max_n_jobs=global_params.config.ncore_total * 4)
-    #
-    # # generate flattened RAG
-    # from syconn.reps.segmentation import SegmentationDataset
-    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    # rag_sub_g = nx.Graph()
-    # # add SV IDs to graph via self-edges
-    # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
-    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
-    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # log.info('{} SVs were added to the RAG after application of the size '
-    #          'filter.'.format(len(filtered_ids)))
-    # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
-    #
-    # exec_init.run_create_rag()
-    # time_stamps.append(time.time())
-    # step_idents.append('SD generation')
-    #
-    # # if global_params.config.prior_glia_removal:
-    # #     log.info('Step 2.5/9 - Glia separation')
-    # #     if not global_params.config.use_point_models:
-    # #         exec_render.run_glia_rendering()
-    # #         exec_inference.run_glia_prediction()
-    # #     else:
-    # #         exec_inference.run_glia_prediction_pts()
-    # #     exec_inference.run_glia_splitting()
-    # #     time_stamps.append(time.time())
-    # #     step_idents.append('Glia separation')
-    #
-    # log.info('Step 3/9 - Creating SuperSegmentationDataset')
-    # exec_init.run_create_neuron_ssd()
-    # time_stamps.append(time.time())
-    # step_idents.append('SSD generation')
-    #
-    # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-    #     log.info('Step 3.5/9 - Neuron rendering')
-    #     exec_render.run_neuron_rendering()
-    #     time_stamps.append(time.time())
-    #     step_idents.append('Neuron rendering')
-    #
-    # log.info('Step 4/9 - Synapse detection')
-    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    # time_stamps.append(time.time())
-    # step_idents.append('Synapse detection')
-    #
-    # log.info('Step 5/9 - Axon prediction')
-    # exec_inference.run_semsegaxoness_prediction()
-    # time_stamps.append(time.time())
-    # step_idents.append('Axon prediction')
-    #
-    # log.info('Step 6/9 - Spine prediction')
-    # exec_inference.run_semsegspiness_prediction()
-    # exec_syns.run_spinehead_volume_calc()
-    # time_stamps.append(time.time())
-    # step_idents.append('Spine prediction')
+    # Start SyConn
+    # --------------------------------------------------------------------------
+    log.info('Finished example cube initialization (shape: {}). Starting'
+             ' SyConn pipeline.'.format(bd))
+    log.info('Example data will be processed in "{}".'.format(working_dir))
+    time_stamps.append(time.time())
+    step_idents.append('Preparation')
 
-    # log.info('Step 7/9 - Morphology extraction')
-    # exec_inference.run_morphology_embedding()
-    # time_stamps.append(time.time())
-    # step_idents.append('Morphology extraction')
+    log.info('Step 1/9 - Predicting sub-cellular structures')
+    # myelin is not needed before `run_create_neuron_ssd`
+    # exec_dense_prediction.predict_myelin(raw_kd_path)
+    time_stamps.append(time.time())
+    step_idents.append('Dense predictions')
 
-    # log.info('Step 8/9 - Celltype analysis')
-    # exec_inference.run_celltype_prediction()
-    # time_stamps.append(time.time())
-    # step_idents.append('Celltype analysis')
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+                                    n_folders_fs=n_folders_fs,
+                                    load_cellorganelles_from_kd_overlaycubes=True,
+                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
+                                    max_n_jobs=global_params.config.ncore_total * 4)
+
+    # generate flattened RAG
+    from syconn.reps.segmentation import SegmentationDataset
+    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    rag_sub_g = nx.Graph()
+    # add SV IDs to graph via self-edges
+    mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    log.info('{} SVs were added to the RAG after application of the size '
+             'filter.'.format(len(filtered_ids)))
+    nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+
+    exec_init.run_create_rag()
+    time_stamps.append(time.time())
+    step_idents.append('SD generation')
+
+    log.info('Step 3/9 - Glia separation')
+    if global_params.config.prior_glia_removal:
+        if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+        else:
+            exec_inference.run_glia_prediction_pts()
+        exec_inference.run_glia_splitting()
+        time_stamps.append(time.time())
+        step_idents.append('Glia separation')
+
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    exec_init.run_create_neuron_ssd()
+    time_stamps.append(time.time())
+    step_idents.append('SSD generation')
+
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Step 4.5/9 - Neuron rendering')
+        exec_render.run_neuron_rendering()
+        time_stamps.append(time.time())
+        step_idents.append('Neuron rendering')
+
+    log.info('Step 5/9 - Synapse detection')
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    time_stamps.append(time.time())
+    step_idents.append('Synapse detection')
+
+    log.info('Step 6/9 - Compartment prediction')
+    ftimer.start('Compartment predictions')
+    exec_inference.run_semsegaxoness_prediction()
+    if not global_params.config.use_point_models:
+        exec_inference.run_semsegspiness_prediction()
+    exec_syns.run_spinehead_volume_calc()
+    ftimer.stop()
+
+    # use multi-view models until here
+    raise()
+
+    # use point models from here
+    log.info('Step 7/9 - Morphology extraction')
+    exec_inference.run_morphology_embedding()
+    time_stamps.append(time.time())
+    step_idents.append('Morphology extraction')
+
+    log.info('Step 8/9 - Celltype analysis')
+    exec_inference.run_celltype_prediction()
+    time_stamps.append(time.time())
+    step_idents.append('Celltype analysis')
 
     log.info('Step 9/9 - Matrix export')
     exec_syns.run_matrix_export()

@@ -2005,7 +2005,8 @@ class SuperSegmentationObject(SegmentationBase):
             return views
 
     def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
-                       raw_view_key=None, save=False, ws=None, comp_window=None):
+                       raw_view_key=None, save=False, ws=None, comp_window=None,
+                       add_cellobjects: Union[bool, Iterable] = True):
         """
         Generates label views based on input model and stores it under the key
         'semseg_key', either within the SSV's SVs or in an extra view-storage
@@ -2035,6 +2036,8 @@ class SuperSegmentationObject(SegmentationBase):
             Window size in pixels [y, x]
         comp_window : float
             Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
+            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
         """
         view_props_default = self.config['views']['view_properties']
         if (nb_views is not None) or (raw_view_key is not None):
@@ -2046,10 +2049,9 @@ class SuperSegmentationObject(SegmentationBase):
             if raw_view_key in self.view_dict:
                 views = self.load_views(raw_view_key)
             else:
-                # log_reps.warning('Could not find raw-views. Re-rendering now.')
                 self._render_rawviews(nb_views, ws=ws, comp_window=comp_window, save=save,
                                       view_key=raw_view_key, verbose=verbose,
-                                      force_recompute=True)
+                                      force_recompute=True, add_cellobjects=add_cellobjects)
                 views = self.load_views(raw_view_key)
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
                 raise ValueError("Unequal number of views and redering locations.")
@@ -2740,6 +2742,7 @@ class SuperSegmentationObject(SegmentationBase):
 
     def morphembed2mesh(self, dest_path, pred_key='latent_morph', whiten=True):
         """
+        Write morphology embedding as RGB to k.zip file.
 
         Args:
             dest_path:
@@ -3510,7 +3513,7 @@ def semsegspiness_predictor(args) -> List[int]:
     Returns:
 
     """
-    from ..handler.prediction import get_semseg_axon_model
+    from ..handler.prediction import get_semseg_spiness_model
     m = get_semseg_axon_model()
     ssv_ids, view_props, nb_cpus, kwargs_semseg2mesh, kwargs_semsegforcoords = args
     missing_ssvs = []

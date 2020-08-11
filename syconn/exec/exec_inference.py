@@ -157,8 +157,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     # one list as parameter one needs an additional axis
     multi_params = [(ixs,) for ixs in multi_params]
 
-    predict_func = 'predict_spiness_semseg'
-    qu.batchjob_script(multi_params, predict_func, log=log,
+    qu.batchjob_script(multi_params, 'predict_spiness_semseg', log=log,
                        n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
                        suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished spine prediction.')

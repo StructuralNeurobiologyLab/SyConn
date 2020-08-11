@@ -189,8 +189,8 @@ if __name__ == '__main__':
     exec_init.run_create_rag()
     ftimer.stop()
 
+    log.info('Step 3/9 - Glia separation')
     if global_params.config.prior_glia_removal:
-        log.info('Step 3/9 - Glia separation')
         ftimer.start('Glia separation')
         if not global_params.config.use_point_models:
             exec_render.run_glia_rendering()

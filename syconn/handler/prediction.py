@@ -975,13 +975,6 @@ def get_celltype_model_e3():
     return m
 
 
-def get_semseg_spiness_model_pts():
-    from elektronn3.models.base import InferenceModel
-    m = torch.jit.load(global_params.config.mpath_glia_e3)
-    m = InferenceModel(m)
-    return m
-
-
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel
@@ -1059,13 +1052,6 @@ def get_pca_tnet_embedding_e3():
     """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
-
-
-def get_pca_tnet_embedding_pts():
-    raise NotImplementedError
-    # collect all embedding vectors
-    # TODO!
-    return pca_tnet_embedding()
 
 
 def naive_view_normalization(d):

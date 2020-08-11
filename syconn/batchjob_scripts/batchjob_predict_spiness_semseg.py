@@ -29,8 +29,7 @@ ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_p
 kwargs_semseg2mesh = global_params.config['spines']['semseg2mesh_spines']
 kwargs_semsegforcoords = global_params.config['spines']['semseg2coords_spines']
 view_props = global_params.config['views']['view_properties']
-# TODO: work-in
-# global_params.config.use_point_models
+
 n_worker = 2
 params = [(ch_sub, view_props, ncpus, kwargs_semseg2mesh, kwargs_semsegforcoords) for ch_sub in
           basics.chunkify(ch, n_worker * 2)]

@@ -4,8 +4,7 @@ import argparse
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='SyConn compartment (shaft, head, neck, axon/soma)'
-                                                 ' prediction with multi-views.', )
+    parser = argparse.ArgumentParser(description='SyConn morphology embedding with multi-views.', )
     parser.add_argument('--working_dir', type=str,
                         default=os.path.expanduser("~/SyConn/example_cube1/"),
                         help='Working directory of SyConn')
@@ -21,7 +20,7 @@ if __name__ == '__main__':
 
     # path to cell reconstruction k.zip
     if args.kzip is None:
-        args.kzip = '../data/1_spineexample.k.zip'
+        args.kzip = '../data/2_axonexample.k.zip'
     cell_kzip_fn = os.path.abspath(os.path.expanduser(args.kzip))
     if not os.path.isfile(cell_kzip_fn):
         raise FileNotFoundError('Could not find cell reconstruction file at the'
@@ -33,9 +32,9 @@ if __name__ == '__main__':
     # import rendering.py after setting working directory so that OpenGL settings specified in
     # the config  are applied properly
     from syconn.reps.super_segmentation import *
-    from syconn.reps.super_segmentation_helper import semseg_of_sso_nocache
+    from syconn.reps.super_segmentation_helper import view_embedding_of_sso_nocache
     from syconn.proc.ssd_assembly import init_sso_from_kzip
-    from syconn.handler.prediction import get_semseg_spiness_model
+    from syconn.handler.prediction import get_tripletnet_model_e3
 
     model_p = args.modelpath
 
@@ -48,7 +47,7 @@ if __name__ == '__main__':
                   f'{global_params.config.mpath_spiness} or specify a model via' \
                   ' --modelpath.'
             raise FileNotFoundError(msg)
-        m = get_semseg_spiness_model()
+        m = get_tripletnet_model_e3()
     else:
         if not os.path.isfile(cell_kzip_fn):
             raise FileNotFoundError('Could not find a model at the specified '
@@ -65,16 +64,13 @@ if __name__ == '__main__':
     # load SSO instance from k.zip file
     sso = init_sso_from_kzip(cell_kzip_fn, sso_id=1)
 
-    # run prediction and store result in new kzip
-    cell_kzip_fn_spines = cell_kzip_fn[:-6] + '_spines.k.zip'
-    semseg_of_sso_nocache(sso, dest_path=cell_kzip_fn_spines, verbose=True,
-                          semseg_key="spinesstest", k=0, ws=(256, 128),
-                          model=m,  nb_views=2, comp_window=8e3,
-                          add_cellobjects=('mi', 'vc', 'sj'))
-    node_preds = sso.semseg_for_coords(
-        sso.skeleton['nodes'], "spinesstest",
-        **global_params.config['spines']['semseg2coords_spines'])
-    sso.skeleton["spinesstest"] = node_preds
-    sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_spines,
-                              additional_keys=["spinesstest"])
+    # run inference and store result in new kzip
+    cell_kzip_fn_embed = cell_kzip_fn[:-6] + '_embed.k.zip'
+    # generate skeleton attribute 'latent_morph'
+    view_embedding_of_sso_nocache(sso, dest_path=cell_kzip_fn_embed, verbose=True, ws=(256, 128),
+                                  model=m,  nb_views=2, comp_window=8e3, add_cellobjects=('mi', 'vc', 'sj'))
+    # store RGB projection of the embedding in k.zip file
+    sso.morphembed2mesh(dest_path=cell_kzip_fn_embed)
+    # also save skeleton as Knossos tree with latent vector
+    sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_embed, additional_keys=["latent_morph"])
 

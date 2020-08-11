@@ -10,12 +10,15 @@ import glob
 import shutil
 import sys
 import time
-from knossos_utils import knossosdataset
+import argparse
+import pytest
 import numpy as np
+
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
+from syconn.handler.basics import FileTimer
 
-# TODO: add FileTimer; even better: re-use start.py here
+from knossos_utils import knossosdataset
 
 
 def test_full_run():
@@ -84,9 +87,8 @@ def test_full_run():
 
     # PREPARE TOY DATA
     log.info(f'Step 0/9 - Preparation')
-
-    time_stamps = [time.time()]
-    step_idents = ['t-0']
+    ftimer = FileTimer(example_wd + '/.timing.pkl')
+    ftimer.start('Preparation')
 
     # copy models to working directory
     if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
@@ -114,6 +116,7 @@ def test_full_run():
     del tmp
 
     # INITIALIZE DATA
+    # TODO: switch to streaming confs instead of h5 files
     if not os.path.isdir(global_params.config.kd_sj_path):
         kd = knossosdataset.KnossosDataset()
         kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -149,90 +152,80 @@ def test_full_run():
                                      offset=offset, boundary=bd, fast_downsampling=True,
                                      data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
         del kd_sj
-        time_stamps.append(time.time())
-        step_idents.append('Preparation')
+    ftimer.stop()
 
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(bd))
+    log.info(f'Finished example cube initialization (shape: {bd}). Starting SyConn pipeline.')
+    log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
-    log.info('Example data will be processed in "{}".'.format(example_wd))
     log.info('Step 1/9 - Predicting sub-cellular structures')
+    ftimer.start('Dense predictions')
+    # TODO: launch all predictions in parallel
     exec_dense_prediction.predict_myelin()
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
-    time_stamps.append(time.time())
-    step_idents.append('Dense predictions')
+    ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    ftimer.start('SD generation')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
                                     n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
+    ftimer.stop()
 
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
-
+    log.info('Step 3/9 - Glia separation')
     if global_params.config.prior_glia_removal:
-        log.info('Step 2.5/9 - Glia separation')
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
+        ftimer.start('Glia separation')
+        if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+        else:
+            exec_inference.run_glia_prediction_pts()
         exec_inference.run_glia_splitting()
-        time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+        ftimer.stop()
+    else:
+        log.info('Glia separation disabled. Skipping.')
 
-    log.info('Step 3/9 - Creating SuperSegmentationDataset')
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    ftimer.start('SSD generation')
     exec_init.run_create_neuron_ssd(kimimaro=global_params.config.use_kimimaro)
-    time_stamps.append(time.time())
-    step_idents.append('SSD generation')
+    ftimer.stop()
 
-    if not global_params.config.use_onthefly_views:
-        log.info('Step 3.5/9 - Neuron rendering')
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Step 4.5/9 - Neuron rendering')
+        ftimer.start('Neuron rendering')
         exec_render.run_neuron_rendering()
-        time_stamps.append(time.time())
-        step_idents.append('Neuron rendering')
+        ftimer.stop()
 
-    log.info('Step 4/9 - Synapse detection')
+    log.info('Step 5/9 - Synapse detection')
+    ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    time_stamps.append(time.time())
-    step_idents.append('Synapse detection')
+    ftimer.stop()
 
-    log.info('Step 5/9 - Axon prediction')
+    log.info('Step 6/9 - Compartment prediction')
+    ftimer.start('Compartment predictions')
     exec_inference.run_semsegaxoness_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Axon prediction')
-
-    log.info('Step 6/9 - Spine prediction')
-    exec_inference.run_semsegspiness_prediction()
+    if not global_params.config.use_point_models:
+        exec_inference.run_semsegspiness_prediction()
     exec_syns.run_spinehead_volume_calc()
-    time_stamps.append(time.time())
-    step_idents.append('Spine prediction')
+    ftimer.stop()
 
     log.info('Step 7/9 - Morphology extraction')
+    ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
-    time_stamps.append(time.time())
-    step_idents.append('Morphology extraction')
+    ftimer.stop()
 
     log.info('Step 8/9 - Celltype analysis')
+    ftimer.start('Celltype analysis')
     exec_inference.run_celltype_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Celltype analysis')
+    ftimer.stop()
 
     log.info('Step 9/9 - Matrix export')
+    ftimer.start('Matrix export')
     exec_syns.run_matrix_export()
-    time_stamps.append(time.time())
-    step_idents.append('Matrix export')
+    ftimer.stop()
 
-    time_stamps = np.array(time_stamps)
-    dts = time_stamps[1:] - time_stamps[:-1]
-    dt_tot = time_stamps[-1] - time_stamps[0]
-    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-                       " {}.\n".format(experiment_name, dt_tot_str)
-    n_steps = len(step_idents[1:]) - 1
-    for i in range(len(step_idents[1:])):
-        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "{:<10}{:<25}{:<20}{:<4s}\n".format(
-            f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_perc}%')
-        time_summary_str += step_str
+    time_summary_str = ftimer.prepare_report(experiment_name)
     log.info(time_summary_str)

@@ -144,8 +144,7 @@ def run_spinehead_volume_calc():
     np.random.seed(0)
 
     log.info('Starting spine head volume calculation.')
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
-                               for ssv_id in ssd.ssv_ids])
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     multi_params = ssd.ssv_ids
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]

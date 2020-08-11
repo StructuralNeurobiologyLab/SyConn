@@ -1822,7 +1822,8 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
 
 def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],
                                   nb_views: int, comp_window: int, pred_key_appendix: str = "",
-                                  verbose: bool = False, overwrite: bool = True):
+                                  verbose: bool = False, overwrite: bool = True, dest_path: Optional[str] = None,
+                                  add_cellobjects: Union[bool, Iterable] = True):
     """
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -1841,12 +1842,15 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
         pred_key_appendix:
         verbose: Adds progress bars for view generation.
         overwrite: Overwrite existing views in temporary view dictionary. Key: ``'tmp_views' + pred_key_appendix``.
+        dest_path: Destination path of k.zip file.
+        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
+            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
 
     """
     pred_key = "latent_morph"
     pred_key += pred_key_appendix
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
-                       verbose=verbose, add_cellobjects=True,
+                       verbose=verbose, add_cellobjects=add_cellobjects,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
     # this cache is only in-memory, and not file system cache
@@ -1858,7 +1862,8 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
 
         # overwrite default rendering locations (used later on for the view generation)
         sso._sample_locations = rendering_locs[None, ]  # requires auxiliary axis
-        views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
+        # views shape: N, 4, nb_views, y, x
+        views = render_sso_coords(sso, rendering_locs, **view_kwargs)
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
     else:
         views = sso.view_dict[tmp_view_key]
@@ -1872,15 +1877,19 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
 
     # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
     sso.load_skeleton()
-    hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))  # view location ordering same as views / latent
+    # view location ordering same as views / latent
+    hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))
     dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
     sso.skeleton[pred_key] = latent[ixs]
+    if dest_path is not None:
+        return sso.save_skeleton_to_kzip(dest_path=dest_path)
     sso.save_skeleton()
 
 
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
                           nb_views: int, comp_window: float, k: int = 1,
-                          dest_path: Optional[str] = None, verbose: bool = False):
+                          dest_path: Optional[str] = None, verbose: bool = False,
+                          add_cellobjects: Union[bool, Iterable] = True):
     """
     Renders raw and index views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -1928,6 +1937,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         dest_path: location of kzip in which colored vertices (according to semantic
             segmentation prediction) are stored.
         verbose: Adds progress bars for view generation.
+        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
+            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
 
     Returns:
 
@@ -1946,7 +1957,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
-    sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key, **view_kwargs)
+    sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key,
+                       add_cellobjects=add_cellobjects, **view_kwargs)
     if verbose:
         log_reps.debug('Finished shape-view rendering and sem. seg. prediction.')
     # this generates the index views

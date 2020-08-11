@@ -1091,16 +1091,9 @@ def _extract_synapse_type_thread(args):
             if trafo_dict is not None:
                 vxl -= trafo_dict[so_id]
                 vxl = vxl[:, [1, 0, 2]]
-            # TODO: remove try-except
             if global_params.config.syntype_available:
-                try:
-                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl) == asym_label)
-                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl) == sym_label)
-                except:
-                    log_extraction.error("Failed to read raw cubes during synapse type "
-                                         "extraction.")
-                    sym_prop = 0
-                    asym_prop = 0
+                asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl) == asym_label)
+                sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl) == sym_label)
             else:
                 sym_prop = 0
                 asym_prop = 0

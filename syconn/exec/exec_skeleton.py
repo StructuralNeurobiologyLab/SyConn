@@ -3,26 +3,24 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
-# Authors: Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Alexandra Rother, Joergen Kornfeld
 
-import numpy as np
 import os
+import shutil
+import glob
 from typing import Optional
-from syconn.mp import batchjob_utils as qu
+import numpy as np
+
+from knossos_utils.chunky import ChunkDataset
+from knossos_utils import knossosdataset
+
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
-from syconn.reps.super_segmentation_object import SuperSegmentationObject
 from syconn.handler.basics import chunkify, chunkify_weighted
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
+from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
-from knossos_utils.chunky import ChunkDataset
-from knossos_utils import knossosdataset
-import shutil
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
@@ -118,6 +116,12 @@ def run_skeleton_axoness():
     sbc.classifier_production(ft_context, nb_cpus=global_params.config['ncores_per_node'])
 
 
+def _collect_paths(p: str) -> dict:
+    partial_res = load_pkl2obj(p)
+    res = {cellid: p for cellid in partial_res}
+    return res
+
+
 def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = True,
                          cube_size: np.ndarray = None):
     """
@@ -139,8 +143,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         os.mkdir(tmp_dir)
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
-    log = initialize_logging('skeleton_generation',
-                             global_params.config.working_dir + '/logs/',
+    log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
     kd = knossosdataset.KnossosDataset()
@@ -159,21 +162,21 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
                   fit_box_size=True, list_of_coords=[])
     multi_params = [(cube_size, offset, overlap, boundary) for offset in cd.coord_dict]
 
-    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False)
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log,
+                                 remove_jobfolder=False, n_cores=2)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     # list of SSV IDs and SSD parameters need to be given to each batch job
-    path_dic = {ssv_id: [] for ssv_id in ssd.ssv_ids}
-    for f in os.listdir(out_dir):
-        partial_skels = load_pkl2obj(out_dir + "/" + f)
-        for cell_id in partial_skels:
-            path_dic[cell_id].append(out_dir + "/" + f)
+    path_dc = {ssv_id: [] for ssv_id in ssd.ssv_ids}
+    res = start_multiprocess_imap(_collect_paths, glob.glob(out_dir + '*.pkl'), nb_cpus=None)
+    for dc in res:
+        for k, v in dc.items():
+            path_dc[k].append(v)
     pathdict_filepath = ("%s/excube1_path_dict.pkl" % tmp_dir)
-    write_obj2pkl(pathdict_filepath, path_dic)
-    multi_params = ssd.ssv_ids
-    ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
-    multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
+    write_obj2pkl(pathdict_filepath, path_dc)
+
+    multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs, ssd.load_cached_data('size'))
 
     # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
     zipname = ("%s/excube1_kimimaro_skels_binaryfillingc100dps4/" % tmp_dir)
@@ -181,10 +184,9 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         os.mkdir(zipname)
     multi_params = [(pathdict_filepath, ssv_id, zipname) for ssv_id in multi_params]
     # create SSV skeletons, requires SV skeletons!
-    log.info('Starting skeleton generation of {} SSVs.'.format(
-        len(ssd.ssv_ids)))
-    qu.batchjob_script(multi_params, "kimimaromerge", log=log,
-                       remove_jobfolder=True, n_cores=2)
+    log.info('Starting skeleton generation of {} SSVs.'.format(len(ssd.ssv_ids)))
+    # high memory load
+    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=2)
 
     if map_myelin:
         map_myelin_global()

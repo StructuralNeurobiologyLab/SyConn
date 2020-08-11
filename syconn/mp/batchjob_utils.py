@@ -569,8 +569,7 @@ def number_of_running_processes(job_name):
                                stdout=subprocess.PIPE)
     nb_lines = 0
     for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-        if job_name[:10 if global_params.config['batch_proc_system'] == 'QSUB'
-        else 8] in line:
+        if job_name[:10 if global_params.config['batch_proc_system'] == 'QSUB' else 8] in line:
             nb_lines += 1
     return nb_lines
 
