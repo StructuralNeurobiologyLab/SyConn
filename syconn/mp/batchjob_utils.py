@@ -75,7 +75,7 @@ def batchjob_script(params: list, name: str,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: int = 20,
                     show_progress=True,
-                    overwrite=False):
+                    overwrite=False, max_njobs_parallel: Optional[bool] = None):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -113,6 +113,7 @@ def batchjob_script(params: list, name: str,
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
         overwrite:
+        max_njobs_parallel: Maximum number of jobs running at the same time.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -347,10 +348,10 @@ def batchjob_script(params: list, name: str,
                 p = subprocess.Popen([f'df', '-T {batchjob_folder}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      stdin=subprocess.PIPE)
                 output += p.stdout.read()
-                print(output)
                 batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
                 log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
-                                     f'{batchjob_folder_old}. Error: "{str(e)}".\n "lsof {batchjob_folder}": {output}')
+                                     f'{batchjob_folder_old}. Error: "{str(e)}".\n "lsof {batchjob_folder}": '
+                                     f'{str(output)}')
                 if os.path.exists(os.path.dirname(batchjob_folder_old)):
                     shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
                 os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)

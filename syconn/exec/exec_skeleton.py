@@ -1,14 +1,15 @@
-# -*- coding: utf-8 -*-
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-import numpy as np
 import shutil
 import os
+import glob
 from typing import Optional, Union
+
+import numpy as np
 
 from knossos_utils.chunky import ChunkDataset
 from knossos_utils import knossosdataset
@@ -19,6 +20,7 @@ from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
+from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
@@ -65,17 +67,13 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
     #                    remove_jobfolder=True)
 
 
-def map_myelin_global(max_n_jobs: Optional[int] = None,
-                      cube_of_interest_bb: Union[Optional[tuple], np.ndarray] = None):
+def map_myelin_global(max_n_jobs: Optional[int] = None):
     """
     Stand-alone myelin mapping to cell reconstruction skeletons. See kwarg ``map_myelin``
     in :func:`run_skeleton_generation` for a mapping right after skeleton generation.
 
     Args:
         max_n_jobs: Number of parallel jobs.
-        cube_of_interest_bb: Optional bounding box (in mag 1 voxel coordinates). If given,
-            translates the skeleton nodes coordinates by the offset ``cube_of_interest_bb[0]`` to
-            match the coordinate frame of the complete data set volume.
 
     """
     if max_n_jobs is None:
@@ -91,7 +89,7 @@ def map_myelin_global(max_n_jobs: Optional[int] = None,
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
-    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir, cube_of_interest_bb)
+    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
                     for ssv_ids in multi_params]
 
     # create SSV skeletons, requires SV skeletons!
@@ -141,6 +139,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
     cd = ChunkDataset()
+    # TODO: cube_size and overlap should be voxel size dependent
     if cube_size is None:
         cube_size = np.array([1024, 1024, 512])
     overlap = np.array([100, 100, 50])
@@ -151,7 +150,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
 
     # TODO: factor 1/2 must be adapted if anisotropic downsampling is used in KD!
     dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0]) // 2
-    # if later working on mag=2
+
     if np.all(cube_size > dataset_size):
         cube_size = dataset_size
 
@@ -159,25 +158,22 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=cube_of_interest_bb[0] // 2, fit_box_size=True)
     multi_params = [(cube_size, off, overlap, cube_of_interest_bb) for off in cd.coord_dict]
-    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False, n_cores=4)
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False, n_cores=6)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
     # list of SSV IDs and SSD parameters need to be given to each batch job
-    path_dic = {ssv_id: [] for ssv_id in ssd.ssv_ids}
-    # TODO: Each job needs to output a dictionary with IDs. Then create a global dict from these instead of loading
-    #  the entire skeleton output files.
+    path_dc = {ssv_id: [] for ssv_id in ssd.ssv_ids}
     log.info('Cube-wise skeleton generation finished. Generating cells-to-cubes dict.')
-    for fname in glob.glob(out_dir + '/*_ids.pkl'):
-        partial_skels = load_pkl2obj(fname)
-        for cell_id in partial_skels:
-            path_dic[cell_id].append(fname[:-4] + '.pkl')
+    res = start_multiprocess_imap(_collect_paths, glob.glob(out_dir + '*_ids.pkl'), nb_cpus=None)
+    for dc in res:
+        for k, v in dc.items():
+            path_dc[k].append(v[:-8] + '.pkl')
     pathdict_filepath = f"{tmp_dir}/excube1_path_dict.pkl"
-    write_obj2pkl(pathdict_filepath, path_dic)
-    del path_dic
-    multi_params = ssd.ssv_ids
-    ssv_sizes = np.array([ssv.size for ssv in ssd.ssvs])
-    multi_params = chunkify_weighted(multi_params, max_n_jobs, ssv_sizes)
+    write_obj2pkl(pathdict_filepath, path_dc)
+    del path_dc
+
+    multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs, ssd.load_cached_data('size'))
 
     # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
     zipname = ("%s/excube1_kimimaro_skels_binaryfillingc100dps4/" % tmp_dir)
@@ -190,9 +186,15 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=2)
 
     if map_myelin:
-        map_myelin_global(cube_of_interest_bb=cube_of_interest_bb)
+        map_myelin_global()
 
     shutil.rmtree(tmp_dir)
     shutil.rmtree(out_dir + '/../')
 
     log.info('Finished skeleton generation.')
+
+
+def _collect_paths(p: str) -> dict:
+    partial_res = load_pkl2obj(p)
+    res = {cellid: p for cellid in partial_res}
+    return res

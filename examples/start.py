@@ -44,11 +44,11 @@ if __name__ == '__main__':
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('use_point_models', False),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
-        ('ncores_per_node', 20),
-        ('mem_per_node', 249500),
-        ('ngpus_per_node', 1),
-        ('nnodes_total', 1),
+        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
+        ('ncores_per_node', 32),
+        ('mem_per_node', 208000),
+        ('ngpus_per_node', 2),
+        ('nnodes_total', 2),
         ('skeleton', {'use_kimimaro': False}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -203,7 +203,7 @@ if __name__ == '__main__':
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(kimimaro=global_params.config.use_kimimaro)
+    exec_init.run_create_neuron_ssd()
     ftimer.stop()
 
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):

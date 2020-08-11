@@ -551,7 +551,7 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
 def map_myelin2coords(coords: np.ndarray,
                       cube_edge_avg: np.ndarray = np.array([21, 21, 11]),
                       thresh_proba: float = 255 // 2, thresh_majority: float = 0.1,
-                      mag: int = 1, cube_of_interest_bb: Optional[tuple] = None) -> np.ndarray:
+                      mag: int = 1) -> np.ndarray:
     """
     Retrieves a myelin prediction at every location in `coords`. The classification
     is the majority label within a cube of size `cube_edge_avg` around the
@@ -595,9 +595,6 @@ def map_myelin2coords(coords: np.ndarray,
             ``thresh_majority=0.1`` means that 10% myelin voxels within ``cube_edge_avg``
             will flag the corresponding locations as myelinated.
         mag: Data mag. level used to retrieve the prediction results.
-        cube_of_interest_bb: Optional bounding box (in mag 1 voxel coordinates). If given,
-            translates the skeleton nodes coordinates by the offset ``cube_of_interest_bb[0]`` to
-            match the coordinate frame of the complete data set volume.
 
     Returns:
         Myelin prediction (0: no myelin, 1: myelinated neuron) at every coordinate.
@@ -605,16 +602,12 @@ def map_myelin2coords(coords: np.ndarray,
     myelin_kd_p = global_params.config.working_dir + "/knossosdatasets/myelin/"
     if not os.path.isdir(myelin_kd_p):
         raise ValueError(f'Could not find myelin KnossosDataset at {myelin_kd_p}.')
-    if cube_of_interest_bb is not None:
-        cube_of_interest_bb = np.array(cube_of_interest_bb, dtype=np.int)
     kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
     # convert to mag 1, TODO: requires adaption if anisotropic downsampling was used in KD!
     cube_edge_avg = cube_edge_avg * mag
     for ix, c in enumerate(coords):
-        if cube_of_interest_bb is not None:
-            c += cube_of_interest_bb[0]
         offset = c - cube_edge_avg // 2
         myelin_proba = kd.load_raw(size=cube_edge_avg, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
@@ -1843,8 +1836,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     and according to given view properties without storing them on the file system. Views will
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
     for an alternative which uses file-system cached views.
-    By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph`.
+    By default, resulting predictions are stored as `latent_morph`.
 
     Args:
         sso:

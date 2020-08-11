@@ -35,7 +35,7 @@ For SyConn v1, please refer to the old [documentation](https://structuralneurobi
 The Team
 --------
 The Synaptic connectivity inference toolkit is currently developed at the Max-Planck-Institute of Neurobiology in Martinsried by
- Philipp Schubert, Maria Kawula, Carl Constantin v. Wedemeyer, Atul Mohite, Gaurav Kumar and Joergen Kornfeld.
+ Philipp Schubert, Jonathan Klimesch, Alexandra Rother and Joergen Kornfeld.
 
 
 Acknowledgements
@@ -49,8 +49,8 @@ used for our project can be found
 [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
 Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful
 work) for designing and creating the logo and to Rangoli Saxena, Mariana
-Shumliakivska, Josef Mark, Maria Kawula, Atul Mohite, Alexandra Rother
-and Martin Drawitsch and for code contributions.
+Shumliakivska, Josef Mark, Maria Kawula, Atul Mohite, Carl Constantin v. Wedemeyer,
+Gaurav Kumar and Martin Drawitsch for code contributions.
 
 
 Publications

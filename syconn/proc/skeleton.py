@@ -51,23 +51,23 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> di
         # converting mag 2 units to mag 1 (required by load_seg)
         seg = kd.load_seg(size=cube_size*2, offset=np.array(cube_offset)*2, mag=2).swapaxes(0, 2)
 
-    seg_cell = np.zeros_like(seg)
+    # transform IDs to agglomerated SVs
     for x in range(seg.shape[0]):
         for y in range(seg.shape[1]):
             for z in range(seg.shape[2]):
                 try:
-                    seg_cell[x, y, z] = ssd.mapping_dict_reversed[seg[x, y, z]]
+                    seg[x, y, z] = ssd.mapping_dict_reversed[seg[x, y, z]]
                 except KeyError:
-                    seg_cell[x, y, z] = 0
+                    seg[x, y, z] = 0
 
-    seg_cell = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg_cell, iterations=None)
+    seg = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg, iterations=None)
 
-    if np.all(cube_size < dataset_size) is True:
-        seg_cell = seg_cell[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
+    if np.all(cube_size < dataset_size):
+        seg = seg[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
 
     # kimimaro code
     skels = kimimaro.skeletonize(
-        seg_cell,
+        seg,
         teasar_params={
             'scale': 4,
             'const': 100,  # physical units
@@ -87,20 +87,14 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> di
         fix_branching=True,  # default True
         fix_borders=True,  # default True
         progress=False,  # show progress bar
-        parallel=1,  # <= 0 all cpu, 1 single process, 2+ multiprocess
-        parallel_chunk_size=100,  # how many skeletons to process before updating progress bar
+        parallel=2,  # <= 0 all cpu, 1 single process, 2+ multiprocess
     )
-
     for ii in skels:
-        cell = skels[ii]
-        for i, v in enumerate(cell.vertices):
-            c = cell.vertices[i]  # already in physical coordinates (nm)
-            # now add the offset in physical coordinates, both are originally in mag 2
-            # TODO: the factor 1/2 must be adapted when using anisotropic downsampling of the
-            #  KnossosDataset
-            c = np.array(c + (cube_offset - cube_of_interest_bb[0] // 2) * kd.scales[1],
-                         dtype=np.int)
-            cell.vertices[i] = c
+        # cell.vertices already in physical coordinates (nm)
+        # now add the offset in physical coordinates, both are originally in mag 2
+        # TODO: the factor 1/2 must be adapted when using anisotropic downsampling of the
+        #  KnossosDataset
+        skels[ii].vertices += (cube_offset * kd.scales[1]).astype(np.int)
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
         # cell = cell.downsample(2)

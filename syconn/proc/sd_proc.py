@@ -414,7 +414,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
             multi_params, "map_subcell_extract_props", n_cores=n_cores)
-        out_files = glob.glob(path_to_out + "/*")
+        out_files = glob.glob(path_to_out + "/*.pkl")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
             with open(out_file, 'rb') as f:
@@ -547,7 +547,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     start = time.time()
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
-    n_jobs = int(max(2 * global_params.config.ncore_total, len(storage_location_ids) / 10))
+    n_jobs = int(min(2 * global_params.config.ncore_total, len(storage_location_ids)))
     multi_params = [(sv_id_block, n_folders_fs_sc, kd_organelle_paths)
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():

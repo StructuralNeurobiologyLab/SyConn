@@ -30,7 +30,7 @@ if __name__ == '__main__':
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 32),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 5),
+        ('nnodes_total', 2),
         ('mem_per_node', 208990),
         ('use_point_models', False),
         ('skeleton', {'use_kimimaro': True}),
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024])
+    cube_size = np.array([2048, 2048, 1024]) * 2
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
