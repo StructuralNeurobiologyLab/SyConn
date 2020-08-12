@@ -15,7 +15,8 @@ import numpy as np
 from syconn import global_params
 from syconn.handler.basics import chunkify
 from syconn.handler.config import initialize_logging
-from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd
+from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd, \
+    predict_cmpt_ssd
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_glia_rag, transform_rag_edgelist2pkl
 from syconn.proc.graphs import create_ccsize_dict
@@ -39,7 +40,7 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
         :func:`~syconn.exec.skeleton.run_skeleton_generation`.
     """
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ngpu_total * 2
+        max_n_jobs = global_params.config.ngpu_total * 4
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -75,7 +76,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
         Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd` and :func:`~run_neuron_rendering`.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 3 if qu.batchjob_enabled() else 1
+        max_n_jobs_gpu = global_params.config.ngpu_total * 4 if qu.batchjob_enabled() else 1
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -114,7 +115,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
 
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
+        max_n_jobs_gpu = global_params.config.ngpu_total * 4 if qu.batchjob_enabled() else 1
     if qu.batchjob_enabled():
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
     else:
@@ -125,16 +126,20 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     np.random.seed(0)
     multi_params = ssd.ssv_ids
     np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, max_n_jobs_gpu)
-    # job parameter will be read sequentially, i.e. in order to provide only
-    # one list as parameter one needs an additonal axis
-    multi_params = [(ixs,) for ixs in multi_params]
 
-    path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
-                                     suffix="", additional_flags="--gres=gpu:1",
-                                     n_cores=n_cores, remove_jobfolder=False)
-    log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
-    shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
+    if not qu.batchjob_enabled():
+        ssd_kwargs = dict(working_dir=global_params.config.working_dir)
+        predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=multi_params, bs=2)
+    else:
+        multi_params = chunkify(multi_params, max_n_jobs_gpu)
+        # job parameter will be read sequentially, i.e. in order to provide only
+        # one list as parameter one needs an additonal axis
+        multi_params = [(ixs,) for ixs in multi_params]
+        path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
+                                         suffix="", additional_flags="--gres=gpu:1",
+                                         n_cores=n_cores, remove_jobfolder=False)
+        log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
 def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
@@ -145,7 +150,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
         max_n_jobs_gpu: Number of parallel GPU jobs. Used for the inference.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10 if qu.batchjob_enabled() else 1
+        max_n_jobs_gpu = global_params.config.ngpu_total * 4 if qu.batchjob_enabled() else 1
     log = initialize_logging('compartment_prediction', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -174,7 +179,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds`.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 10
+        max_n_jobs_gpu = global_params.config.ngpu_total * 4
     log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/', overwrite=False)
     pred_key = "glia_probas"
 

@@ -61,7 +61,7 @@ if elektronn3_avail:
         """
         def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
                      train=True, cv_val=0, cellshape_only=False, ctx_size=20000, use_syntype=True,
-                     onehot=True, batch_size=1):
+                     onehot=True, batch_size=1, map_myelin: bool = False):
             """
 
             Args:
@@ -93,6 +93,7 @@ if elektronn3_avail:
             self.ssd = ssd
             self.sso_ids = None
             gt_dir = ssd.path
+            self.map_myelin = map_myelin
 
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
@@ -188,7 +189,7 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True, cache=False)][0]
+                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,

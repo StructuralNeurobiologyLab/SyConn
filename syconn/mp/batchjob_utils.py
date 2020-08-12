@@ -75,7 +75,7 @@ def batchjob_script(params: list, name: str,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: int = 20,
                     show_progress=True,
-                    overwrite=False):
+                    overwrite=False, max_njobs_parallel: Optional[bool] = None):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -113,6 +113,7 @@ def batchjob_script(params: list, name: str,
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
         overwrite:
+        max_njobs_parallel: Maximum number of jobs running at the same time.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -127,23 +128,21 @@ def batchjob_script(params: list, name: str,
             job_name = "".join([letters[le] for le in np.random.randint(0, len(letters), 8)])
 
     if batchjob_folder is None:
-        batchjob_folder = f"{global_params.config.qsub_work_folder}/{name}_{suffix}_{job_name}/"
+        batchjob_folder = f"{global_params.config.qsub_work_folder}/{name}{suffix}_{job_name}/"
     if os.path.exists(batchjob_folder):
         if not overwrite:
-            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". '
-                                  f'Please make sure it is safe for deletion, then set overwrite=True')
+            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". Please'
+                                  f' make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
     batchjob_folder = batchjob_folder.rstrip('/')
     # Check if fallback is required
     if disable_batchjob or not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path, show_progress=show_progress,
-                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
-                                 job_folder=batchjob_folder)
+        return batchjob_fallback(params, name, n_cores, suffix, script_folder, python_path,
+                                 show_progress=show_progress, remove_jobfolder=remove_jobfolder,
+                                 log=log, overwrite=True, job_folder=batchjob_folder)
 
     if log is None:
-        log_batchjob = initialize_logging("{}".format(name + suffix),
-                                          log_dir=batchjob_folder)
+        log_batchjob = initialize_logging("{}".format(name + suffix), log_dir=batchjob_folder)
     else:
         log_batchjob = log
     if script_folder is not None:
@@ -197,7 +196,7 @@ def batchjob_script(params: list, name: str,
         os.makedirs(path_to_out)
 
     # Submit jobs
-    log_batchjob.debug("Number of jobs for {}-script: {}".format(name, len(params)))
+    log_batchjob.debug("Number of jobs for {}-scsript: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
     dtime_sub = 0
     start_all = time.time()
@@ -238,9 +237,10 @@ def batchjob_script(params: list, name: str,
             out_str, err = process.communicate()
             if process.returncode != 0:
                 if max_relaunch_cnt == 5:
-                    raise RuntimeError(f'Could not launch job with ID {job_id} and command '
-                                       f'"{job_cmd}".')
-                log_mp.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
+                    msg = f'Could not launch job with ID {job_id} and command "{job_cmd}".'
+                    log_batchjob.error(msg)
+                    raise RuntimeError(msg)
+                log_batchjob.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
                                f'for the {max_relaunch_cnt}. time.'
                                f'Attempting again in 5s. Error raised: {err}')
                 max_relaunch_cnt += 1
@@ -295,11 +295,11 @@ def batchjob_script(params: list, name: str,
                 out_str, err = process.communicate()
                 if process.returncode != 0:
                     if max_relaunch_cnt == 5:
-                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) and '
-                                           f'command "{job_cmd}".')
-                    log_mp.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) with command "{job_cmd}"'
-                                   f'for the {max_relaunch_cnt}. time.'
-                                   f'Attempting again in 5s. Error raised: {err}')
+                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) '
+                                           f'and command "{job_cmd}".')
+                    log_batchjob.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
+                                         f'with command "{job_cmd}" for the {max_relaunch_cnt}. '
+                                         f'time. Attempting again in 5s. Error raised: {err}')
                     max_relaunch_cnt += 1
                     time.sleep(5)
                 else:
@@ -338,15 +338,26 @@ def batchjob_script(params: list, name: str,
         try:
             shutil.rmtree(batchjob_folder)
         except OSError:
-            batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
-            log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
-                                 f'{batchjob_folder_old}')
-            if os.path.exists(os.path.dirname(batchjob_folder_old)):
-                shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
-            os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)
-            if os.path.exists(batchjob_folder_old):
-                shutil.rmtree(batchjob_folder_old, ignore_errors=True)
-            shutil.move(batchjob_folder, batchjob_folder_old)
+            try:
+                time.sleep(2)
+                shutil.rmtree(batchjob_folder)
+            except OSError as e:
+                p = subprocess.Popen([f'lsof', '/mnt/'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     stdin=subprocess.PIPE)
+                output = p.stdout.read()
+                p = subprocess.Popen([f'df', '-T {batchjob_folder}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     stdin=subprocess.PIPE)
+                output += p.stdout.read()
+                batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
+                log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
+                                     f'{batchjob_folder_old}. Error: "{str(e)}".\n "lsof {batchjob_folder}": '
+                                     f'{str(output)}')
+                if os.path.exists(os.path.dirname(batchjob_folder_old)):
+                    shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
+                os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)
+                if os.path.exists(batchjob_folder_old):
+                    shutil.rmtree(batchjob_folder_old, ignore_errors=True)
+                shutil.move(batchjob_folder, batchjob_folder_old)
     return path_to_out
 
 

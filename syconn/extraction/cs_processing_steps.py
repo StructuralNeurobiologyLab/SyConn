@@ -114,8 +114,7 @@ def _collect_properties_from_ssv_partners_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
-                                                      version=ssd_version)
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd, version=ssd_version)
 
     syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
@@ -207,8 +206,7 @@ def _from_cell_to_syn_dict(args):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
 
-                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] ==
-                                                synssv_id))
+                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:
                     msg = "useful error message"
                     raise ValueError(msg)

@@ -605,9 +605,9 @@ def map_myelin2coords(coords: np.ndarray,
     kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
+    # convert to mag 1, TODO: requires adaption if anisotropic downsampling was used in KD!
     cube_edge_avg = cube_edge_avg * mag
     for ix, c in enumerate(coords):
-        # switch to mag reference system, afterwards rescale to mag 1 again
         offset = c - cube_edge_avg // 2
         myelin_proba = kd.load_raw(size=cube_edge_avg, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
@@ -617,6 +617,14 @@ def map_myelin2coords(coords: np.ndarray,
 
 # New Implementation of skeleton generation which makes use of ssv.rag
 def from_netkx_to_arr(skel_nx: nx.Graph) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+
+    Args:
+        skel_nx:
+
+    Returns:
+
+    """
     skeleton = {}
     skeleton['nodes'] = np.array(
         [skel_nx.node[ix]['position'] for ix in skel_nx.nodes()],
@@ -1829,8 +1837,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     and according to given view properties without storing them on the file system. Views will
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
     for an alternative which uses file-system cached views.
-    By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph`.
+    By default, resulting predictions are stored as `latent_morph`.
 
     Args:
         sso:
@@ -1858,7 +1865,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
-        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # ~3 views per comp window
 
         # overwrite default rendering locations (used later on for the view generation)
         sso._sample_locations = rendering_locs[None, ]  # requires auxiliary axis

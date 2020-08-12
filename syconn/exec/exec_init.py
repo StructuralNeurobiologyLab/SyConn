@@ -3,14 +3,14 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
-# Authors: Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert
 
 import os
 import shutil
 import time
 from logging import Logger
 from multiprocessing import Process
-from typing import Optional, Callable, Tuple, Dict, Any
+from typing import Optional, Callable, Tuple, Dict, Any, Union
 
 import networkx as nx
 import numpy as np
@@ -29,16 +29,24 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimimaro=True):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, cube_of_interest_bb: Optional[tuple] = None):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
     at ``/glia/neuron_rag.bz2``. In case glia splitting is active, this will be
     the RAG after glia removal, if it was disabled it is identical to ``pruned_rag.bz2``.
 
+    Args:
+        apply_ssv_size_threshold:
+        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
+            Only required for kimimaro skeletonization.
+
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
         optionally :func:`~run_glia_splitting`.
+
+    Returns:
+
     """
     log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
@@ -93,9 +101,13 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, kimim
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    if kimimaro is True:
-        exec_skeleton.run_kimimaro_skelgen()
+    if global_params.config.use_kimimaro:
+        # volume-based
+        exec_skeleton.run_kimimaro_skelgen(cube_of_interest_bb=cube_of_interest_bb)
     else:
+        if cube_of_interest_bb is not None:
+            raise ValueError()
+        # SSV-based
         exec_skeleton.run_skeleton_generation()
 
     log.info('Finished SSD initialization. Starting cellular '
@@ -220,7 +232,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           max_n_jobs: Optional[int] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
-                          cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
+                          cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
                           overwrite=False):
     """
     Todo:
