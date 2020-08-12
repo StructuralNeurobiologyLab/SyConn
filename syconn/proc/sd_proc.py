@@ -1013,8 +1013,14 @@ def _write_props_to_sc_thread(args):
 
 
 def _write_props_to_sv_thread(args):
-    """"""
+    """
 
+    Args:
+        args:
+
+    Returns:
+
+    """
     obj_id_chs = args[0]
     n_folders_fs = args[1]
     generate_sv_mesh = args[2]
@@ -1238,10 +1244,10 @@ def _write_props_to_sv_thread(args):
         this_attr_dc.push()
         if global_params.config.use_new_meshing:
             obj_mesh_dc.push()
-    if global_params.config.use_new_meshing:
-        log_proc.debug(f'[SV] dt mesh area {dt_mesh_area:.2f}s\tdt mesh merge '
-                       f'{dt_mesh_merge:.2f}s\tdt merge IO '
-                       f'{dt_mesh_merge_io:.2f}s')
+    # if global_params.config.use_new_meshing:
+    #     log_proc.debug(f'[SV] dt mesh area {dt_mesh_area:.2f}s\tdt mesh merge '
+    #                    f'{dt_mesh_merge:.2f}s\tdt merge IO '
+    #                    f'{dt_mesh_merge_io:.2f}s')
 
 
 def merge_meshes_dict(m_storage, tmp_dict):

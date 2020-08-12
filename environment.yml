@@ -82,6 +82,7 @@ dependencies:
     - tensorboard
     #for skeletonisation
     - kimimaro
+    - fill-voids
 
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil_convpoint#egg=elektronn3

@@ -3512,7 +3512,7 @@ def semsegspiness_predictor(args) -> List[int]:
 
     """
     from ..handler.prediction import get_semseg_spiness_model
-    m = get_semseg_axon_model()
+    m = get_semseg_spiness_model()
     ssv_ids, view_props, nb_cpus, kwargs_semseg2mesh, kwargs_semsegforcoords = args
     missing_ssvs = []
 

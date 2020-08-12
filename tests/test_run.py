@@ -9,9 +9,6 @@ import os
 import glob
 import shutil
 import sys
-import time
-import argparse
-import pytest
 import numpy as np
 
 from syconn import global_params
@@ -190,7 +187,7 @@ def test_full_run():
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(kimimaro=global_params.config.use_kimimaro)
+    exec_init.run_create_neuron_ssd()
     ftimer.stop()
 
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):

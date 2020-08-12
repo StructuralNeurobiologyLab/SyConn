@@ -191,7 +191,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         map_myelin_global()
 
     shutil.rmtree(tmp_dir)
-    shutil.rmtree(out_dir + '/../')
+    shutil.rmtree(os.path.abspath(out_dir + '/../'))
 
     log.info('Finished skeleton generation.')
 

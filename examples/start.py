@@ -45,11 +45,11 @@ if __name__ == '__main__':
         ('use_point_models', False),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
-        ('ncores_per_node', 32),
-        ('mem_per_node', 208000),
+        ('ncores_per_node', 20),
+        ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 2),
-        ('skeleton', {'use_kimimaro': False}),
+        ('nnodes_total', 17),
+        ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
         # exec_dense_prediction.predict_synapsetype()), must also be uncommented!

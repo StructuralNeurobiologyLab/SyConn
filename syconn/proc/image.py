@@ -7,6 +7,7 @@
 import numpy as np
 
 from ..proc import log_proc
+from ..mp.mp_utils import start_multiprocess_imap
 
 __cv2__ = True
 try:
@@ -21,6 +22,7 @@ from sklearn.decomposition import PCA
 from scipy import spatial, sparse, ndimage
 import tqdm
 from typing import List, Optional, Union
+import fill_voids
 
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
@@ -401,6 +403,14 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
     # TODO: Currently mop_kwargs are not generic because of explicit 'iterations' kwarg in mop_func call
     objslices = ndimage.find_objects(overlay)
     unique_ixs = np.unique(overlay[overlay != 0])
+    if "fill_holes" in mop_func.__name__:
+        for ix in unique_ixs:
+            sub_vol = overlay[objslices[int(ix - 1)]]
+            binary_mask = (sub_vol == ix).astype(np.int)
+            fill_voids.fill(binary_mask, in_place=True)
+            proc_mask = sub_vol == 0  # modify only background
+            overlay[objslices[int(ix - 1)]][proc_mask] = binary_mask[proc_mask] * ix
+        return overlay
     if verbose:
         pbar = tqdm.tqdm(total=len(unique_ixs))
     for ix in unique_ixs:

@@ -7,13 +7,15 @@ from scipy import ndimage
 import kimimaro
 from cloudvolume import PrecomputedSkeleton
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from syconn.extraction.block_processing_C import relabel_vol_nonexist2zero
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.basics import load_pkl2obj, kd_factory
 from syconn.proc.image import multi_mop_backgroundonly
 from syconn import global_params
 
 
-def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> dict:
+def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb,
+                     nb_cpus: Optional[int] = None) -> dict:
     """
     code from https://pypi.org/project/kimimaro/
 
@@ -23,15 +25,22 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> di
         overlap: In mag 2 voxels.
         cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
             coord, upper coord)
+        nb_cpus: Number of cpus used by kimimaro.
 
     Returns:
         Skeleton with nodes, edges in physical parameters
 
     """
+    if nb_cpus is None:
+        nb_cpus = 1
     # volume to be processed in mag!
     # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
     #  KnossosDataset
     dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0]) // 2
+
+    # TODO: remove
+    import time
+    start = time.time()
 
     overlap = np.array(overlap, dtype=np.int)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -50,22 +59,20 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> di
         #  KnossosDataset
         # converting mag 2 units to mag 1 (required by load_seg)
         seg = kd.load_seg(size=cube_size*2, offset=np.array(cube_offset)*2, mag=2).swapaxes(0, 2)
-
+    print(f'loaded seg: {time.time() - start:.2f}')
     # transform IDs to agglomerated SVs
-    for x in range(seg.shape[0]):
-        for y in range(seg.shape[1]):
-            for z in range(seg.shape[2]):
-                try:
-                    seg[x, y, z] = ssd.mapping_dict_reversed[seg[x, y, z]]
-                except KeyError:
-                    seg[x, y, z] = 0
+    start = time.time()
+    relabel_vol_nonexist2zero(seg, ssd.mapping_dict_reversed)
+    print(f'relabeld seg: {time.time() - start:.2f}')
 
+    start = time.time()
     seg = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg, iterations=None)
-
     if np.all(cube_size < dataset_size):
         seg = seg[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
+    print(f'closed holes: {time.time() - start:.2f}')
 
     # kimimaro code
+    start = time.time()
     skels = kimimaro.skeletonize(
         seg,
         teasar_params={
@@ -87,8 +94,11 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> di
         fix_branching=True,  # default True
         fix_borders=True,  # default True
         progress=False,  # show progress bar
-        parallel=2,  # <= 0 all cpu, 1 single process, 2+ multiprocess
+        parallel=nb_cpus,  # <= 0 all cpu, 1 single process, 2+ multiprocess
     )
+    print(f'finished skeletonization: {time.time() - start:.2f}')
+
+    start = time.time()
     for ii in skels:
         # cell.vertices already in physical coordinates (nm)
         # now add the offset in physical coordinates, both are originally in mag 2
@@ -100,7 +110,7 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb) -> di
         # cell = cell.downsample(2)
         # code from sparsify_skeleton_fast in syconn.procs.super_segmentation_helper
         # modify for kimimaro_skeletons
-
+    print(f'modified node coordinates: {time.time() - start:.2f}')
     return skels
 
 
