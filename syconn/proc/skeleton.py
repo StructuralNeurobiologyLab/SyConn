@@ -14,18 +14,18 @@ from syconn.proc.image import multi_mop_backgroundonly
 from syconn import global_params
 
 
-def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb,
-                     nb_cpus: Optional[int] = None) -> dict:
+def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
+                     nb_cpus: Optional[int] = None, ds: Optional[np.ndarray] = None) -> dict:
     """
     code from https://pypi.org/project/kimimaro/
 
     Args:
-        cube_size: size of processed cube in mag 2 voxels.
-        cube_offset: starting point of cubes (in mag 2 voxel coordinates)
-        overlap: In mag 2 voxels.
+        cube_size: size of processed cube in mag 1 voxels.
+        cube_offset: starting point of cubes (in mag 1 voxel coordinates)
         cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
             coord, upper coord)
         nb_cpus: Number of cpus used by kimimaro.
+        ds: Downsampling.
 
     Returns:
         Skeleton with nodes, edges in physical parameters
@@ -33,66 +33,51 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb,
     """
     if nb_cpus is None:
         nb_cpus = 1
+
     # volume to be processed in mag!
-    # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
-    #  KnossosDataset
-    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0]) // 2
+    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0])
 
     # TODO: remove
     import time
     start = time.time()
 
-    overlap = np.array(overlap, dtype=np.int)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
-    if np.all(cube_size < dataset_size):
-        # this is in mag2!
-        cube_size_ov = cube_size + 2 * overlap
-        # offset is converted to mag 2
-        # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
-        #  KnossosDataset
-        cube_offset_ov = cube_offset - overlap
-        seg = kd.load_seg(size=cube_size_ov*2, offset=np.array(cube_offset_ov)*2,
-                          mag=2).swapaxes(0, 2)
+    # TODO: uint32 conversion should be controlled externally
+    seg = kd.load_seg(size=cube_size, offset=cube_offset, mag=1).swapaxes(0, 2).astype(np.uint32)
+    if ds is not None:
+        seg = ndimage.zoom(seg, 1 / ds, order=0)
     else:
-        # TODO: the factor 2 must be adapted when using anisotropic downsampling of the
-        #  KnossosDataset
-        # converting mag 2 units to mag 1 (required by load_seg)
-        seg = kd.load_seg(size=cube_size*2, offset=np.array(cube_offset)*2, mag=2).swapaxes(0, 2)
+        ds = np.ones(3)
     print(f'loaded seg: {time.time() - start:.2f}')
     # transform IDs to agglomerated SVs
     start = time.time()
     relabel_vol_nonexist2zero(seg, ssd.mapping_dict_reversed)
-    print(f'relabeld seg: {time.time() - start:.2f}')
-
-    start = time.time()
-    seg = multi_mop_backgroundonly(ndimage.binary_fill_holes, seg, iterations=None)
-    if np.all(cube_size < dataset_size):
-        seg = seg[overlap[0]:-overlap[0], overlap[1]:-overlap[1], overlap[2]:-overlap[2]]
-    print(f'closed holes: {time.time() - start:.2f}')
+    print(f'relabelled seg: {time.time() - start:.2f}')
 
     # kimimaro code
     start = time.time()
     skels = kimimaro.skeletonize(
         seg,
         teasar_params={
-            'scale': 4,
+            'scale': 2,
             'const': 100,  # physical units
             'pdrf_exponent': 4,
             'pdrf_scale': 100000,
             'soma_detection_threshold': 1100,  # physical units
             'soma_acceptance_threshold': 3500,  # physical units
             'soma_invalidation_scale': 1.0,
-            'soma_invalidation_const': 300,  # physical units
-            'max_paths': 50,  # default None
+            'soma_invalidation_const': 2000,  # physical units
+            'max_paths': 100,  # default None
         },
         # object_ids=[ ... ], # process only the specified labels
         # extra_targets_before=[ (27,33,100), (44,45,46) ], # target points in voxels
         # extra_targets_after=[ (27,33,100), (44,45,46) ], # target points in voxels
         dust_threshold=1000,  # skip connected components with fewer than this many voxels
-        anisotropy=kd.scales[1],  # index 1 is mag 2
+        anisotropy=kd.scales[0] * ds,  # index 1 is mag 2
         fix_branching=True,  # default True
         fix_borders=True,  # default True
+        fill_holes=True,
         progress=False,  # show progress bar
         parallel=nb_cpus,  # <= 0 all cpu, 1 single process, 2+ multiprocess
     )
@@ -104,7 +89,7 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb,
         # now add the offset in physical coordinates, both are originally in mag 2
         # TODO: the factor 1/2 must be adapted when using anisotropic downsampling of the
         #  KnossosDataset
-        skels[ii].vertices += (cube_offset * kd.scales[1]).astype(np.int)
+        skels[ii].vertices += (cube_offset * kd.scales[0]).astype(np.int)
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
         # cell = cell.downsample(2)
