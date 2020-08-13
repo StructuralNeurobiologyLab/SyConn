@@ -15,12 +15,12 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
-cube_size, cube_offset, overlap, cube_of_interest_bb = args
+cube_size, cube_offset, cube_of_interest_bb, ds = args
 
 nb_cpus = os.environ.get('SLURM_CPUS_PER_TASK')
 if nb_cpus is not None:
     nb_cpus = int(nb_cpus)
-skels = kimimaro_skelgen(cube_size, cube_offset, overlap, cube_of_interest_bb, nb_cpus=nb_cpus)
+skels = kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb, ds=ds, nb_cpus=nb_cpus)
 
 with open(path_out_file[:-4] + '_ids.pkl', "wb") as f:
     pkl.dump(list(skels.keys()), f)

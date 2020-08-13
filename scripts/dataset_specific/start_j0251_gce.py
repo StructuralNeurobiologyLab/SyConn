@@ -30,7 +30,7 @@ if __name__ == '__main__':
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 32),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 2),
+        ('nnodes_total', 4),
         ('mem_per_node', 208990),
         ('use_point_models', False),
         ('skeleton', {'use_kimimaro': True}),
@@ -50,8 +50,7 @@ if __name__ == '__main__':
           }
          )
     ]
-
-    chunk_size = (512, 512, 256)
+    chunk_size = (384, 384, 192)
     n_folders_fs = 10000
     n_folders_fs_sc = 10000
 
@@ -79,7 +78,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) * 2
+    cube_size = np.array([2048, 2048, 1024])
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
@@ -111,7 +110,7 @@ if __name__ == '__main__':
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # create symlink to myelin predictions
-    if not os.path.exists(f'/mnt/j0251_data/myelin {working_dir}/knossosdatasets/'):
+    if not os.path.exists(f'{working_dir}/knossosdatasets/myelin'):
         assert os.path.exists('/mnt/j0251_data/myelin')
         os.system(f'ln -s /mnt/j0251_data/myelin {working_dir}/knossosdatasets/')
 

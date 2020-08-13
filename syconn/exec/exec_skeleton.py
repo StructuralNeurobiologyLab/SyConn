@@ -113,7 +113,8 @@ def run_skeleton_axoness():
 
 
 def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = True,
-                         cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None):
+                         cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None,
+                         ds: Optional[np.ndarray] = None):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in
     proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
@@ -123,9 +124,9 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
         cube_size: Cube size used within each worker. This should be as big as possible to prevent
-            un-centered skeletons in cell compartments with big diameters.
+            un-centered skeletons in cell compartments with big diameters. In mag 1 voxels.
         cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
-
+        ds: Downsampling.
     """
     if not os.path.exists(global_params.config.temp_path):
         os.mkdir(global_params.config.temp_path)
@@ -134,33 +135,34 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         os.mkdir(tmp_dir)
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
+    if ds is None:
+        ds = global_params.config['scaling'][2] // np.array(global_params.config['scaling'])
+        assert np.all(ds > 0)
     log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
     cd = ChunkDataset()
-    # TODO: cube_size and overlap should be voxel size dependent
+    # TODO: cube_size should be voxel size dependent
     if cube_size is None:
-        cube_size = np.array([1024, 1024, 512])
-    overlap = np.array([100, 100, 50])
+        cube_size = np.array([1024, 1024, 512])  # this is in mag1
     if cube_of_interest_bb is not None:
         cube_of_interest_bb = np.array(cube_of_interest_bb, dtype=np.int)
     else:
         cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int)
 
-    # TODO: factor 1/2 must be adapted if anisotropic downsampling is used in KD!
-    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0]) // 2
+    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0])
 
     if np.all(cube_size > dataset_size):
         cube_size = dataset_size
 
-    # TODO: factor 1/2 in box_coords must be adapted if anisotropic downsampling is used in KD!
     cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
-                  box_coords=cube_of_interest_bb[0] // 2, fit_box_size=True)
-    multi_params = [(cube_size, off, overlap, cube_of_interest_bb) for off in cd.coord_dict]
+                  box_coords=cube_of_interest_bb[0], fit_box_size=True)
+    multi_params = [(cube_size, off, cube_of_interest_bb, ds) for off in cd.coord_dict]
     # high memory load
-    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False, n_cores=2)
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
+                                 n_cores=2, max_iterations=10)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -183,9 +185,10 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
         os.mkdir(zipname)
     multi_params = [(pathdict_filepath, ssv_id, zipname) for ssv_id in multi_params]
     # create SSV skeletons, requires SV skeletons!
-    log.info('Starting skeleton generation of {} SSVs.'.format(len(ssd.ssv_ids)))
+    log.info('Merging cube-wise skeletons of {} SSVs.'.format(len(ssd.ssv_ids)))
     # high memory load
-    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=2)
+    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=1,
+                       max_iterations=10)
 
     if map_myelin:
         map_myelin_global()
