@@ -203,7 +203,8 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
     q_loader_sync.put('DONE')
 
 
-def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int):
+def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
+             show_progress: bool = True):
     """
 
     Args:
@@ -211,8 +212,10 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int):
         q_loader_sync:
         nloader:
         total:
+        show_progress
     """
-    pbar = tqdm.tqdm(total=total, leave=False)
+    if show_progress:
+        pbar = tqdm.tqdm(total=total, leave=False)
     cnt_loder_done = 0
     while True:
         if q_progress.empty():
@@ -221,9 +224,11 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int):
             res = q_progress.get()
             if res is None:  # final stop
                 assert cnt_loder_done == nloader
-                pbar.close()
+                if show_progress:
+                    pbar.close()
                 break
-            pbar.update(res)
+            if show_progress:
+                pbar.update(res)
         if q_loader_sync.empty() or cnt_loder_done == nloader:
             pass
         else:
@@ -249,7 +254,8 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                       seeded: bool = False,
                       device: str = 'cuda', bs: Union[int, dict] = 40,
                       loader_kwargs: Optional[dict] = None,
-                      model_loader_kwargs: Optional[dict] = None) -> dict:
+                      model_loader_kwargs: Optional[dict] = None,
+                      show_progress: bool = True) -> dict:
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions `npreds` per cell is calculated based on the
@@ -303,6 +309,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         loader_kwargs: Optional keyword arguments for loader func.
         seeded: Loader will hash ssv, sample and batch IDs to generate a random seed.
         model_loader_kwargs: Optional keyword arguments for model_loader func.
+        show_progress: Show progress bar.
 
     Examples:
 
@@ -406,7 +413,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.start()
     dict_out = collections.defaultdict(list)
     cnt_end = 0
-    lsnr = Process(target=listener, args=(q_progress, q_loader_sync, nloader, nsamples_tot))
+    lsnr = Process(target=listener, args=(q_progress, q_loader_sync, nloader, nsamples_tot, show_progress))
     lsnr.start()
     while True:
         if q_out.empty():
@@ -1636,7 +1643,7 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
 
 # prediction wrapper
 def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
-                     postproc_kwargs: Optional[dict] = None, **add_kwargs):
+                     postproc_kwargs: Optional[dict] = None, show_progress: bool = True, **add_kwargs):
     """
     Perform glia predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1649,6 +1656,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
         ssv_params: List of kwargs to initialize SSVs.
         mpath: Path to model.
         postproc_kwargs: Postprocessing kwargs.
+        show_progress: Show progress bar.
 
     Returns:
 
@@ -1665,7 +1673,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
     postproc_kwargs_def.update(postproc_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_local_skel, pts_pred_local_skel,
                                postproc_func=pts_postproc_glia, mpath=mpath, postproc_kwargs=postproc_kwargs_def,
-                               **loader_kwargs, **default_kwargs)
+                               show_progress=show_progress, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during glia prediction.')
 
@@ -1699,14 +1707,14 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
     default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_tnet_model_pts, pts_loader_local_skel, pts_pred_embedding,
                                postproc_kwargs=postproc_kwargs, postproc_func=pts_postproc_embedding,
-                               mpath=mpath, **loader_kwargs, **default_kwargs)
+                               show_progress=False, mpath=mpath, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during glia prediction.')
 
 
 def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
                          da_equals_tan: bool = True, pred_key: Optional[str] = None, map_myelin: bool = False,
-                         **add_kwargs):
+                         show_progress: bool = True, **add_kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1722,6 +1730,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         da_equals_tan:
         pred_key:
         map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
+        show_progress: Show progress bar.
 
     Returns:
 
@@ -1739,7 +1748,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         ssv_ids = ssd.ssv_ids
     out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar_infer, pts_pred_scalar,
                                postproc_func=pts_postproc_scalar, mpath=mpath, ssv_ids=ssv_ids,
-                               **loader_kwargs, **default_kwargs)
+                               show_progress=show_progress, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
         raise ValueError('Invalid output during cell type prediction.')
 
@@ -1748,7 +1757,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 
 
 def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
-                     ctx_dst_fac: Optional[int] = None, **add_kwargs):
+                     ctx_dst_fac: Optional[int] = None, show_progress: bool = True, **add_kwargs):
     """
     Performs compartment predictions on the ssv's given with ``ssv_ids``, based on the dataset initialized with
     ``ssd_kwargs``. The kwargs for predict_pts_plain are organized as dicts with the respective values, keyed
@@ -1765,6 +1774,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
             therefore larger context overlap and longer processing time.
          add_kwargs: Can for example contain parameter ``bs`` for batchsize. ``bs`` is supposed to be a factor
             which gets multiplied with the model dependent batch sizes.
+        show_progress: Show progress bar.
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -1819,6 +1829,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
                                mpath=mpath,
                                loader_kwargs=loader_kwargs,
                                model_loader_kwargs=dict(pred_types=pred_types),
+                               show_progress=show_progress,
                                **default_kwargs,
                                **kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
