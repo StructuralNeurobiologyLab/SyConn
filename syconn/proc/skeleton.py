@@ -61,7 +61,7 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
         seg,
         teasar_params={
             'scale': 2,
-            'const': 100,  # physical units
+            'const': 500,  # physical units
             'pdrf_exponent': 4,
             'pdrf_scale': 100000,
             'soma_detection_threshold': 1100,  # physical units
@@ -119,8 +119,8 @@ def kimimaro_mergeskels(path_list, cell_id):
     skel = PrecomputedSkeleton.simple_merge(skel_list).consolidate()
     skel = kimimaro.postprocess(
         skel,
-        dust_threshold=1000,  # physical units
-        tick_threshold=3500  # physical units
+        dust_threshold=500,  # physical units
+        tick_threshold=1000  # physical units
     )
     # better suited in function above with part of skels. Doesn't work there.
     skel = skel.downsample(4)

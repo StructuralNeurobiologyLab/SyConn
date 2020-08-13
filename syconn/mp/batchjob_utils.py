@@ -75,7 +75,7 @@ def batchjob_script(params: list, name: str,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: int = 20,
                     show_progress=True,
-                    overwrite=False, max_njobs_parallel: Optional[bool] = None):
+                    overwrite=False):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -113,7 +113,6 @@ def batchjob_script(params: list, name: str,
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
         overwrite:
-        max_njobs_parallel: Maximum number of jobs running at the same time.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
