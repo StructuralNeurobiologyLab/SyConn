@@ -19,7 +19,7 @@ with open(path_storage_file, 'rb') as f:
 
 working_dir = global_params.config.working_dir
 scaling = global_params.config["scaling"]
-path2results_dc, ssv_ids, zipname = args
+path2results_dc, ssv_ids = args
 results_dc = load_pkl2obj(path2results_dc)
 
 for ssv_id in ssv_ids:

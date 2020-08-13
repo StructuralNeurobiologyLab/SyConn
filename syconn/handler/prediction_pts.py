@@ -1917,6 +1917,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
     # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
     del feat_dc['syn_ssv_sym']
+    del feat_dc['sv_myelin']
     if not use_subcell:
         del feat_dc['mi']
         del feat_dc['vc']

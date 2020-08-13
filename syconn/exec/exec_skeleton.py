@@ -175,11 +175,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
 
     multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs, ssd.load_cached_data('size'))
 
-    # add ssd parameters needed for merging of skeleton, ssv_ids, path to folder for kzip files
-    zipname = ("%s/excube1_kimimaro_skels_binaryfillingc100dps4/" % tmp_dir)
-    if not os.path.exists(zipname):
-        os.mkdir(zipname)
-    multi_params = [(pathdict_filepath, ssv_id, zipname) for ssv_id in multi_params]
+    multi_params = [(pathdict_filepath, ssv_id) for ssv_id in multi_params]
     # create SSV skeletons, requires SV skeletons!
     log.info('Merging cube-wise skeletons of {} SSVs.'.format(len(ssd.ssv_ids)))
     # high memory load
