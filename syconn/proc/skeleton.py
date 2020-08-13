@@ -34,9 +34,6 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
     if nb_cpus is None:
         nb_cpus = 1
 
-    # volume to be processed in mag!
-    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0])
-
     # TODO: remove
     import time
     start = time.time()
@@ -113,7 +110,8 @@ def kimimaro_mergeskels(path_list, cell_id):
     skel_list = []
     for f in path_list:
         part_dict = load_pkl2obj(f)
-        skel_list.append(part_dict[int(cell_id)])
+        # part_dict is now a defaultdict(list)
+        skel_list.extend(part_dict[int(cell_id)])
     # merge skeletons to one connected component
     # a set of skeletons produced from the same label id
     skel = PrecomputedSkeleton.simple_merge(skel_list).consolidate()

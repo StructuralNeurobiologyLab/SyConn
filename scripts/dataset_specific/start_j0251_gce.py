@@ -30,7 +30,7 @@ if __name__ == '__main__':
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 32),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 2),
+        ('nnodes_total', 4),
         ('mem_per_node', 208990),
         ('use_point_models', False),
         ('skeleton', {'use_kimimaro': True}),
@@ -50,8 +50,7 @@ if __name__ == '__main__':
           }
          )
     ]
-
-    chunk_size = (512, 512, 256)
+    chunk_size = (384, 384, 192)
     n_folders_fs = 10000
     n_folders_fs_sc = 10000
 
@@ -111,7 +110,7 @@ if __name__ == '__main__':
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # create symlink to myelin predictions
-    if not os.path.exists(f'/mnt/j0251_data/myelin {working_dir}/knossosdatasets/'):
+    if not os.path.exists(f'{working_dir}/knossosdatasets/myelin'):
         assert os.path.exists('/mnt/j0251_data/myelin')
         os.system(f'ln -s /mnt/j0251_data/myelin {working_dir}/knossosdatasets/')
 
@@ -160,8 +159,8 @@ if __name__ == '__main__':
     exec_init.run_create_rag()
     ftimer.stop()
 
+    log.info('Step 3/9 - Glia separation')
     if global_params.config.prior_glia_removal:
-        log.info('Step 2.5/9 - Glia separation')
         ftimer.start('Glia separation')
         if not global_params.config.use_point_models:
             exec_render.run_glia_rendering()
@@ -171,31 +170,31 @@ if __name__ == '__main__':
         exec_inference.run_glia_splitting()
         ftimer.stop()
 
-    log.info('Step 3/9 - Creating SuperSegmentationDataset')
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
     exec_init.run_create_neuron_ssd(cube_of_interest_bb=cube_of_interest_bb)
     ftimer.stop()
 
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 3.5/9 - Neuron rendering')
+        log.info('Step 4.5/9 - Neuron rendering')
         ftimer.start('Neuron rendering')
         exec_render.run_neuron_rendering()
         ftimer.stop()
 
-    log.info('Step 4/9 - Synapse detection')
+    log.info('Step 5/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
                                  cube_of_interest_bb=cube_of_interest_bb)
     ftimer.stop()
 
-    log.info('Step 5/9 - Axon prediction')
-    ftimer.start('Axon prediction')
+    log.info('Step 6/9 - Compartment prediction')
+    ftimer.start('Compartment predictions')
     exec_inference.run_semsegaxoness_prediction()
+    if not global_params.config.use_point_models:
+        exec_inference.run_semsegspiness_prediction()
     ftimer.stop()
 
-    log.info('Step 6/9 - Spine prediction')
-    ftimer.start('Spine prediction')
-    exec_inference.run_semsegspiness_prediction()
+    ftimer.start('Spine head calculation')
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 

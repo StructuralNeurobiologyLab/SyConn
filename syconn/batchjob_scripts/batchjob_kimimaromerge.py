@@ -30,7 +30,7 @@ for ssv_id in ssv_ids:
     sso.skeleton["neighbours"] = neighbour_dict
     if combined_skel.vertices.size > 0:
         sso.skeleton["nodes"] = combined_skel.vertices / scaling  # to fit voxel coordinates
-        # get radius in pseudo-voxel units
+        # get radius in pseudo-voxel units (used by Knossos)
         sso.skeleton["diameters"] = (combined_skel.radii / scaling[0]) * 2  # divide by x scale
         sso.skeleton["edges"] = combined_skel.edges
         sso.skeleton["degree"] = degree_dict

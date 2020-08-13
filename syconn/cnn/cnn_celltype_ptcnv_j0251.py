@@ -86,6 +86,7 @@ use_norm = 'gn'
 num_classes = 11
 onehot = True
 act = 'swish'
+use_myelin = True
 
 if name is None:
     name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
@@ -93,8 +94,14 @@ if name is None:
         name += '_cellshapeOnly'
     if not use_syntype:
         name += '_noSyntype'
+    if use_myelin:
+        name += '_myelin'
 if onehot:
-    input_channels = 5 if use_syntype else 4
+    input_channels = 4
+    if use_syntype:
+        input_channels += 1
+    if use_myelin:
+        input_channels += 1
 else:
     input_channels = 1
     name += '_flatinp'

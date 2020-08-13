@@ -468,8 +468,11 @@ def _load_ssv_hc(args):
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     if map_myelin:
         _, _, myelinated = ssv._pred2mesh(ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['myelin_avg10000'],
-                                          return_colors=False)
+                                          return_color=False)
+        myelinated = myelinated.astype(np.bool)
     for k in feats:
+        if k == 'sv_myelin':  # do not process - 'sv_myelin' is processed together with 'sv'
+            continue
         pcd = o3d.geometry.PointCloud()
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
@@ -477,12 +480,14 @@ def _load_ssv_hc(args):
             pcd, idcs = pcd.voxel_down_sample_and_trace(
                 pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(), pcd.get_max_bound())
             vert_ixs = np.max(idcs, axis=1)
-            sv_verts = np.asarray(pcd.points)
-            vert_dc[k] = sv_verts[vert_ixs][myelinated[vert_ixs] == 0]
-            vert_dc['sv_myelin'] = sv_verts[vert_ixs][myelinated[vert_ixs] == 1]
+            sv_verts = np.asarray(pcd.points, dtype=np.float32)
+            vert_dc[k] = sv_verts[~myelinated[vert_ixs]]
+            vert_dc['sv_myelin'] = sv_verts[myelinated[vert_ixs]]
         else:
             pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
             vert_dc[k] = np.asarray(pcd.points)
+    if np.sum(myelinated) > 1:
+        raise()
     sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
                                    for ii, k in enumerate(feats)])
     sample_pts = np.concatenate([vert_dc[k] for k in feats])
@@ -532,6 +537,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
+    if not map_myelin:
+        del feat_dc['sv_myelin']
     for ssv_id in ssv_ids:
         redundancy_ssv = int(redundancy)
         n_batches = int(np.ceil(redundancy_ssv / batchsize))
@@ -599,8 +606,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None, train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, use_ctx_sampling: bool = True, cache: Optional[bool] = True,
-                      map_myelin: bool = False,
-                      ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+                      map_myelin: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     per-cell point-to-scalar tasks, e.g. cell type prediction.
@@ -634,6 +640,8 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
+    if not map_myelin:
+        del feat_dc['sv_myelin']
     if cache is None:
         cache = train
     if not train:
@@ -1321,9 +1329,9 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
         if train:
-            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', None))
         else:
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', None))
         ssv.clear_cache()
         npoints_ssv = min(len(hc.vertices), npoints)
         # add a +-10% fluctuation in the number of input and output points
@@ -1643,7 +1651,7 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
 
 # prediction wrapper
 def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
-                     postproc_kwargs: Optional[dict] = None, **add_kwargs):
+                     postproc_kwargs: Optional[dict] = None, show_progress: bool = True, **add_kwargs):
     """
     Perform glia predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1656,6 +1664,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
         ssv_params: List of kwargs to initialize SSVs.
         mpath: Path to model.
         postproc_kwargs: Postprocessing kwargs.
+        show_progress: Show progress bar.
 
     Returns:
 
@@ -1672,7 +1681,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
     postproc_kwargs_def.update(postproc_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_glia_model_pts, pts_loader_local_skel, pts_pred_local_skel,
                                postproc_func=pts_postproc_glia, mpath=mpath, postproc_kwargs=postproc_kwargs_def,
-                               show_progress=False, **loader_kwargs, **default_kwargs)
+                               show_progress=show_progress, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
         raise ValueError('Invalid output during glia prediction.')
 
@@ -1713,7 +1722,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
 
 def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
                          da_equals_tan: bool = True, pred_key: Optional[str] = None, map_myelin: bool = False,
-                         **add_kwargs):
+                         show_progress: bool = True, **add_kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
     cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
@@ -1729,6 +1738,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         da_equals_tan:
         pred_key:
         map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
+        show_progress: Show progress bar.
 
     Returns:
 
@@ -1745,8 +1755,8 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar_infer, pts_pred_scalar,
-                               postproc_func=pts_postproc_scalar, mpath=mpath, ssv_ids=ssv_ids, show_progress=False,
-                               **loader_kwargs, **default_kwargs)
+                               postproc_func=pts_postproc_scalar, mpath=mpath, ssv_ids=ssv_ids,
+                               show_progress=show_progress, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
         raise ValueError('Invalid output during cell type prediction.')
 
@@ -1755,7 +1765,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 
 
 def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
-                     ctx_dst_fac: Optional[int] = None, **add_kwargs):
+                     ctx_dst_fac: Optional[int] = None, show_progress: bool = True, **add_kwargs):
     """
     Performs compartment predictions on the ssv's given with ``ssv_ids``, based on the dataset initialized with
     ``ssd_kwargs``. The kwargs for predict_pts_plain are organized as dicts with the respective values, keyed
@@ -1772,6 +1782,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
             therefore larger context overlap and longer processing time.
          add_kwargs: Can for example contain parameter ``bs`` for batchsize. ``bs`` is supposed to be a factor
             which gets multiplied with the model dependent batch sizes.
+        show_progress: Show progress bar.
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -1826,7 +1837,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
                                mpath=mpath,
                                loader_kwargs=loader_kwargs,
                                model_loader_kwargs=dict(pred_types=pred_types),
-                               show_progress=False,
+                               show_progress=show_progress,
                                **default_kwargs,
                                **kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_ids):
