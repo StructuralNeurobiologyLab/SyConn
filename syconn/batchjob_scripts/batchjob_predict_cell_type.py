@@ -43,7 +43,8 @@ if global_params.config.use_point_models:
 else:
     n_worker = 2
     params = basics.chunkify(ch, n_worker * 4)
-    res = start_multiprocess_imap(celltype_predictor, [(p, ncpus, model_props) for p in params], nb_cpus=n_worker)
+    res = start_multiprocess_imap(celltype_predictor, [(p, ncpus, model_props) for p in params], nb_cpus=n_worker,
+                                  show_progress=False)
 
     missing = np.concatenate(res)
     if len(missing) > 0:

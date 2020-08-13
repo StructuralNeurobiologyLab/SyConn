@@ -36,14 +36,13 @@ ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_p
 view_props = global_params.config['compartments']['view_properties_semsegax']
 
 if global_params.config.use_point_models:
-    # TODO: move mpath to global params
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, mpath='~/thesis/current_work/paper/test_models/', bs=2)
+    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, bs=2)
 else:
     n_worker = 2
     params = [(ch_sub, view_props, ncpus, map_properties,
                pred_key, max_dist) for ch_sub in basics.chunkify(ch, n_worker * 2)]
-    res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker)
+    res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker, show_progress=False)
     missing = np.concatenate(res)
     if len(missing) > 0:
         missing = semsegaxoness_predictor((missing, view_props, ncpus, map_properties))

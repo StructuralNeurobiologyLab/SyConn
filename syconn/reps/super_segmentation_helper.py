@@ -549,8 +549,8 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
 
 
 def map_myelin2coords(coords: np.ndarray,
-                      cube_edge_avg: np.ndarray = np.array([21, 21, 11]),
-                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.1,
+                      cube_edge_avg: np.ndarray = np.array([11, 11, 5]),
+                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.5,
                       mag: int = 1) -> np.ndarray:
     """
     Retrieves a myelin prediction at every location in `coords`. The classification
@@ -1678,8 +1678,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             i_views = sso.load_views(index_view_key).flatten()
         semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
-        log_reps.debug('Time to load index and shape views: '
-                       '{:.2f}s.'.format(ts1 - ts0))
+        # log_reps.debug('Time to load index and shape views: '
+        #                '{:.2f}s.'.format(ts1 - ts0))
         background_id = np.max(i_views)
         background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
@@ -1708,8 +1708,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predicted_vertices = predicted_vertices[predictions != background_id]
             predictions = predictions[predictions != background_id]
         ts2 = time.time()
-        log_reps.debug('Time to map predictions on vertices: '
-                       '{:.2f}s.'.format(ts2 - ts1))
+        # log_reps.debug('Time to map predictions on vertices: '
+        #                '{:.2f}s.'.format(ts2 - ts1))
         # High time complexity!
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
@@ -1717,8 +1717,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 k=k,
                 return_color=False, nb_cpus=sso.nb_cpus)
             ts3 = time.time()
-            log_reps.debug('Time to map predictions on unpredicted vertices'
-                           'with k={}: {:.2f}s.'.format(k, ts3 - ts2))
+            # log_reps.debug('Time to map predictions on unpredicted vertices'
+            #                'with k={}: {:.2f}s.'.format(k, ts3 - ts2))
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
 
