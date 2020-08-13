@@ -1223,9 +1223,6 @@ class SuperSegmentationObject(SegmentationBase):
                 if pred_key_ax in self.skeleton:
                     skel_nodes[-1].data[pred_key_ax] = self.skeleton[pred_key_ax][
                         i_node]
-                if "cell_type" in self.skeleton:
-                    skel_nodes[-1].data["cell_type"] = \
-                        self.skeleton["cell_type"][i_node]
                 if "meta" in self.skeleton:
                     skel_nodes[-1].data["meta"] = self.skeleton["meta"][i_node]
                 if additional_keys is not None:

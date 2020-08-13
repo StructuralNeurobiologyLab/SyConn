@@ -25,6 +25,7 @@ import string
 import subprocess
 import tqdm
 import sys
+import socket
 import time
 import numpy as np
 from multiprocessing import cpu_count
@@ -73,7 +74,7 @@ def batchjob_script(params: list, name: str,
                     disable_batchjob: bool = False,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
-                    log: Logger = None, sleep_time: int = 20,
+                    log: Logger = None, sleep_time: Optional[int] = None,
                     show_progress=True,
                     overwrite=False):
     """
@@ -118,6 +119,11 @@ def batchjob_script(params: list, name: str,
     # Parameter handling
     if n_cores is None:
         n_cores = 1
+    if sleep_time is None:
+        if 'wb01' in socket.gethostname():
+            sleep_time = 10
+        else:
+            sleep_time = 0.5
     if python_path is None:
         python_path = python_path_global
 
@@ -251,7 +257,7 @@ def batchjob_script(params: list, name: str,
         job2slurm_dc[job_id] = slurm_id
         slurm2job_dc[slurm_id] = job_id
         dtime_sub += time.time() - start
-        time.sleep(0.1)
+        time.sleep(0.01)
 
     # wait for jobs to be in SLURM memory
     time.sleep(sleep_time)

@@ -30,15 +30,14 @@ for ssv_id in ssv_ids:
     sso.skeleton["neighbours"] = neighbour_dict
     if combined_skel.vertices.size > 0:
         sso.skeleton["nodes"] = combined_skel.vertices / scaling  # to fit voxel coordinates
-        # get radius in pseudo-voxel units
+        # get radius in pseudo-voxel units (used by Knossos)
         sso.skeleton["diameters"] = (combined_skel.radii / scaling[0]) * 2  # divide by x scale
-        # kimimaro_skels_tokzip(combined_skel, ssv_id, zipname)
         sso.skeleton["edges"] = combined_skel.edges
         sso.skeleton["degree"] = degree_dict
     else:
         sso.skeleton["nodes"] = np.array([sso.rep_coord], dtype=np.float32)
         sso.skeleton["diameters"] = np.zeros((1, ), dtype=np.float32)
-        sso.skeleton["edges"] = np.array([[0, 0], ], dtype=np.float32)
+        sso.skeleton["edges"] = np.array([[0, 0], ], dtype=np.int)
         sso.skeleton["degree"] = {0: 0}
 
     sso.save_skeleton()
