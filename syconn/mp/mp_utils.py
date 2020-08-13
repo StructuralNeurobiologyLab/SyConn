@@ -19,22 +19,24 @@ MyPool = multiprocessing.Pool
 
 
 def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs: int,
-                     use_kwargs: bool = False, front_num: int = 0) -> list:
+                     use_kwargs: bool = False, front_num: int = 0, show_progress: bool = True) -> list:
     """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
-        A parallel version of the map function with a progress bar.
+     A parallel version of the map function with a progress bar.
 
-        Args:
-            array (array-like): An array to iterate over.
-            function (function): A python function to apply to the elements of
-                array n_jobs (int, default=16): The number of cores to use
-            use_kwargs (boolean, default=False): Whether to consider the
-                elements of array as dictionaries of keyword arguments to function
-            front_num (int, default=3): The number of iterations to run
-                serially before kicking off the parallel job.
-                Useful for catching bugs.
-             n_jobs:
-        Returns:
-            [function(array[0]), function(array[1]), ...]
+    Args:
+        array (array-like): An array to iterate over.
+        function (function): A python function to apply to the elements of
+            array n_jobs (int, default=16): The number of cores to use
+        use_kwargs (boolean, default=False): Whether to consider the
+            elements of array as dictionaries of keyword arguments to function
+        front_num (int, default=3): The number of iterations to run
+            serially before kicking off the parallel job.
+            Useful for catching bugs.
+        n_jobs:
+        show_progress: show progress
+
+    Returns:
+        [function(array[0]), function(array[1]), ...]
     """
     # We run the first few iterations serially to catch bugs
     if front_num > 0:
@@ -61,8 +63,12 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
             'mininterval': 1
         }
         # Print out the progress as tasks complete
-        for f in tqdm.tqdm(as_completed(futures), **kwargs):
-            pass
+        if show_progress:
+            for f in tqdm.tqdm(as_completed(futures), **kwargs):
+                pass
+        else:
+            for f in as_completed(futures):
+                pass
     finally:
         pool.shutdown()
     out = []
@@ -159,15 +165,7 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        if show_progress:
-            result = parallel_process(params, func, nb_cpus)
-        else:
-            pool = MyPool(nb_cpus)
-            try:
-                result = list(pool.map(func, params))
-            finally:
-                pool.close()
-                pool.join()
+        result = parallel_process(params, func, nb_cpus, show_progress=show_progress)
     else:
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,

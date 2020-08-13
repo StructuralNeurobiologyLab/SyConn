@@ -129,7 +129,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     if not os.path.exists(tmp_dir):
         os.mkdir(tmp_dir)
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
+        max_n_jobs = min(global_params.config.ncore_total * 4, 1000)
     if ds is None:
         ds = global_params.config['scaling'][2] // np.array(global_params.config['scaling'])
         assert np.all(ds > 0)

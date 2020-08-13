@@ -114,13 +114,9 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, cube_
              'organelle mapping.')
 
     # map cellular organelles to SSVs
-    # TODO: sort by SSV size (descending)
-    ssd_proc.aggregate_segmentation_object_mappings(
-        ssd, global_params.config['existing_cell_organelles'])
-    ssd_proc.apply_mapping_decisions(
-        ssd, global_params.config['existing_cell_organelles'])
-    log.info('Finished mapping of cellular organelles to SSVs. '
-             'Writing individual SSV graphs.')
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
+    log.info('Finished mapping of cellular organelles to SSVs. Writing individual SSV graphs.')
 
 
 def _ssv_rag_writer(args):
@@ -162,16 +158,15 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
     multi_params = [[par, so_kwargs] for par in multi_params]
 
-    if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
-                                                                    global_params.config.allow_mesh_gen_cells)):
+    if not global_params.config.use_new_meshing and \
+            (co != "sv" or (co == "sv" and global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
             multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
 
     # TODO: add as soon as glia separation supports on the fly view generation
     if co == "sv":  # and not global_params.config.use_onthefly_views:
         _ = qu.batchjob_script(
-            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True,
-            log=log)
+            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True, log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
     if not global_params.config.use_new_meshing:

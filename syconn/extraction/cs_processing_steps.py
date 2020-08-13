@@ -396,6 +396,8 @@ def _combine_and_split_syn_thread(args):
         for syn_ix, syn_id in enumerate(syn_ids[1:]):
             syn = sd_syn.get_segmentation_object(syn_id)
             syn.load_attr_dict()
+            if len(set(ssv_ids).union(set(syn.cs_partner))) != 2:
+                raise ValueError('Mis-match in neuron partner IDs.')
             syn_attr_list.append(syn.attr_dict)
             voxel_list.append(syn.voxel_list)
             synix_list += [syn_ix] * len(voxel_list[-1])

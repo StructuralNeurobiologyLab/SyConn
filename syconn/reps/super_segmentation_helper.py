@@ -2185,13 +2185,12 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
     ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
     ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
-    if len(ssv_syncoords) == 0:  # node spine head synapses
+    if len(ssv_syncoords) == 0:  # no spine head synapses
         return
     kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
-    _, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
+    dists, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
     # iterate over connected skeleton nodes labeled as spine head
-    for c, node_ix, ssv_id in zip(ssv_syncoords, close_node_ids, ssv_synids):
-        # get closest skeleton node
+    for c, node_ix, ssv_syn_id in zip(ssv_syncoords, close_node_ids, ssv_synids):
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
         size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
@@ -2220,9 +2219,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices
-        maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
-                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
-                                       return_color=False, nb_cpus=sso.nb_cpus)
+        # TODO: fix zero-size error
+        try:
+            maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
+                                           k=global_params.config['spines']['semseg2coords_spines']['k'],
+                                           return_color=False, nb_cpus=sso.nb_cpus)
+        except ValueError:  # catch zero-size array error
+            raise()
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
@@ -2232,8 +2235,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         max_id = 1
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21),
-                 (c[2] - 10):(c[2] + 11)]
+            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21), (c[2] - 10):(c[2] + 11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]

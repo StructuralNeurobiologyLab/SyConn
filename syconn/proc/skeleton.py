@@ -1,4 +1,3 @@
-import pickle as pkl
 from typing import Optional
 
 import numpy as np
@@ -10,7 +9,6 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 from syconn.extraction.block_processing_C import relabel_vol_nonexist2zero
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.basics import load_pkl2obj, kd_factory
-from syconn.proc.image import multi_mop_backgroundonly
 from syconn import global_params
 
 
@@ -34,10 +32,6 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
     if nb_cpus is None:
         nb_cpus = 1
 
-    # TODO: remove
-    import time
-    start = time.time()
-
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
     # TODO: uint32 conversion should be controlled externally
@@ -46,14 +40,10 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
         seg = ndimage.zoom(seg, 1 / ds, order=0)
     else:
         ds = np.ones(3)
-    print(f'loaded seg: {time.time() - start:.2f}')
     # transform IDs to agglomerated SVs
-    start = time.time()
     relabel_vol_nonexist2zero(seg, ssd.mapping_dict_reversed)
-    print(f'relabelled seg: {time.time() - start:.2f}')
 
     # kimimaro code
-    start = time.time()
     skels = kimimaro.skeletonize(
         seg,
         teasar_params={
@@ -78,9 +68,7 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
         progress=False,  # show progress bar
         parallel=nb_cpus,  # <= 0 all cpu, 1 single process, 2+ multiprocess
     )
-    print(f'finished skeletonization: {time.time() - start:.2f}')
 
-    start = time.time()
     for ii in skels:
         # cell.vertices already in physical coordinates (nm)
         # now add the offset in physical coordinates, both are originally in mag 2
@@ -92,7 +80,6 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
         # cell = cell.downsample(2)
         # code from sparsify_skeleton_fast in syconn.procs.super_segmentation_helper
         # modify for kimimaro_skeletons
-    print(f'modified node coordinates: {time.time() - start:.2f}')
     return skels
 
 

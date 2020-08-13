@@ -486,8 +486,6 @@ def _load_ssv_hc(args):
         else:
             pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
             vert_dc[k] = np.asarray(pcd.points)
-    if np.sum(myelinated) > 1:
-        raise()
     sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
                                    for ii, k in enumerate(feats)])
     sample_pts = np.concatenate([vert_dc[k] for k in feats])

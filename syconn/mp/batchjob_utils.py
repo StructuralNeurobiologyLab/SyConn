@@ -121,7 +121,7 @@ def batchjob_script(params: list, name: str,
         n_cores = 1
     if sleep_time is None:
         if 'wb01' in socket.gethostname():
-            sleep_time = 10
+            sleep_time = 5
         else:
             sleep_time = 0.5
     if python_path is None:
@@ -260,7 +260,7 @@ def batchjob_script(params: list, name: str,
         time.sleep(0.01)
 
     # wait for jobs to be in SLURM memory
-    time.sleep(sleep_time)
+    time.sleep(10)
     # requeue failed jobs for `max_iterations`-times
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
@@ -275,7 +275,7 @@ def batchjob_script(params: list, name: str,
         except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
             log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
                                  f'again, SLURM cache might have been delayed.')
-            time.sleep(1.5 * sleep_time)
+            time.sleep(5)
             js_dc = jobstates_slurm(job_name, starttime)
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         # all jobs which are not running, completed or pending have failed for
@@ -344,7 +344,7 @@ def batchjob_script(params: list, name: str,
             shutil.rmtree(batchjob_folder)
         except OSError:
             try:
-                time.sleep(2)
+                time.sleep(1)
                 shutil.rmtree(batchjob_folder)
             except OSError as e:
                 p = subprocess.Popen([f'lsof', '/mnt/'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
