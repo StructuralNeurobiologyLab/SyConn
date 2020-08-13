@@ -3461,8 +3461,8 @@ def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
     """
     if sso.skeleton is None:
         sso.load_skeleton()
-    if sso.skeleton is None or len(sso.skeleton["nodes"]) < 2:
-        print(f"Skeleton of {sso} has < 2 nodes.")
+    if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
+        print(f"Skeleton of {sso} has zero nodes.")
         return
     # vertex predictions
     node_preds = sso.semseg_for_coords(
@@ -3521,8 +3521,8 @@ def semsegspiness_predictor(args) -> List[int]:
             ssh.semseg_of_sso_nocache(ssv, m, **view_props, **kwargs_semseg2mesh)
             # map to skeleton
             ssv.load_skeleton()
-            if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
-                log_reps.warning(f"Skeleton of SSV {ssv.id} has < 2 nodes.")
+            if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
+                log_reps.warning(f"Skeleton of SSV {ssv.id} has zero nodes.")
                 continue
             # vertex predictions
             node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],

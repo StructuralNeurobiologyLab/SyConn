@@ -164,11 +164,11 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                          cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size, ctx_size=ctx)
+                         onehot=onehot, batch_size=batch_size, ctx_size=ctx, use_myelin=use_myelin)
 valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
                          cv_val=cval, cellshape_only=cellshape_only,
                          use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-                         ctx_size=ctx)
+                         ctx_size=ctx, use_myelin=use_myelin)
 
 # PREPARE AND START TRAINING #
 
