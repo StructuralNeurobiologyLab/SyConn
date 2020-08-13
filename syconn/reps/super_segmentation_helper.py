@@ -549,8 +549,8 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
 
 
 def map_myelin2coords(coords: np.ndarray,
-                      cube_edge_avg: np.ndarray = np.array([21, 21, 11]),
-                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.1,
+                      cube_edge_avg: np.ndarray = np.array([11, 11, 5]),
+                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.5,
                       mag: int = 1) -> np.ndarray:
     """
     Retrieves a myelin prediction at every location in `coords`. The classification

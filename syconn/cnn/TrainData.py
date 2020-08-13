@@ -194,7 +194,7 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, cache=False)][0]
+                    train=True, cache=False, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]

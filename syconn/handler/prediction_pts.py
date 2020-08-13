@@ -468,8 +468,11 @@ def _load_ssv_hc(args):
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     if map_myelin:
         _, _, myelinated = ssv._pred2mesh(ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['myelin_avg10000'],
-                                          return_colors=False)
+                                          return_color=False)
+        myelinated = myelinated.astype(np.bool)
     for k in feats:
+        if k == 'sv_myelin':  # do not process - 'sv_myelin' is processed together with 'sv'
+            continue
         pcd = o3d.geometry.PointCloud()
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
@@ -477,12 +480,14 @@ def _load_ssv_hc(args):
             pcd, idcs = pcd.voxel_down_sample_and_trace(
                 pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(), pcd.get_max_bound())
             vert_ixs = np.max(idcs, axis=1)
-            sv_verts = np.asarray(pcd.points)
-            vert_dc[k] = sv_verts[vert_ixs][myelinated[vert_ixs] == 0]
-            vert_dc['sv_myelin'] = sv_verts[vert_ixs][myelinated[vert_ixs] == 1]
+            sv_verts = np.asarray(pcd.points, dtype=np.float32)
+            vert_dc[k] = sv_verts[~myelinated[vert_ixs]]
+            vert_dc['sv_myelin'] = sv_verts[myelinated[vert_ixs]]
         else:
             pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[pt_type][k])
             vert_dc[k] = np.asarray(pcd.points)
+    if np.sum(myelinated) > 1:
+        raise()
     sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
                                    for ii, k in enumerate(feats)])
     sample_pts = np.concatenate([vert_dc[k] for k in feats])
@@ -532,6 +537,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
+    if not map_myelin:
+        del feat_dc['sv_myelin']
     for ssv_id in ssv_ids:
         redundancy_ssv = int(redundancy)
         n_batches = int(np.ceil(redundancy_ssv / batchsize))
@@ -599,8 +606,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None, train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, use_ctx_sampling: bool = True, cache: Optional[bool] = True,
-                      map_myelin: bool = False,
-                      ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+                      map_myelin: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     per-cell point-to-scalar tasks, e.g. cell type prediction.
@@ -634,6 +640,8 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
+    if not map_myelin:
+        del feat_dc['sv_myelin']
     if cache is None:
         cache = train
     if not train:
@@ -1321,9 +1329,9 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
         if train:
-            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', None))
         else:
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', None))
         ssv.clear_cache()
         npoints_ssv = min(len(hc.vertices), npoints)
         # add a +-10% fluctuation in the number of input and output points
