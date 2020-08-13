@@ -25,9 +25,9 @@ sso_ids = args[0]
 
 ssd = SuperSegmentationDataset()
 for sso in ssd.get_super_segmentation_object(sso_ids):
-    assert sso.load_skeleton(), f"Skeleton of SSO {sso.id} does not exist."
+    assert sso.load_attr_dict() == 0, f"Attribute of SSO {sso.id} does not exist."
     extract_spinehead_volume_mesh(sso)
-    sso.save_skeleton()
+    sso.save_attr_dict()
 
 with open(path_out_file, "wb") as f:
     pkl.dump("", f)

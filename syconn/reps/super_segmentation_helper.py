@@ -2134,21 +2134,21 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
     return ratio
 
 
-def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObject',
-                                  ctx_vol=(200, 200, 100)):
+def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObject', ctx_vol=(200, 200, 100)):
     """
+    #  problematic if the same node was assigned different synapses..
+
     Calculate the volume of spine heads based on a watershed procedure on the
-    cell segmentation. Connected components of spine head skeleton nodes
-    are used as starting point to collect mesh vertices with spine predictions
-    within at least ``2*ctx_vol``. The watershed seeds are extracted from local maxima of the
-    cell mask's distance transform. Each seed is assigned the majority label of its
+    cell segmentation. Spine head predictions on the cell mesh are used as starting point. Vertex predictions are
+    then mapped to voxels within at least ``2*ctx_vol + synapse_boundinb_box``. The watershed seeds are extracted
+    from local maxima of the cell mask's distance transform. Each seed is assigned the majority label of its
     k-nearest vertices.
-    Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-    .skeleton` with the key ``spinehead_vol``.
+    Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.attr_dict` with
+    the key ``spinehead_vol``.
 
     Notes:
-        * Requires a (loaded, ``sso.load_skeleton``) skeleton, i.e. ``sso.skeleton`` must be present.
-        * If the results have to be stored, call ``sso.save_skeleton()``
+        * Requires a predicted cell mesh, i.e. 'spiness' must be present in ``label_dict('vertex')['spiness']``.
+        * If the results have to be stored, call ``sso.save_attr_dict()``
 
     Args:
         sso: Cell object.
@@ -2159,13 +2159,12 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     # use bigger skel context to get the correspondence to the voxel as accurate as possible
     ctx_vol = np.array(ctx_vol)
     scaling = sso.scaling
-    if 'spiness' not in sso.skeleton:
-        log_reps.warn(f'"spiness" not available in skeleton of SSO {sso.id}. '
-                      f'Skipping.')
-        sso.skeleton['spinehead_vol'] = np.zeros((len(sso.skeleton['nodes']),)).astype(np.float32)
-        return
+    sso.attr_dict['spinehead_vol'] = {}
+    if 'spiness' not in sso.label_dict('vertex'):
+        msg = f'"spiness" not available in skeleton of SSO {sso.id}.'
+        log_reps.error(msg)
+        raise ValueError(msg)
     ssv_svids = set(sso.sv_ids)
-    sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness']).astype(np.float32)
     ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
     if len(ssv_syncoords) == 0:
         return
@@ -2187,10 +2186,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
     if len(ssv_syncoords) == 0:  # no spine head synapses
         return
-    kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
-    dists, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
-    # iterate over connected skeleton nodes labeled as spine head
-    for c, node_ix, ssv_syn_id in zip(ssv_syncoords, close_node_ids, ssv_synids):
+    # iterate over spine head synapses
+    for c, ssv_syn_id in zip(ssv_syncoords, ssv_synids):
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
         size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
@@ -2204,6 +2201,11 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 seg[ii] = 0
             else:
                 seg[ii] = 1
+        if np.sum(seg) == 0:
+            msg = (f'Could not find segmentation at {offset} and size {size} for SSVs '
+                   f'{ssv_svids}. syn_ssv ID: {ssv_syn_id}.')
+            log_reps.error(msg)
+            raise ValueError(msg)
         seg = seg.reshape(orig_sh)
         seg = ndimage.binary_fill_holes(seg)
         # set watershed seeds using vertices
@@ -2219,13 +2221,9 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices
-        # TODO: fix zero-size error
-        try:
-            maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
-                                           k=global_params.config['spines']['semseg2coords_spines']['k'],
-                                           return_color=False, nb_cpus=sso.nb_cpus)
-        except ValueError:  # catch zero-size array error
-            raise()
+        maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
+                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
+                                       return_color=False, nb_cpus=sso.nb_cpus)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
@@ -2255,7 +2253,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
         n_voxels_spinehead = np.sum(labels == max_id)
         vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
-        sso.skeleton['spinehead_vol'][node_ix] = vol_sh
+        sso.attr_dict['spinehead_vol'][ssv_syn_id] = vol_sh
 
 
 def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):

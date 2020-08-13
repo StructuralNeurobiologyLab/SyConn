@@ -16,7 +16,7 @@ from knossos_utils.chunky import ChunkDataset
 from knossos_utils import knossosdataset
 
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
-from syconn.handler.basics import chunkify, chunkify_weighted
+from syconn.handler.basics import chunkify, chunkify_weighted, chunkify_successive
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
@@ -155,7 +155,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=cube_of_interest_bb[0], fit_box_size=True)
     multi_params = [(cube_size, offs, cube_of_interest_bb, ds) for offs in
-                    chunkify(list(cd.coord_dict.keys()), max_n_jobs)]
+                    chunkify_successive(list(cd.coord_dict.keys()), len(cd.coord_dict) // max_n_jobs)]
     # high memory load
     out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
                                  n_cores=2, max_iterations=10)

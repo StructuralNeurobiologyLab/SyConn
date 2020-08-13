@@ -93,7 +93,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    # create KDs and SDs for syn and cs
+    # # create KDs and SDs for syn and cs
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs)
@@ -113,6 +113,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
+    del syn_sign
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
              f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
