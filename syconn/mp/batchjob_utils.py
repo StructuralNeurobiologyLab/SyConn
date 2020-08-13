@@ -123,7 +123,7 @@ def batchjob_script(params: list, name: str,
         if 'wb01' in socket.gethostname():
             sleep_time = 5
         else:
-            sleep_time = 0.5
+            sleep_time = 1
     if python_path is None:
         python_path = python_path_global
 

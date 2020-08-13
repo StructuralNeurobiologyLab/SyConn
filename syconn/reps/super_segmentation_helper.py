@@ -2204,6 +2204,10 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 seg[ii] = 0
             else:
                 seg[ii] = 1
+        if np.sum(seg) == 0:
+            log_reps.error(f'Could not find segmentation at {offset} and size {size} for SSVs '
+                           f'{ssv_svids}. syn_ssv ID: {ssv_syn_id}. Skipping.')
+            continue
         seg = seg.reshape(orig_sh)
         seg = ndimage.binary_fill_holes(seg)
         # set watershed seeds using vertices
@@ -2219,7 +2223,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices
-        # TODO: fix zero-size error
+        # TODO: fix zero-size error, see if clause above
         try:
             maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
                                            k=global_params.config['spines']['semseg2coords_spines']['k'],
