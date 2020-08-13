@@ -47,10 +47,8 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     pred_key_appendix = ""
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     # sort ssv ids according to their number of SVs (descending)
-    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
-
+    multi_params = multi_params[np.argsort(ssd.load_cached_data('size'))[::-1]]
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
         ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]

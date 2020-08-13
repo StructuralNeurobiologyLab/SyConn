@@ -145,13 +145,10 @@ def run_spinehead_volume_calc():
     np.random.seed(0)
 
     log.info('Starting spine head volume calculation.')
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     multi_params = ssd.ssv_ids
-    ordering = np.argsort(nb_svs_per_ssv)
+    ordering = np.argsort(ssd.load_cached_data('size'))
     multi_params = multi_params[ordering[::-1]]
-    # job parameter will be read sequentially, i.e. in order to provide only
-    # one list as parameter one needs an additonal axis
-    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
+    multi_params = chunkify(multi_params, min(global_params.config.ncore_total * 10, 1000))
     multi_params = [(ixs,) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log,

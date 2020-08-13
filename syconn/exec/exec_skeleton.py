@@ -45,10 +45,7 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
-                               for ssv_id in ssd.ssv_ids])
-    ordering = np.argsort(nb_svs_per_ssv)
-    multi_params = multi_params[ordering[::-1]]
+    multi_params = multi_params[np.argsort(ssd.load_cached_data('size'))[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
@@ -84,9 +81,7 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
-    ordering = np.argsort(nb_svs_per_ssv)
-    multi_params = multi_params[ordering[::-1]]
+    multi_params = multi_params[np.argsort(ssd.load_cached_data('size'))[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
