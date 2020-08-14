@@ -24,7 +24,7 @@ if nb_cpus is not None:
 res = defaultdict(list)
 res_ids = []
 for cube_offset in cube_offsets:
-    skels = kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb, ds=ds, nb_cpus=nb_cpus)
+    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus)
     for k, v in skels.items():
         res[k].append(v)
 

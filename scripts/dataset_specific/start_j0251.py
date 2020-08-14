@@ -160,6 +160,12 @@ if __name__ == '__main__':
     # exec_init.run_create_neuron_ssd()
     # ftimer.stop()
     #
+    # log.info('Step 5/10 - Creating SuperSegmentationDataset')
+    # ftimer.start('Skeleton generation')
+    # exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
+    # ftimer.stop()
+    #
+    #
     # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
     #     log.info('Step 4.5/9 - Neuron rendering')
     #     ftimer.start('Neuron rendering')

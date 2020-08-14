@@ -12,16 +12,14 @@ from syconn.handler.basics import load_pkl2obj, kd_factory
 from syconn import global_params
 
 
-def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
-                     nb_cpus: Optional[int] = None, ds: Optional[np.ndarray] = None) -> dict:
+def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
+                     ds: Optional[np.ndarray] = None) -> dict:
     """
     code from https://pypi.org/project/kimimaro/
 
     Args:
         cube_size: size of processed cube in mag 1 voxels.
         cube_offset: starting point of cubes (in mag 1 voxel coordinates)
-        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
-            coord, upper coord)
         nb_cpus: Number of cpus used by kimimaro.
         ds: Downsampling.
 
@@ -71,9 +69,9 @@ def kimimaro_skelgen(cube_size, cube_offset, cube_of_interest_bb,
 
     for ii in skels:
         # cell.vertices already in physical coordinates (nm)
-        # now add the offset in physical coordinates, both are originally in mag 2
-        # TODO: the factor 1/2 must be adapted when using anisotropic downsampling of the
-        #  KnossosDataset
+        # now add the offset in physical coordinates
+        # TODO: remove here
+        skels[ii].downsample(4)
         skels[ii].vertices += (cube_offset * kd.scales[0]).astype(np.int)
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
@@ -108,21 +106,16 @@ def kimimaro_mergeskels(path_list, cell_id):
         tick_threshold=1000  # physical units
     )
     # better suited in function above with part of skels. Doesn't work there.
-    skel = skel.downsample(4)
+    # TODO: remove downsampling here and move this up to skelgen
+    skel = skel.downsample(10)
     # Split input skeletons into connected components and
     # then join the two nearest vertices within `radius` distance
     # of each other until there is only a single connected component
     # or no pairs of points nearer than `radius` exist.
     # Fuse all remaining components into a single skeleton.
     skel = kimimaro.join_close_components(skel, radius=None)  # no threshold
-    # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end points"
-    # link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-    # skel = skel.downsample(4) #better suited in function above with part of skels. Doesn't work
-    # there.
-    degree_dict = {i: 0 for i, iv in enumerate(skel.vertices)}
-    neighbour_dict = {i: [] for i in list(degree_dict.keys())}
 
-    return skel, degree_dict, neighbour_dict
+    return skel
 
 
 def kimimaro_skels_tokzip(cell_skel, cell_id, zipname):

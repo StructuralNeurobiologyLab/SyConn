@@ -101,18 +101,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, cube_
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    if global_params.config.use_kimimaro:
-        # volume-based
-        exec_skeleton.run_kimimaro_skelgen(cube_of_interest_bb=cube_of_interest_bb)
-    else:
-        if cube_of_interest_bb is not None:
-            raise ValueError()
-        # SSV-based
-        exec_skeleton.run_skeleton_generation()
-
-    log.info('Finished SSD initialization. Starting cellular '
-             'organelle mapping.')
-
+    log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
     ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'])
     ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
