@@ -171,6 +171,7 @@ if __name__ == '__main__':
     # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     # ftimer.stop()
 
+    # TDO: remove
     exec_skeleton.run_kimimaro_skelgen()
 
     log.info('Step 6/9 - Compartment prediction')

@@ -2,6 +2,7 @@ import sys
 import os
 import pickle as pkl
 from collections import defaultdict
+import time
 
 from syconn.proc.skeleton import kimimaro_skelgen
 

@@ -151,18 +151,8 @@ def _collect_properties_from_ssv_partners_thread(args):
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
-        sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0]
-        if len(ssv_o.skeleton['nodes']) > 1:
-            # if only one skeleton node, sh_vol only contains one element per location
-            sh_vol = np.max(sh_vol, axis=1)
-        # # This should be reported during spine head volume calculation.
-        # sh_vol_zero = (sh_vol == 0) & (curr_sp == 1) & (curr_ax == 0)
-        # if np.any(sh_vol_zero):
-        #     log_extraction.warn(f'Empty spinehead volume at {ssv_syncoords[sh_vol_zero]}'
-        #                         f' in SSO {ssv_id}.')
-        if np.any(sh_vol == -1):
-            log_extraction.warn(f'No spinehead volume at {ssv_syncoords[sh_vol == -1]}'
-                                f' in SSO {ssv_id}.')
+        sh_vol = np.array([ssv_o.attr_dict['spinehead_vol'][syn_id] if syn_id in ssv_o.attr_dict['spinehead_vol']
+                           else -1 for syn_id in ssv_synids], dtype=np.float32)
 
         cache_dc['partner_spineheadvol'] = np.array(sh_vol)
         cache_dc['partner_axoness'] = curr_ax
@@ -259,7 +249,8 @@ def filter_relevant_syn(sd_syn, ssd):
     sv_ids = ch.sv_id_to_partner_ids_vec(syn_ids)
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
-    sv_ids[sv_ids >= len(ssd.id_changer)] = -1
+    sv_ids[sv_ids >= len(ssd.id_changer)] = 0
+    # ^^^^ -1 changed to 0 due to overflow in uint array... PS 13Aug2020; 0 should be fine as it is background anyway
     mapped_sv_ids = ssd.id_changer[sv_ids]
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
@@ -275,8 +266,7 @@ def filter_relevant_syn(sd_syn, ssd):
     # create lookup from SSV-wide synapses to SV syn. objects
     rel_synssv_to_syn_ids = defaultdict(list)
     for i_entry in range(len(relevant_synssv_ids)):
-        rel_synssv_to_syn_ids[relevant_synssv_ids[i_entry]]. \
-            append(syn_ids[i_entry])
+        rel_synssv_to_syn_ids[relevant_synssv_ids[i_entry]].append(syn_ids[i_entry])
 
     return rel_synssv_to_syn_ids
 
@@ -316,7 +306,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
     n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
-                       len(rel_ssv_with_syn_ids))
+                       len(rel_ssv_with_syn_ids), 1000)
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
     # target SD for SSV syn objects
@@ -388,7 +378,9 @@ def _combine_and_split_syn_thread(args):
         ssv_ids = ch.sv_id_to_partner_ids_vec([ssvpartners_enc])[0]
         syn = sd_syn.get_segmentation_object(syn_ids[0])
 
+        # verify ssv_partner_ids
         syn.load_attr_dict()
+        ssv_partners_check = syn.cs_partner
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
         voxel_list = [syn.voxel_list]
         # store index of syn. objects for attribute dict retrieval
@@ -396,13 +388,17 @@ def _combine_and_split_syn_thread(args):
         for syn_ix, syn_id in enumerate(syn_ids[1:]):
             syn = sd_syn.get_segmentation_object(syn_id)
             syn.load_attr_dict()
-            if len(set(ssv_ids).union(set(syn.cs_partner))) != 2:
-                raise ValueError('Mis-match in neuron partner IDs.')
+            ssv_partners_check.extend(syn.cs_partner)
             syn_attr_list.append(syn.attr_dict)
             voxel_list.append(syn.voxel_list)
             synix_list += [syn_ix] * len(voxel_list[-1])
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
+
+        ssv_id_consistency = set(set(np.unique(ssv_partners_check).tolist())).difference(ssv_ids)
+        if len(ssv_id_consistency) != 0:
+            raise ValueError(f'Mis-match in neuron partner IDs. Found {ssv_id_consistency}, but expected '
+                             f'ssv partners {ssv_ids}.')
 
         if len(synix_list) == 0:
             msg = 'Voxels not available for syn-object {}.'.format(str(syn))
