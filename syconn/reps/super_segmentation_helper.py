@@ -657,7 +657,7 @@ def sparsify_skeleton_fast(g: nx.Graph, scal: Optional[np.ndarray] = None,
     Reduces nodes in the skeleton.
 
     Args:
-        g: networkx graph of the sso skel.
+        g: networkx graph of the sso skel. Requires 'position' attribute.
         scal: Scale factor; equal to the physical voxel size (nm).
         dot_prod_thresh: the 'straightness' of the edges.
         max_dist_thresh: Maximum distance desired between every node.
@@ -905,7 +905,6 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True, max_dist_th
             Maximum distance in NM of two adjacent edges in order to prune the node
             in-between. Used in :func:`~sparsify_skeleton_fast` after
             first sparsening and pruning.
-
 
     Returns:
         The cell reconstruction with sparse skeleton (as MST) and radius

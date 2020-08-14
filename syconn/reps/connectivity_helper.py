@@ -24,10 +24,9 @@ from collections import defaultdict
 from scipy import ndimage
 
 
-def sv_id_to_partner_ids_vec(cs_ids):
+def cs_id_to_partner_ids_vec(cs_ids):
     sv_ids = np.right_shift(cs_ids, 32)
-    sv_ids = np.concatenate((sv_ids[:, None],
-                             (cs_ids - np.left_shift(sv_ids, 32))[:, None]),
+    sv_ids = np.concatenate((sv_ids[:, None], (cs_ids - np.left_shift(sv_ids, 32))[:, None]),
                             axis=1)
     return sv_ids
 

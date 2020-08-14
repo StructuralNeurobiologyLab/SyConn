@@ -246,7 +246,7 @@ def filter_relevant_syn(sd_syn, ssd):
     # -> not necessary to load the cs_ids.
     syn_ids = sd_syn.ids.copy()
 
-    sv_ids = ch.sv_id_to_partner_ids_vec(syn_ids)
+    sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids >= len(ssd.id_changer)] = 0
@@ -257,18 +257,19 @@ def filter_relevant_syn(sd_syn, ssd):
     filtered_mapped_sv_ids = mapped_sv_ids[mask]
 
     # this identifies all inter-ssv contact sites
-    mask = filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1] != 0
+    mask = (filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1]) != 0
     syn_ids = syn_ids[mask]
-    relevant_syns = filtered_mapped_sv_ids[mask]
-
-    relevant_synssv_ids = np.left_shift(np.max(relevant_syns, axis=1), 32) + np.min(relevant_syns, axis=1)
+    inter_ssv_contacts = filtered_mapped_sv_ids[mask]
+    # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
+    # cells
+    relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
 
     # create lookup from SSV-wide synapses to SV syn. objects
-    rel_synssv_to_syn_ids = defaultdict(list)
-    for i_entry in range(len(relevant_synssv_ids)):
-        rel_synssv_to_syn_ids[relevant_synssv_ids[i_entry]].append(syn_ids[i_entry])
+    ssv_to_syn_ids_dc = defaultdict(list)
+    for i_entry in range(len(relevant_ssv_ids_enc)):
+        ssv_to_syn_ids_dc[relevant_ssv_ids_enc[i_entry]].append(syn_ids[i_entry])
 
-    return rel_synssv_to_syn_ids
+    return ssv_to_syn_ids_dc
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
@@ -375,7 +376,7 @@ def _combine_and_split_syn_thread(args):
 
     for ssvpartners_enc, syn_ids in rel_ssv_with_syn_ids_items:
         n_items_for_path += 1
-        ssv_ids = ch.sv_id_to_partner_ids_vec([ssvpartners_enc])[0]
+        ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
         syn = sd_syn.get_segmentation_object(syn_ids[0])
 
         # verify ssv_partner_ids
@@ -394,11 +395,6 @@ def _combine_and_split_syn_thread(args):
             synix_list += [syn_ix] * len(voxel_list[-1])
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
-
-        ssv_id_consistency = set(set(np.unique(ssv_partners_check).tolist())).difference(ssv_ids)
-        if len(ssv_id_consistency) != 0:
-            raise ValueError(f'Mis-match in neuron partner IDs. Found {ssv_id_consistency}, but expected '
-                             f'ssv partners {ssv_ids}.')
 
         if len(synix_list) == 0:
             msg = 'Voxels not available for syn-object {}.'.format(str(syn))
@@ -670,7 +666,7 @@ def _combine_and_split_syn_thread_old(args):
     next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
-        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
+        ssv_ids = ch.cs_id_to_partner_ids_vec([item[0]])[0]
         syn = sd_syn.get_segmentation_object(item[1][0])
         syn.load_attr_dict()
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
@@ -793,7 +789,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
     :param ssd:
     :return:
     """
-    sv_ids = ch.sv_id_to_partner_ids_vec(cs_agg.ids)
+    sv_ids = ch.cs_id_to_partner_ids_vec(cs_agg.ids)
 
     cs_agg_ids = cs_agg.ids.copy()
 
@@ -902,7 +898,7 @@ def _combine_and_split_cs_agg_thread(args):
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
 
-        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
+        ssv_ids = ch.cs_id_to_partner_ids_vec([item[0]])[0]
 
         voxel_list = cs_agg.get_segmentation_object(item[1][0]).voxel_list
         for cs_agg_id in item[1][1:]:

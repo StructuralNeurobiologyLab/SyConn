@@ -2,6 +2,7 @@ import sys
 import os
 import pickle as pkl
 from collections import defaultdict
+import time
 
 from syconn.proc.skeleton import kimimaro_skelgen
 
@@ -15,7 +16,7 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
-cube_size, cube_offsets, cube_of_interest_bb, ds = args
+cube_size, cube_offsets, ds = args
 
 nb_cpus = os.environ.get('SLURM_CPUS_PER_TASK')
 if nb_cpus is not None:
