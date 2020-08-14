@@ -28,7 +28,6 @@ for ssv_id in ssv_ids:
     sso = SuperSegmentationObject(ssv_id, working_dir=working_dir)
 
     sso.skeleton = dict()
-    # no need to store neighbor/degree dict
     if combined_skel.vertices.size > 0:
         sso.skeleton["nodes"] = combined_skel.vertices / scaling  # to fit voxel coordinates
         # get radius in pseudo-voxel units (used by Knossos)
