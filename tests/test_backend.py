@@ -101,7 +101,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
     p4.start()
     p4.join()
     if q1.get() == 1 or q2.get() == 1 or q3.get() == 1:
-       raise AssertionError
+        raise AssertionError
 
 
 def test_saving_loading_and_copying_process_for_Attribute_dict():

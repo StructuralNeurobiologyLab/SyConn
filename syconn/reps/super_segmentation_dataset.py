@@ -921,8 +921,8 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     if nb_threads > 1:
         pool = ThreadPool(nb_threads)
         pool.map(_load_sv_voxels_thread, multi_params)
-        pool.close()
         pool.join()
+        pool.close()
     else:
         map(_load_sv_voxels_thread, multi_params)
 

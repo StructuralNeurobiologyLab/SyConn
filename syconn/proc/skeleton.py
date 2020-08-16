@@ -69,14 +69,10 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
     for ii in skels:
         # cell.vertices already in physical coordinates (nm)
         # now add the offset in physical coordinates
-        # TODO: remove downsampling below
         skels[ii].downsample(10)
         skels[ii].vertices += (cube_offset * kd.scales[0]).astype(np.int)
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-        # cell = cell.downsample(2)
-        # code from sparsify_skeleton_fast in syconn.procs.super_segmentation_helper
-        # modify for kimimaro_skeletons
     return skels
 
 
@@ -104,9 +100,6 @@ def kimimaro_mergeskels(path_list, cell_id):
         dust_threshold=500,  # physical units
         tick_threshold=1000  # physical units
     )
-    # better suited in function above with part of skels. Doesn't work there.
-    # TODO: remove downsampling here and move this up to skelgen
-    skel = skel.downsample(10)
     # Split input skeletons into connected components and
     # then join the two nearest vertices within `radius` distance
     # of each other until there is only a single connected component

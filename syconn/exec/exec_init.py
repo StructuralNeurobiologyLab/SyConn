@@ -29,7 +29,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, cube_of_interest_bb: Optional[tuple] = None):
+def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
@@ -38,8 +38,6 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None, cube_
 
     Args:
         apply_ssv_size_threshold:
-        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
-            Only required for kimimaro skeletonization.
 
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
@@ -152,7 +150,7 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
         _ = qu.batchjob_script(
             multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
 
-    # TODO: add as soon as glia separation supports on the fly view generation
+    # TODO: add comment as soon as glia separation supports on the fly view generation
     if co == "sv":  # and not global_params.config.use_onthefly_views:
         _ = qu.batchjob_script(
             multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True, log=log)
@@ -279,16 +277,17 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Caching properties of subcellular structures {} and cell'
              ' supervoxels'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    ps = [Process(target=sd_init, args=[co, max_n_jobs, log])
+    ps = [Process(target=sd_init, args=(co, max_n_jobs, log))
           for co in ["sv"] + global_params.config['existing_cell_organelles']]
     for p in ps:
         p.start()
-        time.sleep(5)
+        time.sleep(2)
     for p in ps:
         p.join()
         if p.exitcode != 0:
             raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
                             f'code {p.exitcode}.')
+        p.close()
     log.info('Finished SD caching after {:.2f}s.'
              ''.format(time.time() - start))
 

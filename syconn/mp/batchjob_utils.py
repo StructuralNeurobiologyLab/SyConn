@@ -13,6 +13,7 @@ from ..handler.basics import temp_seed, str_delta_sec
 from ..handler.config import initialize_logging
 
 import pickle as pkl
+import threading
 import getpass
 import glob
 import os
@@ -201,7 +202,6 @@ def batchjob_script(params: list, name: str,
         os.makedirs(path_to_out)
 
     # Submit jobs
-    log_batchjob.debug("Number of jobs for {}-scsript: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
     dtime_sub = 0
     start_all = time.time()
@@ -332,38 +332,43 @@ def batchjob_script(params: list, name: str,
     log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
                       f"{dtime_all} ({dtime_sub:.1f}s submission): "
                       f"{nb_completed} completed, {nb_failed} failed.")
-    out_files = glob.glob(path_to_out + "*.pkl")
+    out_files = glob.glob(path_to_out + "job_*.pkl")
     if len(out_files) < len(params):
         msg = f'Batch processing error during execution of {name} in job ' \
               f'\"{job_name}\": Found {len(out_files)}, expected {len(params)}.'
         log_batchjob.error(msg)
         raise ValueError(msg)
     if remove_jobfolder:
-        # nfs might be slow and leaves .nfs files behind (possibly from the slurm worker)
-        try:
-            shutil.rmtree(batchjob_folder)
-        except OSError:
-            try:
-                time.sleep(1)
-                shutil.rmtree(batchjob_folder)
-            except OSError as e:
-                p = subprocess.Popen([f'lsof', '/mnt/'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     stdin=subprocess.PIPE)
-                output = p.stdout.read()
-                p = subprocess.Popen([f'df', '-T {batchjob_folder}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     stdin=subprocess.PIPE)
-                output += p.stdout.read()
-                batchjob_folder_old = f"{os.path.dirname(batchjob_folder)}/DEL/{os.path.basename(batchjob_folder)}_DEL"
-                log_batchjob.warning(f'Deletion of job folder "{batchjob_folder}" was not complete. Moving to '
-                                     f'{batchjob_folder_old}. Error: "{str(e)}".\n "lsof {batchjob_folder}": '
-                                     f'{str(output)}')
-                if os.path.exists(os.path.dirname(batchjob_folder_old)):
-                    shutil.rmtree(os.path.dirname(batchjob_folder_old), ignore_errors=True)
-                os.makedirs(os.path.dirname(batchjob_folder_old), exist_ok=True)
-                if os.path.exists(batchjob_folder_old):
-                    shutil.rmtree(batchjob_folder_old, ignore_errors=True)
-                shutil.move(batchjob_folder, batchjob_folder_old)
+        _delete_folder_daemon(batchjob_folder, log_batchjob, job_name)
     return path_to_out
+
+
+def _delete_folder_daemon(dirname, log, job_name, timeout=60):
+
+    def _delete_folder(dn, lg, to=60):
+        start = time.time()
+        e = ''
+        while timeout > time.time() - start:
+            try:
+                shutil.rmtree(dn)
+                break
+            except OSError as e:
+                e = str(e)
+                time.sleep(5)
+        if time.time() - start > timeout:
+            lg.warning(f'Deletion of job folder "{dn}" timed out after {to}s. OSError: {e}')
+            shutil.rmtree(dn, ignore_errors=True)
+            if os.path.exists(dn):
+                dn_del = f"{os.path.dirname(dn)}/DEL/{os.path.basename(dn)}_DEL"
+                if os.path.exists(os.path.dirname(dn_del)):
+                    shutil.rmtree(os.path.dirname(dn_del), ignore_errors=True)
+                os.makedirs(os.path.dirname(dn_del), exist_ok=True)
+                shutil.move(dn, dn_del)
+
+    t = threading.Thread(name=f'jobfold_delete_{job_name}', target=_delete_folder,
+                         args=(dirname, log))
+    t.setDaemon(True)
+    t.start()
 
 
 def jobstates_slurm(job_name: str, start_time: str,

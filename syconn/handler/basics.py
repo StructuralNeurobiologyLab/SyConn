@@ -792,11 +792,14 @@ class FileTimer:
     def __init__(self, fname: str, overwrite: bool = False):
         self.fname = fname
         self.step_name = None
+        self.overwrite = overwrite
         os.makedirs(os.path.dirname(fname), exist_ok=True)
         self.timings = {}
         self.t0, self.t1, self.interval = None, None, None
+
+    def _load_prev(self):
         if os.path.isfile(self.fname):
-            if overwrite:
+            if self.overwrite:
                 os.remove(self.fname)
             else:
                 prev = load_pkl2obj(self.fname)
@@ -816,6 +819,7 @@ class FileTimer:
         if self.step_name is None:
             raise ValueError(f'No step name set. Please call the FileTimer instance and pass the '
                              f'step name as string.')
+        self._load_prev()
         self.timings[self.step_name] = self.interval
         write_obj2pkl(self.fname, self.timings)
         self.step_name = None

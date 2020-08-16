@@ -26,10 +26,8 @@ from ..proc.meshes import mesh_chunk, find_meshes
 from ..reps import rep_helper
 from ..reps import segmentation
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+from multiprocessing import Process
+import pickle as pkl
 import numpy as np
 from logging import Logger
 import shutil
@@ -113,17 +111,14 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
-        # TODO: perform multiprocessed
         file_mask = np.zeros(len(out_files), dtype=np.int)
-        for ii, p in enumerate(out_files):
-            with open(p, 'rb') as f:
-                res_dc = pkl.load(f)
-                n_el = len(res_dc['id'])
-                if n_el > 0:
-                    file_mask[ii] = n_el
-                    if len(res_keys) == 0:
-                        res_keys = list(res_dc.keys())
-        # TODO: perform multiprocessed [END]
+        res = sm.start_multiprocess_imap(_dataset_analysis_check, out_files, sm.cpu_count())
+        for ix_cnt, r in enumerate(res):
+            rk, n_el = r
+            if n_el > 0:
+                file_mask[ix_cnt] = n_el
+                if len(res_keys) == 0:
+                    res_keys = rk
         if len(res_keys) == 0:
             raise ValueError(f'No objects found during dataset_analysis of {sd}.')
         n_ids = np.sum(file_mask)
@@ -134,6 +129,17 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
                            remove_jobfolder=True)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
+
+
+def _dataset_analysis_check(out_file):
+    res_keys = []
+    with open(out_file, 'rb') as f:
+        res_dc = pkl.load(f)
+        n_el = len(res_dc['id'])
+        if n_el > 0:
+            if len(res_keys) == 0:
+                res_keys = list(res_dc.keys())
+    return res_keys, n_el
 
 
 def _dataset_analysis_collect(args):
@@ -157,7 +163,7 @@ def _dataset_analysis_collect(args):
         else:
             log_proc.error(
                 f'ValueError {e} encountered when writing numpy array '
-                f'cache of attribute {attribute} in "dataset_analysis",')
+                f'cache of attribute "{attribute}" in "dataset_analysis",')
             raise ValueError(e)
 
 
@@ -556,11 +562,24 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=1)
+
+    # perform dataset analysis to cache all attributes in numpy arrays
+    procs = []
+    da_kwargs = dict(recompute=False, compute_meshprops=False)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=k,
             version=0, n_folders_fs=n_folders_fs_sc)
-        dataset_analysis(sc_sd, recompute=False, compute_meshprops=False)
+        p = Process(target=dataset_analysis, args=(sc_sd,), kwargs=da_kwargs)
+        procs.append(p)
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
+        p.close()
     all_times.append(time.time() - start)
     step_names.append("write subcellular SD")
 

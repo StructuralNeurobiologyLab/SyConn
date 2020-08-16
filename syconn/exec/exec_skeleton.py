@@ -36,10 +36,10 @@ def run_skeleton_generation(cube_of_interest_bb: Optional[tuple] = None):
     """
     if global_params.config.use_kimimaro:
         # volume-based
-        exec_skeleton.run_kimimaro_skelgen(cube_of_interest_bb=cube_of_interest_bb)
+        run_kimimaro_skelgen(cube_of_interest_bb=cube_of_interest_bb)
     else:
         # SSV-based skeletonization on mesh vertices, not centered. Does not require cube_of_interest_bb
-        exec_skeleton.run_skeleton_generation()
+        run_skeleton_generation()
 
 
 def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None):
@@ -170,8 +170,8 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
 
     cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
                   box_coords=cube_of_interest_bb[0], fit_box_size=True)
-    multi_params = [(cube_size, offs, cube_of_interest_bb, ds) for offs in
-                    chunkify_successive(list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
+    multi_params = [(cube_size, offs, ds) for offs in chunkify_successive(
+        list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
     # high memory load
     out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
                                  n_cores=2, max_iterations=10)

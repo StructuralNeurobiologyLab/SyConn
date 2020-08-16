@@ -163,6 +163,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
         if p.exitcode != 0:
             raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
                             f'code {p.exitcode}.')
+        p.close()
     log.info('Finished rendering of all SSVs. Checking completeness.')
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.config['ncores_per_node'])
@@ -276,6 +277,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
             if p.exitcode != 0:
                 raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
                                 f'code {p.exitcode}.')
+            p.close()
         if q_out.qsize() != len(big_ssv):
             msg = 'Not all `_run_huge_ssv_render_worker` jobs completed ' \
                   'successfully.'
