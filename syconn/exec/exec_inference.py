@@ -125,7 +125,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     multi_params = ssd.ssv_ids
     np.random.shuffle(multi_params)
 
-    if not qu.batchjob_enabled():
+    if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=global_params.config.working_dir)
         predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=multi_params, bs=2)
     else:

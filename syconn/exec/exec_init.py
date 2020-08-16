@@ -96,7 +96,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     params = [(g_p, ssv_ids) for ssv_ids in chunkify(
         ssd.ssv_ids, global_params.config['ncores_per_node'] * 2)]
     start_multiprocess_imap(_ssv_rag_writer, params,
-                            nb_cpus=10)  # global_params.config['ncores_per_node'])
+                            nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')

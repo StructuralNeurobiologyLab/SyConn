@@ -30,7 +30,7 @@ if __name__ == '__main__':
     global_params.wd = path_to_workingdir
 
     # import rendering.py after setting working directory so that OpenGL settings specified in
-    # the config  are applied properly
+    # the config are applied properly
     from syconn.reps.super_segmentation import *
     from syconn.reps.super_segmentation_helper import view_embedding_of_sso_nocache
     from syconn.proc.ssd_assembly import init_sso_from_kzip
