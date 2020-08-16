@@ -5,17 +5,18 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from ..mp.mp_utils import start_multiprocess_imap
+from typing import Union, List, Callable, Optional, Tuple, TYPE_CHECKING, Iterable
+
 from . import log_proc
+from .meshes import MeshObject, calc_rot_matrices
 from .. import global_params
+from ..backend.storage import CompressedStorage
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
-from ..backend.storage import CompressedStorage
-from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
+from ..handler.multiviews import generate_palette, remap_rgb_labelviews, \
     rgb2id_array, rgba2id_array, id2rgba_array_contiguous
-from .meshes import MeshObject, calc_rot_matrices
+from ..mp.mp_utils import start_multiprocess_imap
 
-from typing import Union, List, Callable, Optional, Tuple, TYPE_CHECKING, Iterable
 if TYPE_CHECKING:
     from ..reps.super_segmentation import SuperSegmentationObject
     from ..reps.segmentation import SegmentationObject
@@ -180,7 +181,7 @@ def render_sampled_sso(sso: 'SuperSegmentationObject', ws: Optional[Tuple[int, i
     if verbose:
         dur = time.time() - start
         log_proc.debug("Rendering of %d views took %0.2fs. "
-                       "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
+                       "%0.4fs/SV" % (len(views), dur, float(dur) / len(sso.svs)))
     if not return_views:
         if cellobjects_only:
             log_proc.warning('`cellobjects_only=True` in `render_sampled_sso` call, views '
@@ -355,7 +356,7 @@ def render_sso_coords_index_views(sso: 'SuperSegmentationObject', coords: np.nda
         raise ValueError(msg)
     if color_array.shape[1] == 3:  # add alpha channel
         color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
-                                                           dtype=np.uint8)*255], axis=-1)
+                                                           dtype=np.uint8) * 255], axis=-1)
     color_array = color_array.astype(np.float32) / 255.
     # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
@@ -434,7 +435,7 @@ def render_sso_coords_label_views(sso: 'SuperSegmentationObject', vertex_labels:
         raise ValueError("Length of vertex labels and vertices "
                          "have to be equal.")
     palette = generate_palette(len(np.unique(vertex_labels)))
-    color_array = palette[vertex_labels].astype(np.float32)/255
+    color_array = palette[vertex_labels].astype(np.float32) / 255
     mo = MeshObject("neuron", ind, vert, color=color_array)
     label_views, rot_mat = _render_mesh_coords(coords, mo, depth_map=False, ws=ws,
                                                rot_matrices=rot_mat, nb_views=nb_views,
@@ -480,13 +481,13 @@ def render_sso_ortho_views(sso: 'SuperSegmentationObject') -> np.ndarray:
     views = np.zeros((3, 4, 1024, 1024))
     # init MeshObject to calculate rotation into PCA frame
     views[:, 0] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('sv', ), )
+                                 obj_to_render=('sv',), )
     views[:, 1] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('mi', ))
+                                 obj_to_render=('mi',))
     views[:, 2] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('vc', ))
+                                 obj_to_render=('vc',))
     views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('sj', ))
+                                 obj_to_render=('sj',))
     return views
 
 
@@ -556,7 +557,7 @@ def render_sso_coords_multiprocessing(ssv: 'SuperSegmentationObject', n_jobs: in
                              'will be written to file system in serial (this is slow).')
             for i, so in enumerate(svs):
                 so.enable_locking = True
-                sv_views = views[part_views[i]:part_views[i+1]]
+                sv_views = views[part_views[i]:part_views[i + 1]]
                 so.save_views(sv_views, woglia=render_kwargs_def['woglia'],
                               cellobjects_only=render_kwargs_def['cellobjects_only'],
                               index_views=render_kwargs_def["render_indexviews"],
@@ -620,7 +621,7 @@ def write_sv_views_chunked(svs: List['SegmentationObject'], views: np.ndarray, p
     view_dc = {}
     for sv_ix, sv in enumerate(svs):
         curr_view_dest = sv.view_path(**view_kwargs)
-        view_ixs = part_views[sv_ix], part_views[sv_ix+1]
+        view_ixs = part_views[sv_ix], part_views[sv_ix + 1]
         if curr_view_dest in view_dc:
             view_dc[curr_view_dest][sv.id] = view_ixs
         else:
@@ -632,4 +633,3 @@ def write_sv_views_chunked(svs: List['SegmentationObject'], views: np.ndarray, p
             view_storage[sv_id] = views[sv_view_ixs[0]:sv_view_ixs[1]]
         view_storage.push()
         del view_storage
-

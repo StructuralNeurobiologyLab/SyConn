@@ -4,33 +4,34 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..handler.basics import kd_factory, chunkify
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..reps import super_segmentation, segmentation, connectivity_helper as ch
-from ..reps import segmentation_helper as seghelp
-from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
-from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage, MeshStorage
-from ..handler.config import initialize_logging
-from . import log_extraction
-from .. import global_params
-from ..reps.connectivity_helper import generate_wiring_array, plot_wiring, plot_cumul_wiring
-
-import os
-import time
-import joblib
 import datetime
-import tqdm
-import shutil
+import os
 import pickle as pkl
+import shutil
+import time
 from collections import defaultdict
-from typing import Optional, Dict, List, Tuple
-import numpy as np
 from logging import Logger
+from typing import Optional, Dict, List, Tuple
+
+import joblib
+import numpy as np
+import tqdm
+from knossos_utils import skeleton_utils, skeleton
 from scipy import spatial
 from sklearn import ensemble
 from sklearn.model_selection import cross_val_score
-from knossos_utils import knossosdataset, skeleton_utils, skeleton
+
+from . import log_extraction
+from .. import global_params
+from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage, MeshStorage
+from ..handler.basics import kd_factory, chunkify
+from ..handler.config import initialize_logging
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..reps import segmentation_helper as seghelp
+from ..reps import super_segmentation, segmentation, connectivity_helper as ch
+from ..reps.connectivity_helper import generate_wiring_array, plot_wiring, plot_cumul_wiring
+from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
@@ -60,7 +61,6 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
-
     multi_params = []
 
     for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
@@ -92,8 +92,9 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             multi_params, "from_cell_to_syn_dict", remove_jobfolder=True)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.working_dir) for ssv_id in ssd.ssv_ids],
-                               nb_cpus=global_params.config['ncores_per_node'])
+    # TODO: start as thread!
+    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.config) for ssv_id in ssd.ssv_ids],
+                               nb_cpus=None)
     log_extraction.debug('Deleted all cache dictionaries.')
 
 
@@ -113,8 +114,7 @@ def _collect_properties_from_ssv_partners_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
-                                                      version=ssd_version)
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd, version=ssd_version)
 
     syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
@@ -131,12 +131,12 @@ def _collect_properties_from_ssv_partners_thread(args):
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
         if len(ssv_synids) == 0:
-            cache_dc['partner_spineheadvol'] = np.zeros((0, ), dtype=np.float)
-            cache_dc['partner_axoness'] = np.zeros((0, ), dtype=np.int)
+            cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float)
+            cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int)
             cache_dc['synssv_ids'] = ssv_synids
-            cache_dc['partner_spiness'] = np.zeros((0, ), dtype=np.int)
-            cache_dc['partner_celltypes'] = np.zeros((0, ), dtype=np.int)
-            cache_dc['latent_morph'] = np.zeros((0, ), dtype=np.float)
+            cache_dc['partner_spiness'] = np.zeros((0,), dtype=np.int)
+            cache_dc['partner_celltypes'] = np.zeros((0,), dtype=np.int)
+            cache_dc['latent_morph'] = np.zeros((0,), dtype=np.float)
             cache_dc.push()
             continue
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
@@ -151,18 +151,8 @@ def _collect_properties_from_ssv_partners_thread(args):
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
-        sh_vol = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['spinehead_vol'], k=2)[0]
-        if len(ssv_o.skeleton['nodes']) > 1:
-            # if only one skeleton node, sh_vol only contains one element per location
-            sh_vol = np.max(sh_vol, axis=1)
-        # # This should be reported during spine head volume calculation.
-        # sh_vol_zero = (sh_vol == 0) & (curr_sp == 1) & (curr_ax == 0)
-        # if np.any(sh_vol_zero):
-        #     log_extraction.warn(f'Empty spinehead volume at {ssv_syncoords[sh_vol_zero]}'
-        #                         f' in SSO {ssv_id}.')
-        if np.any(sh_vol == -1):
-            log_extraction.warn(f'No spinehead volume at {ssv_syncoords[sh_vol == -1]}'
-                                f' in SSO {ssv_id}.')
+        sh_vol = np.array([ssv_o.attr_dict['spinehead_vol'][syn_id] if syn_id in ssv_o.attr_dict['spinehead_vol']
+                           else -1 for syn_id in ssv_synids], dtype=np.float32)
 
         cache_dc['partner_spineheadvol'] = np.array(sh_vol)
         cache_dc['partner_axoness'] = curr_ax
@@ -206,8 +196,7 @@ def _from_cell_to_syn_dict(args):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
 
-                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] ==
-                                                synssv_id))
+                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:
                     msg = "useful error message"
                     raise ValueError(msg)
@@ -229,8 +218,8 @@ def _from_cell_to_syn_dict(args):
 
 
 def _delete_all_cache_dc(args):
-    ssv_id, working_dir = args
-    ssv_o = super_segmentation.SuperSegmentationObject(ssv_id, working_dir=working_dir)
+    ssv_id, config = args
+    ssv_o = super_segmentation.SuperSegmentationObject(ssv_id, config=config)
     if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
         os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
 
@@ -257,29 +246,30 @@ def filter_relevant_syn(sd_syn, ssd):
     # -> not necessary to load the cs_ids.
     syn_ids = sd_syn.ids.copy()
 
-    sv_ids = ch.sv_id_to_partner_ids_vec(syn_ids)
+    sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
-    sv_ids[sv_ids >= len(ssd.id_changer)] = -1
+    sv_ids[sv_ids >= len(ssd.id_changer)] = 0
+    # ^^^^ -1 changed to 0 due to overflow in uint array... PS 13Aug2020; 0 should be fine as it is background anyway
     mapped_sv_ids = ssd.id_changer[sv_ids]
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
     filtered_mapped_sv_ids = mapped_sv_ids[mask]
 
     # this identifies all inter-ssv contact sites
-    mask = filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1] != 0
+    mask = (filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1]) != 0
     syn_ids = syn_ids[mask]
-    relevant_syns = filtered_mapped_sv_ids[mask]
-
-    relevant_synssv_ids = np.left_shift(np.max(relevant_syns, axis=1), 32) + np.min(relevant_syns, axis=1)
+    inter_ssv_contacts = filtered_mapped_sv_ids[mask]
+    # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
+    # cells
+    relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
 
     # create lookup from SSV-wide synapses to SV syn. objects
-    rel_synssv_to_syn_ids = defaultdict(list)
-    for i_entry in range(len(relevant_synssv_ids)):
-        rel_synssv_to_syn_ids[relevant_synssv_ids[i_entry]].\
-            append(syn_ids[i_entry])
+    ssv_to_syn_ids_dc = defaultdict(list)
+    for i_entry in range(len(relevant_ssv_ids_enc)):
+        ssv_to_syn_ids_dc[relevant_ssv_ids_enc[i_entry]].append(syn_ids[i_entry])
 
-    return rel_synssv_to_syn_ids
+    return ssv_to_syn_ids_dc
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
@@ -317,7 +307,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
     n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
-                       len(rel_ssv_with_syn_ids))
+                       len(rel_ssv_with_syn_ids), 1000)
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
     # target SD for SSV syn objects
@@ -341,7 +331,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
 
     rel_synssv_to_syn_ids_items_chunked = chunkify(rel_ssv_with_syn_ids_items, n_used_paths)
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
-                    syn_sd.version, sd_syn_ssv.version, cs_gap_nm) for
+                     syn_sd.version, sd_syn_ssv.version, cs_gap_nm) for
                     ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
@@ -386,10 +376,12 @@ def _combine_and_split_syn_thread(args):
 
     for ssvpartners_enc, syn_ids in rel_ssv_with_syn_ids_items:
         n_items_for_path += 1
-        ssv_ids = ch.sv_id_to_partner_ids_vec([ssvpartners_enc])[0]
+        ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
         syn = sd_syn.get_segmentation_object(syn_ids[0])
 
+        # verify ssv_partner_ids
         syn.load_attr_dict()
+        ssv_partners_check = syn.cs_partner
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
         voxel_list = [syn.voxel_list]
         # store index of syn. objects for attribute dict retrieval
@@ -397,6 +389,7 @@ def _combine_and_split_syn_thread(args):
         for syn_ix, syn_id in enumerate(syn_ids[1:]):
             syn = sd_syn.get_segmentation_object(syn_id)
             syn.load_attr_dict()
+            ssv_partners_check.extend(syn.cs_partner)
             syn_attr_list.append(syn.attr_dict)
             voxel_list.append(syn.voxel_list)
             synix_list += [syn_ix] * len(voxel_list[-1])
@@ -494,7 +487,7 @@ def _combine_and_split_syn_thread(args):
                     # next ID chunk mapped to this storage
                     id_chunk_cnt += 1
                     old_base_id = base_id
-                    base_id += np.uint(sd_syn_ssv.n_folders_fs*div_base) * id_chunk_cnt
+                    base_id += np.uint(sd_syn_ssv.n_folders_fs * div_base) * id_chunk_cnt
                     assert subfold_from_ix(base_id, sd_syn_ssv.n_folders_fs, old_version=False) == \
                            subfold_from_ix(old_base_id, sd_syn_ssv.n_folders_fs, old_version=False)
                     syn_ssv_id = base_id
@@ -630,7 +623,7 @@ def combine_and_split_syn_old(
 
     rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
-                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for
+                     syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for
                     ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread_old,
@@ -673,7 +666,7 @@ def _combine_and_split_syn_thread_old(args):
     next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
-        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
+        ssv_ids = ch.cs_id_to_partner_ids_vec([item[0]])[0]
         syn = sd_syn.get_segmentation_object(item[1][0])
         syn.load_attr_dict()
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
@@ -765,7 +758,7 @@ def _combine_and_split_syn_thread_old(args):
         if n_items_for_path > n_per_voxel_path:
             # TODO: passing explicit dest_path might not be required here
             voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                              "/voxel.pkl")
+                          "/voxel.pkl")
             attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
@@ -782,9 +775,9 @@ def _combine_and_split_syn_thread_old(args):
     if n_items_for_path > 0:
         # TODO: passing explicit dest_path might not be required here
         voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                          "/voxel.pkl")
+                      "/voxel.pkl")
         attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/attr_dict.pkl")
+                     "/attr_dict.pkl")
 
 
 def filter_relevant_cs_agg(cs_agg, ssd):
@@ -796,7 +789,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
     :param ssd:
     :return:
     """
-    sv_ids = ch.sv_id_to_partner_ids_vec(cs_agg.ids)
+    sv_ids = ch.cs_id_to_partner_ids_vec(cs_agg.ids)
 
     cs_agg_ids = cs_agg.ids.copy()
 
@@ -817,7 +810,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
 
     rel_cs_to_cs_agg_ids = defaultdict(list)
     for i_entry in range(len(relevant_cs_ids)):
-        rel_cs_to_cs_agg_ids[relevant_cs_ids[i_entry]].\
+        rel_cs_to_cs_agg_ids[relevant_cs_ids[i_entry]]. \
             append(cs_agg_ids[i_entry])
 
     return rel_cs_to_cs_agg_ids
@@ -827,7 +820,6 @@ def filter_relevant_cs_agg(cs_agg, ssd):
 def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              cs_agg_version=None, n_folders_fs=10000,
                              stride=1000, nb_cpus=None):
-
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_agg = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
                                               version=cs_agg_version)
@@ -853,7 +845,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     for block in [rel_cs_to_cs_agg_ids_items[i:i + stride]
                   for i in range(0, len(rel_cs_to_cs_agg_ids_items), stride)]:
         multi_params.append([wd, block,
-                             voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
+                             voxel_rel_paths[block_steps[i_block]: block_steps[i_block + 1]],
                              cs_agg.version, cs.version, ssd.scaling, cs_gap_nm])
         i_block += 1
 
@@ -895,7 +887,7 @@ def _combine_and_split_cs_agg_thread(args):
     except:
         pass
     voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/voxel.pkl", read_only=False)
+                            "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                             "/attr_dict.pkl", read_only=False)
 
@@ -906,7 +898,7 @@ def _combine_and_split_cs_agg_thread(args):
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
 
-        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
+        ssv_ids = ch.cs_id_to_partner_ids_vec([item[0]])[0]
 
         voxel_list = cs_agg.get_segmentation_object(item[1][0]).voxel_list
         for cs_agg_id in item[1][1:]:
@@ -1091,16 +1083,9 @@ def _extract_synapse_type_thread(args):
             if trafo_dict is not None:
                 vxl -= trafo_dict[so_id]
                 vxl = vxl[:, [1, 0, 2]]
-            # TODO: remove try-except
             if global_params.config.syntype_available:
-                try:
-                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl) == asym_label)
-                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl) == sym_label)
-                except:
-                    log_extraction.error("Failed to read raw cubes during synapse type "
-                                         "extraction.")
-                    sym_prop = 0
-                    asym_prop = 0
+                asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl) == asym_label)
+                sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl) == sym_label)
             else:
                 sym_prop = 0
                 asym_prop = 0
@@ -1190,7 +1175,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
         log = log_extraction
     log.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.working_dir) for ssv_id in ssd.ssv_ids],
+    sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.config) for ssv_id in ssd.ssv_ids],
                                nb_cpus=global_params.config['ncores_per_node'])
     log.debug('Deleted all cache dictionaries.')
 
@@ -1417,11 +1402,11 @@ def classify_synssv_objects(wd, obj_version=None, log=None, nb_cpus=None):
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+                                       multi_params, nb_cpus=nb_cpus)
 
     else:
         _ = qu.batchjob_script(
-            multi_params,  "classify_synssv_objects", log=log,
+            multi_params, "classify_synssv_objects", log=log,
             remove_jobfolder=True)
 
 
@@ -1726,15 +1711,16 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
                           global_params.config['tcmn']['ndim_embedding'])])
                )
-    wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
-    plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
-    plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
+    # # super high memory consumption for j0251
+    # wiring, borders = generate_wiring_array(log=log, thresh_syn_prob=threshold_syn, syn_version=obj_version)
+    # plot_wiring(f'{dest_folder}', wiring, borders, borders, log=log)
+    # plot_cumul_wiring(f'{dest_folder}', wiring, borders, min_cumul_synarea=0, log=log)
 
     if export_kzip:
-        ax_labels = np.array(["N/A", "D", "A", "S"])   # TODO: this is already defined in handler.multiviews!
+        ax_labels = np.array(["N/A", "D", "A", "S"])  # TODO: this is already defined in handler.multiviews!
         ax_label_ids = np.array([-1, 0, 1, 2])
         # Documentation of prediction labels, maybe add somewhere to .k.zip or .csv
-        ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']   # TODO: this is already defined in handler.multiviews!
+        ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']  # TODO: this is already defined in handler.multiviews!
         ct_label_ids = np.array([-1, 0, 1, 2, 3])
         sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']  # TODO: this is already defined in handler.multiviews!
         sp_label_ids = np.array([-1, 0, 1, 2, 3])
@@ -1781,4 +1767,3 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
             st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
             os.rename(dest_name + '.k.zip', '{}_{}.k.zip'.format(dest_name, st))
         skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
-

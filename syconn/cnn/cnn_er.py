@@ -19,7 +19,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='ER_unet_GN',
+parser.add_argument('-n', '--exp-name', default='ER_unet_BN',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
@@ -88,13 +88,12 @@ out_channels = 2
 model = UNet(
     in_channels=1,
     out_channels=out_channels,
-    n_blocks=5,
+    n_blocks=4,
     start_filts=48,
-    planar_blocks=(0, 3),
+    planar_blocks=(0, 2),
     activation='relu',
-    normalization='group8',
+    normalization='batch',
 ).to(device)
-
 example_input = torch.randn(1, 1, 32, 144, 144)
 
 enable_save_trace = False if args.jit == 'disabled' else True
@@ -120,6 +119,7 @@ input_h5data = [(os.path.join(data_root, f), 'raw') for f in fnames]
 target_h5data = [(os.path.join(data_root, f), 'label') for f in fnames]
 
 # use training data for validation too
+fnames += fnames[3:6]
 valid_indices = [3, 4, 5]
 max_steps = args.max_steps
 max_runtime = args.max_runtime
@@ -236,7 +236,7 @@ trainer = Trainer(
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
     batch_size=2,
-    num_workers=2,
+    num_workers=4,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,

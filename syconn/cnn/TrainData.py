@@ -12,8 +12,6 @@ except ImportError:
     pass  # for sphinx build
 import os
 import re
-import matplotlib
-matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
@@ -21,7 +19,7 @@ import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
 from syconn.handler.prediction_pts import pts_loader_scalar, \
-    pts_loader_glia, load_hc_pkl, pts_loader_semseg_train
+    pts_loader_local_skel, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -63,7 +61,7 @@ if elektronn3_avail:
         """
         def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
                      train=True, cv_val=0, cellshape_only=False, ctx_size=20000, use_syntype=True,
-                     onehot=True, batch_size=1):
+                     onehot=True, batch_size=1, map_myelin: bool = False):
             """
 
             Args:
@@ -92,7 +90,10 @@ if elektronn3_avail:
                                        version='ctgt_v4')
             self.ctx_size = ctx_size
             ssd = SuperSegmentationDataset(**self.ssd_kwargs)
+            self.ssd = ssd
+            self.sso_ids = None
             gt_dir = ssd.path
+            self.map_myelin = map_myelin
 
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
@@ -154,8 +155,7 @@ if elektronn3_avail:
             item = np.random.randint(0, len(self.sso_ids))
             self._curr_ssv_id = self.sso_ids[item]
             pts, feats = self.load_ssv_sample(item)
-            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size,
-                           dtype=np.int)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size, dtype=np.int)
             pts = torch.from_numpy(pts).float()
             lbs = torch.from_numpy(lbs[..., None]).long()
             feats = torch.from_numpy(feats).float()
@@ -189,12 +189,12 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True)][0]
+                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True)][0]
+                    train=True, cache=False, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -207,7 +207,7 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, draw_local: bool=True, **kwargs):
+        def __init__(self, draw_local: bool = True, **kwargs):
             """
 
             Args:
@@ -216,6 +216,11 @@ if elektronn3_avail:
                 **kwargs:
             """
             super().__init__(**kwargs)
+            if self.sso_ids is None:
+                bb = self.ssd.load_cached_data('bounding_box') * self.ssd.scaling  # N, 2, 3
+                bb = np.linalg.norm(bb[:, 1] - bb[:, 0], axis=1)
+                self.sso_ids = self.ssd.ssv_ids[bb > 2 * self.ctx_size]
+                print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
             self._curr_ssv_id_altern = None
             self.draw_local = draw_local
 
@@ -249,23 +254,27 @@ if elektronn3_avail:
             x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
             return x0, x1, x2
 
+        def __len__(self):
+            return 20000
+
 
     class CellCloudDataJ0251(CellCloudData):
         """
         Uses the same data for train and valid set.
         """
         def __init__(self, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
 
             super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
             # load GT
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v0.csv"
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v2.csv"
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
-                raise ValueError('Multi-usage of IDs!')
+                ixs, cnt = np.unique(ssv_ids, return_counts=True)
+                raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
-            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251') for el in str_labels], dtype=np.uint16)
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
             self.sso_ids = ssv_ids
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}
@@ -357,7 +366,7 @@ if elektronn3_avail:
                 Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
-            if np.random.randint(5) == 1:
+            if np.random.randint(3) == 1:
                 # reduce context and merge glia and neuron samples
                 orig_ctx = self.ctx_size
                 orig_npts = self.num_pts
@@ -406,9 +415,9 @@ if elektronn3_avail:
             self._curr_ssv_params = self.sso_params[item]
             self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
-                [*pts_loader_glia([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
-                 self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
-                                  train=True, ctx_size=self.ctx_size)][0]
+                [*pts_loader_local_skel([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
+                                        self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
+                                        train=True, ctx_size=self.ctx_size)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:

@@ -5,35 +5,38 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from ..proc import log_proc
-from ..handler.basics import write_data2kzip, data2kzip
-from ..reps.segmentation_helper import load_so_meshes_bulk
-from .image import apply_pca
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from .. import global_params
-from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-
-from scipy.ndimage import zoom
-from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
-from zmesh import Mesher
-import tqdm
 import itertools
-import numpy as np
 from collections import Counter
+from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
+
+import numpy as np
+import tqdm
 from numba import jit
+from plyfile import PlyData, PlyElement
 from scipy import spatial, ndimage
+from scipy.ndimage import zoom
+from scipy.ndimage.morphology import binary_closing, binary_dilation
 from skimage import measure
 from sklearn.decomposition import PCA
+from zmesh import Mesher
 
-from plyfile import PlyData, PlyElement
-from scipy.ndimage.morphology import binary_closing, binary_dilation
+from .image import apply_pca
+from .. import global_params
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from ..handler.basics import write_data2kzip, data2kzip
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+from ..proc import log_proc
+from ..reps.segmentation_helper import load_so_meshes_bulk
+
 try:
     import vtki
+
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
 
 from skimage.measure import mesh_surface_area
+
 try:
     # set matplotlib backend to offscreen
     import matplotlib
@@ -53,6 +56,7 @@ try:
     from .in_bounding_boxC import in_bounding_box
 except ImportError:
     from .in_bounding_box import in_bounding_box
+
     log_proc.error('ImportError. Could not import `in_boundinb_box` from '
                    '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 if TYPE_CHECKING:
@@ -98,7 +102,7 @@ class MeshObject(object):
         if normals is not None and len(normals) == 0:
             normals = None
         if normals is not None and normals.ndim == 2:
-            normals = normals.reshape(len(normals)*3)
+            normals = normals.reshape(len(normals) * 3)
         self._normals = normals
         self._ext_color = color
         self._colors = None
@@ -113,14 +117,14 @@ class MeshObject(object):
         else:
             if np.ndim(self._ext_color) >= 2:
                 self._ext_color = self._ext_color.squeeze()
-                assert self._ext_color.shape[1] == 4,\
+                assert self._ext_color.shape[1] == 4, \
                     "'color' parameter has wrong shape"
                 self._ext_color = self._ext_color.squeeze()
-                assert self._ext_color.shape[1] == 4,\
+                assert self._ext_color.shape[1] == 4, \
                     "Rendering requires RGBA 'color' shape of (X, 4). Please" \
                     "add alpha channel."
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color)/4 == len(self.vertices)/3, \
+            assert len(self._ext_color) / 4 == len(self.vertices) / 3, \
                 "len(ext_color)/4 must be equal to len(vertices)/3."
             self._colors = self._ext_color
         return self._colors
@@ -137,8 +141,8 @@ class MeshObject(object):
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
             log_proc.debug("Calculating normals, because their shape differs from"
-                  " vertices: %s (normals) vs. %s (vertices)" %
-                  (str(self._normals.shape), str(self.vertices.shape)))
+                           " vertices: %s (normals) vs. %s (vertices)" %
+                           (str(self._normals.shape), str(self.vertices.shape)))
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 
@@ -313,7 +317,7 @@ def get_rotmatrix_from_points(points: np.ndarray) -> np.ndarray:
 
 def _calc_pca_components(pts: np.ndarray) -> np.ndarray:
     """
-    Retrieve principal components from input array.
+    Retrieve Eigenvalue sorted Eigenvectors from input array.
 
     Args:
         pts: Input points.
@@ -421,7 +425,7 @@ def unit_normal(vertices: np.ndarray, indices: np.ndarray) -> np.ndarray:
     normals = np.array(list(itertools.chain.from_iterable(itertools.repeat(x, 3) for x in normals)))
     # average normal for every vertex
     normals_avg = get_avg_normal(normals, indices, nbvert)
-    return -normals_avg.astype(np.float32).reshape(nbvert*3)
+    return -normals_avg.astype(np.float32).reshape(nbvert * 3)
 
 
 def get_random_centered_coords(pts, nb, r):
@@ -474,7 +478,7 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
     all_ind = np.concatenate(ind_lst)
     for i in range(0, len(vert_lst)):
-        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i + 1]
         all_ind[start_ix:end_ix] += vert_offset[i]
     return all_ind, all_vert
 
@@ -513,7 +517,7 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
     all_ind = np.concatenate(ind_lst)
     for i in range(0, len(vert_lst)):
-        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i + 1]
         all_ind[start_ix:end_ix] += vert_offset[i]
     return [all_ind, all_vert, all_norm]
 
@@ -559,7 +563,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
         vert_lst.append(vert)
         norm_lst.append(norm)
         if color_vals is not None:
-            color_lst.append(np.array([color_vals[i]]*len(vert)))
+            color_lst.append(np.array([color_vals[i]] * len(vert)))
 
     # merge results
     if color_vals is not None:
@@ -583,7 +587,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
         vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(np.uint)
         ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
         for i in range(0, len(vert_lst)):
-            start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+            start_ix, end_ix = ind_ixs[i], ind_ixs[i + 1]
             all_ind[start_ix:end_ix] += vert_offset[i]
 
     assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
@@ -816,9 +820,9 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
     """
     # TODO: requires update to include the bouton labels as axon
     preds = np.array(start_multiprocess_obj("axoness_preds",
-                                             [[sv, {"pred_key_appendix": pred_key_appendix}]
-                                                for sv in ssv.svs],
-                                               nb_cpus=ssv.nb_cpus))
+                                            [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                             for sv in ssv.svs],
+                                            nb_cpus=ssv.nb_cpus))
     preds = np.concatenate(preds)
     locs = ssv.sample_locations()
     pred_coords = np.concatenate(locs)
@@ -907,7 +911,7 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
     if 0 in seg_objs:
         seg_objs.remove(0)
     meshes = {ix: [np.zeros(0, dtype=np.uint32), np.zeros(0, dtype=np.float32),
-                   np.zeros((0, ), dtype=np.float32)] for ix in seg_objs}
+                   np.zeros((0,), dtype=np.float32)] for ix in seg_objs}
     if ds is not None:
         ds = np.array(ds)
         chunk = zoom(chunk, 1 / ds, order=0)
@@ -928,7 +932,7 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
         if tmp.normals is not None:
             meshes[obj_id].append(tmp.normals.flatten().astype(np.float32))
         else:
-            meshes[obj_id].append(np.zeros((0, ), dtype=np.float32))
+            meshes[obj_id].append(np.zeros((0,), dtype=np.float32))
         mesher.erase(obj_id)
 
     mesher.clear()
@@ -962,7 +966,8 @@ def mesh_chunk(args):
         # create binary mask as single 3D cube
         mask, off = voxel_dc.get_voxel_data_cubed(ix)
         # create mesh
-        indices, vertices, normals = find_meshes(mask, off, pad=1, ds=ds, scaling=scaling, meshing_props=meshing_props)[ix]
+        indices, vertices, normals = find_meshes(mask, off, pad=1, ds=ds, scaling=scaling, meshing_props=meshing_props)[
+            ix]
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
 

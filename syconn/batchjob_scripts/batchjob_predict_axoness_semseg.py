@@ -9,6 +9,7 @@ import sys
 from syconn.reps.super_segmentation_object import semsegaxoness_predictor
 from syconn import global_params
 from syconn.handler import basics
+from syconn.handler.prediction_pts import predict_cmpt_ssd
 from syconn.mp.mp_utils import start_multiprocess_imap
 import numpy as np
 try:
@@ -33,17 +34,20 @@ pred_key = global_params.config['compartments']['view_properties_semsegax']['sem
 max_dist = global_params.config['compartments']['dist_axoness_averaging']
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
 view_props = global_params.config['compartments']['view_properties_semsegax']
-# TODO: work-in
-# global_params.config.use_point_models
-n_worker = 2
-params = [(ch_sub, view_props, ncpus, map_properties,
-           pred_key, max_dist) for ch_sub in basics.chunkify(ch, n_worker * 2)]
-res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker)
-missing = np.concatenate(res)
-if len(missing) > 0:
-    missing = semsegaxoness_predictor((missing, view_props, ncpus, map_properties))
-if len(missing) > 0:
-    print('ERROR: Sem. seg. prediction of {} SSVs ({}) failed.'.format(
-        len(missing), str(missing)))
+
+if global_params.config.use_point_models:
+    ssd_kwargs = dict(working_dir=global_params.config.working_dir)
+    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, bs=2, show_progress=False)
+else:
+    n_worker = 2
+    params = [(ch_sub, view_props, ncpus, map_properties,
+               pred_key, max_dist) for ch_sub in basics.chunkify(ch, n_worker * 2)]
+    res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker, show_progress=False)
+    missing = np.concatenate(res)
+    if len(missing) > 0:
+        missing = semsegaxoness_predictor((missing, view_props, ncpus, map_properties))
+    if len(missing) > 0:
+        print('ERROR: Sem. seg. prediction of {} SSVs ({}) failed.'.format(
+            len(missing), str(missing)))
 with open(path_out_file, "wb") as f:
     pkl.dump(None, f)

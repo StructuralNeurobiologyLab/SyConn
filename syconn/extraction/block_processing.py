@@ -85,6 +85,3 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
         chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
         out[x, y, z] = kernel(chunk, center_id)
     return out
-
-
-

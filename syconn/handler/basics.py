@@ -5,31 +5,30 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from . import log_handler
-from .. import global_params
-
 import collections
+import contextlib
+import gc
+import glob
 import os
+import pickle as pkl
+import re
+import time
 import shutil
+import signal
 import tempfile
 import zipfile
 from collections import defaultdict
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-import re
-import gc
-import signal
-import contextlib
-import glob
-import tqdm
-import numpy as np
+from typing import List, Union, Optional
+
 import networkx as nx
-from typing import List, Union
-from plyfile import PlyData
-from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
+import numpy as np
+import tqdm
 from knossos_utils import KnossosDataset
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
+from plyfile import PlyData
+
+from . import log_handler
+from .. import global_params
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):
@@ -773,3 +772,83 @@ def str_delta_sec(seconds: int) -> str:
         str_rep += f'{m:02d}min:'
     str_rep += f'{s:02d}s'
     return str_rep
+
+
+class FileTimer:
+    """
+    ContextDecorator for timing. Stores the results as dict in a pkl file.
+
+    Examples:
+        The script SyConn/examples/start.py uses `FileTimer` to track the execution time of several
+        major steps of the analysis. The results are written as ``dict`` to the file '.timing.pkl'
+        in the working directory. The timing data can be accessed after the run to by initializing
+        `FileTimer` with the output file:
+
+            ft = FileTimer(path_to_timings_pkl)
+            # this is a dict with the step names as keys and the timings in seconds as values
+            print(ft.timings)
+
+    """
+    def __init__(self, fname: str, overwrite: bool = False):
+        self.fname = fname
+        self.step_name = None
+        self.overwrite = overwrite
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        self.timings = {}
+        self.t0, self.t1, self.interval = None, None, None
+
+    def _load_prev(self):
+        if os.path.isfile(self.fname):
+            if self.overwrite:
+                os.remove(self.fname)
+            else:
+                prev = load_pkl2obj(self.fname)
+                if not type(prev) is dict:
+                    raise TypeError(f'Incompatible FileTimer type "{type(prev)}".')
+                self.timings = prev
+
+    def start(self, step_name: str):
+        if self.step_name is not None:
+            raise ValueError(f'Previous timing was not stopped.')
+        self.t0 = time.perf_counter()
+        self.step_name = step_name
+
+    def stop(self):
+        self.t1 = time.perf_counter()
+        self.interval = self.t1 - self.t0
+        if self.step_name is None:
+            raise ValueError(f'No step name set. Please call the FileTimer instance and pass the '
+                             f'step name as string.')
+        self._load_prev()
+        self.timings[self.step_name] = self.interval
+        write_obj2pkl(self.fname, self.timings)
+        self.step_name = None
+
+    def __enter__(self):
+        # do not start counting here to enable manual (with start and stop methods) interface and
+        # context decorators. Timing difference between __enter__ and __call__ is not relevant for
+        # our applications
+        return self
+
+    def __call__(self, step_name: str):
+        self.start(step_name)
+
+    def __exit__(self, *args):
+        self.stop()
+
+    def prepare_report(self, experiment_name: str) -> str:
+        # python dicts are insertion sensitive
+        dts = np.array(list(self.timings.values()))
+        step_idents = np.array(list(self.timings.keys()))
+        dt_tot = np.sum(dts)
+        dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+        time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished " \
+                           f"after {dt_tot_str}.\n"
+        n_steps = len(step_idents[1:]) - 1
+        for i in range(len(step_idents[1:])):
+            step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
+            step_dt_per = int(dts[i] / dt_tot * 100)
+            step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i + 1],
+                                                           step_dt, f'{step_dt_per}%')
+            time_summary_str += step_str
+        return time_summary_str

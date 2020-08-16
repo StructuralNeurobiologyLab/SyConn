@@ -1,5 +1,6 @@
-from numba import jit
 import numpy as np
+from numba import jit
+
 
 @jit
 def in_bounding_box(coords, bounding_box):

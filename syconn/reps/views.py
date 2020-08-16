@@ -4,10 +4,11 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..handler.compression import load_lz4_compressed, save_lz4_compressed
-
 import os
+
 import numpy as np
+
+from ..handler.compression import load_lz4_compressed, save_lz4_compressed
 
 
 class ViewContainer(object):
@@ -65,10 +66,7 @@ class ViewContainer(object):
         return views
 
     def plot(self, fig=None, view_nb=0, perspective_nb=0):
-        import matplotlib
-        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
-        import matplotlib.ticker as ticker
         tick_spacing = 40
         if self.views is None:
             views = self.load()
@@ -108,8 +106,6 @@ class ViewContainer(object):
         ax.spines['bottom'].set_visible(False)
 
     def write_single_plot(self, dest_path, view_nb, perspective_nb=0, dpi=300):
-        import matplotlib
-        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         plt.ioff()
         fig = plt.figure()
@@ -122,13 +118,13 @@ class ViewContainer(object):
         views = self.load()
         if strict:
             center = np.array([64, 128])
-            if np.all(views[0, :, center[0]-2:center[0]+2,
-               center[1]-2:center[1]+2] == 1.) or \
-               np.all(np.all(views[0, :, center[0]-2:center[0]+2,
-               center[1]-2:center[1]+2] == 0.)):
+            if np.all(views[0, :, center[0] - 2:center[0] + 2,
+                      center[1] - 2:center[1] + 2] == 1.) or \
+                    np.all(np.all(views[0, :, center[0] - 2:center[0] + 2,
+                                  center[1] - 2:center[1] + 2] == 0.)):
                 return True
         if np.sum(views[0]) == np.prod(views[0].shape) or \
-           np.sum(views[0]) == 0:
+                np.sum(views[0]) == 0:
             return True
         else:
             return False
@@ -142,8 +138,6 @@ def plot_n_views(view_array):
     ----------
     view_array : numpy.array
     """
-    import matplotlib
-    matplotlib.use("Agg", warn=False, force=True)
     import matplotlib.pyplot as plt
     nb_views = len(view_array)
     fig, ax = plt.subplots(5, 4)

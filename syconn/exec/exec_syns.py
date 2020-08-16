@@ -5,18 +5,20 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
+from typing import Tuple, Optional, Union
+
 import numpy as np
-from typing import Tuple, Optional
-from syconn.mp.batchjob_utils import batchjob_script
-from syconn.extraction import cs_extraction_steps as ces
+
 from syconn import global_params
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.extraction import cs_extraction_steps as ces
+from syconn.extraction import cs_processing_steps as cps
+from syconn.handler.basics import kd_factory, chunkify
+from syconn.handler.config import initialize_logging
+from syconn.mp.batchjob_utils import batchjob_script
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
-from syconn.extraction import cs_processing_steps as cps
-from syconn.handler.config import initialize_logging
-from syconn.handler.basics import kd_factory, chunkify
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
 def run_matrix_export():
@@ -58,7 +60,8 @@ def run_matrix_export():
 
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
-                       max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None):
+                       max_n_jobs: Optional[int] = None,
+                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -90,22 +93,19 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    # # TODO: changed!
     # # create KDs and SDs for syn and cs
-    # ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-    #                           cube_of_interest_bb=cube_of_interest_bb,
-    #                           n_folders_fs=n_folders_fs)
-    # log.info('SegmentationDataset of type "cs" and "syn" was generated.')
-    #
-    # # create SD of type 'syn_ssv'
-    # cps.combine_and_split_syn(global_params.config.working_dir,
-    #                           cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
-    #                           log=log, n_folders_fs=n_folders_fs)
+    ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                              cube_of_interest_bb=cube_of_interest_bb,
+                              n_folders_fs=n_folders_fs)
+    log.info('SegmentationDataset of type "cs" and "syn" was generated.')
+
+    # create SD of type 'syn_ssv'
+    cps.combine_and_split_syn(global_params.config.working_dir,
+                              cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
+                              log=log, n_folders_fs=n_folders_fs)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
-
-    # generate the skipped meshes of objects at chunk boundaries sparsely
 
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
@@ -113,6 +113,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
+    del syn_sign
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
              f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
@@ -145,15 +146,11 @@ def run_spinehead_volume_calc():
     np.random.seed(0)
 
     log.info('Starting spine head volume calculation.')
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
-                               for ssv_id in ssd.ssv_ids])
     multi_params = ssd.ssv_ids
-    ordering = np.argsort(nb_svs_per_ssv)
+    ordering = np.argsort(ssd.load_cached_data('size'))
     multi_params = multi_params[ordering[::-1]]
-    # job parameter will be read sequentially, i.e. in order to provide only
-    # one list as parameter one needs an additonal axis
-    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
-    multi_params = [(ixs, ) for ixs in multi_params]
+    multi_params = chunkify(multi_params, min(global_params.config.ncore_total * 10, 1000))
+    multi_params = [(ixs,) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
                     remove_jobfolder=True)

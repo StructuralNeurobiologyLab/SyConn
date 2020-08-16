@@ -12,34 +12,33 @@ try:
     import open3d as o3d
 except ImportError:
     pass  # for sphinx build
-from ..handler.config import initialize_logging
-from ..reps import log_reps
-from ..proc.image import apply_morphological_operations
-from ..mp import batchjob_utils as qu
-from ..handler.basics import chunkify
-from ..handler import log_handler, log_main, basics
-from .compression import load_from_h5py, save_to_h5py
-from .basics import read_txt_from_zip, get_filepaths_from_dir,\
-    parse_cc_dict_from_kzip
-from .. import global_params
-
-import re
 import os
-import sys
-import time
-import tqdm
-from logging import Logger
+import re
 import shutil
-import numpy as np
-from typing import Iterable, Union, Optional, Any, Tuple, Callable, List
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.decomposition import PCA
 from collections import Counter
-from knossos_utils.knossosdataset import KnossosDataset
-from scipy.stats import entropy
-from scipy.special import softmax
-from knossos_utils.chunky import ChunkDataset, save_dataset
+from logging import Logger
+from typing import Iterable, Union, Optional, Any, Tuple, List
+
+import numpy as np
 from knossos_utils import knossosdataset
+from knossos_utils.chunky import ChunkDataset, save_dataset
+from knossos_utils.knossosdataset import KnossosDataset
+from scipy.special import softmax
+from scipy.stats import entropy
+from sklearn.decomposition import PCA
+from sklearn.neighbors import KNeighborsClassifier
+
+from .basics import read_txt_from_zip, get_filepaths_from_dir, \
+    parse_cc_dict_from_kzip
+from .compression import load_from_h5py, save_to_h5py
+from .. import global_params
+from ..handler import log_handler, log_main, basics
+from ..handler.basics import chunkify
+from ..handler.config import initialize_logging
+from ..mp import batchjob_utils as qu
+from ..proc.image import apply_morphological_operations
+from ..reps import log_reps
+
 # for readthedocs build
 try:
     import torch
@@ -91,10 +90,10 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         raw = kd.load_raw(size=(size // mag + 2 * raw_data_offset) * mag,
                           offset=(offset // mag - raw_data_offset) * mag,
                           mag=mag).swapaxes(0, 2)
-        raw_data.append(raw[None, ])
+        raw_data.append(raw[None,])
         label = kd.load_kzip_seg(zip_fname, mag=mag).swapaxes(0, 2)
         label = label
-        label_data.append(label[None, ])
+        label_data.append(label[None,])
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
     label = np.concatenate(label_data, axis=0)
     try:
@@ -145,7 +144,7 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
                       override_mfp_to_active=mfp_active, imposed_batch_size=1)
         original_do_rates = m.dropout_rates
         m.dropout_rates = ([0.0, ] * len(original_do_rates))
-        pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
+        pred = m.predict_dense(raw[None,], pad_raw=True)[1]
         # remove area without sufficient FOV
         pred = zxy2xyz(pred)
         raw = zxy2xyz(raw)
@@ -208,7 +207,7 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
                   override_mfp_to_active=mfp_active, imposed_batch_size=1)
     original_do_rates = m.dropout_rates
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
-    pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
+    pred = m.predict_dense(raw[None,], pad_raw=True)[1]
     pred = zxy2xyz(pred)
     raw = zxy2xyz(raw)
     if as_uint8:
@@ -671,7 +670,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
     # init target KnossosDatasets
-    target_kd_path_list = [target_path+'/{}/'.format(tn) for tn in target_names]
+    target_kd_path_list = [target_path + '/{}/'.format(tn) for tn in target_names]
     for path in target_kd_path_list:
         if os.path.isdir(path):
             if not overwrite:
@@ -683,7 +682,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(6)],)
+                                          kd.experiment_name, [2 ** x for x in range(6)], )
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
     # init batchjob parameters
@@ -694,7 +693,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
                     for ch_ids in multi_params]
     log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
-    n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if\
+    n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if \
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
 
     qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
@@ -729,7 +728,7 @@ def dense_predictor(args):
     # TODO: clean up (e.g. redundant chunk sizes, ...)
     #
     chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
-        target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest = args
+    target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -785,7 +784,7 @@ def dense_predictor(args):
 
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
-        raw = kd.load_raw(size=size*mag, offset=coords*mag, mag=mag)
+        raw = kd.load_raw(size=size * mag, offset=coords * mag, mag=mag)
 
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
                                       is_zyx=True, return_zyx=True)
@@ -815,8 +814,8 @@ def dense_predictor(args):
                     data = pred[label]
             if save_as_raw:
                 target_kd_dict[path].save_raw(
-                    offset=ch.coordinates*mag, data=data.astype(np.uint8),
-                    data_mag=mag, mags=[mag, mag*2, mag*4],
+                    offset=ch.coordinates * mag, data=data.astype(np.uint8),
+                    data_mag=mag, mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
             else:
                 target_kd_dict[path].save_seg(
@@ -882,7 +881,7 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset,
                   box_coords=np.zeros(3), fit_box_size=True)
     kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1,2,4,8])
+                                    kd.experiment_name, mags=[1, 2, 4, 8])
     cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                          stride=[256, 256, 256])
 
@@ -976,13 +975,6 @@ def get_celltype_model_e3():
     return m
 
 
-def get_semseg_spiness_model_pts():
-    from elektronn3.models.base import InferenceModel
-    m = torch.jit.load(global_params.config.mpath_glia_e3)
-    m = InferenceModel(m)
-    return m
-
-
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel
@@ -1051,11 +1043,13 @@ def get_myelin_cnn():
 
 
 def get_knn_tnet_embedding_e3():
+    """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
+    """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
 
@@ -1239,7 +1233,11 @@ def str2int_converter(comment: str, gt_type: str) -> int:
             return -1
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
-                             INT=8, FS=9, LTS=10)
+                             FS=8, LTS=9)
+        return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v2':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10)
         return str2int_label[comment]
     else:
         raise ValueError("Given groundtruth type is not valid.")
@@ -1310,6 +1308,11 @@ def int2str_converter(label: int, gt_type: str) -> str:
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
+    elif gt_type == 'ctgt_j0251_v2':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10)
         int2str_label = {v: k for k, v in str2int_label.items()}
         return int2str_label[label]
     else:

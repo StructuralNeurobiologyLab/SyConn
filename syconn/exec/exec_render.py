@@ -5,22 +5,23 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 
-import numpy as np
-import networkx as nx
 import time
-from typing import Optional
 from multiprocessing import Queue, Process
+from typing import Optional
 
-from syconn.reps.segmentation_helper import find_missing_sv_views
-from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.proc.graphs import create_ccsize_dict
-from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
+import networkx as nx
+import numpy as np
+
 from syconn import global_params
 from syconn.handler.basics import chunkify
-from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
+from syconn.proc.graphs import create_ccsize_dict
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.segmentation_helper import find_missing_sv_views
+from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 
 
 def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
@@ -57,7 +58,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
 
     multi_params = ssd.ssv_ids[size_mask]
     # sort ssv ids according to their number of SVs (descending)
-    ordering = np.argsort(nb_svs_per_ssv[size_mask])
+    ordering = np.argsort(ssd.load_cached_data('size')[size_mask])
     multi_params = multi_params[ordering[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
@@ -127,11 +128,9 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
 
         # render normal views only
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-        n_parallel_jobs = global_params.config.ngpu_total
 
         # sort ssv ids according to their number of SVs (descending)
-        ordering = np.argsort(nb_svs_per_ssv[~size_mask])
-        multi_params = big_ssv[ordering[::-1]]
+        multi_params = big_ssv[np.argsort(ssd.load_cached_data('size')[~size_mask])[::-1]]
         multi_params = chunkify(multi_params, max_n_jobs)
         # list of SSV IDs and SSD parameters need to be given to a single QSUB job
         multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
@@ -154,8 +153,8 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     """
     log = initialize_logging('neuron_rendering',
                              global_params.config.working_dir + '/logs/')
-    ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),
-          Process(target=_run_neuron_rendering_small_helper, args=(max_n_jobs, ))]
+    ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs,)),
+          Process(target=_run_neuron_rendering_small_helper, args=(max_n_jobs,))]
     for p in ps:
         p.start()
         time.sleep(10)
@@ -164,6 +163,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
         if p.exitcode != 0:
             raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
                             f'code {p.exitcode}.')
+        p.close()
     log.info('Finished rendering of all SSVs. Checking completeness.')
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.config['ncores_per_node'])
@@ -277,6 +277,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
             if p.exitcode != 0:
                 raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
                                 f'code {p.exitcode}.')
+            p.close()
         if q_out.qsize() != len(big_ssv):
             msg = 'Not all `_run_huge_ssv_render_worker` jobs completed ' \
                   'successfully.'

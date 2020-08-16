@@ -3,28 +3,30 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
-# Authors: Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert
 
-import time
 import os
 import shutil
+import time
 from logging import Logger
-from typing import Optional, Callable, Tuple, Dict, Any
 from multiprocessing import Process
+from typing import Optional, Callable, Tuple, Dict, Any, Union
+
 import networkx as nx
 import numpy as np
+
 from syconn import global_params
+from syconn.exec import exec_skeleton
 from syconn.extraction import object_extraction_wrapper as oew
-from syconn.proc import sd_proc
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.handler.basics import chunkify, kd_factory
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
-from syconn.proc.graphs import create_ccsize_dict
-from syconn.handler.basics import chunkify, kd_factory
-from syconn.exec import exec_skeleton
 from syconn.mp.mp_utils import start_multiprocess_imap
+from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
+from syconn.proc.graphs import create_ccsize_dict
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
 def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
@@ -34,9 +36,15 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     at ``/glia/neuron_rag.bz2``. In case glia splitting is active, this will be
     the RAG after glia removal, if it was disabled it is identical to ``pruned_rag.bz2``.
 
+    Args:
+        apply_ssv_size_threshold:
+
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
         optionally :func:`~run_glia_splitting`.
+
+    Returns:
+
     """
     log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
@@ -74,6 +82,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     for ssv_id, cc in cc_dict.items():
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
+
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         g_p, len(cc_dict), len(cc_dict_inv)))
 
@@ -90,19 +99,11 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
                             nb_cpus=10)  # global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
-    exec_skeleton.run_skeleton_generation()
-
-    log.info('Finished SSD initialization. Starting cellular '
-             'organelle mapping.')
-
+    log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
-    # TODO: sort by SSV size (descending)
-    ssd_proc.aggregate_segmentation_object_mappings(
-        ssd, global_params.config['existing_cell_organelles'])
-    ssd_proc.apply_mapping_decisions(
-        ssd, global_params.config['existing_cell_organelles'])
-    log.info('Finished mapping of cellular organelles to SSVs. '
-             'Writing individual SSV graphs.')
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
+    log.info('Finished mapping of cellular organelles to SSVs. Writing individual SSV graphs.')
 
 
 def _ssv_rag_writer(args):
@@ -144,16 +145,15 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
     multi_params = [[par, so_kwargs] for par in multi_params]
 
-    if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
-       global_params.config.allow_mesh_gen_cells)):
+    if not global_params.config.use_new_meshing and \
+            (co != "sv" or (co == "sv" and global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
             multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
 
-    # TODO: add as soon as glia separation supports on the fly view generation
+    # TODO: add comment as soon as glia separation supports on the fly view generation
     if co == "sv":  # and not global_params.config.use_onthefly_views:
         _ = qu.batchjob_script(
-            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True,
-            log=log)
+            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True, log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
     if not global_params.config.use_new_meshing:
@@ -214,7 +214,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           max_n_jobs: Optional[int] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
-                          cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
+                          cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
                           overwrite=False):
     """
     Todo:
@@ -277,16 +277,17 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Caching properties of subcellular structures {} and cell'
              ' supervoxels'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
-    ps = [Process(target=sd_init, args=[co, max_n_jobs, log])
+    ps = [Process(target=sd_init, args=(co, max_n_jobs, log))
           for co in ["sv"] + global_params.config['existing_cell_organelles']]
     for p in ps:
         p.start()
-        time.sleep(5)
+        time.sleep(2)
     for p in ps:
         p.join()
         if p.exitcode != 0:
             raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
                             f'code {p.exitcode}.')
+        p.close()
     log.info('Finished SD caching after {:.2f}s.'
              ''.format(time.time() - start))
 

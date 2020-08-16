@@ -4,27 +4,28 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from .segmentation import SegmentationDataset, SegmentationObject
+import copy
+import glob
+import os
+import re
+import shutil
+from multiprocessing.pool import ThreadPool
+from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
+
+import numpy as np
+
+from . import log_reps
 from .rep_helper import SegmentationBase
-from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
-from ..handler.config import DynConfig
+from .segmentation import SegmentationDataset, SegmentationObject
+from .super_segmentation_helper import assemble_from_mergelist
 from .super_segmentation_helper import associate_objs_with_skel_nodes
 from .super_segmentation_helper import view_embedding_of_sso_nocache
-from .super_segmentation_helper import assemble_from_mergelist
-from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
-from ..mp import mp_utils as sm
 from .. import global_params
-from . import log_reps
-
-import copy
-import re
-import glob
-from typing import List, Dict, Optional, Union, Tuple, Iterable, Generator
-import os
-import shutil
-import numpy as np
-from multiprocessing.pool import ThreadPool
+from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
+from ..handler.config import DynConfig
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
 
 try:
     import cPickle as pkl
@@ -671,9 +672,8 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             np.save(ssd.path + "/%ss_sel.npy" % attribute,  # Why '_sel'?
                     attr_dict[attribute])
         else:
-            np.save(ssd.path + "/%ss.npy" % attribute,
-                    attr_dict[attribute])
-    log_reps.info('Finished `save_dataset_deep`of {}.'.format(repr(ssd)))
+            np.save(ssd.path + "/%ss.npy" % attribute, attr_dict[attribute])
+    log_reps.info(f'Finished `save_dataset_deep` of {ssd}.')
 
 
 def _write_super_segmentation_dataset_thread(args):
@@ -921,8 +921,8 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     if nb_threads > 1:
         pool = ThreadPool(nb_threads)
         pool.map(_load_sv_voxels_thread, multi_params)
-        pool.close()
         pool.join()
+        pool.close()
     else:
         map(_load_sv_voxels_thread, multi_params)
 
@@ -1171,7 +1171,7 @@ def preproc_sso_skelfeature_thread(args: Tuple):
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_skeleton()
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) <= 1:
+        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
             log_reps.warning("Skeleton of SSV %d has zero nodes." % ssv_id)
             continue
         for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
@@ -1196,14 +1196,11 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
     """
     ssv_obj_ids = args[0]
     nb_cpus = args[1]
-    version = args[2]
-    version_dict = args[3]
-    pred_key_appendix = args[4]
+    pred_key_appendix = args[2]
     use_onthefly_views = global_params.config.use_onthefly_views
     view_props = global_params.config['views']['view_properties']
 
-    ssd = SuperSegmentationDataset(version=version,
-                                   version_dict=version_dict)
+    ssd = SuperSegmentationDataset()
     from ..handler.prediction import get_tripletnet_model_e3
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)

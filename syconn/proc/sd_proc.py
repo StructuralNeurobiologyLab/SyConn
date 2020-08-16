@@ -5,30 +5,29 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from .. import global_params
-from .image import single_conn_comp_img
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage, CompressedStorage
-from ..reps import segmentation, segmentation_helper
-from ..reps import rep_helper
-from ..handler import basics
-from ..proc.meshes import mesh_chunk, find_meshes
-from . import log_proc
-from ..extraction import object_extraction_wrapper as oew
-from .meshes import mesh_area_calc, merge_meshes_incl_norm
-
+import gc
 import glob
 import os
-import tqdm
-import time
 import sys
-import gc
+import time
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import tqdm
+
+from . import log_proc
+from .image import single_conn_comp_img
+from .meshes import mesh_area_calc, merge_meshes_incl_norm
+from .. import global_params
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage, CompressedStorage
+from ..extraction import object_extraction_wrapper as oew
+from ..handler import basics
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..proc.meshes import mesh_chunk, find_meshes
+from ..reps import rep_helper
+from ..reps import segmentation
+
+from multiprocessing import Process
+import pickle as pkl
 import numpy as np
 from logging import Logger
 import shutil
@@ -95,7 +94,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
             except ValueError as e:
                 if attribute not in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                         'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
+                                     'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
                     log_proc.warn('ValueError {} encountered when writing numpy'
                                   ' array caches in "dataset_analysis", this is '
                                   'currently caught by using `dtype=object`'
@@ -113,14 +112,13 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
 
         res_keys = []
         file_mask = np.zeros(len(out_files), dtype=np.int)
-        for ii, p in enumerate(out_files):
-            with open(p, 'rb') as f:
-                res_dc = pkl.load(f)
-                n_el = len(res_dc['id'])
-                if n_el > 0:
-                    file_mask[ii] = n_el
-                    if len(res_keys) == 0:
-                        res_keys = list(res_dc.keys())
+        res = sm.start_multiprocess_imap(_dataset_analysis_check, out_files, sm.cpu_count())
+        for ix_cnt, r in enumerate(res):
+            rk, n_el = r
+            if n_el > 0:
+                file_mask[ix_cnt] = n_el
+                if len(res_keys) == 0:
+                    res_keys = rk
         if len(res_keys) == 0:
             raise ValueError(f'No objects found during dataset_analysis of {sd}.')
         n_ids = np.sum(file_mask)
@@ -131,6 +129,17 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
                            remove_jobfolder=True)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
+
+
+def _dataset_analysis_check(out_file):
+    res_keys = []
+    with open(out_file, 'rb') as f:
+        res_dc = pkl.load(f)
+        n_el = len(res_dc['id'])
+        if n_el > 0:
+            if len(res_keys) == 0:
+                res_keys = list(res_dc.keys())
+    return res_keys, n_el
 
 
 def _dataset_analysis_collect(args):
@@ -154,7 +163,7 @@ def _dataset_analysis_collect(args):
         else:
             log_proc.error(
                 f'ValueError {e} encountered when writing numpy array '
-                f'cache of attribute {attribute} in "dataset_analysis",')
+                f'cache of attribute "{attribute}" in "dataset_analysis",')
             raise ValueError(e)
 
 
@@ -388,7 +397,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     step_names = []
     dict_paths_tmp = []
 
-
     # extract mapping
     start = time.time()
     # random assignment to improve workload balance
@@ -412,7 +420,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
             multi_params, "map_subcell_extract_props", n_cores=n_cores)
-        out_files = glob.glob(path_to_out + "/*")
+        out_files = glob.glob(path_to_out + "/*.pkl")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
             with open(out_file, 'rb') as f:
@@ -545,7 +553,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     start = time.time()
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
-    n_jobs = int(max(2 * global_params.config.ncore_total, len(storage_location_ids) / 10))
+    n_jobs = int(min(2 * global_params.config.ncore_total, len(storage_location_ids)))
     multi_params = [(sv_id_block, n_folders_fs_sc, kd_organelle_paths)
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
@@ -554,11 +562,24 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     else:
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=1)
+
+    # perform dataset analysis to cache all attributes in numpy arrays
+    procs = []
+    da_kwargs = dict(recompute=False, compute_meshprops=False)
     for k in kd_organelle_paths:
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=k,
             version=0, n_folders_fs=n_folders_fs_sc)
-        dataset_analysis(sc_sd, recompute=False, compute_meshprops=False)
+        p = Process(target=dataset_analysis, args=(sc_sd,), kwargs=da_kwargs)
+        procs.append(p)
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
+        p.close()
     all_times.append(time.time() - start)
     step_names.append("write subcellular SD")
 
@@ -664,7 +685,7 @@ def _map_subcell_extract_props_thread(args):
             obj_ids_bdry[organelle] = obj_bdry
             dt_times_dc['data_io'] += time.time() - start
             # add auxiliary axis
-            subcell_d.append(subc_d[None, ])
+            subcell_d.append(subc_d[None,])
         subcell_d = np.concatenate(subcell_d)
         start = time.time()
         cell_d = kd_cell.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
@@ -1011,8 +1032,14 @@ def _write_props_to_sc_thread(args):
 
 
 def _write_props_to_sv_thread(args):
-    """"""
+    """
 
+    Args:
+        args:
+
+    Returns:
+
+    """
     obj_id_chs = args[0]
     n_folders_fs = args[1]
     generate_sv_mesh = args[2]
@@ -1236,14 +1263,13 @@ def _write_props_to_sv_thread(args):
         this_attr_dc.push()
         if global_params.config.use_new_meshing:
             obj_mesh_dc.push()
-    if global_params.config.use_new_meshing:
-        log_proc.debug(f'[SV] dt mesh area {dt_mesh_area:.2f}s\tdt mesh merge '
-                       f'{dt_mesh_merge:.2f}s\tdt merge IO '
-                       f'{dt_mesh_merge_io:.2f}s')
+    # if global_params.config.use_new_meshing:
+    #     log_proc.debug(f'[SV] dt mesh area {dt_mesh_area:.2f}s\tdt mesh merge '
+    #                    f'{dt_mesh_merge:.2f}s\tdt merge IO '
+    #                    f'{dt_mesh_merge_io:.2f}s')
 
 
 def merge_meshes_dict(m_storage, tmp_dict):
-
     """ Merge meshes dictionaries:
 
     m_storage: list dictionary
@@ -1255,7 +1281,6 @@ def merge_meshes_dict(m_storage, tmp_dict):
 
 
 def merge_meshes_single(m_storage, obj_id, tmp_dict):
-
     """ Merge meshes dictionaries:
     m_storage: objec of type MeshStorage
     tmp_dict: list dictionary
@@ -1395,8 +1420,8 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
         pbar = tqdm.tqdm(total=len(sos), leave=False)
     for ch in so_chs:
         views = sm.start_multiprocess_obj("load_views", [[sv, {"woglia": woglia,
-                                          "raw_only": raw_only}]
-                                          for sv in ch], nb_cpus=nb_cpus)
+                                                               "raw_only": raw_only}]
+                                                         for sv in ch], nb_cpus=nb_cpus)
         proba = predict_views(model, views, ch, pred_key, verbose=False,
                               single_cc_only=single_cc_only,
                               return_proba=return_proba, nb_cpus=nb_cpus)
@@ -1460,7 +1485,6 @@ def multi_probas_saver(args):
 
 
 def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
-
     block_size = np.array([block_edge_length] * 3)
 
     grid_c = []

@@ -4,17 +4,17 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from .. import global_params
-from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
-from . import log_proc
-
 import itertools
-from typing import List, Any, Optional, Dict, Union
+from typing import List, Any, Optional
+
 import networkx as nx
 import numpy as np
-from scipy import spatial
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import tqdm
+from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from scipy import spatial
+
+from .. import global_params
+from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
@@ -210,7 +210,7 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     """
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
-                            nb_cpus=sso.nb_cpus, pred_key_appendix=pred_key_appendix)
+                                             nb_cpus=sso.nb_cpus, pred_key_appendix=pred_key_appendix)
     return nonglia_ccs, glia_ccs
 
 
@@ -246,7 +246,7 @@ def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
 
 def glia_loader_helper(args):
     so, glia_key, thresh, use_sv_volume = args
-    if not glia_key in so.attr_dict.keys():
+    if glia_key not in so.attr_dict.keys():
         so.load_attr_dict()
     curr_glianess = so.glia_pred(thresh)
     if not use_sv_volume:
@@ -404,7 +404,7 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
                     dist = curr_dist
                 else:  # only take path through glia into account
                     dist = 0
-                g.add_edge(kk+curr_ind, curr_ix+curr_ind, weights=dist)
+                g.add_edge(kk + curr_ind, curr_ix + curr_ind, weights=dist)
         curr_ind += len(vert_resh)
     start_ix = 0  # choose any index of the first mesh
     end_ix = curr_ind - 1  # choose any index of the last mesh
@@ -420,7 +420,7 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
 
 
 def eucl_dist(a, b):
-    return np.linalg.norm(a-b)
+    return np.linalg.norm(a - b)
 
 
 def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
@@ -462,7 +462,7 @@ def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
             if np.all(sv_ixs == el_ixs):
                 glia_nodes_already_exist = True
                 break
-        if glia_nodes_already_exist: # check if same glia path exists already
+        if glia_nodes_already_exist:  # check if same glia path exists already
             continue
         glia_paths.append(paths[a][b])
         glia_svixs_in_paths.append(np.array([so.id for so in glia_nodes]))
@@ -499,7 +499,7 @@ def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
         anno.addNode(n)
         rep_nodes.append(n)
     for i in range(1, len(rep_nodes)):
-        anno.addEdge(rep_nodes[i-1], rep_nodes[i])
+        anno.addEdge(rep_nodes[i - 1], rep_nodes[i])
     if comment is not None:
         anno.setComment(comment)
     skel.add_annotation(anno)
@@ -524,12 +524,12 @@ def coordpath2anno(coords: np.ndarray, scaling: Optional[np.ndarray] = None) -> 
     anno.scaling = scaling
     rep_nodes = []
     for c in coords:
-        n = SkeletonNode().from_scratch(anno, c[0]/scaling[0], c[1]/scaling[1],
-                                        c[2]/scaling[2])
+        n = SkeletonNode().from_scratch(anno, c[0] / scaling[0], c[1] / scaling[1],
+                                        c[2] / scaling[2])
         anno.addNode(n)
         rep_nodes.append(n)
     for i in range(1, len(rep_nodes)):
-        anno.addEdge(rep_nodes[i-1], rep_nodes[i])
+        anno.addEdge(rep_nodes[i - 1], rep_nodes[i])
     return anno
 
 
@@ -558,7 +558,7 @@ def create_graph_from_coords(coords: np.ndarray, max_dist: float = 6000, force_s
     kd_t = spatial.cKDTree(coords)
     pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
     g.add_nodes_from([(ix, dict(position=coord)) for ix, coord in enumerate(coords)])
-    weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)
+    weights = np.linalg.norm(coords[pairs[:, 0]] - coords[pairs[:, 1]], axis=1)
     g.add_weighted_edges_from([[pairs[i][0], pairs[i][1], weights[i]] for i in range(len(pairs))])
     if force_single_cc:  # make sure its a connected component
         g = stitch_skel_nx(g)
@@ -603,7 +603,8 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
         for n in G.nodes():
             glianess[n] = ext_glia[n.id]
     plt.figure()
-    n_size = np.array([size[n]**(1./3) for n in G.nodes()]).astype(np.float32)  # reduce cubic relation to a linear one
+    n_size = np.array([size[n] ** (1. / 3) for n in G.nodes()]).astype(
+        np.float32)  # reduce cubic relation to a linear one
     # n_size = np.array([np.linalg.norm(size[n][1]-size[n][0]) for n in G.nodes()])
     if node_size_cap == "max":
         node_size_cap = np.max(n_size)
@@ -707,7 +708,7 @@ def stitch_skel_nx(skel_nx: nx.Graph) -> nx.Graph:
         start_thread_index = np.argmin(thread_lengths)
         stop_thread_index = indices[start_thread_index]
         start_thread_node = \
-        np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+            np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
         stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
         skel_nx.add_edge(start_thread_node, stop_thread_node)
         no_of_seg -= 1

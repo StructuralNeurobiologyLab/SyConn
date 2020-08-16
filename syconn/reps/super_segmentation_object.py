@@ -4,41 +4,46 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from . import super_segmentation_helper as ssh
-from .segmentation import SegmentationObject, SegmentationDataset
-from .segmentation_helper import load_so_attr_bulk
-from ..proc.sd_proc import predict_sos_views
-from .rep_helper import knossos_ml_from_sso, colorcode_vertices, knossos_ml_from_svixs, subfold_from_ix_SSO, \
-    SegmentationBase
-from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, coordpath2anno, load_pkl2obj, \
-    write_obj2pkl, flatten_list, chunkify, data2kzip
-from ..handler.prediction import certainty_estimate
-from ..backend.storage import CompressedStorage, MeshStorage
-from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
-from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
-from ..proc.rendering import render_sampled_sso, load_rendering_func, render_sso_coords, render_sso_coords_index_views
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..reps import log_reps
-from ..handler.config import DynConfig
-from .. import global_params
-
 import glob
 import os
 import re
 import shutil
 import time
 from collections import Counter, defaultdict
-import scipy.spatial
+from typing import Optional, Dict, List, Tuple, Union, Iterable, Any, TYPE_CHECKING
+
 import networkx as nx
 import numpy as np
+import scipy.spatial
 from scipy import spatial
-from typing import Optional, Dict, List, Tuple, Any, Union, Iterable, Any, TYPE_CHECKING
+
+from . import super_segmentation_helper as ssh
+from .rep_helper import knossos_ml_from_sso, colorcode_vertices, knossos_ml_from_svixs, subfold_from_ix_SSO, \
+    SegmentationBase
+from .segmentation import SegmentationObject, SegmentationDataset
+from .segmentation_helper import load_so_attr_bulk
+from .. import global_params
+from ..backend.storage import CompressedStorage, MeshStorage
+from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, coordpath2anno, load_pkl2obj, \
+    write_obj2pkl, flatten_list, chunkify, data2kzip
+from ..handler.config import DynConfig
+from ..handler.prediction import certainty_estimate
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
+from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, mesh2obj_file, write_meshes2kzip, \
+    _calc_pca_components
+from ..proc.rendering import render_sampled_sso, load_rendering_func, render_sso_coords, render_sso_coords_index_views
+from ..proc.image import normalize_img
+from ..proc.sd_proc import predict_sos_views
+from ..reps import log_reps
+
 if TYPE_CHECKING:
     from .super_segmentation_dataset import SuperSegmentationDataset
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
+
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -153,6 +158,7 @@ class SuperSegmentationObject(SegmentationBase):
         version_dict: A dictionary which contains the versions of other dataset types which share
             the same working directory. Defaults to the `Versions` entry in the `config.yml` file.
     """
+
     def __init__(self, ssv_id: int, version: Optional[str] = None, version_dict: Optional[Dict[str, str]] = None,
                  working_dir: Optional[str] = None, create: bool = False,
                  sv_ids: Optional[Union[np.ndarray, List[int]]] = None, scaling: Optional[np.ndarray] = None,
@@ -968,7 +974,9 @@ class SuperSegmentationObject(SegmentationBase):
     def _load_obj_mesh(self, obj_type: str = "sv", rewrite: bool = False) -> MeshType:
         """
         Load the mesh of a given `obj_type`. If :func:`~mesh_exists` is False,
-        loads the meshes from the underlying supervoxel objects.
+        loads the meshes from the underlying sueprvoxel objects.
+        TODO: Currently does not support color array!
+        TODO: add support for sym. asym synapse type
 
         Parameters
         ----------
@@ -1030,7 +1038,7 @@ class SuperSegmentationObject(SegmentationBase):
         write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
         shutil.move(self.attr_dict_path + '.tmp', self.attr_dict_path)
 
-    def save_attributes(self, attr_keys : List[str], attr_values: List[Any]):
+    def save_attributes(self, attr_keys: List[str], attr_values: List[Any]):
         """
         Writes attributes to attribute dict on file system. Does not care about
         self.attr_dict.
@@ -1209,15 +1217,12 @@ class SuperSegmentationObject(SegmentationBase):
                 skel_nodes.append(skeleton.SkeletonNode().
                                   from_scratch(a, c[0], c[1], c[2], radius=r))
                 pred_key_ax = "{}_avg{}".format(self.config['compartments'][
-                                            'view_properties_semsegax']['semseg_key'],
+                                                    'view_properties_semsegax']['semseg_key'],
                                                 self.config['compartments'][
-                                            'dist_axoness_averaging'])
+                                                    'dist_axoness_averaging'])
                 if pred_key_ax in self.skeleton:
                     skel_nodes[-1].data[pred_key_ax] = self.skeleton[pred_key_ax][
                         i_node]
-                if "cell_type" in self.skeleton:
-                    skel_nodes[-1].data["cell_type"] = \
-                        self.skeleton["cell_type"][i_node]
                 if "meta" in self.skeleton:
                     skel_nodes[-1].data["meta"] = self.skeleton["meta"][i_node]
                 if additional_keys is not None:
@@ -1336,8 +1341,8 @@ class SuperSegmentationObject(SegmentationBase):
         """
         if self.version == 'tmp':
             log_reps.debug('"save_skeleton" called but this SSV '
-                             'has version "tmp", skeleton will'
-                             ' not be saved to disk.')
+                           'has version "tmp", skeleton will'
+                           ' not be saved to disk.')
             return
         if to_object:
             write_obj2pkl(self.skeleton_path, self.skeleton)
@@ -1357,9 +1362,13 @@ class SuperSegmentationObject(SegmentationBase):
             self.skeleton = load_pkl2obj(self.skeleton_path)
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
-        except (KeyError, FileNotFoundError):
-            if self.config.allow_ssv_skel_gen or self._allow_skeleton_calc:
-                self.calculate_skeleton()
+        except:
+            if global_params.config.allow_ssv_skel_gen:
+                if global_params.config.use_kimimaro:
+                    # add per ssv skeleton generation for kimimaro
+                    raise NotImplementedError('Individual cells cannot be processed with kimimaro.')
+                else:
+                    self.calculate_skeleton()
                 return True
             return False
 
@@ -1831,7 +1840,7 @@ class SuperSegmentationObject(SegmentationBase):
         return so_views_exist
 
     def render_views(self, add_cellobjects: bool = False, verbose: bool = False,
-                     overwrite: bool = True, cellobjects_only: bool =False,
+                     overwrite: bool = True, cellobjects_only: bool = False,
                      woglia: bool = True, skip_indexviews: bool = False):
         """
         Renders views for each SV based on SSV context and stores them
@@ -1993,7 +2002,8 @@ class SuperSegmentationObject(SegmentationBase):
             return views
 
     def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
-                       raw_view_key=None, save=False, ws=None, comp_window=None):
+                       raw_view_key=None, save=False, ws=None, comp_window=None,
+                       add_cellobjects: Union[bool, Iterable] = True):
         """
         Generates label views based on input model and stores it under the key
         'semseg_key', either within the SSV's SVs or in an extra view-storage
@@ -2023,6 +2033,8 @@ class SuperSegmentationObject(SegmentationBase):
             Window size in pixels [y, x]
         comp_window : float
             Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
+            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
         """
         view_props_default = self.config['views']['view_properties']
         if (nb_views is not None) or (raw_view_key is not None):
@@ -2034,10 +2046,9 @@ class SuperSegmentationObject(SegmentationBase):
             if raw_view_key in self.view_dict:
                 views = self.load_views(raw_view_key)
             else:
-                # log_reps.warning('Could not find raw-views. Re-rendering now.')
                 self._render_rawviews(nb_views, ws=ws, comp_window=comp_window, save=save,
                                       view_key=raw_view_key, verbose=verbose,
-                                      force_recompute=True)
+                                      force_recompute=True, add_cellobjects=add_cellobjects)
                 views = self.load_views(raw_view_key)
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
                 raise ValueError("Unequal number of views and redering locations.")
@@ -2277,7 +2288,7 @@ class SuperSegmentationObject(SegmentationBase):
         # list of arrays
         # TODO: currently does not support multiprocessing
         locs = sm.start_multiprocess_obj("sample_locations", params,
-                                         nb_cpus=1)  #self.nb_cpus)
+                                         nb_cpus=1)  # self.nb_cpus)
         if cache:
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
@@ -2432,7 +2443,7 @@ class SuperSegmentationObject(SegmentationBase):
         mesh2obj_file(dest_path, self.load_mesh(obj_type), center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton', ),
+    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton',),
                     rag: Optional[nx.Graph] = None,
                     sv_color: Optional[np.ndarray] = None,
                     synssv_instead_sj: bool = False):
@@ -2585,23 +2596,21 @@ class SuperSegmentationObject(SegmentationBase):
                                     comments=sv_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def _pred2mesh(self, pred_coords, preds, ply_fname=None, dest_path=None,
-                   colors=None, k=1):
+    def _pred2mesh(self, pred_coords: np.ndarray, preds: np.ndarray, ply_fname: Optional[str] = None,
+                   dest_path: Optional[str] = None, colors: Optional[Union[tuple, np.ndarray, list]] = None,
+                   k: int = 1, **kwargs):
         """
         If dest_path or ply_fname is None then indices, vertices, colors are
         returned. Else Mesh is written to k.zip file as specified.
 
         Args:
-            pred_coords: np.array
-                N x 3; scaled to nm
-            preds: np.array
-                N x 1
+            pred_coords: N x 3; scaled to nm
+            preds: Label array (N x 1).
             ply_fname: str
             dest_path: str
-            colors: np.array
-                Color for each possible prediction value (range(np.max(preds))
-            k: int
-                Number of nearest neighbors (average prediction)
+            colors: Color for each possible prediction value (range(np.max(preds))
+            k: Number of nearest neighbors (average prediction)
+            **kwargs: Keyword arguments passed to `colorcode_vertices`.
 
         Returns: None or [np.array, np.array, np.array]
 
@@ -2615,7 +2624,7 @@ class SuperSegmentationObject(SegmentationBase):
             raise ValueError(msg)
         mesh = self.mesh
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
-                                 preds, colors=colors, k=k)
+                                 preds, colors=colors, k=k, **kwargs)
         if dest_path is None:
             return mesh[0], mesh[1], col
         else:
@@ -2639,8 +2648,7 @@ class SuperSegmentationObject(SegmentationBase):
         for sv in self.svs:
             sv.load_attr_dict()
         glia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
-        nonglia_svs = [sv for sv in self.svs if
-                       sv.glia_pred(thresh, pred_key_appendix) == 0]
+        nonglia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         mesh = merge_someshes(glia_svs, use_new_subfold=self.config.use_new_subfold)
@@ -2726,6 +2734,31 @@ class SuperSegmentationObject(SegmentationBase):
                                    nonglia], use_new_subfold=self.config.use_new_subfold)
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "nonglia_cc%d.ply" % kk)
+
+    def morphembed2mesh(self, dest_path, pred_key='latent_morph', whiten=True):
+        """
+        Write morphology embedding as RGB to k.zip file.
+
+        Args:
+            dest_path:
+            pred_key:
+            whiten:
+
+        Returns:
+
+        """
+        if self.skeleton is None:
+            self.load_skeleton()
+        d = self.skeleton[pred_key]
+        if whiten:
+            d -= d.mean(axis=0)
+        eig = _calc_pca_components(d)
+        d_transf = np.dot(d, eig[:, :3])
+        d_transf -= d_transf.min(axis=0)
+        d_transf /= d_transf.max(axis=0)
+        vert_col = colorcode_vertices(self.mesh[1].reshape((-1, 3)), self.skeleton['nodes'] * self.scaling,
+                                      np.arange(len(self.skeleton['nodes'])), normalize_img(d_transf))
+        self.mesh2kzip(dest_path, ext_color=vert_col)
 
     def write_gliapred_cnn(self, dest_path=None):
         if dest_path is None:
@@ -2987,12 +3020,19 @@ class SuperSegmentationObject(SegmentationBase):
                        "%0.4fs/SV" % (len(self.svs), end - start,
                                       float(end - start) / len(self.svs)))
 
-    def predict_views_embedding(self, model, pred_key_appendix="",
-                                view_key=None):
+    def predict_views_embedding(self, model, pred_key_appendix="", view_key=None):
         """
         This will save a latent vector which captures a local morphology fingerprint for every
         skeleton node location as :py:attr:`~skeleton`['latent_morph'] based on the nearest rendering
         location.
+
+        Notes:
+            * This method requires existing :py:attr:`~views`. For on the fly view rendering use
+              :py:func:`~syconn.reps.super_segmentation_helper.view_embedding_of_sso_nocache`
+
+        Todo:
+            * Add option for on the fly rendering and call
+              :py:func:`~syconn.reps.super_segmentation_helper.view_embedding_of_sso_nocache` in here.
 
         Args:
             model:
@@ -3021,7 +3061,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
         self.load_skeleton()
-        if not 'view_ixs' in self.skeleton:
+        if 'view_ixs' not in self.skeleton:
             hull_tree = spatial.cKDTree(np.concatenate(self.sample_locations()))
             dists, ixs = hull_tree.query(self.skeleton["nodes"] * self.scaling,
                                          n_jobs=self.nb_cpus, k=1)
@@ -3118,8 +3158,20 @@ class SuperSegmentationObject(SegmentationBase):
             ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
                                               overwrite=True, **view_props)
 
+    def predict_cell_morphology_pts(self, **kwargs):
+        """
+        Store local cell morphology with key 'latent_morph' (+ `pred_key_appendix`) in the SSV skeleton.
+
+        Args:
+            **kwargs:
+        """
+        from syconn.handler.prediction_pts import infere_cell_morphology_ssd
+        ssd_kwargs = dict(working_dir=self.working_dir, config=self.config)
+        ssv_params = [dict(ssv_id=self.id, **ssd_kwargs)]
+        infere_cell_morphology_ssd(ssv_params, **kwargs)
+
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
-                               obj_to_render=("sv", )):
+                               obj_to_render=("sv",)):
         multi_view_sso = load_rendering_func('multi_view_sso')
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
@@ -3220,7 +3272,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         if axoness_key is None:
             axoness_key = 'axoness_avg{}'.format(self.config['compartments'][
-                                            'dist_axoness_averaging'])
+                                                     'dist_axoness_averaging'])
         nodes = self.skeleton['nodes']
         soma_ixs = np.nonzero(self.skeleton[axoness_key] == 2)[0]
         if np.sum(soma_ixs) == 0:
@@ -3409,8 +3461,8 @@ def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
     """
     if sso.skeleton is None:
         sso.load_skeleton()
-    if sso.skeleton is None or len(sso.skeleton["nodes"]) < 2:
-        print(f"Skeleton of {sso} has < 2 nodes.")
+    if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
+        print(f"Skeleton of {sso} has zero nodes.")
         return
     # vertex predictions
     node_preds = sso.semseg_for_coords(
@@ -3456,8 +3508,8 @@ def semsegspiness_predictor(args) -> List[int]:
     Returns:
 
     """
-    from ..handler.prediction import get_semseg_axon_model
-    m = get_semseg_axon_model()
+    from ..handler.prediction import get_semseg_spiness_model
+    m = get_semseg_spiness_model()
     ssv_ids, view_props, nb_cpus, kwargs_semseg2mesh, kwargs_semsegforcoords = args
     missing_ssvs = []
 
@@ -3469,8 +3521,8 @@ def semsegspiness_predictor(args) -> List[int]:
             ssh.semseg_of_sso_nocache(ssv, m, **view_props, **kwargs_semseg2mesh)
             # map to skeleton
             ssv.load_skeleton()
-            if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
-                log_reps.warning(f"Skeleton of SSV {ssv.id} has < 2 nodes.")
+            if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
+                log_reps.warning(f"Skeleton of SSV {ssv.id} has zero nodes.")
                 continue
             # vertex predictions
             node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
@@ -3483,5 +3535,3 @@ def semsegspiness_predictor(args) -> List[int]:
             msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
     return missing_ssvs
-
-

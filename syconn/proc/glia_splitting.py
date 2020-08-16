@@ -4,6 +4,15 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+import os
+from logging import Logger
+from typing import Optional, Union
+
+import networkx as nx
+import numpy as np
+
+from . import log_proc
+from .graphs import create_ccsize_dict
 from .. import global_params
 from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
@@ -12,14 +21,6 @@ from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from ..reps.rep_helper import knossos_ml_from_ccs
 from ..reps.segmentation import SegmentationDataset
 from ..reps.super_segmentation_object import SuperSegmentationObject
-from .graphs import create_ccsize_dict
-from . import log_proc
-
-import os
-from logging import Logger
-from typing import Optional, Union
-import networkx as nx
-import numpy as np
 
 
 def qsub_glia_splitting():
@@ -51,7 +52,7 @@ def collect_glia_sv():
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
     # get SSV glia splits
-    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node']*10)
+    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'] * 10)
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
                                                  nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")

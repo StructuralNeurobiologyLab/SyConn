@@ -21,10 +21,6 @@ with open(path_storage_file, 'rb') as f:
             break
 
 
-def _predict_glia_ssv(*args, **kwargs):
-    return predict_glia_ssv(*args, **kwargs)
-
-
 ch, pred_key = args
 assert global_params.config.use_point_models
 
@@ -38,10 +34,10 @@ working_dir = global_params.config.working_dir
 ssv_params = []
 partitioned = dict()
 for sv_ids, g, was_partitioned in ch:
-    ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g))
+    ssv_params.append(dict(ssv_id=sv_ids[0], sv_ids=sv_ids, working_dir=working_dir, sv_graph=g, version='tmp'))
     partitioned[sv_ids[0]] = was_partitioned
 postproc_kwargs = dict(pred_key=pred_key, lo_first_n=lo_first_n, partitioned=partitioned)
-predict_glia_ssv(ssv_params, postproc_kwargs=postproc_kwargs)
+predict_glia_ssv(ssv_params, postproc_kwargs=postproc_kwargs, show_progress=False)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(None, f)

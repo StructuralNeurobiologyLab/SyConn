@@ -7,6 +7,7 @@
 
 import sys
 import time
+
 import numpy as np
 
 
@@ -40,6 +41,7 @@ def timeit(func):
         print("Prediction of %d samples took %.4gs; %.4gs/sample." % \
               (nb_samples, end - start, (end - start) / nb_samples))
         return res
+
     return timeit_wrapper
 
 
@@ -97,8 +99,8 @@ def crop_bool_array(arr):
                        np.flatnonzero(arr.sum(axis=(0, 1)))]
 
     return arr[in_mask_indices[0].min(): in_mask_indices[0].max() + 1,
-               in_mask_indices[1].min(): in_mask_indices[1].max() + 1,
-               in_mask_indices[2].min(): in_mask_indices[2].max() + 1],\
+           in_mask_indices[1].min(): in_mask_indices[1].max() + 1,
+           in_mask_indices[2].min(): in_mask_indices[2].max() + 1], \
            [in_mask_indices[0].min(),
             in_mask_indices[1].min(),
             in_mask_indices[2].min()]

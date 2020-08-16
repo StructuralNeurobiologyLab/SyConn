@@ -4,15 +4,15 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from .. import global_params
 from . import log_proc
+from .. import global_params
 from ..handler import basics
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
+from ..proc.meshes import mesh_creator_sso
+from ..reps import segmentation, super_segmentation
 from ..reps.super_segmentation import SuperSegmentationObject, \
     SuperSegmentationDataset
-from ..reps import segmentation, super_segmentation
-from ..proc.meshes import mesh_creator_sso
 
 try:
     import cPickle as pkl
@@ -45,7 +45,7 @@ def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
 
-    multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
@@ -112,18 +112,15 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
         assert obj_type in ssd.version_dict
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
-    multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
     if not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                       multi_params)
-
+        _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread, multi_params)
     else:
         _ = qu.batchjob_script(
-            multi_params, "apply_mapping_decisions", n_cores=nb_cpus,
-            remove_jobfolder=True)
+            multi_params, "apply_mapping_decisions", n_cores=nb_cpus, remove_jobfolder=True)
 
 
 def _apply_mapping_decisions_thread(args):
@@ -220,7 +217,7 @@ def _apply_mapping_decisions_thread(args):
                 id_mask[obj_ratios > upper_ratio] = False
 
             candidate_ids = \
-            np.array(ssv.attr_dict["mapping_%s_ids" % obj_type])[id_mask]
+                np.array(ssv.attr_dict["mapping_%s_ids" % obj_type])[id_mask]
 
             ssv.attr_dict[obj_type] = []
             for candidate_id in candidate_ids:
@@ -237,17 +234,18 @@ def map_synssv_objects(synssv_version: Optional[str] = None,
                        nb_cpus=None, n_jobs=None,
                        syn_threshold=None):
     """
-    Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
+    Map syn_ssv objects and merge their meshes for all SSO objects contained in SSV SuperSegmentationDataset.
+
+    Notes:
+        * Stores meshes with keys: 'syn_ssv' and 'syn_ssv_sym', syn_ssv_asym (if synapse type is available). This may
+          take a while.
 
     Args:
-        synssv_version: str
-        n_jobs: int
-        log:
-        nb_cpus: int
-        syn_threshold: float
-
-    Returns:
-
+        synssv_version: String identifier.
+        n_jobs: Number of jobs.
+        log: Logger.
+        nb_cpus: Number of cpus for local multi-processing.
+        syn_threshold: Probability threshold applied during the mapping of syn_ssv objects.
     """
     if n_jobs is None:
         n_jobs = 4 * global_params.config.ncore_total
@@ -272,7 +270,7 @@ def map_synssv_objects(synssv_version: Optional[str] = None,
 
 def map_synssv_objects_thread(args):
     ssv_obj_ids, version, version_dict, working_dir, \
-        ssd_type, synssv_version, syn_threshold = args
+    ssd_type, synssv_version, syn_threshold = args
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
                                                       ssd_type=ssd_type,
@@ -331,7 +329,7 @@ def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,
                                nb_cpus=nb_cpus, debug=False)
 
 
-def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int])\
+def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
         -> Tuple[SuperSegmentationObject, SuperSegmentationObject]:
     """Splits an SuperSegmentationObject into two."""
 
@@ -357,7 +355,7 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int])\
     return ssv1, ssv2
 
 
-def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset)\
+def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset) \
         -> SuperSegmentationObject:
     """Initializes an SuperSegmentationObject and caches all relevant data.
     Cell organelles and supervoxel SegmentationDatasets must be initialized."""

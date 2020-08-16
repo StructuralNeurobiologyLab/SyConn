@@ -76,7 +76,7 @@ if cval is None:
 lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.992
-max_steps = 150000
+max_steps = 200000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition

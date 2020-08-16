@@ -39,11 +39,12 @@ ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_p
 
 if global_params.config.use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-    predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch)
+    predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, show_progress=False)
 else:
     n_worker = 2
     params = basics.chunkify(ch, n_worker * 4)
-    res = start_multiprocess_imap(celltype_predictor, [(p, ncpus, model_props) for p in params], nb_cpus=n_worker)
+    res = start_multiprocess_imap(celltype_predictor, [(p, ncpus, model_props) for p in params], nb_cpus=n_worker,
+                                  show_progress=False)
 
     missing = np.concatenate(res)
     if len(missing) > 0:

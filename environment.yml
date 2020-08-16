@@ -1,7 +1,7 @@
 # Dependencies marked with "(optional)" are not required for core functionality
 # and can be commented out if there are conflicts.
 
-name: pysy
+name: syco
 channels:
   - pytorch
   - conda-forge
@@ -80,6 +80,9 @@ dependencies:
     # TODO: Move these up to conda once they work again
     - tensorflow
     - tensorboard
+    #for skeletonisation
+    - kimimaro
+    - fill-voids
 
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil_convpoint#egg=elektronn3

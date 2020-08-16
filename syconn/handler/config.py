@@ -4,17 +4,19 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert
-from .. import global_params
-import glob
-import os
-import yaml
-import logging
-import coloredlogs
 import datetime
-from typing import Tuple, Optional, Union, Dict, Any, List
+import glob
+import logging
+import os
 from logging import Logger
-from termcolor import colored
+from typing import Tuple, Optional, Union, Dict, Any, List
+
+import coloredlogs
 import numpy as np
+import yaml
+from termcolor import colored
+
+from .. import global_params
 
 __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
@@ -25,6 +27,7 @@ class Config(object):
     in `working_dir` :py:attr:`~initialized` will be False without raising an
     error.
     """
+
     def __init__(self, working_dir):
         self._config = None
         self._configspec = None
@@ -142,6 +145,7 @@ class DynConfig(Config):
             cfg = global_params.config  # this is the `DynConfig` object
 
     """
+
     def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None, fix_config: bool = False):
         """
         Args:
@@ -242,7 +246,7 @@ class DynConfig(Config):
                 and os.environ['syconn_wd'] != "None":
             if super().working_dir != os.path.abspath(os.environ['syconn_wd']):
                 new_wd = os.path.abspath(os.environ['syconn_wd'])
-        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and (global_params.wd != "None") and\
+        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and (global_params.wd != "None") and \
                 (super().working_dir != os.path.abspath(global_params.wd)):
             new_wd = os.path.abspath(global_params.wd)
         if new_wd is None:
@@ -421,6 +425,16 @@ class DynConfig(Config):
             triplet loss on point data.
         """
         mpath = glob.glob(self.model_dir + '/pts/*tnet*/state_dict.pth')
+        if len(mpath) > 1:
+            ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+            if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
+                return mpath[ixs.index(1)]
+            ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+            if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
+                return mpath[ixs.index(1)]
+            # assume its j0126
+            if 'j0251' not in global_params.config.working_dir and np.sum(ixs) == 1:
+                mpath.pop(ixs.index(1))
         assert len(mpath) == 1
         return mpath[0]
 
@@ -451,9 +465,10 @@ class DynConfig(Config):
             Path to model trained on detecting axon, terminal and en-passant boutons,
             dendritic shaft, spine head and neck, and soma from point data.
         """
-        mpath = glob.glob(self.model_dir + '/pts/*semseg*/state_dict.pth')
-        assert len(mpath) == 1
-        return mpath[0]
+        return self.model_dir + '/compartment_pts/'
+        # mpath = glob.glob(self.model_dir + '/pts/*semseg*/state_dict.pth')
+        # assert len(mpath) == 1
+        # return mpath[0]
 
     @property
     def mpath_celltype_e3(self) -> str:
@@ -473,6 +488,15 @@ class DynConfig(Config):
         mpath = glob.glob(self.model_dir + '/pts/*celltype*/state_dict.pth')
         if len(mpath) > 1:
             mpath = [m for m in mpath if 'tnet' not in m]
+        ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+        if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
+            return mpath[ixs.index(1)]
+        ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+        if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
+            return mpath[ixs.index(1)]
+        # assume its j0126
+        if 'j0251' not in global_params.config.working_dir and np.sum(ixs) == 1:
+            mpath.pop(ixs.index(1))
         assert len(mpath) == 1
         return mpath[0]
 
@@ -548,6 +572,19 @@ class DynConfig(Config):
             res = self.entries['skeleton']['allow_skel_gen']
         return res
 
+    @property
+    def use_kimimaro(self) -> bool:
+        """
+        Controls if skeletons should be generated with kimimaro
+        Returns: value stores in config.yml file
+
+        """
+        try:
+            res = self.entries['skeleton']['use_kimimaro']
+        except KeyError:  # backwards compat.
+            res = False
+        return res
+
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
     def syntype_available(self) -> bool:
@@ -567,6 +604,22 @@ class DynConfig(Config):
 
     @property
     def use_point_models(self) -> bool:
+        """
+        Use point cloud based models instead of multi-views.
+
+        Returns:
+            Value stored at the config.yml file.
+        """
+        try:
+            if self.entries['use_point_models'] is None:
+                raise KeyError
+            return self.entries['use_point_models']
+        except KeyError:
+            return False
+
+
+    @property
+    def use_large_fov_views_ct(self) -> bool:
         """
         Use point cloud based models instead of multi-views.
 
@@ -699,7 +752,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           use_new_renderings_locs: bool = True,
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
-                          kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
+                          kd_sj: Optional[str] = None, kd_mi: Optional[str] = None,
                           kd_vc: Optional[str] = None, init_rag_p: str = "",
                           prior_glia_removal: bool = True,
                           use_new_meshing: bool = True,
@@ -725,230 +778,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     working directory.
 
     Examples:
-        The default config content is::
-
-            # General properties of the data set
-            scaling: [1, 1, 1]
-
-            # File system, 'FS' is currently the only supported option
-            backend: "FS"
-
-            # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
-            pyopengl_platform: 'egl'
-
-            existing_cell_organelles: ['mi', 'sj', 'vc']
-            syntype_avail:
-
-            # Compute backend: 'QSUB', 'SLURM', None
-            batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
-
-            # the here defined parameters
-            batch_pe: 'default'
-            batch_queue: 'all.q'
-
-            mem_per_node: 128000  # in MB
-            ncores_per_node: 16
-            ngpus_per_node: 1
-            nnodes_total: 1
-
-            # --------- LOGGING
-            # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
-            # Logs of executed scripts (syconn/scripts) will be stored at the
-            # working directory + '/logs/' nonetheless.
-            default_log_dir:
-            log_level: 10  # INFO: 20, DEBUG: 10
-            # file logging for individual modules, and per job. Only use in case of
-            # debugging with single core processing. Logs for scripts are located in 'SyConn/scripts/'
-            # will be stored at wd + '/logs/'.
-            disable_file_logging: True
-
-            # File locking - deprecated.
-            disable_locking: False
-
-            # Data paths
-            paths:
-              kd_seg:
-              kd_sym:
-              kd_asym:
-              kd_sj:
-              kd_vc:
-              kd_mi:
-              init_rag:
-              use_new_subfold:
-
-            # (Super-)SegmentationDataset versions
-            versions:
-              sv: 0
-              vc: 0
-              sj: 0
-              syn: 0
-              syn_ssv: 0
-              mi: 0
-              ssv: 0
-              ax_gt: 0
-              cs: 0
-
-            # Cell object properties
-            cell_objects:
-              # threshold applied during object extraction
-              min_obj_vx:
-                mi: 100
-                sj: 100
-                vc: 100
-                sv: 1  # all cell supervoxels are extracted
-                cs: 10  # contact sites tend to be small
-                syn: 10  # these are overlayed with contact sites and therefore tend to be small
-                syn_ssv: 100 # minimum number of voxel for synapses in SSVs
-
-              lower_mapping_ratios:
-                mi: 0.5
-                sj: 0.1
-                vc: 0.5
-
-              upper_mapping_ratios:
-                mi: 1.
-                sj: 0.9
-                vc: 1.
-
-              # size threshold (in voxels) applied when mapping them to cells
-              sizethresholds:
-                mi: 2786
-                sj: 498
-                vc: 1584
-
-              probathresholds:
-                mi: 0.428571429
-                sj: 0.19047619
-                vc: 0.285714286
-
-              # Hook for morphological operations from scipy.ndimage applied during object extraction.
-              # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
-              extract_morph_op:
-                mi: []
-                sj: []
-                vc: []
-                sv: []  # these are the cell supervoxels
-
-              # bounding box criteria for mapping mitochondria objects
-              thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
-
-              # --------- CONTACT SITE AND SYNAPSE PARAMETERS
-              # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
-              # into 'syn_ssv'
-              cs_gap_nm: 250
-              cs_filtersize: [13, 13, 7]
-              cs_nclosings: 7
-              # Parameters of agglomerated synapses 'syn_ssv'
-              # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
-              # organelles to syn_ssv
-              max_vx_dist_nm: 2000
-              max_rep_coord_dist_nm: 4000
-              # RFC probability used for classifying whether syn or not
-              thresh_synssv_proba: 0.5
-              # > sym_thresh will be assigned synaptic sign -1 (inhibitory) and <= will be
-              # (1, excitatory)
-              sym_thresh: 0.225
-              # labels are None by default
-              asym_label:
-              sym_label:
-
-            meshes:
-              allow_mesh_gen_cells:
-              use_new_meshing:
-
-              downsampling:
-                sv: [4, 4, 2]
-                sj: [2, 2, 1]
-                vc: [4, 4, 2]
-                mi: [8, 8, 4]
-                cs: [2, 2, 1]
-                syn_ssv: [2, 2, 1]
-
-              closings:
-                sv: 0
-                s: 0
-                vc: 0
-                mi: 0
-                cs: 0
-                syn_ssv: 0
-
-              mesh_min_obj_vx: 100  # adapt to size threshold
-
-              meshing_props:
-                normals: False  # True
-                simplification_factor: 300
-                max_simplification_error: 40  # in nm
-
-            skeleton:
-              allow_ssv_skel_gen: True
-              feature_context_rfc: # in nm
-                axoness: 8000
-                spiness: 1000
-
-            views:
-              use_onthefly_views:
-              use_new_renderings_locs:
-              nb_views: 2  # used for default view rendering (glia separation, spine detection)
-
-            glia:
-              prior_glia_removal: True
-              # min. connected component size of glia nodes/SV after thresholding glia proba
-              min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
-
-              # Threshold for glia classification
-              glia_thresh: 0.161489
-              # number of sv used during local rendering. The total number of SV used are
-              # subcc_size_big_ssv + 2*(subcc_chunk_size_big_ssv-1)
-              subcc_size_big_ssv: 35
-              rendering_max_nb_sv: 5000
-              # number of SV for which views are rendered in one pass
-              subcc_chunk_size_big_ssv: 9
-
-            # --------- SPINE PARAMETERS
-            spines:
-              min_spine_cc_size: 10
-              min_edge_dist_spine_graph: 110
-              gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
-
-              # mapping parameters of the semantic segmentation prediction to the cell mesh
-              # Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
-              # via nearest neighbors.
-              semseg2mesh_spines:
-                semseg_key: "spiness"
-                force_recompute: True
-                k: 0
-
-              # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
-              # and 5 (unpredicted), use labels of the k-nearest vertices
-              semseg2coords_spines:
-                k: 50
-                ds_vertices: 1
-                ignore_labels: [4, 5]
-
-            compartments:
-              dist_axoness_averaging: 10000  # also used for myelin averaging
-              gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'
-
-              # `k=0` will not map predictions to unpredicted vertices -> faster
-              # `k` is the parameter used in `semseg2mesh`
-              view_properties_semsegax:
-                verbose: False
-                ws: [1024, 512]
-                nb_views: 3
-                comp_window: 40960  # in NM
-                semseg_key: 'axoness'
-                k: 0
-              # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
-              # and 6 (unpredicted), use labels of the k-nearest vertices
-              map_properties_semsegax:
-                k: 50
-                ds_vertices: 1
-                ignore_labels: [5, 6]
-
-            # --------- MORPHOLOGY EMBEDDING
-            tcmn:
-              ndim_embedding: 10
-
+        The default config content is located at SyConn/syconn/handler/config.yml
 
     Args:
         working_dir: Folder of the working directory.
@@ -1078,14 +908,15 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
 
 class TimeFilter(logging.Filter):
     """https://stackoverflow.com/questions/31521859/python-logging-module-time-since-last-log"""
+
     def filter(self, record):
         try:
-          last = self.last
+            last = self.last
         except AttributeError:
-          last = record.relativeCreated
+            last = record.relativeCreated
 
-        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - \
-                datetime.datetime.fromtimestamp(last/1000.0)
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated / 1000.0) - \
+                datetime.datetime.fromtimestamp(last / 1000.0)
 
         record.relative = '{0:.1f}'.format(delta.seconds / 60.)
 
