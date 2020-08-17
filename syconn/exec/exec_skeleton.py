@@ -31,8 +31,6 @@ def run_skeleton_generation(cube_of_interest_bb: Optional[tuple] = None):
     Args:
         cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
             coord, upper coord)
-    Returns:
-
     """
     if global_params.config.use_kimimaro:
         # volume-based
@@ -49,7 +47,7 @@ def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myeli
     Args:
         max_n_jobs: Number of parallel jobs.
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
-        :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
+            :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
 
     """
     if map_myelin is None:

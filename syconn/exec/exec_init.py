@@ -169,7 +169,7 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
 
     Initializes a per-object segmentation KnossosDataset for the given supervoxel type
     `co` based on an initial prediction which location has to be defined in the config.yml file
-    for the `co` object, e.g. `kd_mi` for `co='mi'`
+    for the `co` object, e.g. ``'kd_mi'`` for ``co='mi'``
     (see :func:`~syconn.handler.config.generate_default_conf`). Results will be stored as a
     KnossosDataset at `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
     Appropriate parameters have to be set inside the config.yml file, see
@@ -180,8 +180,7 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
         Was used to process sub-cellular structures independently:
 
                 ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
-                      load_cellorganelles_from_kd_overlaycubes,
-                      cube_of_interest_bb, log])
+                    load_cellorganelles_from_kd_overlaycubes, cube_of_interest_bb, log])
                     for co in global_params.config['existing_cell_organelles']]
                 for p in ps:
                     p.start()
@@ -189,8 +188,7 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
                 for p in ps:
                     p.join()
                     if p.exitcode != 0:
-                        raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
-                                        f'code {p.exitcode}.')
+                        raise Exception(f'Worker {p.name} stopped unexpectedly with exit code {p.exitcode}.')
 
     Args:
         co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for

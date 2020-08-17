@@ -25,8 +25,8 @@ def run_matrix_export():
     """
     Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
     of the currently active working directory.
-    Also collects the following synapse properties from prior analysis
-    steps:
+    Also collects the following synapse properties from prior analysis steps:
+
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
           en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
         * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
@@ -66,6 +66,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
     the following versions:
+
         * 'cs': Contact site objects between supervoxels.
         * 'syn': Objects representing the overlap between 'cs' and the initial
           synaptic junction predictions. Note: These objects effectively represent
