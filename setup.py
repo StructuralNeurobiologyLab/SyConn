@@ -28,8 +28,7 @@ def read_readme():
 
 
 def write_version_py(filename='syconn/version.py'):
-    content = """
-# THIS FILE IS GENERATED FROM SYCONN SETUP.PY
+    content = """# THIS FILE IS GENERATED FROM SYCONN SETUP.PY
 #
 version = '%(version)s'
 """
