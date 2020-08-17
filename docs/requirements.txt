@@ -1,10 +1,9 @@
-m2r
+m2r2
 sphinx >=3.0,<=3.1
 sphinx-autodoc-typehints >=1.11,<=1.12
 sphinx_rtd_theme
 
 cython
-kimimaro
 h5py
 matplotlib
 tqdm
@@ -30,6 +29,8 @@ pytest-xdist
 prompt-toolkit
 dill
 pyyaml
+kimimaro
+fill-voids
 git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 git+git://github.com/StructuralNeurobiologyLab/MorphX@master#egg=morphx
 
