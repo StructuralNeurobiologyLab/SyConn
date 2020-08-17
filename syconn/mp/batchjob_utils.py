@@ -274,7 +274,7 @@ def batchjob_script(params: list, name: str,
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
             log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
-                                 f'again, SLURM cache might have been delayed.')
+                                 f'again, SLURM cache may not have been updated yet.')
             time.sleep(5)
             js_dc = jobstates_slurm(job_name, starttime)
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
