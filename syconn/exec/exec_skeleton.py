@@ -25,7 +25,7 @@ from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
-def run_skeleton_generation(cube_of_interest_bb: Optional[tuple] = None):
+def run_skeleton_generation(cube_of_interest_bb: Optional[tuple] = None, map_myelin: Optional[bool] = None):
     """
 
     Args:
@@ -34,10 +34,10 @@ def run_skeleton_generation(cube_of_interest_bb: Optional[tuple] = None):
     """
     if global_params.config.use_kimimaro:
         # volume-based
-        run_kimimaro_skelgen(cube_of_interest_bb=cube_of_interest_bb)
+        run_kimimaro_skelgen(cube_of_interest_bb=cube_of_interest_bb, map_myelin=map_myelin)
     else:
         # SSV-based skeletonization on mesh vertices, not centered. Does not require cube_of_interest_bb
-        run_skeleton_generation()
+        run_skeleton_generation_fallback(map_myelin=map_myelin)
 
 
 def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None):
@@ -90,6 +90,9 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
+    myelin_kd_p = global_params.config.working_dir + '/knossosdatasets/myelin/'
+    if not os.path.isdir(myelin_kd_p):
+        raise ValueError(f'Could not find myelin KnossosDataset at {myelin_kd_p}.')
     log = initialize_logging('myelin_mapping', global_params.config.working_dir + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -121,7 +124,7 @@ def run_skeleton_axoness():
     sbc.classifier_production(ft_context, nb_cpus=global_params.config['ncores_per_node'])
 
 
-def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = True,
+def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None,
                          cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None,
                          ds: Optional[np.ndarray] = None):
     """
@@ -147,6 +150,8 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: bool = Tr
     if ds is None:
         ds = global_params.config['scaling'][2] // np.array(global_params.config['scaling'])
         assert np.all(ds > 0)
+    if map_myelin is None:
+        map_myelin = os.path.isdir(global_params.config.working_dir + '/knossosdatasets/myelin/')
     log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 

@@ -28,6 +28,7 @@ def test_full_run():
     experiment_name = 'j0126_example'
     scale = np.array([10, 10, 20])
     prior_glia_removal = True
+    use_myelin = False
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
@@ -35,7 +36,7 @@ def test_full_run():
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),
-        ('log_level', 'DEBUG'),
+        ('log_level', 'INFO'),
         # these will be created during synapse type prediction (
         # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
         # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
@@ -69,17 +70,18 @@ def test_full_run():
 
     generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf, force_overwrite=False)
 
-    if global_params.config.working_dir is not None and global_params.config.working_dir != example_wd:
-        msg = f'Active working directory is already set to "{example_wd}". Aborting.'
-        log.critical(msg)
-        raise RuntimeError(msg)
+    if global_params.config.working_dir is not None and \
+            os.path.normpath(global_params.config.working_dir) != os.path.normpath(example_wd):
+        os.environ['syconn_wd'] = example_wd
 
-    os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
+    from syconn.reps.super_segmentation import SuperSegmentationDataset
+    assert os.path.normpath(SuperSegmentationDataset().config.working_dir) == os.path.normpath(example_wd)
+    os.makedirs(example_wd, exist_ok=True)
 
     # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
-    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
+    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
     from syconn.handler.compression import load_from_h5py
 
     # PREPARE TOY DATA
@@ -113,7 +115,6 @@ def test_full_run():
     del tmp
 
     # INITIALIZE DATA
-    # TODO: switch to streaming confs instead of h5 files
     if not os.path.isdir(global_params.config.kd_sj_path):
         kd = knossosdataset.KnossosDataset()
         kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -158,7 +159,8 @@ def test_full_run():
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
     # TODO: launch all predictions in parallel
-    exec_dense_prediction.predict_myelin()
+    if use_myelin:
+        exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
@@ -192,21 +194,21 @@ def test_full_run():
 
     log.info('Step 5/10 - Creating SuperSegmentationDataset')
     ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
+    exec_skeleton.run_skeleton_generation(map_myelin=use_myelin)
     ftimer.stop()
 
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 4.5/9 - Neuron rendering')
+        log.info('Step 5.5/9 - Neuron rendering')
         ftimer.start('Neuron rendering')
         exec_render.run_neuron_rendering()
         ftimer.stop()
 
-    log.info('Step 5/9 - Synapse detection')
+    log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     ftimer.stop()
 
-    log.info('Step 6/9 - Compartment prediction')
+    log.info('Step 7/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
     exec_inference.run_semsegaxoness_prediction()
     if not global_params.config.use_point_models:
@@ -214,20 +216,22 @@ def test_full_run():
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 
-    log.info('Step 7/9 - Morphology extraction')
+    log.info('Step 8/9 - Morphology extraction')
     ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
     ftimer.stop()
 
-    log.info('Step 8/9 - Celltype analysis')
+    log.info('Step 9/9 - Celltype analysis')
     ftimer.start('Celltype analysis')
     exec_inference.run_celltype_prediction()
     ftimer.stop()
 
-    log.info('Step 9/9 - Matrix export')
+    log.info('Matrix export')
     ftimer.start('Matrix export')
     exec_syns.run_matrix_export()
     ftimer.stop()
 
     time_summary_str = ftimer.prepare_report(experiment_name)
     log.info(time_summary_str)
+
+    del os.environ['syconn_wd']
