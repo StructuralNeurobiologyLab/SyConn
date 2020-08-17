@@ -15,16 +15,15 @@ from multiprocessing import Process
 from syconn.handler.basics import FileTimer
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
+from syconn.mp.batchjob_utils import batchjob_enabled
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
-
-# TODO: set myelin knossosdataset - currently mapping of myelin to skeletons does not allow partial cubes
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
-    prior_glia_removal = False
+    prior_glia_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
         ('pyopengl_platform', 'egl'),
@@ -178,35 +177,37 @@ if __name__ == '__main__':
     ftimer.stop()
 
     def start_skel_gen():
-        time.sleep(10)
-        log.info('Step 5/10 - Skeleton generation')
+        log.info('Step 6/10 - Skeleton generation')
         ftimer.start('Skeleton generation')
         exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
         ftimer.stop()
 
     def start_neuron_rendering():
-        time.sleep(20)
         if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-            log.info('Step 5.5/10 - Neuron rendering')
+            log.info('Step 6.5/10 - Neuron rendering')
             ftimer.start('Neuron rendering')
             exec_render.run_neuron_rendering()
             ftimer.stop()
 
     def start_syn_gen():
-        time.sleep(0)
-        log.info('Step 6/10 - Synapse detection')
+        log.info('Step 5/10 - Synapse detection')
         ftimer.start('Synapse detection')
         exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
                                      cube_of_interest_bb=cube_of_interest_bb)
         ftimer.stop()
 
     # skeleton and synapse generation and rendering have independent dependencies and target storage
+    # TODO: do not run this in parallel if batchjob is disabled
     procs = []
-    for func in [start_skel_gen, start_neuron_rendering, start_syn_gen]:
+    for func in [start_syn_gen, start_skel_gen, start_neuron_rendering]:
+        if not batchjob_enabled():
+            func()
+            continue
         p = Process(target=func)
         p.start()
         procs.append(p)
-    for p in procs:
+        time.sleep(10)
+    for p in procs:  # procs is empty list, if batch jobs are disabled.
         p.join()
         if p.exitcode != 0:
             raise Exception(f'Worker {p.name} stopped unexpectedly with exit '

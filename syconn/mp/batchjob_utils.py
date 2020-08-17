@@ -33,7 +33,7 @@ from multiprocessing import cpu_count
 from logging import Logger
 
 
-def batchjob_enabled():
+def batchjob_enabled() -> bool:
     """
     Checks if active batch processing system is actually working.
 
@@ -348,15 +348,14 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
     def _delete_folder(dn, lg, to=60):
         start = time.time()
         e = ''
-        while timeout > time.time() - start:
+        while to > time.time() - start:
             try:
                 shutil.rmtree(dn)
                 break
             except OSError as e:
                 e = str(e)
                 time.sleep(5)
-        if time.time() - start > timeout:
-            lg.warning(f'Deletion of job folder "{dn}" timed out after {to}s. OSError: {e}')
+        if time.time() - start > to:
             shutil.rmtree(dn, ignore_errors=True)
             if os.path.exists(dn):
                 dn_del = f"{os.path.dirname(dn)}/DEL/{os.path.basename(dn)}_DEL"
@@ -364,9 +363,10 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
                     shutil.rmtree(os.path.dirname(dn_del), ignore_errors=True)
                 os.makedirs(os.path.dirname(dn_del), exist_ok=True)
                 shutil.move(dn, dn_del)
+                lg.warning(f'Deletion of job folder "{dn}" timed out after {to}s.')
 
     t = threading.Thread(name=f'jobfold_delete_{job_name}', target=_delete_folder,
-                         args=(dirname, log))
+                         args=(dirname, log, timeout))
     t.setDaemon(True)
     t.start()
 
