@@ -845,8 +845,8 @@ class FileTimer:
                            f"after {dt_tot_str}.\n"
         n_steps = len(self.timings)
         for i, (step_name, step_dt) in enumerate(self.timings.items()):
-            step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(step_dt))
             step_dt_per = int(step_dt / dt_tot * 100)
+            step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(step_dt))
             step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
                                                            step_dt, f'{step_dt_per}%')
             time_summary_str += step_str
