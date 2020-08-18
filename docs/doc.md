@@ -36,8 +36,8 @@ To update the environment, e.g. if the environment file changed, use:
     conda env update --name syco --file environment.yml --prune
 
 ## Example run
-Place the example and model data (provided upon request) in `SyConn/scripts/example_run/`,
-cd to `SyConn/scripts/example_run/` and run
+Place the example and model data (provided upon request) in `SyConn/examples/`,
+cd to `SyConn/examples/` and run
 
     python start.py [--working_dir=..]
 
