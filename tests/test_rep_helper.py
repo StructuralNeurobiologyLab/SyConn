@@ -32,10 +32,6 @@ def test_subfold2ix_inverse():
                 assert rep_id == ix_from_subfold_new(storage_ident, n_folder_fs)
 
 
-def test_uint64():
-    return
-
-
 if __name__ == '__main__':
     test_subfold_from_ix()
     test_subfold2ix_inverse()

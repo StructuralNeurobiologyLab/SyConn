@@ -44,7 +44,7 @@ if __name__ == '__main__':
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('use_point_models', False),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
+        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
@@ -95,7 +95,7 @@ if __name__ == '__main__':
 
     # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
-    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
+    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
     from syconn.handler.compression import load_from_h5py
 
     # PREPARE TOY DATA
@@ -206,18 +206,23 @@ if __name__ == '__main__':
     exec_init.run_create_neuron_ssd()
     ftimer.stop()
 
+    log.info('Step 5/9 - Skeleton generation')
+    ftimer.start('Skeleton generation')
+    exec_skeleton.run_skeleton_generation()
+    ftimer.stop()
+
     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 4.5/9 - Neuron rendering')
+        log.info('Step 5.5/9 - Neuron rendering')
         ftimer.start('Neuron rendering')
         exec_render.run_neuron_rendering()
         ftimer.stop()
 
-    log.info('Step 5/9 - Synapse detection')
+    log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     ftimer.stop()
 
-    log.info('Step 6/9 - Compartment prediction')
+    log.info('Step 7/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
     exec_inference.run_semsegaxoness_prediction()
     if not global_params.config.use_point_models:
@@ -225,17 +230,17 @@ if __name__ == '__main__':
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 
-    log.info('Step 7/9 - Morphology extraction')
+    log.info('Step 8/9 - Morphology extraction')
     ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
     ftimer.stop()
 
-    log.info('Step 8/9 - Celltype analysis')
+    log.info('Step 9/9 - Celltype analysis')
     ftimer.start('Celltype analysis')
     exec_inference.run_celltype_prediction()
     ftimer.stop()
 
-    log.info('Step 9/9 - Matrix export')
+    log.info('Step - Matrix export')
     ftimer.start('Matrix export')
     exec_syns.run_matrix_export()
     ftimer.stop()

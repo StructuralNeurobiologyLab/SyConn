@@ -950,8 +950,6 @@ def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module', debug: bool = False
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
-    # m = torch.jit.load(global_params.config.mpath_glia_e3)
-    # m = InferenceModel(m, normalize_func=naive_view_normalization_new)
     m = InferenceModel(global_params.config.mpath_glia_e3, normalize_func=naive_view_normalization_new)
     return m
 
@@ -971,7 +969,6 @@ def get_celltype_model_e3():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_celltype_e3)
     m = InferenceModel(m, bs=40, multi_gpu=True)
-    # m = InferenceModel(global_params.config.mpath_celltype_e3, bs=40)
     return m
 
 
@@ -986,7 +983,6 @@ def get_semseg_spiness_model():
     path = global_params.config.mpath_spiness
     m = torch.jit.load(path)
     m = InferenceModel(m)
-    # m = InferenceModel(path)
     m._path = path
     return m
 
@@ -1002,7 +998,6 @@ def get_semseg_axon_model():
     path = global_params.config.mpath_axonsem
     m = torch.jit.load(path)
     m = InferenceModel(m)
-    # m = InferenceModel(path)
     m._path = path
     return m
 
@@ -1018,7 +1013,6 @@ def get_tripletnet_model_e3():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_tnet)
     m = InferenceModel(m)
-    # m = InferenceModel(global_params.config.mpath_tnet)
     return m
 
 
@@ -1038,7 +1032,6 @@ def get_myelin_cnn():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_myelin)
     m = Predictor(m)
-    # m = Predictor(global_params.config.mpath_myelin)
     return m
 
 
