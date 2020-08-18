@@ -69,10 +69,9 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
     for ii in skels:
         # cell.vertices already in physical coordinates (nm)
         # now add the offset in physical coordinates
+        # TODO: add sparsify
         skels[ii].downsample(10)
         skels[ii].vertices += (cube_offset * kd.scales[0]).astype(np.int)
-        # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
-        # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
     return skels
 
 

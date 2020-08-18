@@ -192,7 +192,7 @@ def run_kimimaro_skelgen(max_n_jobs: Optional[int] = None, map_myelin: Optional[
     write_obj2pkl(pathdict_filepath, path_dc)
     del path_dc
 
-    multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs, ssd.load_cached_data('size'))
+    multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs * 2, ssd.load_cached_data('size'))
 
     multi_params = [(pathdict_filepath, ssv_id) for ssv_id in multi_params]
     # create SSV skeletons, requires SV skeletons!

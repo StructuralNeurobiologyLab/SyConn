@@ -7,7 +7,7 @@ backend: "FS"
 # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
 pyopengl_platform: 'egl'
 
-version: 0.2
+version: 0.3
 
 existing_cell_organelles: ['mi', 'sj', 'vc']
 syntype_avail:
@@ -19,7 +19,6 @@ batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 batch_pe: 'default'
 batch_queue: 'all.q'
 
-# TODO: Use computing settings everywhere
 mem_per_node: 249500  # in MB
 ncores_per_node: 20
 ngpus_per_node: 2
