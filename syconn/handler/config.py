@@ -466,9 +466,6 @@ class DynConfig(Config):
             dendritic shaft, spine head and neck, and soma from point data.
         """
         return self.model_dir + '/compartment_pts/'
-        # mpath = glob.glob(self.model_dir + '/pts/*semseg*/state_dict.pth')
-        # assert len(mpath) == 1
-        # return mpath[0]
 
     @property
     def mpath_celltype_e3(self) -> str:
@@ -477,7 +474,6 @@ class DynConfig(Config):
             Path to model trained on prediction cell types from multi-view sets.
         """
         return self.model_dir + '/celltype_e3/model.pts'
-        # return self.model_dir + '/celltype_e3/'
 
     @property
     def mpath_celltype_pts(self) -> str:
@@ -507,7 +503,6 @@ class DynConfig(Config):
             Path to model trained to classify local 2D projections into glia
             vs. neuron (img2scalar).
         """
-        # return self.model_dir + '/glia_e3/model.pts'
         return self.model_dir + '/glia_e3/'
 
     @property
@@ -549,12 +544,7 @@ class DynConfig(Config):
         If ``True``, meshes are not provided for cell supervoxels and will be
         computed from scratch, see :attr:`~syconn.handler.config.DynConf.use_new_meshing`.
         """
-        try:
-            if self.entries['meshes']['allow_mesh_gen_cells'] is None:
-                raise KeyError
-            return self.entries['meshes']['allow_mesh_gen_cells']
-        except KeyError:
-            return False
+        return bool(self['meshes']['allow_mesh_gen_cells'])
 
     @property
     def allow_ssv_skel_gen(self) -> bool:
@@ -566,11 +556,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            res = self.entries['skeleton']['allow_ssv_skel_gen']
-        except KeyError:  # backwards compat.
-            res = self.entries['skeleton']['allow_skel_gen']
-        return res
+        return bool(self['skeleton']['allow_ssv_skel_gen'])
 
     @property
     def use_kimimaro(self) -> bool:
@@ -579,11 +565,7 @@ class DynConfig(Config):
         Returns: value stores in config.yml file
 
         """
-        try:
-            res = self.entries['skeleton']['use_kimimaro']
-        except KeyError:  # backwards compat.
-            res = False
-        return res
+        return bool(self['skeleton']['use_kimimaro'])
 
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
@@ -595,12 +577,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['dataset']['syntype_avail'] is None:
-                raise KeyError
-            return self.entries['dataset']['syntype_avail']
-        except KeyError:
-            return True
+        return bool(self['syntype_avail'])
 
     @property
     def use_point_models(self) -> bool:
@@ -610,28 +587,8 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['use_point_models'] is None:
-                raise KeyError
-            return self.entries['use_point_models']
-        except KeyError:
-            return False
+        return bool(self['use_point_models'])
 
-
-    @property
-    def use_large_fov_views_ct(self) -> bool:
-        """
-        Use point cloud based models instead of multi-views.
-
-        Returns:
-            Value stored at the config.yml file.
-        """
-        try:
-            if self.entries['use_point_models'] is None:
-                raise KeyError
-            return self.entries['use_point_models']
-        except KeyError:
-            return False
 
     @property
     def use_onthefly_views(self) -> bool:
@@ -641,12 +598,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['views']['use_onthefly_views'] is None:
-                raise KeyError
-            return self.entries['views']['use_onthefly_views']
-        except KeyError:
-            return False
+        return bool(self['views']['use_onthefly_views'])
 
     @property
     def use_new_renderings_locs(self) -> bool:
@@ -657,12 +609,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['views']['use_new_renderings_locs'] is None:
-                raise KeyError
-            return self.entries['views']['use_new_renderings_locs']
-        except KeyError:
-            return False
+        return bool(self['views']['use_new_renderings_locs'])
 
     @property
     def use_new_meshing(self) -> bool:
@@ -673,12 +620,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['meshes']['use_new_meshing'] is None:
-                raise KeyError
-            return self.entries['meshes']['use_new_meshing']
-        except KeyError:
-            return False
+        return bool(self['meshes']['use_new_meshing'])
 
     @property
     def qsub_work_folder(self) -> str:
@@ -711,12 +653,10 @@ class DynConfig(Config):
         Returns:
             Value stored in ``config.yml``.
         """
-        try:
-            if self['paths']['use_new_subfold'] is not None:
-                return self['paths']['use_new_subfold']
-            else:
-                raise KeyError
-        except KeyError:
+        use_new_subfold = self['paths']['use_new_subfold']
+        if use_new_subfold is not None:
+            return bool(use_new_subfold)
+        else:
             return False
 
     @property
@@ -734,17 +674,11 @@ class DynConfig(Config):
 
     @property
     def asym_label(self) -> Optional[int]:
-        try:
-            return self.entries['cell_objects']['asym_label']
-        except KeyError:
-            return None
+        return self['cell_objects']['asym_label']
 
     @property
     def sym_label(self) -> Optional[int]:
-        try:
-            return self.entries['cell_objects']['sym_label']
-        except KeyError:
-            return None
+        return self['cell_objects']['sym_label']
 
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],

@@ -412,6 +412,7 @@ def surface_samples(coords: np.ndarray,
     -------
     np.array
     """
+    coords = np.array(coords)  # create copy!
     offset = np.min(coords, axis=0)
     bin_sizes = np.array(bin_sizes, dtype=np.float)
     coords -= offset

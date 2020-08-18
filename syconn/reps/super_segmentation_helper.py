@@ -15,22 +15,24 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views, \
     find_missing_sv_attributes, find_missing_sv_skeletons, load_so_attr_bulk
 from .. import global_params
-from ..handler.basics import kd_factory
+from ..handler.basics import kd_factory, flatten_list
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc.graphs import create_graph_from_coords, stitch_skel_nx
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
-
+from ..proc.sd_proc import predict_views
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
-
 if TYPE_CHECKING:
     from . import super_segmentation
+    from ..reps.super_segmentation import SuperSegmentationObject
+    from ..reps.segmentation import SegmentationObject
 
+from collections.abc import Iterable
 from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
@@ -39,18 +41,15 @@ import numpy as np
 import scipy
 import scipy.ndimage
 from scipy import spatial
+from skimage.segmentation import watershed
+from skimage.feature import peak_local_max
+from scipy import ndimage
 from knossos_utils.skeleton_utils import annotation_to_nx_graph, \
     load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
-from collections.abc import Iterable
-
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tool
-
-from skimage.segmentation import watershed
-from skimage.feature import peak_local_max
-from scipy import ndimage
 
 
 def majority_vote(anno, prop, max_dist):
@@ -1602,6 +1601,37 @@ def pred_sv_chunk_semseg(args):
         label_vd.push()
 
 
+def gliapred_sso_nocache(sso: 'SuperSegmentationObject', model, verbose: bool = True):
+    """
+    Perform a multi-view based astrocyte inference. Result will be stored as 'glia_probas' in the attribute dicts
+    of every ``sso.svs``, e.g. access the probabilities of the first cell supervoxel via
+    ``sso.svs[0].attr_dict['glia_probas']``.
+
+    Args:
+        sso: Cell reconstruction object.
+        model: Pytorch model.
+        verbose: Print additional output.
+    """
+    pred_key = "glia_probas"
+    assert sso.version == 'tmp', 'Only use this method with ssv.version="tmp".'
+
+    coords = sso.sample_locations(cache=False)
+    # len(part_views) == N + 1
+    part_views = np.cumsum([0] + [len(c) for c in coords])
+    flat_coords = np.array(flatten_list(coords))
+    # views are flat
+    views = render_sso_coords(sso, flat_coords, verbose=verbose, add_cellobjects=False, return_rot_mat=False)
+    sv_views = []
+    for ii in range(len(sso.svs)):
+        sv_views.append(views[part_views[ii]:part_views[ii+1]])
+    del views
+    probas = predict_views(model, sv_views, None, return_proba=True, pred_key=pred_key,  nb_cpus=sso.nb_cpus,
+                           verbose=verbose)
+
+    for ii, prob in enumerate(probas):
+        sso.svs[ii].attr_dict[pred_key] = prob
+
+
 @jit(nopython=True)
 def semseg2mesh_counter(index_arr: np.ndarray, label_arr: np.ndarray,
                         bg_label: int, count_arr: np.ndarray) -> np.ndarray:
@@ -1829,7 +1859,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
 
 def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],
                                   nb_views: int, comp_window: int, pred_key_appendix: str = "",
-                                  verbose: bool = False, overwrite: bool = True, dest_path: Optional[str] = None,
+                                  verbose: bool = False, overwrite: bool = True,
                                   add_cellobjects: Union[bool, Iterable] = True):
     """
     Renders raw views at rendering locations determined by `comp_window`
@@ -1848,7 +1878,6 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
         pred_key_appendix:
         verbose: Adds progress bars for view generation.
         overwrite: Overwrite existing views in temporary view dictionary. Key: ``'tmp_views' + pred_key_appendix``.
-        dest_path: Destination path of k.zip file.
         add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
             used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
 
@@ -1887,8 +1916,6 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
     hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))
     dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
     sso.skeleton[pred_key] = latent[ixs]
-    if dest_path is not None:
-        return sso.save_skeleton_to_kzip(dest_path=dest_path)
     sso.save_skeleton()
 
 
@@ -2002,7 +2029,6 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
                     subobject_map_from_mergelist(f.read())
         else:
             raise Exception("sv_mapping has unknown type")
-
 
     for sv_id in mergelist.values():
         ssd.mapping_dict[sv_id] = []

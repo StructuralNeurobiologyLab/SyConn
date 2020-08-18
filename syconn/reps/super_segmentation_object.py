@@ -2445,8 +2445,8 @@ class SuperSegmentationObject(SegmentationBase):
 
     def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton',),
                     rag: Optional[nx.Graph] = None,
-                    sv_color: Optional[np.ndarray] = None,
-                    synssv_instead_sj: bool = False):
+                    sv_color: Optional[np.ndarray] = None, individual_sv_meshes: bool = True,
+                    object_meshes: Optional[tuple] = None, synssv_instead_sj: bool = False):
         """
         Writes the SSO to a KNOSSOS loadable kzip including the mergelist
         (:func:`~mergelist2kzip`), its meshes (:func:`~meshes2kzip`), data set
@@ -2456,7 +2456,6 @@ class SuperSegmentationObject(SegmentationBase):
 
         Todo:
             * Switch to .json format for storing meta information.
-            * Save actual SSV ID in meta dictionary.
 
         Notes:
             Will not invoke :func:`~load_attr_dict`.
@@ -2468,13 +2467,19 @@ class SuperSegmentationObject(SegmentationBase):
             rag: SV graph of SSV with uint nodes.
             sv_color: Cell supervoxel colors. Array with RGBA (0...255) values
                 or None to use default values (see :func:`~mesh2kzip`).
+            individual_sv_meshes: Export meshes of cell supervoxels individually.
+            object_meshes: Defaults to subcellular organelles defined in config.yml
+                ('existing_cell_organelles').
             synssv_instead_sj: If True, will use 'syn_ssv' objects instead of 'sj'.
 
+
         """
-        # # The next two calls are deprecated but might be usefull at some point
+        # # The next two calls are deprecated but might be useful at some point
         # self.save_skeleton_to_kzip(dest_path=dest_path)
         # self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
         #                                  dest_path=dest_path)
+        if os.path.isfile(dest_path):
+            raise FileExistsError(f'k.zip file already exists at "{dest_path}".')
         tmp_dest_p = []
         target_fnames = []
         attr_keys = list(attr_keys)
@@ -2489,6 +2494,11 @@ class SuperSegmentationObject(SegmentationBase):
                     rag = self.sv_graph_uint
                 nx.write_edgelist(rag, tmp_dest_p[-1])
             attr_keys.remove('rag')
+
+        if object_meshes is None:
+            object_meshes = list(self.config['existing_cell_organelles']) + ['sv']
+        else:
+            object_meshes = list(object_meshes)
 
         allowed_attributes = ('sample_locations', 'skeleton', 'attr_dict')
         for attr in attr_keys:
@@ -2513,8 +2523,11 @@ class SuperSegmentationObject(SegmentationBase):
                                        'sso_id': self.id})
         # write all data
         data2kzip(dest_path, tmp_dest_p, target_fnames)
-        self.meshes2kzip(dest_path=dest_path, sv_color=sv_color,
-                         synssv_instead_sj=synssv_instead_sj)
+        if individual_sv_meshes and 'sv' in object_meshes:
+            object_meshes.remove('sv')
+            self.write_svmeshes2kzip(dest_path, force_overwrite=False)
+        self.meshes2kzip(dest_path=dest_path, sv_color=sv_color, force_overwrite=False,
+                         synssv_instead_sj=synssv_instead_sj, object_types=object_meshes)
         self.mergelist2kzip(dest_path=dest_path)
         if 'skeleton' in attr_keys:
             self.save_skeleton_to_kzip(dest_path=dest_path)
@@ -2566,13 +2579,23 @@ class SuperSegmentationObject(SegmentationBase):
         write_mesh2kzip(dest_path, sym_syn_mesh[0], sym_syn_mesh[1],
                         sym_syn_mesh[2], color=np.array((50, 50, 240, 255)), ply_fname='11.ply')
 
-    def write_svmeshes2kzip(self, dest_path=None):
+    def write_svmeshes2kzip(self, dest_path: Optional[str] = None, **kwargs):
+        """
+        Write individual cell supervoxel ('sv') meshes in ply format to kzip file.
+
+        Args:
+            dest_path: Target file name.
+        """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        for ii, sv in enumerate(self.svs):
-            mesh = sv.mesh
-            write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
-                            ply_fname="sv%d.ply" % ii)
+        inds, verts, norms, cols, ply_fnames = [], [], [], [], []
+        for sv in self.svs:
+            inds.append(sv.mesh[0])
+            verts.append(sv.mesh[1])
+            norms.append(sv.mesh[2])
+            cols.append(None)
+            ply_fnames.append(f"sv_{sv.id}.ply")
+        write_meshes2kzip(dest_path, inds, verts, norms, cols, ply_fnames=ply_fnames, **kwargs)
 
     def _svattr2mesh(self, dest_path, attr_key, cmap, normalize_vals=False):
         sv_attrs = np.array([sv.lookup_in_attribute_dict(attr_key).squeeze()
@@ -2644,9 +2667,6 @@ class SuperSegmentationObject(SegmentationBase):
     def gliapred2mesh(self, dest_path=None, thresh=None, pred_key_appendix=""):
         if thresh is None:
             thresh = self.config['glia']['glia_thresh']
-        self.load_attr_dict()
-        for sv in self.svs:
-            sv.load_attr_dict()
         glia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
         nonglia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
@@ -2664,8 +2684,7 @@ class SuperSegmentationObject(SegmentationBase):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         params = [[sv, ] for sv in self.svs]
-        coords = sm.start_multiprocess_obj("rep_coord", params,
-                                           nb_cpus=self.nb_cpus)
+        coords = sm.start_multiprocess_obj("rep_coord", params, nb_cpus=self.nb_cpus)
         coords = np.array(coords)
         params = [[sv, {"thresh": thresh, "pred_key_appendix": pred_key_appendix}]
                   for sv in self.svs]

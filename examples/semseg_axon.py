@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     # path to cell reconstruction k.zip
     if args.kzip is None:
-        args.kzip = '../data/2_axonexample.k.zip'
+        args.kzip = f'{os.path.dirname(os.path.abspath(__file__))}/../data/2_axonexample.k.zip'
     cell_kzip_fn = os.path.abspath(os.path.expanduser(args.kzip))
     if not os.path.isfile(cell_kzip_fn):
         raise FileNotFoundError('Could not find cell reconstruction file at the'

@@ -281,6 +281,32 @@ def read_mesh_from_zip(zip_fname, fname_in_zip):
     return [ind, vert, None]
 
 
+def read_meshes_from_zip(zip_fname, fnames_in_zip):
+    """
+    Read ply files from zip. Currently does not support normals!
+
+    Args:
+        zip_fname: str
+        fnames_in_zip: str
+
+    Returns: np.array, np.array, np.array
+
+    """
+    meshes = []
+    with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
+        for fname_in_zip in fnames_in_zip:
+            txt = z.open(fname_in_zip)
+            plydata = PlyData.read(txt)
+            vert = plydata['vertex'].data
+            vert = vert.view((np.float32, len(vert.dtype.names))).flatten()
+            ind = np.array(plydata['face'].data['vertex_indices'].tolist()).flatten()
+            # TODO: support normals
+            # norm = plydata['normals'].data
+            # norm = vert.view((np.float32, len(vert.dtype.names))).flatten()
+            meshes.append((ind, vert, None))
+    return meshes
+
+
 def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
     """
     Write string to file in k.zip.
@@ -422,8 +448,8 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     for ii in range(nb_files):
         os.remove(fpaths[ii])
     if verbose:
-        log_handler.info('Done writing {} files to .zip.'.format(nb_files))
         pbar.close()
+        log_handler.info('Done writing files to .zip.')
 
 
 def remove_from_zip(zipfname, *filenames):
