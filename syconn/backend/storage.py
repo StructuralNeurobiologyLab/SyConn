@@ -391,14 +391,11 @@ class MeshStorage(StorageClass):
     def __getitem__(self, item: Union[int, str]) -> List[np.ndarray]:
         """
 
-        Parameters
-        ----------
-        item : int/str
+        Args:
+            item: Key.
 
-        Returns
-        -------
-        List[np.arrays]
-            [indices, vertices, normals, colors/labels]
+        Returns:
+            Flat arrays: (indices, vertices, [normals, [colors/labels]])
         """
         try:
             return self._cache_dc[item]

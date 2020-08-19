@@ -61,7 +61,7 @@ class SegmentationObject(SegmentationBase):
                  voxel_caching: bool = True, mesh_caching: bool = False,
                  view_caching: bool = False, config: DynConfig = None,
                  n_folders_fs: int = None, enable_locking: bool = True,
-                 skeleton_caching: bool = True):
+                 skeleton_caching: bool = True, mesh: Optional[MeshType] = None):
         """
         If `working_dir` is given and the directory contains a valid `config.yml`file,
         all other optional kwargs will be defined by the :class:`~syconn.handler.config.DynConfig`
@@ -94,6 +94,7 @@ class SegmentationObject(SegmentationBase):
             n_folders_fs: Number of folders within the
                 :class:`~syconn.reps.segmentation.SegmentationDataset`'s folder structure.
             enable_locking:  If True, enables file locking.
+            mesh: Mesh data as flat arrays: (indices, vertices, ) or (indices, vertices, normals)
         """
         self._id = int(obj_id)
         self._type = obj_type
@@ -112,7 +113,7 @@ class SegmentationObject(SegmentationBase):
         self._view_caching = view_caching
         self._voxels = None
         self._voxel_list = None
-        self._mesh = None
+        self._mesh = mesh
         self._config = config
         self._views = None
         self._skeleton = None
@@ -157,7 +158,7 @@ class SegmentationObject(SegmentationBase):
                                 self._rep_coord, self._size, self._scaling, False,
                                 self._voxel_caching, self._mesh_caching, self._view_caching,
                                 self._config, self._n_folders_fs, self.enable_locking,
-                                self._skeleton_caching)
+                                self._skeleton_caching, self._mesh)
 
     @property
     def type(self) -> str:
@@ -488,6 +489,8 @@ class SegmentationObject(SegmentationBase):
         Returns:
             True if the attribute dictionary file exists.
         """
+        if self.version == 'tmp':
+            return False
         if not os.path.isfile(self.attr_dict_path):
             return False
         glob_attr_dc = AttributeDict(self.attr_dict_path,
@@ -496,6 +499,8 @@ class SegmentationObject(SegmentationBase):
 
     @property
     def voxels_exist(self) -> bool:
+        if self.version == 'tmp':
+            return False
         voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
                                 disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in voxel_dc
@@ -535,6 +540,8 @@ class SegmentationObject(SegmentationBase):
         Returns:
             True if mesh exists.
         """
+        if self.version == 'tmp':
+            return False
         mesh_dc = MeshStorage(self.mesh_path, disable_locking=True)
         return self.id in mesh_dc
 
@@ -544,6 +551,8 @@ class SegmentationObject(SegmentationBase):
         Returns:
             True if skeleton exists.
         """
+        if self.version == 'tmp':
+            return False
         skeleton_dc = SkeletonStorage(self.skeleton_path, disable_locking=True)
         return self.id in skeleton_dc
 
@@ -554,7 +563,6 @@ class SegmentationObject(SegmentationBase):
         Returns:
             Three flat arrays: indices, vertices, normals.
         """
-        # TODO: use self.load_mesh
         if self._mesh is None:
             if self.mesh_caching:
                 self._mesh = load_mesh(self)
@@ -628,6 +636,8 @@ class SegmentationObject(SegmentationBase):
         Returns:
             True if rendering locations have been stored at :py:attr:`~locations_path`.
         """
+        if self.version == 'tmp':
+            return False
         location_dc = CompressedStorage(self.locations_path,
                                         disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in location_dc
@@ -642,6 +652,8 @@ class SegmentationObject(SegmentationBase):
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
         """
+        if self.version == 'tmp':
+            return False
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
                                     disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in view_dc
@@ -691,8 +703,7 @@ class SegmentationObject(SegmentationBase):
         """
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
-            return CompressedStorage(self.locations_path,
-                                     disable_locking=True)[self.id]
+            return CompressedStorage(self.locations_path, disable_locking=True)[self.id]
         else:
             verts = self.mesh[1].reshape(-1, 3)
             if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
@@ -1041,7 +1052,7 @@ class SegmentationObject(SegmentationBase):
     def save_attributes(self, attr_keys: List[str], attr_values: List[Any]):
         """
         Writes attributes to attribute storage. Ignores :py:attr:`~attr_dict`.
-        Values have be serializable and will be written via the
+        Values have to be serializable and will be written via the
         :class:`~syconn.backend.storage.AttributeDict` interface.
 
         Args:

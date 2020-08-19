@@ -545,7 +545,14 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
         indices, vertices (scaled) [, colors]
 
     """
-    if nb_cpus > 1:
+    all_ind = np.zeros((0,), dtype=np.uint)
+    all_norm = np.zeros((0,))
+    all_vert = np.zeros((0,))
+    colors = np.zeros((0,))
+    if len(sos) == 0:
+        return all_ind, all_vert, all_norm
+
+    if nb_cpus > 1 or sos[0].version == 'tmp':  # assume all sos have the same type..
         meshes = start_multiprocess_imap(_mesh_loader, sos, nb_cpus=nb_cpus, show_progress=False)
     else:
         meshes = load_so_meshes_bulk(sos, use_new_subfold=use_new_subfold)
@@ -561,27 +568,20 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
     for i, (ind, vert, norm) in enumerate(meshes):
         ind_lst.append(ind)
         vert_lst.append(vert)
-        norm_lst.append(norm)
+        if norm is not None:
+            norm_lst.append(norm)
         if color_vals is not None:
             color_lst.append(np.array([color_vals[i]] * len(vert)))
-
     # merge results
-    if color_vals is not None:
+    if len(color_lst) != 0:
         colors = np.concatenate(color_lst)
         del color_lst
-    if len(norm_lst) == 0:
-        all_norm = np.zeros((0,))
-    else:
+    if len(norm_lst) != 0:
         all_norm = np.concatenate(norm_lst)
         del norm_lst
-
-    if len(vert_lst) == 0:
-        all_vert = np.zeros((0,))
-    else:
+    if len(vert_lst) != 0:
         all_vert = np.concatenate(vert_lst)
-    if len(ind_lst) == 0:
-        all_ind = np.zeros((0,), dtype=np.uint)
-    else:
+    if len(ind_lst) != 0:
         all_ind = np.concatenate(ind_lst)
         # store index and vertex offset of every partial mesh
         vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(np.uint)
@@ -590,9 +590,8 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
             start_ix, end_ix = ind_ixs[i], ind_ixs[i + 1]
             all_ind[start_ix:end_ix] += vert_offset[i]
 
-    assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
-        "Length of combined normals and vertices differ."
-    if color_vals is not None:
+    assert len(all_vert) == len(all_norm) or len(all_norm) == 0, "Length of combined normals and vertices differ."
+    if len(colors) > 0:
         return all_ind, all_vert, all_norm, colors
     return all_ind, all_vert, all_norm
 
@@ -620,8 +619,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
     vertices = vertices.astype(np.float32)
     indices = indices.astype(np.int32)
     if not rgba_color.ndim == 2:
-        rgba_color = np.array(rgba_color, dtype=np.uint8).reshape((
-            -1, 4))
+        rgba_color = np.array(rgba_color, dtype=np.uint8).reshape((-1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -736,7 +734,7 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
                       force_overwrite=True, verbose=True,
-                      invert_vertex_order=True):
+                      invert_vertex_order=False):
     """
     Writes meshes as .ply's to k.zip file.
 

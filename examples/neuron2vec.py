@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
     # path to cell reconstruction k.zip
     if args.kzip is None:
-        args.kzip = '../data/2_axonexample.k.zip'
+        args.kzip = f'{os.path.dirname(os.path.abspath(__file__))}/../data/2_axonexample.k.zip'
     cell_kzip_fn = os.path.abspath(os.path.expanduser(args.kzip))
     if not os.path.isfile(cell_kzip_fn):
         raise FileNotFoundError('Could not find cell reconstruction file at the'
@@ -67,10 +67,9 @@ if __name__ == '__main__':
     # run inference and store result in new kzip
     cell_kzip_fn_embed = cell_kzip_fn[:-6] + '_embed.k.zip'
     # generate skeleton attribute 'latent_morph'
-    view_embedding_of_sso_nocache(sso, dest_path=cell_kzip_fn_embed, verbose=True, ws=(256, 128),
+    view_embedding_of_sso_nocache(sso, verbose=True, ws=(256, 128),
                                   model=m,  nb_views=2, comp_window=8e3, add_cellobjects=('mi', 'vc', 'sj'))
     # store RGB projection of the embedding in k.zip file
     sso.morphembed2mesh(dest_path=cell_kzip_fn_embed)
     # also save skeleton as Knossos tree with latent vector
     sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_embed, additional_keys=["latent_morph"])
-
