@@ -48,27 +48,27 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         # created and locked LZ4Dict for 3s
         pkl1 = CompressedStorage(test_p, read_only=False, disable_locking=False)
         pkl1[1] = np.ones((5, 5))
-        time.sleep(2.5)
+        time.sleep(1.5)
         pkl1.push()
 
-    def create_fail_expected_runtime_error_at_1s(q1):
+    def create_fail_expected_runtime_error1(q1):
         try:
-            _ = CompressedStorage(test_p, read_only=True, timeout=1, disable_locking=False,
-                                     max_delay=1)  # timeout sets the maximum time before failing, not max_delay
+            _ = CompressedStorage(test_p, read_only=True, timeout=0.5, disable_locking=False,
+                                  max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
-            logging.warning('FAILED: create_fail_expected_runtime_error_at_1s')
-            q1.put('FAILED: create_fail_expected_runtime_error_at_1s')
+            logging.warning('FAILED: create_fail_expected_runtime_error1')
+            q1.put('FAILED: create_fail_expected_runtime_error1')
         except RuntimeError as e:
-            logging.info('PASSED: create_fail_expected_runtime_error_at_1s')
+            logging.info('PASSED: create_fail_expected_runtime_error1')
             q1.put(0)
 
-    def create_fail_expected_runtime_error_at_2s(q2):
+    def create_fail_expected_runtime_error2(q2):
         try:
-            _ = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=2)
-            logging.warning('FAILED: create_fail_expected_runtime_error_at_2s')
-            q2.put('FAILED: create_fail_expected_runtime_error_at_2s')
+            _ = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=0.75)
+            logging.warning('FAILED: create_fail_expected_runtime_error2')
+            q2.put('FAILED: create_fail_expected_runtime_error2')
         except RuntimeError as e:
-            logging.info('PASSED: create_fail_expected_runtime_error_at_2s')
+            logging.info('PASSED: create_fail_expected_runtime_error2')
             q2.put(0)
 
     def create_success_expected(q3):
@@ -85,19 +85,19 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
     q3 = Queue()
     p = Process(target=create_LZ4Dict_wait_for_3s_then_close)
     p.start()
-    time.sleep(0.01)
-    p2 = Process(target=create_fail_expected_runtime_error_at_1s, args=(q1,))
+    time.sleep(0.05)
+    p2 = Process(target=create_fail_expected_runtime_error1, args=(q1,))
     p2.start()
-    p3 = Process(target=create_fail_expected_runtime_error_at_2s, args=(q2,))
+    p3 = Process(target=create_fail_expected_runtime_error2, args=(q2,))
     p3.start()
-    p.join()  # wait for maximum timeout -> 2s
-    time.sleep(1)  # add safety delay to make sure process `p` has closed the file
+    p.join()  # wait for maximum timeout
+    time.sleep(0.05)
     p4 = Process(target=create_success_expected, args=(q3,))
     p4.start()
     p4.join()
     r1, r2, r3 = q1.get(), q2.get(), q3.get()
     if r1 != 0 or r2 != 0 or r3 != 0:
-        raise AssertionError(f'{r1}{r2}{r3}')
+        raise AssertionError(f'{r1}\n{r2}\n{r3}')
 
 
 def test_saving_loading_and_copying_process_for_Attribute_dict():
