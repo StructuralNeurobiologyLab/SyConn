@@ -205,7 +205,7 @@ def sparsify_skelcv(skel: cloudvolume.Skeleton, scale: Optional[np.ndarray] = No
 
                 dot_prod = np.dot(vector_left_node / np.linalg.norm(vector_left_node),
                                   vector_right_node / np.linalg.norm(vector_right_node))
-                angle = np.arccos(dot_prod) * 180 / np.pi
+                angle = np.arccos(np.clip(dot_prod, -1.0, 1.0)) * 180 / np.pi
                 dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scale[ix]) - int(
                     skel_nx.node[left_node]['position'][ix] * scale[ix]) for ix in range(3)])
 
