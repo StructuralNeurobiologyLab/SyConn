@@ -382,7 +382,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{dir_props}" ' \
+                  f'because temporary files already exist at "{dir_props}" ' \
                   f'and overwrite was set to False.'
             log_proc.error(msg)
             raise FileExistsError(msg)
@@ -1436,7 +1436,7 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
 
 
 def predict_views(model, views, ch, pred_key, single_cc_only=False,
-                  verbose=False, return_proba=False, nb_cpus=1):
+                  verbose=False, return_proba=False, nb_cpus=1) -> Optional[List[np.ndarray]]:
     """
     Will not be written to disk if return_proba is True.
 
@@ -1453,14 +1453,14 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
     Returns:
 
     """
-    for kk in range(len(views)):
-        data = views[kk]
-        for i in range(len(data)):
-            if single_cc_only:
+    if single_cc_only:
+        for kk in range(len(views)):
+            data = views[kk]
+            for i in range(len(data)):
                 sing_cc = np.concatenate([single_conn_comp_img(data[i, 0, :1]),
                                           single_conn_comp_img(data[i, 0, 1:])])
                 data[i, 0] = sing_cc
-        views[kk] = data
+            views[kk] = data
     part_views = np.cumsum([0] + [len(v) for v in views])
     assert len(part_views) == len(views) + 1
     views = np.concatenate(views)

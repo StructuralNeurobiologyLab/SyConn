@@ -9,7 +9,7 @@ test:
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
-    - python -m pytest -c tests/full_run.ini
+    - python -m pytest
   except:
     - master
 
@@ -28,7 +28,7 @@ test-full:
     - source ~/.bashrc
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
-    - python -m pytest -c tests/full_run.ini
+    - python -m pytest
   only:
     - master
 

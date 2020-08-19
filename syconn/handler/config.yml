@@ -7,10 +7,11 @@ backend: "FS"
 # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
 pyopengl_platform: 'egl'
 
-version: 0.2
+# This will be set during initialization
+version:
 
 existing_cell_organelles: ['mi', 'sj', 'vc']
-syntype_avail:
+syntype_avail: False
 
 # Compute backend: 'QSUB', 'SLURM', None
 batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
@@ -19,7 +20,6 @@ batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 batch_pe: 'default'
 batch_queue: 'all.q'
 
-# TODO: Use computing settings everywhere
 mem_per_node: 249500  # in MB
 ncores_per_node: 20
 ngpus_per_node: 2
@@ -140,8 +140,8 @@ cell_objects:
   sym_label:
 
 meshes:
-  allow_mesh_gen_cells:
-  use_new_meshing:
+  allow_mesh_gen_cells: False
+  use_new_meshing: True
 
   downsampling:
     sv: [4, 4, 2]
@@ -170,7 +170,7 @@ use_point_models: False
 
 views:
   use_onthefly_views: True  # TODO: does not yet apply for glia
-  use_new_renderings_locs:
+  use_new_renderings_locs: True
   # ordering sensitive; 'sj' will be replaced by 'syn_ssv' if use_onthefly_views == True
   subcell_objects: ['mi', 'vc', 'sj']
   # used for default view rendering (glia separation, spine detection, cell type prediction)

@@ -234,4 +234,5 @@ def test_full_run():
     time_summary_str = ftimer.prepare_report(experiment_name)
     log.info(time_summary_str)
 
-    del os.environ['syconn_wd']
+    if os.environ.get('syconn_wd') is not None:
+        del os.environ['']

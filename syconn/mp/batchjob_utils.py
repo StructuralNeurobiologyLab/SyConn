@@ -121,10 +121,7 @@ def batchjob_script(params: list, name: str,
     if n_cores is None:
         n_cores = 1
     if sleep_time is None:
-        if 'wb01' in socket.gethostname():
-            sleep_time = 5
-        else:
-            sleep_time = 2
+        sleep_time = 5
     if python_path is None:
         python_path = python_path_global
 
