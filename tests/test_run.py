@@ -235,4 +235,4 @@ def test_full_run():
     log.info(time_summary_str)
 
     if os.environ.get('syconn_wd') is not None:
-        del os.environ['']
+        del os.environ['syconn_wd']
