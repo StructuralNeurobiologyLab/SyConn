@@ -57,7 +57,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
                                      max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
             logging.warning('FAILED: create_fail_expected_runtime_error_at_1s')
-            q1.put(1)
+            q1.put('FAILED: create_fail_expected_runtime_error_at_1s')
         except RuntimeError as e:
             logging.info('PASSED: create_fail_expected_runtime_error_at_1s')
             q1.put(0)
@@ -66,7 +66,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         try:
             _ = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=2)
             logging.warning('FAILED: create_fail_expected_runtime_error_at_2s')
-            q2.put(1)
+            q2.put('FAILED: create_fail_expected_runtime_error_at_2s')
         except RuntimeError as e:
             logging.info('PASSED: create_fail_expected_runtime_error_at_2s')
             q2.put(0)
@@ -78,7 +78,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
             q3.put(0)
         except RuntimeError as e:
             logging.warning('FAILED: create_success_expected')
-            q3.put(1)
+            q3.put('FAILED: create_success_expected')
 
     q1 = Queue()
     q2 = Queue()
@@ -91,12 +91,13 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
     p3 = Process(target=create_fail_expected_runtime_error_at_2s, args=(q2,))
     p3.start()
     p.join()  # wait for maximum timeout -> 2s
-    time.sleep(0.5)  # add safety delay to make sure process `p` has closed the file
+    time.sleep(1)  # add safety delay to make sure process `p` has closed the file
     p4 = Process(target=create_success_expected, args=(q3,))
     p4.start()
     p4.join()
-    if q1.get() == 1 or q2.get() == 1 or q3.get() == 1:
-        raise AssertionError
+    r1, r2, r3 = q1.get(), q2.get(), q3.get()
+    if r1 != 0 or r2 != 0 or r3 != 0:
+        raise AssertionError(f'{r1}{r2}{r3}')
 
 
 def test_saving_loading_and_copying_process_for_Attribute_dict():

@@ -39,7 +39,7 @@ if __name__ == '__main__':
     experiment_name = 'j0126_example'
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
-    prior_glia_removal = False
+    prior_glia_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('use_point_models', False),

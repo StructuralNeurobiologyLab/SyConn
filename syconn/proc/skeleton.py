@@ -90,22 +90,10 @@ def kimimaro_mergeskels(path_list, cell_id):
 
     """
     skel_list = []
-    # TODO: use commented code again
-    # for f in path_list:
-    #     part_dict = load_pkl2obj(f)
-    #     # part_dict is now a defaultdict(list)
-    #     skel_list.extend(part_dict[int(cell_id)])
     for f in path_list:
         part_dict = load_pkl2obj(f)
         # part_dict is now a defaultdict(list)
-        skels = part_dict[int(cell_id)]
-        for ii in range(len(skels)):
-            s = skels[ii]
-            s.downsample(50)
-            s = sparsify_skelcv(s)
-            skels[ii] = s
-        skel_list.extend(skels)
-
+        skel_list.extend(part_dict[int(cell_id)])
     # merge skeletons to one connected component
     # a set of skeletons produced from the same label id
     skel = cloudvolume.PrecomputedSkeleton.simple_merge(skel_list).consolidate()
