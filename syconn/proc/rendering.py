@@ -251,7 +251,7 @@ def render_sso_coords(sso: 'SuperSegmentationObject', coords: np.ndarray,
         nb_views = view_props_default['nb_views']
     mesh = sso.mesh
     if verbose:
-        log_proc.debug(f'Loaded cell mesh after {time.time() - start} s.')
+        log_proc.debug(f'Loaded cell mesh after {(time.time() - start):.2f} s.')
     if cellobjects_only:
         assert len(add_cellobjects) > 0, "Add cellobjects must contain at least one entry " \
                                          "when rendering cellobjects only."

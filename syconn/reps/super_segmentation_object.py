@@ -1358,6 +1358,8 @@ class SuperSegmentationObject(SegmentationBase):
         Returns:
             True if successfully loaded/generated skeleton, else False.
         """
+        if self.skeleton is not None:
+            return True
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
