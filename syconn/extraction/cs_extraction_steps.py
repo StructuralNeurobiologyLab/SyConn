@@ -123,7 +123,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{dir_props}" ' \
+                  f'because temporary files already exist at "{dir_props}" ' \
                   f'and overwrite was set to False.'
             log.error(msg)
             raise FileExistsError(msg)
@@ -132,7 +132,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     if os.path.isdir(cset.path_head_folder):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{cset.path_head_folder}" ' \
+                  f'because temporary files already exist at "{cset.path_head_folder}" ' \
                   f'and overwrite was set to False.'
             log.error(msg)
             raise FileExistsError(msg)

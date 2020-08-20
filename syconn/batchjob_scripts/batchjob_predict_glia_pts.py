@@ -28,7 +28,6 @@ ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_p
 
 n_worker = 2
 
-kwargs_semseg2mesh = global_params.config['spines']['semseg2mesh_spines']
 lo_first_n = global_params.config['glia']['subcc_chunk_size_big_ssv']
 working_dir = global_params.config.working_dir
 ssv_params = []
