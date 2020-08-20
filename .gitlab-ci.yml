@@ -28,7 +28,7 @@ test-full:
     - source ~/.bashrc
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
-    - python -m pytest
+    - python -m pytest -c tests/full_run.ini
   only:
     - master
 

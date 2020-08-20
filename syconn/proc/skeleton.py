@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Union, Dict
 
 import numpy as np
 import tqdm
@@ -14,7 +14,7 @@ from syconn import global_params
 
 
 def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
-                     ds: Optional[np.ndarray] = None) -> dict:
+                     ds: Optional[np.ndarray] = None) -> Dict[int, cloudvolume.Skeleton]:
     """
     code from https://pypi.org/project/kimimaro/
 
@@ -70,15 +70,17 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
     for ii in skels:
         # cell.vertices already in physical coordinates (nm)
         # now add the offset in physical coordinates
-        skels[ii].downsample(10)
-        skels[ii] = sparsify_skelcv(skels[ii])
-        skels[ii].vertices += (cube_offset * kd.scales[0]).astype(np.int)
+        skel = skels[ii]
+        skel.downsample(50)
+        skel = sparsify_skelcv(skels[ii])
+        skel.vertices += (cube_offset * kd.scales[0]).astype(np.int)
+        skels[ii] = skel
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
     return skels
 
 
-def kimimaro_mergeskels(path_list, cell_id):
+def kimimaro_mergeskels(path_list: str, cell_id: int) -> cloudvolume.Skeleton:
     """
     For debugging. Load files and merge dictionaries.
 
@@ -169,7 +171,7 @@ def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
 def sparsify_skelcv(skel: cloudvolume.Skeleton, scale: Optional[np.ndarray] = None,
                     angle_thresh: float = 135,
                     max_dist_thresh: Union[int, float] = 500,
-                    min_dist_thresh: Union[int, float] = 50) -> nx.Graph:
+                    min_dist_thresh: Union[int, float] = 50) -> cloudvolume.Skeleton:
     """
     Recursively removes nodes in skeleton. Ignores leaf and branch nodes.
 
