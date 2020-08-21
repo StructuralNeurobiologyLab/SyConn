@@ -159,7 +159,10 @@ def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
     old2new_ixs = dict()
     for ii, n in enumerate(g.nodes()):
         old2new_ixs[n] = ii
-    edges = np.array(g.edges, dtype=np.int)
+    if g.number_of_edges() == 1:
+        edges = np.array(list(g.edges()), dtype=np.int)
+    else:
+        edges = np.array(g.edges(), dtype=np.int)
     for ii in range(edges.shape[0]):
         e1, e2 = edges[ii]
         edges[ii] = (old2new_ixs[e1], old2new_ixs[e2])
