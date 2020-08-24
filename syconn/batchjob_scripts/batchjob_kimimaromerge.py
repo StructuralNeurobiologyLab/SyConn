@@ -1,8 +1,9 @@
 import sys
+import os
 import pickle as pkl
 import numpy as np
 from syconn.handler.basics import load_pkl2obj
-from syconn.proc.skeleton import kimimaro_mergeskels, kimimaro_skels_tokzip
+from syconn.proc.skeleton import kimimaro_mergeskels
 from syconn import global_params
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 
@@ -22,9 +23,12 @@ scaling = global_params.config["scaling"]
 path2results_dc, ssv_ids = args
 results_dc = load_pkl2obj(path2results_dc)
 
+nb_cpus = os.environ.get('SLURM_CPUS_PER_TASK')
+if nb_cpus is not None:
+    nb_cpus = int(nb_cpus)
+
 for ssv_id in ssv_ids:
-    ssv_id = int(ssv_id)
-    combined_skel = kimimaro_mergeskels(results_dc[ssv_id], ssv_id)
+    combined_skel = kimimaro_mergeskels(results_dc[ssv_id], ssv_id, nb_cpus=nb_cpus)
     sso = SuperSegmentationObject(ssv_id, working_dir=working_dir)
 
     sso.skeleton = dict()

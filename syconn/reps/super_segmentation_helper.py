@@ -510,13 +510,13 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
             # This merges existing SV skeletons - SV skeletons must exist
             ssv = create_sso_skeleton_fast(ssv)
         else:
-            # TODO: add parameter to config
             verts = ssv.mesh[1].reshape(-1, 3)
             # choose random subset of surface vertices
             np.random.seed(0)
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
             ixs = ixs[:int(0.5 * len(ixs))]
+            # TODO: add parameter to config
             if use_new_renderings_locs:
                 locs = generate_rendering_locs(verts[ixs], 1000)
             else:

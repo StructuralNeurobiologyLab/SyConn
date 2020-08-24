@@ -35,8 +35,7 @@ if __name__ == '__main__':
         ('use_point_models', False),
         ('skeleton', {'use_kimimaro': True}),
         ('meshes', {'use_new_meshing': True}),
-        ('views', {'use_onthefly_views': True,
-                   'use_new_renderings_locs': True,
+        ('views', {'use_new_renderings_locs': True,
                    'view_properties': {'nb_views': 3}
                    }),
         ('cell_objects',
@@ -78,7 +77,7 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) * 4
+    cube_size = np.array([2048, 2048, 1024])
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
@@ -197,6 +196,8 @@ if __name__ == '__main__':
         ftimer.stop()
 
     # skeleton and synapse generation and rendering have independent dependencies and target storage
+    assert global_params.config.use_onthefly_views, ('"use_onthefly_views" must be True to enable parallel '
+                                                     'execution of skel and syn generation')
     procs = []
     for func in [start_syn_gen, start_skel_gen, start_neuron_rendering]:
         if not batchjob_enabled():

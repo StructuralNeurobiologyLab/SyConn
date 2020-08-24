@@ -178,7 +178,7 @@ if __name__ == '__main__':
     # ftimer.stop()
 
     # TDO: remove
-    exec_skeleton.run_kimimaro_skelgen()
+    exec_skeleton.run_kimimaro_skeletonization()
 
     log.info('Step 6/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
