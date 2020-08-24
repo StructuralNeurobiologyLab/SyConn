@@ -329,7 +329,7 @@ def batchjob_script(params: list, name: str,
     log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
                       f"{dtime_all} ({dtime_sub:.1f}s submission): "
                       f"{nb_completed} completed, {nb_failed} failed.")
-    out_files = glob.glob(path_to_out + "job_*.pkl")
+    out_files = [fn for fn in glob.glob(path_to_out + "job_*.pkl") if re.search(r'job_(\d+).pkl', fn)]
     if len(out_files) < len(params):
         msg = f'Batch processing error during execution of {name} in job ' \
               f'\"{job_name}\": Found {len(out_files)}, expected {len(params)}.'

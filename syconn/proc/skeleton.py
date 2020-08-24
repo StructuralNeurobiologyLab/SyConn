@@ -72,7 +72,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
         # now add the offset in physical coordinates
         skel = skels[ii]
         skel.downsample(50)
-        skel = sparsify_skelcv(skels[ii])
+        skel = sparsify_skelcv(skels)
         skel.vertices += (cube_offset * kd.scales[0]).astype(np.int)
         skels[ii] = skel
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end
@@ -109,6 +109,7 @@ def kimimaro_mergeskels(path_list: str, cell_id: int) -> cloudvolume.Skeleton:
     # of each other until there is only a single connected component
     # or no pairs of points nearer than `radius` exist.
     # Fuse all remaining components into a single skeleton.
+    skel = kimimaro.join_close_components(skel, radius=1500)  # no threshold
     skel = kimimaro.join_close_components(skel, radius=None)  # no threshold
     return skel
 
@@ -172,8 +173,8 @@ def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
 
 
 def sparsify_skelcv(skel: cloudvolume.Skeleton, scale: Optional[np.ndarray] = None,
-                    angle_thresh: float = 135,
-                    max_dist_thresh: Union[int, float] = 500,
+                    angle_thresh: float = 120,
+                    max_dist_thresh: Union[int, float] = 1000,
                     min_dist_thresh: Union[int, float] = 50) -> cloudvolume.Skeleton:
     """
     Recursively removes nodes in skeleton. Ignores leaf and branch nodes.

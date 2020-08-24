@@ -37,7 +37,6 @@ for ssv_id in ssv_ids:
         sso.skeleton["nodes"] = np.array([sso.rep_coord], dtype=np.float32)
         sso.skeleton["diameters"] = np.zeros((1, ), dtype=np.float32)
         sso.skeleton["edges"] = np.array([[0, 0], ], dtype=np.int)
-    # TODO: apply sparsify_skeleton_fast to remove more nodes
     sso.save_skeleton()
 
 with open(path_out_file, "wb") as f:
