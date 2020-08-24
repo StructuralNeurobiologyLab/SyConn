@@ -99,28 +99,16 @@ def kimimaro_mergeskels(path_list: str, cell_id: int, nb_cpus: bool = None) -> c
         part_dict = load_pkl2obj(f)
         # part_dict is now a defaultdict(list)
         skel_list.extend(part_dict[int(cell_id)])
-    # merge skeletons to one connected component
-    # a set of skeletons produced from the same label id
-    log_proc.info('loading done')
     skel = cloudvolume.PrecomputedSkeleton.simple_merge(skel_list).consolidate()
-    log_proc.info('consolidate done')
 
-    # # Split input skeletons into connected components and
-    # # then join the two nearest vertices within `radius` distance
-    # # of each other until there is only a single connected component
-    # # or no pairs of points nearer than `radius` exist.
-    # # Fuse all remaining components into a single skeleton.
-    # skel = kimimaro.join_close_components(skel, radius=1500)
-    # log_proc.info('join close (1500) done')
-    # skel = kimimaro.join_close_components(skel, radius=None)  # no threshold
-    # log_proc.info('postprocessing done')
     if skel.vertices.size == 0:
         return skel
+    # convert cloud volume skeleton to networkx graph
     skel = skelcv2nxgraph(skel)
-    log_proc.info('nxgraph conversion done')
+    # Fuse all remaining components into a single skeleton and covnert it back to cloud volume skeleton
     skel = nxgraph2skelcv(stitch_skel_nx(skel, n_jobs=nb_cpus))
-    log_proc.info('stitching done')
-
+    # remove small stubs and single connected components with less than 500 nodes. The latter is not applicable as
+    # `stitch_skel_nx` merges all connected components regardless of their distance.
     skel = kimimaro.postprocess(
         skel,
         dust_threshold=500,  # physical units
