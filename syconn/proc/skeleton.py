@@ -164,8 +164,8 @@ def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
 
 
 def sparsify_skelcv(skel: cloudvolume.Skeleton, scale: Optional[np.ndarray] = None,
-                    angle_thresh: float = 135,
-                    max_dist_thresh: Union[int, float] = 500,
+                    angle_thresh: float = 120,
+                    max_dist_thresh: Union[int, float] = 1000,
                     min_dist_thresh: Union[int, float] = 50) -> cloudvolume.Skeleton:
     """
     Recursively removes nodes in skeleton. Ignores leaf and branch nodes.
