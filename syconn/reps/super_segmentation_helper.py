@@ -1503,7 +1503,7 @@ def predict_views_semseg(views, model, batch_size=10, verbose=False):
 
 
 def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
-                    nb_cpus=1, verbose=False):
+                    nb_cpus=1, verbose=False, bs: int = 10):
     """
     Predicts views of a list of SVs and saves them via SV.save_views.
     Efficient helper function for chunked predictions,
@@ -1519,6 +1519,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
         nb_cpus: int
             number CPUs for saving the SV views
         verbose: bool
+        bs: Batch size during inference.
 
     Returns: list[np.array]
         if 'return_pred=True' it returns the label views of input
@@ -1531,7 +1532,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
     assert len(part_views) == len(views) + 1
     views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
     # views have shape: M, 4, 2, 128, 256
-    label_views = predict_views_semseg(views, model, verbose=verbose)
+    label_views = predict_views_semseg(views, model, verbose=verbose, batch_size=bs)
     svs_labelviews = []
     for ii in range(len(part_views[:-1])):
         sv_label_views = label_views[part_views[ii]:part_views[ii + 1]]
@@ -1922,7 +1923,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
                           nb_views: int, comp_window: float, k: int = 1,
                           dest_path: Optional[str] = None, verbose: bool = False,
-                          add_cellobjects: Union[bool, Iterable] = True):
+                          add_cellobjects: Union[bool, Iterable] = True, bs: int = 10):
     """
     Renders raw and index views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -1972,6 +1973,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         verbose: Adds progress bars for view generation.
         add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
             used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
+        bs: Batch size during inference.
 
     Returns:
 
@@ -1991,7 +1993,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
     sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key,
-                       add_cellobjects=add_cellobjects, **view_kwargs)
+                       add_cellobjects=add_cellobjects, bs=bs, **view_kwargs)
     if verbose:
         log_reps.debug('Finished shape-view rendering and sem. seg. prediction.')
     # this generates the index views
