@@ -14,7 +14,7 @@ if __name__ == "__main__":
     global_params.wd = "/wholebrain/scratch/areaxfs3/"
     with open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v3.pkl'), 'rb') as f:
         data = pkl.load(f)
-    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/ds2/')
+    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/ds_full/')
     save_path_examples = save_path + 'examples/'
     if not os.path.exists(save_path_examples):
         os.makedirs(save_path_examples)
@@ -29,7 +29,7 @@ if __name__ == "__main__":
             # 0: dendrite, 1: axon, 2: soma
             pc_ads = replace_preds(sso, 'ads', [])
             # 0: dendrite, 1: spine
-            pc_dnh = replace_preds(sso, 'ds2', [])
+            pc_dnh = replace_preds(sso, 'ds', [])
 
             tree_ads = cKDTree(pc_ads.vertices)
             tree_dnh = cKDTree(pc_dnh.vertices)
@@ -46,9 +46,9 @@ if __name__ == "__main__":
 
             # 0: dendrite, 1: axon, 2: head, 3: soma
             for ix in range(len(gt)):
-                if gt[ix] == 1 or gt[ix] == 3:
-                    mask[ix] = False
-                    continue
+                # if gt[ix] == 1 or gt[ix] == 3:
+                #     mask[ix] = False
+                #     continue
                 preds = pc_ads.labels[ind_ads[ix]].reshape(-1).astype(int)
                 mv = np.argmax(np.bincount(preds))
                 tree = tree_ads
@@ -82,9 +82,9 @@ if __name__ == "__main__":
                 total_gt = np.concatenate((total_gt, gt.reshape((-1, 1))[mask]))
                 total_preds = np.concatenate((total_preds, result.reshape((-1, 1))[mask]))
 
-    # targets = ['dendrite', 'axon', 'head', 'soma']
-    targets = ['dendrite', 'head']
-    total_preds[total_preds == 2] = 1
-    total_gt[total_gt == 2] = 1
+    targets = ['dendrite', 'axon', 'head', 'soma']
+    # targets = ['dendrite', 'head']
+    # total_preds[total_preds == 2] = 1
+    # total_gt[total_gt == 2] = 1
     report = sm.classification_report(total_gt, total_preds, target_names=targets)
     print(report)
