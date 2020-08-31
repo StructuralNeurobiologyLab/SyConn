@@ -39,7 +39,9 @@ if global_params.config.use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
     predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, bs=2, show_progress=False)
 else:
-    n_worker = 2
+    # TODO: inspect! this needed to be changed due to memory errors (probably because wrong memory handling in nested
+    #  multi-processing)
+    n_worker = 1
     bs = 5
     params = [(ch_sub, view_props, ncpus, map_properties,
                pred_key, max_dist, bs) for ch_sub in basics.chunkify(ch, n_worker * 2)]

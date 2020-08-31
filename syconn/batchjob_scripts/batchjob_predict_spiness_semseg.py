@@ -30,7 +30,9 @@ kwargs_semseg2mesh = global_params.config['spines']['semseg2mesh_spines']
 kwargs_semsegforcoords = global_params.config['spines']['semseg2coords_spines']
 view_props = global_params.config['views']['view_properties']
 
-n_worker = 2
+# TODO: inspect! this needed to be changed due to memory errors (probably because wrong memory handling in nested
+#  multi-processing)
+n_worker = 1
 params = [(ch_sub, view_props, ncpus, kwargs_semseg2mesh, kwargs_semsegforcoords) for ch_sub in
           basics.chunkify(ch, n_worker * 2)]
 res = start_multiprocess_imap(semsegspiness_predictor, params, nb_cpus=n_worker, show_progress=False)

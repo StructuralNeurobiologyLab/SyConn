@@ -1,17 +1,14 @@
 from typing import Optional, Union, Dict
 
 import numpy as np
-import tqdm
 from scipy import ndimage
 import kimimaro
 import networkx as nx
 import cloudvolume
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 from syconn.extraction.block_processing_C import relabel_vol_nonexist2zero
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import stitch_skel_nx
 from syconn.handler.basics import load_pkl2obj, kd_factory
-from . import log_proc
 from syconn import global_params
 
 
@@ -41,7 +38,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
         seg = ndimage.zoom(seg, 1 / ds, order=0)
     else:
         ds = np.ones(3)
-    # transform IDs to agglomerated SVs
+    # transform SV IDs to agglomerated SV (SSV) IDs
     relabel_vol_nonexist2zero(seg, ssd.mapping_dict_reversed)
 
     # kimimaro code
@@ -76,7 +73,6 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
         skel = sparsify_skelcv(skel, scale=np.array([1, 1, 1]))
         skel.vertices += (cube_offset * kd.scales[0]).astype(np.int)
         skels[cell_id] = skel
-        print(skels[cell_id].vertices.size)
     return skels
 
 
@@ -109,6 +105,8 @@ def kimimaro_mergeskels(path_list: str, cell_id: int, nb_cpus: bool = None) -> c
     skel = nxgraph2skelcv(stitch_skel_nx(skel, n_jobs=nb_cpus))
     # remove small stubs and single connected components with less than 500 nodes. The latter is not applicable as
     # `stitch_skel_nx` merges all connected components regardless of their distance.
+    # TODO: kimimaro.postprocess should probably be executed before `stitch_skel_nx` to remove "dust" - requires
+    #  performance monitoring in large, "branchy" neurons and astrocytes.
     skel = kimimaro.postprocess(
         skel,
         dust_threshold=500,  # physical units

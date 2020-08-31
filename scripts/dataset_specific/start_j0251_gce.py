@@ -12,6 +12,7 @@ import networkx as nx
 import shutil
 from multiprocessing import Process
 
+
 from syconn.handler.basics import FileTimer
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
@@ -24,15 +25,16 @@ if __name__ == '__main__':
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
+    use_point_models = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 32),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 4),
-        ('mem_per_node', 208990),
-        ('use_point_models', False),
+        ('nnodes_total', 6),
+        ('mem_per_node', 208000),
+        ('use_point_models', use_point_models),
         ('skeleton', {'use_kimimaro': True}),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_new_renderings_locs': True,
@@ -77,11 +79,12 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024])
+    cube_size = np.array([2048, 2048, 1024]) * 4
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
-    working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size{'_'.join(map(str, cube_size))}"
+    working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size{'_'.join(map(str, cube_size))}_" \
+                  f"{use_point_models}"
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')
 

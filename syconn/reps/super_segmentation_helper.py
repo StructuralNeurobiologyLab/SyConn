@@ -11,7 +11,6 @@ import time
 from . import log_reps
 from . import segmentation
 from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
-from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views, \
     find_missing_sv_attributes, find_missing_sv_skeletons, load_so_attr_bulk
 from .. import global_params
@@ -22,6 +21,8 @@ from ..proc.graphs import create_graph_from_coords, stitch_skel_nx
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
 from ..proc.sd_proc import predict_views
+from ..extraction.block_processing_C import relabel_vol_nonexist2zero
+
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
@@ -2213,28 +2214,26 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
     if len(ssv_syncoords) == 0:  # no spine head synapses
         return
+    ds = sso.scaling[2] // np.array(sso.scaling)
+    assert np.all(ds > 0)
     # iterate over spine head synapses
     for c, ssv_syn_id in zip(ssv_syncoords, ssv_synids):
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
-        size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
+        size = (bb[1] - bb[0] + ds + 2 * ctx_vol).astype(np.int)
         # get cell segmentation mask
         kd = kd_factory(global_params.config.kd_seg_path)
         seg = kd.load_seg(offset=offset, size=size, mag=1).swapaxes(2, 0)
-        orig_sh = seg.shape
-        seg = seg.flatten()
-        for ii, el in enumerate(seg):
-            if el not in ssv_svids:
-                seg[ii] = 0
-            else:
-                seg[ii] = 1
+        seg = ndimage.zoom(seg, 1 / ds, order=0)
+        if len(ssv_svids) > 1:
+            relabel_vol_nonexist2zero(seg, {k: 1 for k in ssv_svids})
+
+        seg = ndimage.binary_fill_holes(seg)
         if np.sum(seg) == 0:
             msg = (f'Could not find segmentation at {offset} and size {size} for SSVs '
                    f'{ssv_svids}. syn_ssv ID: {ssv_syn_id}.')
             log_reps.error(msg)
             raise ValueError(msg)
-        seg = seg.reshape(orig_sh)
-        seg = ndimage.binary_fill_holes(seg)
         # set watershed seeds using vertices
         vert_ixs_bb = in_bounding_box(verts, np.array([offset + size / 2, size]))
         vert_ixs_bb = np.array(vert_ixs_bb, dtype=np.bool)
@@ -2248,9 +2247,12 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices
-        maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
-                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
-                                       return_color=False, nb_cpus=sso.nb_cpus)
+        try:
+            maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
+                                           k=global_params.config['spines']['semseg2coords_spines']['k'],
+                                           return_color=False, nb_cpus=sso.nb_cpus)
+        except ValueError:
+            raise()
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
