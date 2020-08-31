@@ -104,13 +104,13 @@ if __name__ == '__main__':
             raise ValueError('Could not find model "{}". Make sure to copy the'
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, working_dir))
+    ftimer.stop()
 
     # # Start SyConn
     # # --------------------------------------------------------------------------
     # log.info('Finished example cube initialization (shape: {}). Starting'
     #          ' SyConn pipeline.'.format(bd))
     # log.info('Example data will be processed in "{}".'.format(working_dir))
-    # ftimer.stop()
     #
     # log.info('Step 1/9 - Predicting sub-cellular structures')
     # ftimer.start('Dense predictions')
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     # ftimer.stop()
 
     # TDO: remove
-    exec_skeleton.run_kimimaro_skeletonization()
+    # exec_skeleton.run_kimimaro_skeletonization()
 
     log.info('Step 6/9 - Compartment prediction')
     ftimer.start('Compartment predictions')

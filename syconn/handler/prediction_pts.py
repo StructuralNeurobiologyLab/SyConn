@@ -1187,6 +1187,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
     # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
     del feat_dc['syn_ssv_sym']
+    del feat_dc['sv_myelin']
     if not use_subcell:
         del feat_dc['mi']
         del feat_dc['vc']

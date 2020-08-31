@@ -59,7 +59,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
             'max_paths': 100,  # default None
         },
         dust_threshold=1000,  # skip connected components with fewer than this many voxels
-        anisotropy=kd.scales[0] * ds,  # index 1 is mag 2
+        anisotropy=kd.scales[0] * ds,  # index 0 is mag 1
         fix_branching=True,  # default True
         fix_borders=True,  # default True
         fill_holes=True,
@@ -72,8 +72,8 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
         skel = skels[cell_id]
         # cloud_volume docu: " reduce size of skeleton by factor of 50, preserves branch and end
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-        skel.downsample(50)
-        skel = sparsify_skelcv(skel)
+        skel = skel.downsample(10)
+        skel = sparsify_skelcv(skel, scale=np.array([1, 1, 1]))
         skel.vertices += (cube_offset * kd.scales[0]).astype(np.int)
         skels[cell_id] = skel
     return skels
@@ -98,17 +98,29 @@ def kimimaro_mergeskels(path_list: str, cell_id: int, nb_cpus: bool = None) -> c
     for f in path_list:
         part_dict = load_pkl2obj(f)
         # part_dict is now a defaultdict(list)
-        skel_list.extend(part_dict[int(cell_id)])
-    # merge skeletons to one connected component
+        # # TODO: use commented part instead of donwsampling skeletons below
+        # skel_list.extend(part_dict[int(cell_id)])
+
+        skels = part_dict[int(cell_id)]
+        for ii in range(len(skels)):
+            # cell.vertices already in physical coordinates (nm)
+            # now add the offset in physical coordinates
+            skel = skels[ii]
+            # cloud_volume docu: " reduce size of skeleton by factor of 50, preserves branch and end
+            # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
+            skel = skel.downsample(10)
+            skel = sparsify_skelcv(skel, scale=np.array([1, 1, 1]))
+            skels[ii] = skel
+        skel_list.extend(skels)
+
     # a set of skeletons produced from the same label id
     skel = cloudvolume.PrecomputedSkeleton.simple_merge(skel_list).consolidate()
 
     if skel.vertices.size == 0:
         return skel
+    # merge skeletons to one connected component
     skel = skelcv2nxgraph(skel)
-    log_proc.info('nxgraph conversion done')
     skel = nxgraph2skelcv(stitch_skel_nx(skel, n_jobs=nb_cpus))
-    log_proc.info('stitching done')
 
     skel = kimimaro.postprocess(
         skel,
@@ -153,8 +165,8 @@ def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
 
 
 def sparsify_skelcv(skel: cloudvolume.Skeleton, scale: Optional[np.ndarray] = None,
-                    angle_thresh: float = 120,
-                    max_dist_thresh: Union[int, float] = 1000,
+                    angle_thresh: float = 135,
+                    max_dist_thresh: Union[int, float] = 500,
                     min_dist_thresh: Union[int, float] = 50) -> cloudvolume.Skeleton:
     """
     Recursively removes nodes in skeleton. Ignores leaf and branch nodes.

@@ -29,11 +29,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=4, help='Batch size')
-parser.add_argument('--sp', type=int, default=10000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=1000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--use_bias', default=False, help='Use bias parameter in Convpoint layers.', type=bool)
+parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
@@ -74,14 +74,14 @@ cellshape_only = False
 use_syntype = False
 dr = 0.2
 track_running_stats = False
-use_norm = 'bn'
+use_norm = 'gn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
-act = 'swish'
+act = 'relu'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights_SegSmall3'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights_SegSmall3_v3'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -139,10 +139,11 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='normal'),  # in nm
                                   clouds.Center(),
                                   clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
+                                  clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 

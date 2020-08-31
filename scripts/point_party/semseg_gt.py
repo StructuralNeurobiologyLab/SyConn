@@ -154,9 +154,9 @@ def comment2int(comment: str):
         return 3
     elif comment == "gt_terminal":
         return 4
-    elif comment == "gt_neck" or comment == "neck":
+    elif comment in ["gt_neck", 'neck', 'in', 'nr']:  # 'in' and 'nr' neck sub classes
         return 5
-    elif comment == "gt_head" or comment == "head":
+    elif comment in ["gt_head", "head", 's', 'gt_protrusion', 'p']:  # 's' for stubby, 'p' for protrusion
         return 6
     elif comment == 'gt_glia' or comment == 'ignore':
         return 33
@@ -189,16 +189,15 @@ def gt_generation(kzip_paths, out_path, version: str = None):
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
-
 if __name__ == "__main__":
     data_path = "/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05/"
-    destination = data_path + '/hc_out/'
+    destination = data_path + '/hc_out_2020_08/'
     os.makedirs(destination, exist_ok=True)
 
     # axon GT
     global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-    # file_paths += glob.glob(data_path + '/sparse_gt/*.k.zip', recursive=False)
+    file_paths += glob.glob(data_path + '/batch2/*.k.zip', recursive=False)
 
     gt_generation(file_paths, destination)
 
