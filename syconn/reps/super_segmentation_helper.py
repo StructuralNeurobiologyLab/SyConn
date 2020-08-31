@@ -2192,7 +2192,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         msg = f'"spiness" not available in skeleton of SSO {sso.id}.'
         log_reps.error(msg)
         raise ValueError(msg)
-    ssv_svids = set(sso.sv_ids)
+    ssv_svids = sso.sv_ids
     ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
     if len(ssv_syncoords) == 0:
         return
@@ -2227,6 +2227,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         seg = ndimage.zoom(seg, 1 / ds, order=0)
         if len(ssv_svids) > 1:
             relabel_vol_nonexist2zero(seg, {k: 1 for k in ssv_svids})
+        else:
+            seg = (seg == ssv_svids[0]).astype(np.int)
 
         seg = ndimage.binary_fill_holes(seg)
         if np.sum(seg) == 0:
@@ -2239,20 +2241,21 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         vert_ixs_bb = np.array(vert_ixs_bb, dtype=np.bool)
         verts_bb = verts[vert_ixs_bb]
         semseg_bb = sp_semseg[vert_ixs_bb]
+        # pathological case, such as re-entering cells within a smaller test cube lead to missing
+        # meshes and skeletons if the process is very small. Synapse objects get correctly identified,
+        # but context is insufficient for mesh generation/prediction. Does not occur in real data.
+        if len(semseg_bb) == 0:
+            continue
         # relabelled spine neck as 9, actually not needed here
         semseg_bb[semseg_bb == 0] = 9
-
         distance = ndimage.distance_transform_edt(seg)
         local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3, 3)),
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
-        # assign labels from nearby vertices
-        try:
-            maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
-                                           k=global_params.config['spines']['semseg2coords_spines']['k'],
-                                           return_color=False, nb_cpus=sso.nb_cpus)
-        except ValueError:
-            raise()
+        # assign labels from nearby vertices; convert maxima coordinates back to mag 1 via 'ds'
+        maxima_sp = colorcode_vertices(maxima * ds, verts_bb - offset, semseg_bb,
+                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
+                                       return_color=False, nb_cpus=sso.nb_cpus)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
@@ -2260,9 +2263,10 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         labels, nb_obj = ndimage.label(labels)
         c = c - offset
         max_id = 1
+        # if more than one spine head object get the one with the majority voxels in vicinity
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21), (c[2] - 10):(c[2] + 11)]
+            ls = labels[(c[0] - 10):(c[0] + 11), (c[1] - 10):(c[1] + 11), (c[2] - 10):(c[2] + 11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]
@@ -2281,7 +2285,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 max_id = ids[np.argmax(cnts)]
 
         n_voxels_spinehead = np.sum(labels == max_id)
-        vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
+        vol_sh = n_voxels_spinehead * np.prod(scaling * ds) / 1e9  # in um^3
         sso.attr_dict['spinehead_vol'][ssv_syn_id] = vol_sh
 
 

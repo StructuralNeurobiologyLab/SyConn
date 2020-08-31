@@ -191,11 +191,12 @@ if __name__ == '__main__':
                                       clouds.Center(500, distr='uniform'),
                                       clouds.Normalization(scale_norm),
                                       clouds.RandomRotate(apply_flip=True),
+                                      clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                       clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype, onehot=onehot,
-                                    batch_size=batch_size, ctx_size=ctx, ssd_kwargs=ssd_kwargs,
+                                    batch_size=batch_size, ctx_size=1.5*ctx, ssd_kwargs=ssd_kwargs,
                                     map_myelin=use_myelin)
 
     # PREPARE AND START TRAINING #

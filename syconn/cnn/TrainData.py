@@ -169,11 +169,14 @@ if elektronn3_avail:
             else:
                 return max(len(self.sso_ids) // 5, 1)
 
-        def load_ssv_sample(self, item: int, draw_local: bool = False):
+        def load_ssv_sample(self, item: int, draw_local: bool = False, draw_local_dist: float = 1000):
             """
             Args:
                 item: Cell ID.
                 draw_local: Sample two similar samples from the same location.
+                draw_local_dist: Maximum distance to the location used for generation the "similar" sample.
+                    Note that the location is drawn randomly from all skeleton nodes within the traversed
+                    path (within `draw_local_dist`).
 
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
@@ -189,7 +192,8 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin)][0]
+                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin,
+                    draw_local_dist=draw_local_dist)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
@@ -207,7 +211,7 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, draw_local: bool = True, **kwargs):
+        def __init__(self, draw_local: bool = True, draw_local_dist: float = 1000, **kwargs):
             """
 
             Args:
@@ -223,35 +227,44 @@ if elektronn3_avail:
                 print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
             self._curr_ssv_id_altern = None
             self.draw_local = draw_local
+            self.draw_local_dist = draw_local_dist
 
         def __getitem__(self, item):
-            item = np.random.randint(0, len(self.sso_ids))
-            self._curr_ssv_id_altern = self.sso_ids[item]
-            pts_altern, feats_altern = self.load_ssv_sample(item)
-
-            pts_altern = torch.from_numpy(pts_altern).float()
-            feats_altern = torch.from_numpy(feats_altern).float()
-
-            # draw base and similar sample from a different cell
             while True:
-                ix = np.random.randint(0, len(self.sso_ids))
-                if self.sso_ids[ix] != self._curr_ssv_id_altern:
-                    self._curr_ssv_id = self.sso_ids[ix]
+                try:
+                    item = np.random.randint(0, len(self.sso_ids))
+                    self._curr_ssv_id_altern = self.sso_ids[item]
+                    pts_altern, feats_altern = self.load_ssv_sample(item)
+                    pts_altern = torch.from_numpy(pts_altern).float()
+                    feats_altern = torch.from_numpy(feats_altern).float()
                     break
-            if self.draw_local:
-                # consecutive samples belong together
-                pts, feats = self.load_ssv_sample(ix, draw_local=True)
-                pts0, pts1 = pts[0::2], pts[1::2]
-                feats0, feats1 = feats[0::2], feats[1::2]
-            else:
-                pts0, feats0 = self.load_ssv_sample(ix)  # base sample
-                pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
+                except ValueError as e:
+                    print(f'Exception occurred during CellCloudDataTriplet._getitem__ with SSV ID {self.sso_ids[item]}: {str(e)}')
+            while True:
+                try:
+                    # draw base and similar sample from a different cell
+                    while True:
+                        ix = np.random.randint(0, len(self.sso_ids))
+                        if self.sso_ids[ix] != self._curr_ssv_id_altern:
+                            self._curr_ssv_id = self.sso_ids[ix]
+                            break
+                    if self.draw_local:
+                        # consecutive samples belong together
+                        pts, feats = self.load_ssv_sample(ix, draw_local=True, draw_local_dist=self.draw_local_dist)
+                        pts0, pts1 = pts[0::2], pts[1::2]
+                        feats0, feats1 = feats[0::2], feats[1::2]
+                    else:
+                        pts0, feats0 = self.load_ssv_sample(ix)  # base sample
+                        pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
 
-            x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
-                  torch.from_numpy(feats0).float()}
-            x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
-                  torch.from_numpy(feats1).float()}
-            x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+                    x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
+                          torch.from_numpy(feats0).float()}
+                    x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
+                          torch.from_numpy(feats1).float()}
+                    x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+                    break
+                except ValueError as e:
+                    print(f'Exception occurred during CellCloudDataTriplet._getitem__ with SSV ID {self.sso_ids[item]}: {str(e)}')
             return x0, x1, x2
 
         def __len__(self):
@@ -429,12 +442,13 @@ if elektronn3_avail:
                      train=True, batch_size=1, use_subcell=True, ctx_size=20000):
             if source_dir is None:
                 source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt'
-                              '_2020/2020_05//hc_out/')
+                              '_2020/2020_05//hc_out_2020_08/')
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')
-            ssv_ids_proof = [491527, 2734465, 2854913, 8339462, 10919937, 15933443, 15982592,
-                             16096256, 16113665, 18571264, 23144450, 24414208, 26501121, 33581058,
-                             34811392, 37558272, 46319619]  # + [1090051, 2091009, 3447296, 8003584, 12806659]  # sparse GT
+            ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
+                             16113665, 24414208, 18571264, 2734465, 23144450, 15982592, 15933443, 8339462, 18251791,
+                             17079297, 31967234, 23400450, 1090051, 3447296, 2091009, 28790786, 14637059, 19449344,
+                             12806659, 26331138, 22335491, 26169344, 12179464, 24434691, 18556928, 8003584, 27435010]
             self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
                            in ssv_ids_proof]
             print(f'Using {len(self.fnames)} cells for training.')

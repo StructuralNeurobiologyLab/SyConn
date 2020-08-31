@@ -55,11 +55,11 @@ if __name__ == '__main__':
                         default=None)
     parser.add_argument('--sr', type=str, help='Save root', default=None)
     parser.add_argument('--bs', type=int, default=16, help='Batch size')
-    parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
-    parser.add_argument('--scale_norm', type=int, default=750, help='Scale factor for normalization')
+    parser.add_argument('--sp', type=int, default=25000, help='Number of sample points')
+    parser.add_argument('--scale_norm', type=int, default=1500, help='Scale factor for normalization')
     parser.add_argument('--co', action='store_true', help='Disable CUDA')
     parser.add_argument('--seed', default=0, help='Random seed')
-    parser.add_argument('--ctx', default=7500, help='Context size in nm', type=float)
+    parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
     parser.add_argument('--ana', default=0, help='Cloudset size of previous analysis')
     parser.add_argument(
         '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
@@ -191,12 +191,13 @@ if __name__ == '__main__':
                                       clouds.Center(500, distr='uniform'),
                                       clouds.Normalization(scale_norm),
                                       clouds.RandomRotate(apply_flip=True),
+                                      clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                       clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype, onehot=onehot,
                                     batch_size=batch_size, ctx_size=ctx, ssd_kwargs=ssd_kwargs,
-                                    map_myelin=use_myelin)
+                                    map_myelin=use_myelin, draw_local=True, draw_local_dist=ctx)
 
     # PREPARE AND START TRAINING #
 
