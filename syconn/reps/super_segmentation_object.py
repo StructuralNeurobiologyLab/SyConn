@@ -2005,7 +2005,7 @@ class SuperSegmentationObject(SegmentationBase):
 
     def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
                        raw_view_key=None, save=False, ws=None, comp_window=None,
-                       add_cellobjects: Union[bool, Iterable] = True):
+                       add_cellobjects: Union[bool, Iterable] = True, bs: int = 10):
         """
         Generates label views based on input model and stores it under the key
         'semseg_key', either within the SSV's SVs or in an extra view-storage
@@ -2037,6 +2037,7 @@ class SuperSegmentationObject(SegmentationBase):
             Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
         add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
             used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
+        bs: Batch size during inference.
         """
         view_props_default = self.config['views']['view_properties']
         if (nb_views is not None) or (raw_view_key is not None):
@@ -2054,7 +2055,7 @@ class SuperSegmentationObject(SegmentationBase):
                 views = self.load_views(raw_view_key)
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
                 raise ValueError("Unequal number of views and redering locations.")
-            labeled_views = ssh.predict_views_semseg(views, m, verbose=verbose)
+            labeled_views = ssh.predict_views_semseg(views, m, verbose=verbose, batch_size=bs)
             assert labeled_views.shape[2] == nb_views, \
                 "Predictions have wrong shape."
             if self.view_caching:
@@ -2080,7 +2081,7 @@ class SuperSegmentationObject(SegmentationBase):
                                  ' not be saved to disk.')
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
                                 nb_cpus=self.nb_cpus, verbose=verbose,
-                                return_pred=self.version == 'tmp')  # do not write to disk
+                                return_pred=self.version == 'tmp', bs=bs)  # do not write to disk
 
     def semseg2mesh(self, semseg_key: str, dest_path: Optional[str] = None,
                     nb_views: Optional[int] = None, k: int = 1,
@@ -3450,7 +3451,7 @@ def semsegaxoness_predictor(args) -> List[int]:
         IDs of missing/failed SSVs.
     """
     from ..handler.prediction import get_semseg_axon_model
-    ssv_ids, view_props, nb_cpus, map_properties, pred_key, max_dist = args
+    ssv_ids, view_props, nb_cpus, map_properties, pred_key, max_dist, bs = args
     m = get_semseg_axon_model()
     missing_ssvs = []
     for ix in ssv_ids:
@@ -3458,12 +3459,13 @@ def semsegaxoness_predictor(args) -> List[int]:
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
-            ssh.semseg_of_sso_nocache(ssv, m, **view_props)
+            ssh.semseg_of_sso_nocache(ssv, m, bs=bs, **view_props)
             semsegaxoness2skel(ssv, map_properties, pred_key, max_dist)
         except RuntimeError as e:
             missing_ssvs.append(ssv.id)
             msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
+        del ssv
     return missing_ssvs
 
 

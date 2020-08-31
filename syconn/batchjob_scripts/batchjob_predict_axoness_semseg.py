@@ -40,8 +40,9 @@ if global_params.config.use_point_models:
     predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, bs=2, show_progress=False)
 else:
     n_worker = 2
+    bs = 5
     params = [(ch_sub, view_props, ncpus, map_properties,
-               pred_key, max_dist) for ch_sub in basics.chunkify(ch, n_worker * 2)]
+               pred_key, max_dist, bs) for ch_sub in basics.chunkify(ch, n_worker * 2)]
     res = start_multiprocess_imap(semsegaxoness_predictor, params, nb_cpus=n_worker, show_progress=False)
     missing = np.concatenate(res)
     if len(missing) > 0:

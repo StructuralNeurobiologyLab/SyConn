@@ -98,30 +98,16 @@ def kimimaro_mergeskels(path_list: str, cell_id: int, nb_cpus: bool = None) -> c
     for f in path_list:
         part_dict = load_pkl2obj(f)
         # part_dict is now a defaultdict(list)
-        # # TODO: use commented part instead of donwsampling skeletons below
-        # skel_list.extend(part_dict[int(cell_id)])
-
-        skels = part_dict[int(cell_id)]
-        for ii in range(len(skels)):
-            # cell.vertices already in physical coordinates (nm)
-            # now add the offset in physical coordinates
-            skel = skels[ii]
-            # cloud_volume docu: " reduce size of skeleton by factor of 50, preserves branch and end
-            # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-            skel = skel.downsample(10)
-            skel = sparsify_skelcv(skel, scale=np.array([1, 1, 1]))
-            skels[ii] = skel
-        skel_list.extend(skels)
-
-    # a set of skeletons produced from the same label id
+        skel_list.extend(part_dict[int(cell_id)])
     skel = cloudvolume.PrecomputedSkeleton.simple_merge(skel_list).consolidate()
-
     if skel.vertices.size == 0:
         return skel
-    # merge skeletons to one connected component
+    # convert cloud volume skeleton to networkx graph
     skel = skelcv2nxgraph(skel)
+    # Fuse all remaining components into a single skeleton and covnert it back to cloud volume skeleton
     skel = nxgraph2skelcv(stitch_skel_nx(skel, n_jobs=nb_cpus))
-
+    # remove small stubs and single connected components with less than 500 nodes. The latter is not applicable as
+    # `stitch_skel_nx` merges all connected components regardless of their distance.
     skel = kimimaro.postprocess(
         skel,
         dust_threshold=500,  # physical units
