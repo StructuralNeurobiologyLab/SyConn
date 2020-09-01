@@ -1782,11 +1782,11 @@ class SegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
+            msg = f'Requested data cache "{prop_name}" did not exist.'
             if not allow_nonexisting:
-                msg = f''
                 log_reps.error(msg)
                 raise FileNotFoundError(msg)
-            log_reps.warning(f'Requested data cache "{prop_name}" did not exist.')
+            log_reps.warning(msg)
 
     def get_segmentationdataset(self, obj_type: str) -> 'SegmentationDataset':
         """

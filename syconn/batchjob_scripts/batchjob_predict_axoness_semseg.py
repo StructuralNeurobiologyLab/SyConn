@@ -41,7 +41,7 @@ if global_params.config.use_point_models:
 else:
     # TODO: inspect! this needed to be changed due to memory errors (probably because wrong memory handling in nested
     #  multi-processing)
-    n_worker = 1
+    n_worker = 2
     bs = 5
     params = [(ch_sub, view_props, ncpus, map_properties,
                pred_key, max_dist, bs) for ch_sub in basics.chunkify(ch, n_worker * 2)]

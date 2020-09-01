@@ -192,7 +192,7 @@ class SuperSegmentationObject(SegmentationBase):
             nb_cpus: Number of cpus for parallel jobs. will only be used in some processing steps.
             enable_locking: Enable posix locking for IO operations.
             enable_locking_so: Locking flag for all :class:`syconn.reps.segmentation.SegmentationObject` assigned.
-            to this object (e.g. SV, mitochondria, vesicle clouds, ...)
+                to this object (e.g. SV, mitochondria, vesicle clouds, ...)
             ssd_type: Type of cell reconstruction. Default: 'ssv'. If speficied and `ssd` is given, types must match.
             ssd: :py:class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`; if given it will be used
                 to check if property caching can be used in `:py:class:`~syconn.reps.segmentation.SegmentationDataset``.

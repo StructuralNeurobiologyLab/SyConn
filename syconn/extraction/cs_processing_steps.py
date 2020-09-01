@@ -16,6 +16,7 @@ from typing import Optional, Dict, List, Tuple
 import joblib
 import numpy as np
 import tqdm
+import pandas
 from knossos_utils import skeleton_utils, skeleton
 from scipy import spatial
 from sklearn import ensemble
@@ -91,7 +92,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
         _ = qu.batchjob_script(
             multi_params, "from_cell_to_syn_dict", remove_jobfolder=True)
     log_extraction.debug('Deleting cache dictionaries now.')
-    # delete cache_dc
+    # delete cache_dicts
     # TODO: start as thread!
     sm.start_multiprocess_imap(_delete_all_cache_dc, [(ssv_id, ssd.config) for ssv_id in ssd.ssv_ids],
                                nb_cpus=None)
@@ -1469,20 +1470,20 @@ def write_conn_gt_kzips(conn, n_objects, folder):
         skeleton_utils.write_skeleton(folder + "/obj_%d.k.zip" % conn_id, [a])
 
 
-def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path_kzip: str, overwrite: bool = False,
+def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path2file: str, overwrite: bool = False,
                    rfc_path_out: str = None, max_dist_vx: int = 20) -> \
         Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]:
     """
     Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic
     objects. Features are generated from the objects in `conn` associated with the annotated
-    coordinates stored in `path_kzip`.
+    coordinates stored in `path2file`.
     Will write the trained classifier to ``global_params.config.mpath_syn_rfc``.
 
     Args:
         conn: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
             type ``syn_ssv``. Used to identify synaptic object candidates annotated
-            in the kzip file at `path_kzip`.
-        path_kzip: Path to kzip file with synapse labels as node comments
+            in the kzip/xlsx file at `path2file`.
+        path2file: Path to kzip file with synapse labels as node comments
             ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
             respectively).
         overwrite: Replace existing files.
@@ -1492,6 +1493,7 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path_kzip: str, ove
     Returns:
         The trained random forest classifier and the feature and label data.
     """
+
     log = log_extraction
     if global_params.config.working_dir is not None or rfc_path_out is not None:
         if rfc_path_out is None:
@@ -1505,11 +1507,10 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path_kzip: str, ove
         if os.path.isfile(rfc_path_out) and not overwrite:
             raise FileExistsError()
     assert conn.type == 'syn_ssv'
-    anno = skeleton_utils.load_skeleton(path_kzip)['Synapse annotation']
 
-    log.info(f'Initiated RFC fitting procedure with GT file "{path_kzip}" and {conn}.')
+    log.info(f'Initiated RFC fitting procedure with GT file "{path2file}" and {conn}.')
 
-    base_dir = os.path.split(path_kzip)[0]
+    base_dir = os.path.split(path2file)[0]
     mapped_synssv_objects_kzip = f'{base_dir}/mapped_synssv.k.zip'
     if os.path.isfile(mapped_synssv_objects_kzip):
         if not overwrite:
@@ -1518,12 +1519,20 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path_kzip: str, ove
         os.remove(mapped_synssv_objects_kzip)
     label_coords = []
     labels = []
-    for node in anno.getNodes():
-        c = node.getComment()
-        if not ((c == 'synaptic') | (c == 'non-synaptic')):
-            continue
-        labels.append(c)
-        label_coords.append(np.array(node.getCoordinate()))
+    if path2file.endswith('k.zip'):
+        anno = skeleton_utils.load_skeleton(path2file)['Synapse annotation']
+        for node in anno.getNodes():
+            c = node.getComment()
+            if not ((c == 'synaptic') | (c == 'non-synaptic')):
+                continue
+            labels.append(c)
+            label_coords.append(np.array(node.getCoordinate()))
+    else:
+        df = pandas.io.parsers.read_csv(path2file, header=None, names=['ID', 'type']).values
+        ssv_ids = df[:, 0].astype(np.uint)
+        if len(np.unique(ssv_ids)) != len(ssv_ids):
+            raise ValueError('Multi-usage of IDs!')
+        str_labels = df[:, 1]
 
     labels = np.array(labels)
     label_coords = np.array(label_coords)

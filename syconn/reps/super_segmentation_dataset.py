@@ -124,7 +124,7 @@ class SuperSegmentationDataset(SegmentationBase):
                 `config.yml` file.
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
                 setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
-            sso_caching: WIP, enables caching mechanisms in SuperSegmentationObjects returned via
+            sso_caching: WIP, enables caching mechanism in SuperSegmentationObjects returned via
                 `get_super_segmentation_object`
             sso_locking: If True, locking is enabled for SSV files.
             sd_lookup: Lookup dict for :py:class:`~syconn.reps.segmentation.SegmentationDataset`, this will enable

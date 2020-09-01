@@ -23,11 +23,14 @@ with open(path_storage_file, 'rb') as f:
 
 sso_ids = args[0]
 
-ssd = SuperSegmentationDataset()
+sd_syn_ssv = SegmentationDataset('syn_ssv', cache_properties=['rep_coord', 'id'])
+
+ssd = SuperSegmentationDataset(sd_lookup={'syn_ssv': sd_syn_ssv})
 for sso in ssd.get_super_segmentation_object(sso_ids):
     assert sso.load_attr_dict() == 0, f"Attribute of SSO {sso.id} does not exist."
     extract_spinehead_volume_mesh(sso)
     sso.save_attr_dict()
+    del sso
 
 with open(path_out_file, "wb") as f:
     pkl.dump("", f)
