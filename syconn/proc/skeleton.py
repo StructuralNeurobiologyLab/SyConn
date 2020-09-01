@@ -83,7 +83,7 @@ def kimimaro_skelgen(cube_size, cube_offset, overlap, boundary):
             #add cube_offset in physical coordinates
             cell.vertices[i] = np.array([int(c[0]+cube_offset[0]*20), int(c[1]+cube_offset[1]*20), int(c[2]+cube_offset[2]*40)])
         # cloud_volume docu: " reduce size of skeleton by factor of 2, preserves branch and end points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
-        #cell = cell.downsample(2)
+        cell = cell.downsample(4)
         # code from sparsify_skeleton_fast in syconn.procs.super_segmentation_helper
         # modify for kimimaro_skeletons
 
@@ -113,7 +113,7 @@ def kimimaro_mergeskels(path_list, cell_id):
         dust_threshold=1000,  # physical units
         tick_threshold=3500  # physical units
     )
-    skel = skel.downsample(4)  # better suited in function above with part of skels. Doesn't work there.
+    #skel = skel.downsample(4)  # better suited in function above with part of skels.
     # Split input skeletons into connected components and
     # then join the two nearest vertices within `radius` distance
     # of each other until there is only a single connected component
