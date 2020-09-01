@@ -384,8 +384,9 @@ class MeshStorage(StorageClass):
     additionally (save decompressing time).
     """
 
-    def __init__(self, inp, load_colarr=False, **kwargs):
+    def __init__(self, inp, load_colarr=False, compress=False, **kwargs):
         self.load_colarr = load_colarr
+        self.compress = compress
         super(MeshStorage, self).__init__(inp, **kwargs)
 
     def __getitem__(self, item: Union[int, str]) -> List[np.ndarray]:
@@ -442,10 +443,14 @@ class MeshStorage(StorageClass):
                                      len(mesh[1]) == len(mesh[3]) * 3):
             log_backend.warning('Lengths of vertex array and length of color/'
                                 'label array differ!')
-        comp_ind = arrtolz4string_list(mesh[0].astype(dtype=np.uint32))
-        comp_vert = arrtolz4string_list(mesh[1].astype(dtype=np.float32))
-        comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
-        comp_col = arrtolz4string_list(mesh[3].astype(dtype=np.uint8))
+        if self.compress:
+            transf = arrtolz4string_list
+        else:
+            def transf(x): return x
+        comp_ind = transf(mesh[0].astype(dtype=np.uint32))
+        comp_vert = transf(mesh[1].astype(dtype=np.float32))
+        comp_norm = transf(mesh[2].astype(dtype=np.float32))
+        comp_col = transf(mesh[3].astype(dtype=np.uint8))
         self._dc_intern[key] = [comp_ind, comp_vert, comp_norm, comp_col]
 
 

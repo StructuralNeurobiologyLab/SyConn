@@ -473,6 +473,8 @@ class SegmentationObject(SegmentationBase):
         Returns:
             1D array of the coordinate (XYZ).
         """
+        if self._rep_coord is None and 'rep_coord' in self.attr_dict:
+            self._rep_coord = self.attr_dict['rep_coord']
         if self._rep_coord is None and self.attr_dict_exists:
             self._rep_coord = self.lookup_in_attribute_dict("rep_coord")
 
