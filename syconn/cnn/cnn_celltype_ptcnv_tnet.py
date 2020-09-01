@@ -105,6 +105,7 @@ if __name__ == '__main__':
     use_norm = 'gn'
     act = 'swish'
     dataset = 'j0251'
+    use_myelin = True
 
     if name is None:
         name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}'
@@ -112,8 +113,14 @@ if __name__ == '__main__':
             name += '_cellshapeOnly'
         if not use_syntype:
             name += '_noSyntype'
+        if use_myelin:
+            name += '_myelin'
     if onehot:
-        input_channels = 5 if use_syntype else 4
+        input_channels = 4
+        if use_syntype:
+            input_channels += 1
+        if use_myelin:
+            input_channels += 1
     else:
         input_channels = 1
         name += '_flatinp'
@@ -134,7 +141,7 @@ if __name__ == '__main__':
         ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_'
                                       'agglo_cbsplit')
     elif dataset == 'j0251':
-        ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+        ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
     else:
         raise NotImplementedError
     name += f'_{dataset}'
@@ -188,7 +195,8 @@ if __name__ == '__main__':
 
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype, onehot=onehot,
-                                    batch_size=batch_size, ctx_size=ctx, ssd_kwargs=ssd_kwargs)
+                                    batch_size=batch_size, ctx_size=ctx, ssd_kwargs=ssd_kwargs,
+                                    map_myelin=use_myelin)
 
     # PREPARE AND START TRAINING #
 

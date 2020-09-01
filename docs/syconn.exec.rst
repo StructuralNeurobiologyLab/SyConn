@@ -12,10 +12,10 @@ syconn.exec.exec\_init module
     :undoc-members:
     :show-inheritance:
 
-syconn.exec.exec\_multiview module
+syconn.exec.exec\_inference module
 ----------------------------------------------
 
-.. automodule:: syconn.exec.exec_multiview
+.. automodule:: syconn.exec.exec_inference
     :members:
     :undoc-members:
     :show-inheritance:

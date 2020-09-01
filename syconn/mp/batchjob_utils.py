@@ -13,6 +13,7 @@ from ..handler.basics import temp_seed, str_delta_sec
 from ..handler.config import initialize_logging
 
 import pickle as pkl
+import threading
 import getpass
 import glob
 import os
@@ -25,6 +26,7 @@ import string
 import subprocess
 import tqdm
 import sys
+import socket
 import time
 import numpy as np
 from multiprocessing import cpu_count
@@ -73,7 +75,7 @@ def batchjob_script(params: list, name: str,
                     disable_batchjob: bool = False,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
-                    log: Logger = None, sleep_time: int = 20,
+                    log: Logger = None, sleep_time: Optional[int] = None,
                     show_progress=True,
                     overwrite=False):
     """
@@ -118,27 +120,32 @@ def batchjob_script(params: list, name: str,
     # Parameter handling
     if n_cores is None:
         n_cores = 1
+    if sleep_time is None:
+        sleep_time = 5
     if python_path is None:
         python_path = python_path_global
+
+    if job_name == "default":
+        with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
+            letters = string.ascii_lowercase
+            job_name = "".join([letters[le] for le in np.random.randint(0, len(letters), 8)])
+
     if batchjob_folder is None:
-        batchjob_folder = "{}/{}_folder{}/".format(
-            global_params.config.qsub_work_folder, name, suffix)
+        batchjob_folder = f"{global_params.config.qsub_work_folder}/{name}{suffix}_{job_name}/"
     if os.path.exists(batchjob_folder):
         if not overwrite:
-            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". '
-                                  f'Please make sure it is safe for deletion, then set overwrite=True')
+            raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". Please'
+                                  f' make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
-
+    batchjob_folder = batchjob_folder.rstrip('/')
     # Check if fallback is required
     if disable_batchjob or not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path, show_progress=show_progress,
-                                 remove_jobfolder=remove_jobfolder, log=log, overwrite=True,
-                                 job_folder=batchjob_folder)
+        return batchjob_fallback(params, name, n_cores, suffix, script_folder, python_path,
+                                 show_progress=show_progress, remove_jobfolder=remove_jobfolder,
+                                 log=log, overwrite=True, job_folder=batchjob_folder)
 
     if log is None:
-        log_batchjob = initialize_logging("{}".format(name + suffix),
-                                          log_dir=batchjob_folder)
+        log_batchjob = initialize_logging("{}".format(name + suffix), log_dir=batchjob_folder)
     else:
         log_batchjob = log
     if script_folder is not None:
@@ -166,17 +173,13 @@ def batchjob_script(params: list, name: str,
     additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
 
     # Start SLURM job
-    if job_name == "default":
-        with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
-            letters = string.ascii_lowercase
-            job_name = "".join([letters[l] for l in np.random.randint(0, len(letters), 8)])
-    log_batchjob.info(
-        'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks, each'
-        ' using {} core(s).'.format(name, job_name, suffix, len(params), n_cores))
     if len(job_name) > 8:
         msg = "job_name is longer than 8 characters. This is untested."
         log_batchjob.error(msg)
         raise ValueError(msg)
+    log_batchjob.info(
+        'Started BatchJob script "{}" ({}) (suffix="{}") with {} tasks, each'
+        ' using {} core(s).'.format(name, job_name, suffix, len(params), n_cores))
 
     # Create folder structure
     path_to_storage = "%s/storage/" % batchjob_folder
@@ -196,7 +199,6 @@ def batchjob_script(params: list, name: str,
         os.makedirs(path_to_out)
 
     # Submit jobs
-    log_batchjob.debug("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
     dtime_sub = 0
     start_all = time.time()
@@ -237,9 +239,10 @@ def batchjob_script(params: list, name: str,
             out_str, err = process.communicate()
             if process.returncode != 0:
                 if max_relaunch_cnt == 5:
-                    raise RuntimeError(f'Could not launch job with ID {job_id} and command '
-                                       f'"{job_cmd}".')
-                log_mp.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
+                    msg = f'Could not launch job with ID {job_id} and command "{job_cmd}".'
+                    log_batchjob.error(msg)
+                    raise RuntimeError(msg)
+                log_batchjob.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
                                f'for the {max_relaunch_cnt}. time.'
                                f'Attempting again in 5s. Error raised: {err}')
                 max_relaunch_cnt += 1
@@ -251,10 +254,10 @@ def batchjob_script(params: list, name: str,
         job2slurm_dc[job_id] = slurm_id
         slurm2job_dc[slurm_id] = job_id
         dtime_sub += time.time() - start
-        time.sleep(0.1)
+        time.sleep(0.01)
 
     # wait for jobs to be in SLURM memory
-    time.sleep(sleep_time)
+    time.sleep(10)
     # requeue failed jobs for `max_iterations`-times
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
@@ -268,8 +271,8 @@ def batchjob_script(params: list, name: str,
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
             log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
-                                 f'again, SLURM cache might have been delayed.')
-            time.sleep(1.5 * sleep_time)
+                                 f'again, SLURM cache may not have been updated yet.')
+            time.sleep(5)
             js_dc = jobstates_slurm(job_name, starttime)
             job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
         # all jobs which are not running, completed or pending have failed for
@@ -294,11 +297,11 @@ def batchjob_script(params: list, name: str,
                 out_str, err = process.communicate()
                 if process.returncode != 0:
                     if max_relaunch_cnt == 5:
-                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) and '
-                                           f'command "{job_cmd}".')
-                    log_mp.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) with command "{job_cmd}"'
-                                   f'for the {max_relaunch_cnt}. time.'
-                                   f'Attempting again in 5s. Error raised: {err}')
+                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) '
+                                           f'and command "{job_cmd}".')
+                    log_batchjob.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
+                                         f'with command "{job_cmd}" for the {max_relaunch_cnt}. '
+                                         f'time. Attempting again in 5s. Error raised: {err}')
                     max_relaunch_cnt += 1
                     time.sleep(5)
                 else:
@@ -326,15 +329,43 @@ def batchjob_script(params: list, name: str,
     log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
                       f"{dtime_all} ({dtime_sub:.1f}s submission): "
                       f"{nb_completed} completed, {nb_failed} failed.")
-    out_files = glob.glob(path_to_out + "*.pkl")
+    out_files = glob.glob(path_to_out + "job_*.pkl")
     if len(out_files) < len(params):
         msg = f'Batch processing error during execution of {name} in job ' \
               f'\"{job_name}\": Found {len(out_files)}, expected {len(params)}.'
         log_batchjob.error(msg)
         raise ValueError(msg)
     if remove_jobfolder:
-        shutil.rmtree(batchjob_folder)
+        _delete_folder_daemon(batchjob_folder, log_batchjob, job_name)
     return path_to_out
+
+
+def _delete_folder_daemon(dirname, log, job_name, timeout=60):
+
+    def _delete_folder(dn, lg, to=60):
+        start = time.time()
+        e = ''
+        while timeout > time.time() - start:
+            try:
+                shutil.rmtree(dn)
+                break
+            except OSError as e:
+                e = str(e)
+                time.sleep(5)
+        if time.time() - start > timeout:
+            lg.warning(f'Deletion of job folder "{dn}" timed out after {to}s. OSError: {e}')
+            shutil.rmtree(dn, ignore_errors=True)
+            if os.path.exists(dn):
+                dn_del = f"{os.path.dirname(dn)}/DEL/{os.path.basename(dn)}_DEL"
+                if os.path.exists(os.path.dirname(dn_del)):
+                    shutil.rmtree(os.path.dirname(dn_del), ignore_errors=True)
+                os.makedirs(os.path.dirname(dn_del), exist_ok=True)
+                shutil.move(dn, dn_del)
+
+    t = threading.Thread(name=f'jobfold_delete_{job_name}', target=_delete_folder,
+                         args=(dirname, log))
+    t.setDaemon(True)
+    t.start()
 
 
 def jobstates_slurm(job_name: str, start_time: str,
@@ -380,8 +411,7 @@ def jobstates_slurm(job_name: str, start_time: str,
     return job_states
 
 
-def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
-                      python_path=None, remove_jobfolder=False,
+def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, python_path=None, remove_jobfolder=False,
                       show_progress=True, log=None, overwrite=False, job_folder=None):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
@@ -400,6 +430,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
     show_progress : bool
     log: Logger
         Logger.
+    overwrite:
+    job_folder:
 
     Returns
     -------
@@ -416,6 +448,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
             raise FileExistsError(f'Batchjob folder already exists at "{job_folder}". '
                                   f'Please make sure it is safe for deletion, then set overwrite=True')
         shutil.rmtree(job_folder, ignore_errors=True)
+    job_folder = job_folder.rstrip('/')
     if log is None:
         log_batchjob = initialize_logging("{}".format(name + suffix),
                                           log_dir=job_folder)
@@ -488,14 +521,24 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None,
         raise ValueError(msg)
     elif len("".join(out_str)) != 0:
         msg = 'Warnings/errors occurred during ' \
-              '"{}".:\n{} See logs at {} for details.'.format(name, out_str,
-                                                              job_folder)
+              '"{}".:\n{} See logs at {} for details.'.format(name, out_str, job_folder)
         log_mp.warning(msg)
         log_batchjob.warning(msg)
     if remove_jobfolder:
-        shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(
-        name, time.time() - start))
+        # nfs might be slow and leaves .nfs files behind (possibly from the slurm worker)
+        try:
+            shutil.rmtree(job_folder)
+        except OSError:
+            job_folder_old = f"{os.path.dirname(job_folder)}/DEL/{os.path.basename(job_folder)}_DEL"
+            log_batchjob.warning(f'Deletion of job folder "{job_folder}" was not complete. Moving to '
+                                 f'{job_folder_old}')
+            if os.path.exists(os.path.dirname(job_folder_old)):
+                shutil.rmtree(os.path.dirname(job_folder_old), ignore_errors=True)
+            os.makedirs(os.path.dirname(job_folder_old), exist_ok=True)
+            if os.path.exists(job_folder_old):
+                shutil.rmtree(job_folder_old, ignore_errors=True)
+            shutil.move(job_folder, job_folder_old)
+    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
     return path_to_out
 
 
@@ -503,8 +546,7 @@ def fallback_exec(cmd_exec):
     """
     Helper function to execute commands via ``subprocess.Popen``.
     """
-    ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE)
+    ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = ps.communicate()
     out_str = ""
     reported = False
@@ -545,8 +587,7 @@ def number_of_running_processes(job_name):
                                stdout=subprocess.PIPE)
     nb_lines = 0
     for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-        if job_name[:10 if global_params.config['batch_proc_system'] == 'QSUB'
-        else 8] in line:
+        if job_name[:10 if global_params.config['batch_proc_system'] == 'QSUB' else 8] in line:
             nb_lines += 1
     return nb_lines
 

@@ -29,7 +29,7 @@ with open(path_storage_file, 'rb') as f:
             break
 
 ssv_ids = args[0]
-pred_key_appendix = args[3]
+pred_key_appendix = args[1]
 
 ssd = SuperSegmentationDataset()
 if global_params.config.use_point_models:

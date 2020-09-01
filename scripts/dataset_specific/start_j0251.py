@@ -12,12 +12,13 @@ import networkx as nx
 
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference
+from syconn.handler.basics import FileTimer
+from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/"
+    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
@@ -28,7 +29,7 @@ if __name__ == '__main__':
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
-        ('use_point_models', True),
+        ('use_point_models', False),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -73,9 +74,8 @@ if __name__ == '__main__':
     # --------------------------------------------------------------------------
     # Setup working directory and logging
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
-    time_stamps = [time.time()]
-    step_idents = ['t-0']
-    log.info('Step 0/9 - Preparation')
+    ftimer = FileTimer(working_dir + '/.timing.pkl')
+    ftimer.start('Preparation')
 
     bb = None
     bd = None
@@ -110,16 +110,16 @@ if __name__ == '__main__':
     # log.info('Finished example cube initialization (shape: {}). Starting'
     #          ' SyConn pipeline.'.format(bd))
     # log.info('Example data will be processed in "{}".'.format(working_dir))
-    # time_stamps.append(time.time())
-    # step_idents.append('Preparation')
+    # ftimer.stop()
     #
     # log.info('Step 1/9 - Predicting sub-cellular structures')
+    # ftimer.start('Dense predictions')
     # # myelin is not needed before `run_create_neuron_ssd`
     # # exec_dense_prediction.predict_myelin(raw_kd_path)
-    # time_stamps.append(time.time())
-    # step_idents.append('Dense predictions')
+    # ftimer.stop()
     #
     # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    # ftimer.start('SD generation')
     # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
     #                                 n_folders_fs=n_folders_fs,
     #                                 load_cellorganelles_from_kd_overlaycubes=True,
@@ -140,74 +140,75 @@ if __name__ == '__main__':
     # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
     #
     # exec_init.run_create_rag()
-    # time_stamps.append(time.time())
-    # step_idents.append('SD generation')
+    # ftimer.stop()
     #
-    # # if global_params.config.prior_glia_removal:
-    # #     log.info('Step 2.5/9 - Glia separation')
-    # #     if not global_params.config.use_point_models:
-    # #         exec_render.run_glia_rendering()
-    # #         exec_inference.run_glia_prediction()
-    # #     else:
-    # #         exec_inference.run_glia_prediction_pts()
-    # #     exec_inference.run_glia_splitting()
-    # #     time_stamps.append(time.time())
-    # #     step_idents.append('Glia separation')
+    # log.info('Step 3/9 - Glia separation')
+    # if global_params.config.prior_glia_removal:
+    #     ftimer.start('Glia separation')
+    #     if not global_params.config.use_point_models:
+    #         exec_render.run_glia_rendering()
+    #         exec_inference.run_glia_prediction()
+    #     else:
+    #         exec_inference.run_glia_prediction_pts()
+    #     exec_inference.run_glia_splitting()
+    #     ftimer.stop()
+    # else:
+    #     log.info('Glia separation disabled. Skipping.')
     #
-    # log.info('Step 3/9 - Creating SuperSegmentationDataset')
+    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    # ftimer.start('SSD generation')
     # exec_init.run_create_neuron_ssd()
-    # time_stamps.append(time.time())
-    # step_idents.append('SSD generation')
+    # ftimer.stop()
+    #
+    # log.info('Step 5/10 - Creating SuperSegmentationDataset')
+    # ftimer.start('Skeleton generation')
+    # exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
+    # ftimer.stop()
+    #
     #
     # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-    #     log.info('Step 3.5/9 - Neuron rendering')
+    #     log.info('Step 4.5/9 - Neuron rendering')
+    #     ftimer.start('Neuron rendering')
     #     exec_render.run_neuron_rendering()
-    #     time_stamps.append(time.time())
-    #     step_idents.append('Neuron rendering')
+    #     ftimer.stop()
     #
-    # log.info('Step 4/9 - Synapse detection')
+    # log.info('Step 5/9 - Synapse detection')
+    # ftimer.start('Synapse detection')
     # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    # time_stamps.append(time.time())
-    # step_idents.append('Synapse detection')
-    #
-    # log.info('Step 5/9 - Axon prediction')
-    # exec_inference.run_semsegaxoness_prediction()
-    # time_stamps.append(time.time())
-    # step_idents.append('Axon prediction')
-    #
-    # log.info('Step 6/9 - Spine prediction')
-    # exec_inference.run_semsegspiness_prediction()
-    # exec_syns.run_spinehead_volume_calc()
-    # time_stamps.append(time.time())
-    # step_idents.append('Spine prediction')
-    #
-    # log.info('Step 7/9 - Morphology extraction')
-    # exec_inference.run_morphology_embedding()
-    # time_stamps.append(time.time())
-    # step_idents.append('Morphology extraction')
+    # ftimer.stop()
+
+    # TDO: remove
+    exec_skeleton.run_kimimaro_skelgen()
+
+    log.info('Step 6/9 - Compartment prediction')
+    ftimer.start('Compartment predictions')
+    exec_inference.run_semsegaxoness_prediction()
+    if not global_params.config.use_point_models:
+        exec_inference.run_semsegspiness_prediction()
+    exec_syns.run_spinehead_volume_calc()
+    ftimer.stop()
+
+    # Use multi-views until here
+    raise()
+
+    log.info('Step 7/9 - Morphology extraction')
+    ftimer.start('Morphology extraction')
+    exec_inference.run_morphology_embedding()
+    ftimer.stop()
 
     log.info('Step 8/9 - Celltype analysis')
-    # exec_inference.run_celltype_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Celltype analysis')
+    ftimer.start('Celltype analysis')
+    exec_inference.run_celltype_prediction()
+    ftimer.stop()
 
     log.info('Step 9/9 - Matrix export')
+    ftimer.start('Matrix export')
     exec_syns.run_matrix_export()
-    time_stamps.append(time.time())
-    step_idents.append('Matrix export')
+    ftimer.stop()
 
-    time_stamps = np.array(time_stamps)
-    dts = time_stamps[1:] - time_stamps[:-1]
-    dt_tot = time_stamps[-1] - time_stamps[0]
-    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished after {dt_tot_str}.\n"
-    n_steps = len(step_idents[1:]) - 1
-    for i in range(len(step_idents[1:])):
-        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_per = int(dts[i] / dt_tot * 100)
-        step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_idents[i+1], step_dt, f'{step_dt_per}%')
-        time_summary_str += step_str
+    time_summary_str = ftimer.prepare_report(experiment_name)
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
-             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
+    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+             'can be analyzed via the KNOSSOS-SyConn plugin at '
+             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    os.system(f'syconn.server --working_dir={example_wd} --port=10001')

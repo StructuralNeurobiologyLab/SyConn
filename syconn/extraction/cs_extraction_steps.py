@@ -15,6 +15,7 @@ from collections import defaultdict
 from logging import Logger
 from typing import Optional, Dict, List, Tuple, Union
 
+from multiprocessing import Process
 import numpy as np
 import scipy.ndimage
 import tqdm
@@ -125,7 +126,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{dir_props}" ' \
+                  f'because temporary files already exist at "{dir_props}" ' \
                   f'and overwrite was set to False.'
             log.error(msg)
             raise FileExistsError(msg)
@@ -134,7 +135,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     if os.path.isdir(cset.path_head_folder):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{cset.path_head_folder}" ' \
+                  f'because temporary files already exist at "{cset.path_head_folder}" ' \
                   f'and overwrite was set to False.'
             log.error(msg)
             raise FileExistsError(msg)
@@ -217,11 +218,11 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     # write cs and syn segmentation to KD and SD
     chunky.save_dataset(cset)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
+
     # convert Chunkdataset to syn and cs KD
-    # TODO: spawn in parallel
-    for obj_type in ['cs', 'syn']:
+    def _convert_cd_to_kd(ot):
         path = "{}/knossosdatasets/{}_seg/".format(
-            global_params.config.working_dir, obj_type)
+            global_params.config.working_dir, ot)
         if os.path.isdir(path):
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
@@ -232,12 +233,22 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
                                           mags=[1, ])
         target_kd = basics.kd_factory(path)
-        export_cset_to_kd_batchjob({obj_type: path},
-                                   cset, obj_type, [obj_type],
-                                   offset=offset, size=size, stride=chunk_size, as_raw=False,
+        export_cset_to_kd_batchjob({ot: path}, cset, ot, [ot],  offset=offset, size=size,
+                                   stride=chunk_size, as_raw=False,
                                    orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
                   ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
+
+    procs = [Process(target=_convert_cd_to_kd, args=('cs',)),
+             Process(target=_convert_cd_to_kd, args=('syn',))]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
+        p.close()
 
     # create folders for existing (sub-)cell supervoxels to prevent concurrent makedirs
     for ii, struct in enumerate(['cs', 'syn']):
@@ -269,11 +280,21 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     # Mesh props are not computed as this is done for the agglomerated versions (currently only syn_ssv exist)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
-    dataset_analysis(sd_syn, recompute=True, compute_meshprops=False)
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
-    log.info(f'Identified {n_cs} contact sites and {n_syn} synapses within size threshold.')
-    dataset_analysis(sd_cs, recompute=True, compute_meshprops=False)
+    da_kwargs = dict(recompute=True, compute_meshprops=False)
+    procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
+             Process(target=dataset_analysis, args=(sd_cs,), kwargs=da_kwargs)]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
+        p.close()
+
+    # remove temporary files
     for p in dict_paths_tmp:
         if os.path.isfile(p):
             os.remove(p)

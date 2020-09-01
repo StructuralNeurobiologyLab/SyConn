@@ -12,8 +12,6 @@ except ImportError:
     pass  # for sphinx build
 import os
 import re
-import matplotlib
-matplotlib.use("agg", warn=False, force=True)
 import numpy as np
 import pandas
 from typing import Optional, Tuple, Dict, List, Union
@@ -21,7 +19,7 @@ import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed, kd_factory
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new, str2int_converter
 from syconn.handler.prediction_pts import pts_loader_scalar, \
-    pts_loader_local_skel, load_hc_pkl, pts_loader_semseg_train
+    pts_loader_local_skel, pts_loader_semseg_train
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
@@ -63,7 +61,7 @@ if elektronn3_avail:
         """
         def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
                      train=True, cv_val=0, cellshape_only=False, ctx_size=20000, use_syntype=True,
-                     onehot=True, batch_size=1):
+                     onehot=True, batch_size=1, map_myelin: bool = False):
             """
 
             Args:
@@ -95,6 +93,7 @@ if elektronn3_avail:
             self.ssd = ssd
             self.sso_ids = None
             gt_dir = ssd.path
+            self.map_myelin = map_myelin
 
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
@@ -190,12 +189,12 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True, cache=False)][0]
+                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, cache=False)][0]
+                    train=True, cache=False, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -264,17 +263,18 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019/')
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
 
             super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
             # load GT
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v0.csv"
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v2.csv"
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
-                raise ValueError('Multi-usage of IDs!')
+                ixs, cnt = np.unique(ssv_ids, return_counts=True)
+                raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
-            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251') for el in str_labels], dtype=np.uint16)
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
             self.sso_ids = ssv_ids
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}

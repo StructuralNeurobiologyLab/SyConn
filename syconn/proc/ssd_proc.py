@@ -45,7 +45,7 @@ def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
 
-    multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
@@ -112,18 +112,15 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
         assert obj_type in ssd.version_dict
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
-    multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
     if not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                       multi_params)
-
+        _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread, multi_params)
     else:
         _ = qu.batchjob_script(
-            multi_params, "apply_mapping_decisions", n_cores=nb_cpus,
-            remove_jobfolder=True)
+            multi_params, "apply_mapping_decisions", n_cores=nb_cpus, remove_jobfolder=True)
 
 
 def _apply_mapping_decisions_thread(args):

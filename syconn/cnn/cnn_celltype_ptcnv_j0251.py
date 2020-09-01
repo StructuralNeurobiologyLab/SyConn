@@ -83,18 +83,25 @@ cellshape_only = False
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
-num_classes = 10
+num_classes = 11
 onehot = True
 act = 'swish'
+use_myelin = True
 
 if name is None:
-    name = f'celltype_pts_j0251_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
         name += '_noSyntype'
+    if use_myelin:
+        name += '_myelin'
 if onehot:
-    input_channels = 5 if use_syntype else 4
+    input_channels = 4
+    if use_syntype:
+        input_channels += 1
+    if use_myelin:
+        input_channels += 1
 else:
     input_channels = 1
     name += '_flatinp'
@@ -157,11 +164,11 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                          cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size, ctx_size=ctx)
+                         onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
 valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
                          cv_val=cval, cellshape_only=cellshape_only,
                          use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-                         ctx_size=ctx)
+                         ctx_size=ctx, map_myelin=use_myelin)
 
 # PREPARE AND START TRAINING #
 

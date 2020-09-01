@@ -9,11 +9,11 @@ test:
     - source ~/.bashrc
     - conda activate pysyintegration
     - pip install --upgrade --no-deps -v -e .
-    - pytest --cache-clear
+    - python -m pytest
   except:
     - master
 
-build:
+build-full:
   stage: build
   script:
     - conda env create -f environment.yml -n pysyintegration_m python --force
@@ -28,7 +28,7 @@ test-full:
     - source ~/.bashrc
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
-    - pytest --cache-clear -c tests/full_run.ini
+    - python -m pytest -c tests/full_run.ini
   only:
     - master
 
@@ -55,3 +55,5 @@ pylint:
       - ./pylint/
     expire_in: 2 yrs
   allow_failure: true
+  only:
+    - master

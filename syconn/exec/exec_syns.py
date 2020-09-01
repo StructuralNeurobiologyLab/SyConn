@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import numpy as np
 
@@ -25,8 +25,8 @@ def run_matrix_export():
     """
     Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
     of the currently active working directory.
-    Also collects the following synapse properties from prior analysis
-    steps:
+    Also collects the following synapse properties from prior analysis steps:
+
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
           en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
         * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
@@ -60,11 +60,13 @@ def run_matrix_export():
 
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
-                       max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None):
+                       max_n_jobs: Optional[int] = None,
+                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
     the following versions:
+
         * 'cs': Contact site objects between supervoxels.
         * 'syn': Objects representing the overlap between 'cs' and the initial
           synaptic junction predictions. Note: These objects effectively represent
@@ -92,7 +94,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    # create KDs and SDs for syn and cs
+    # # create KDs and SDs for syn and cs
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs)
@@ -112,6 +114,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
+    del syn_sign
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
              f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
@@ -144,14 +147,10 @@ def run_spinehead_volume_calc():
     np.random.seed(0)
 
     log.info('Starting spine head volume calculation.')
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
-                               for ssv_id in ssd.ssv_ids])
     multi_params = ssd.ssv_ids
-    ordering = np.argsort(nb_svs_per_ssv)
+    ordering = np.argsort(ssd.load_cached_data('size'))
     multi_params = multi_params[ordering[::-1]]
-    # job parameter will be read sequentially, i.e. in order to provide only
-    # one list as parameter one needs an additonal axis
-    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
+    multi_params = chunkify(multi_params, min(global_params.config.ncore_total * 10, 1000))
     multi_params = [(ixs,) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log,

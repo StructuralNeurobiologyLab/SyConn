@@ -921,8 +921,8 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     if nb_threads > 1:
         pool = ThreadPool(nb_threads)
         pool.map(_load_sv_voxels_thread, multi_params)
-        pool.close()
         pool.join()
+        pool.close()
     else:
         map(_load_sv_voxels_thread, multi_params)
 
@@ -1171,7 +1171,7 @@ def preproc_sso_skelfeature_thread(args: Tuple):
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_skeleton()
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) <= 1:
+        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
             log_reps.warning("Skeleton of SSV %d has zero nodes." % ssv_id)
             continue
         for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:

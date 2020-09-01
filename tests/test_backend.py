@@ -8,19 +8,21 @@ from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
      read_txt_from_zip, remove_from_zip
 import os
 import logging
-import traceback
 import zipfile
 import sys
 
 # TODO: use tempfile
 dir_path = os.path.dirname(os.path.realpath(__file__))
 
-test_p = dir_path + "/test.pkl"
-if os.path.isfile(test_p):
-    os.remove(test_p)
 
-if os.path.isfile(dir_path + '/.test.pkl.lk'):
-    os.remove(dir_path + '/.test.pkl.lk')
+def _setup_testfile(fname):
+    test_p = f"{dir_path}/{fname}.pkl"
+    if os.path.isfile(test_p):
+        os.remove(test_p)
+
+    if os.path.isfile(f'{dir_path}/.{fname}.pkl.lk'):
+        os.remove(f'{dir_path}/.{fname}.pkl.lk')
+    return test_p
 
 
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
@@ -40,68 +42,62 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
           An assertion error in case any of the test case fails.
           Logged to: logs/unitests.log
       """
+    test_p = _setup_testfile('test1')
 
     def create_LZ4Dict_wait_for_3s_then_close():
         # created and locked LZ4Dict for 3s
         pkl1 = CompressedStorage(test_p, read_only=False, disable_locking=False)
         pkl1[1] = np.ones((5, 5))
-        time.sleep(3)
+        time.sleep(1.5)
         pkl1.push()
 
-    def create_fail_expected_runtime_error_at_1s(a, b, q1):
-        # logging.debug("Started worker to access file for 1s"
-        time.sleep(0)
-        start = time.time()
+    def create_fail_expected_runtime_error1(q1):
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1, disable_locking=False,
-                                     max_delay=1)  # timeout sets the maximum time before failing, not max_delay
+            _ = CompressedStorage(test_p, read_only=True, timeout=0.5, disable_locking=False,
+                                  max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
-            logging.warning('FAILED: create_fail_expected_runtime_error_at_1s' + str(e))
-            q1.put(1)
+            logging.warning('FAILED: create_fail_expected_runtime_error1')
+            q1.put('FAILED: create_fail_expected_runtime_error1')
         except RuntimeError as e:
-            logging.info('PASSED: create_fail_expected_runtime_error_at_1s')
+            logging.info('PASSED: create_fail_expected_runtime_error1')
             q1.put(0)
 
-    def create_fail_expected_runtime_error_at_2s(a, b, q2):
-        # logging.debug("Started worker to access file for 2s."
-        time.sleep(0)
-        start = time.time()
+    def create_fail_expected_runtime_error2(q2):
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=2)
-            logging.warning('FAILED: create_fail_expected_runtime_error_at_2s')
-            q2.put(1)
+            _ = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=0.75)
+            logging.warning('FAILED: create_fail_expected_runtime_error2')
+            q2.put('FAILED: create_fail_expected_runtime_error2')
         except RuntimeError as e:
-            logging.info('PASSED: create_fail_expected_runtime_error_at_2s')
+            logging.info('PASSED: create_fail_expected_runtime_error2')
             q2.put(0)
 
-    def create_success_expected(a, b, q3):
-        time.sleep(0)
-        start = time.time()
-
+    def create_success_expected(q3):
         try:
-            pkl2 = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=1)
+            _ = CompressedStorage(test_p, read_only=True,  disable_locking=False, timeout=1)
             logging.info('PASSED: create_success_expected')
             q3.put(0)
         except RuntimeError as e:
             logging.warning('FAILED: create_success_expected')
-            q3.put(1)
+            q3.put('FAILED: create_success_expected')
 
     q1 = Queue()
     q2 = Queue()
     q3 = Queue()
     p = Process(target=create_LZ4Dict_wait_for_3s_then_close)
     p.start()
-    time.sleep(0.01)
-    p2 = Process(target=create_fail_expected_runtime_error_at_1s, args=(1, 2, q1))
+    time.sleep(0.05)
+    p2 = Process(target=create_fail_expected_runtime_error1, args=(q1,))
     p2.start()
-    p3 = Process(target=create_fail_expected_runtime_error_at_2s, args=(1, 2, q2))
+    p3 = Process(target=create_fail_expected_runtime_error2, args=(q2,))
     p3.start()
-    p.join()
-    p4 = Process(target=create_success_expected, args=(1, 2, q3))
+    p.join()  # wait for maximum timeout
+    time.sleep(0.05)
+    p4 = Process(target=create_success_expected, args=(q3,))
     p4.start()
     p4.join()
-    if q1.get() == 1 or q2.get() == 1 or q3.get() == 1:
-       raise AssertionError
+    r1, r2, r3 = q1.get(), q2.get(), q3.get()
+    if r1 != 0 or r2 != 0 or r3 != 0:
+        raise AssertionError(f'{r1}\n{r2}\n{r3}')
 
 
 def test_saving_loading_and_copying_process_for_Attribute_dict():
@@ -112,6 +108,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
     -------
 
     """
+    test_p = _setup_testfile('test2')
 
     try:
         ad = AttributeDict(test_p, read_only=False)
@@ -149,6 +146,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 
 
 def test_compression_and_decompression_for_mesh_dict():
+    test_p = _setup_testfile('test3')
 
     try:
         md = MeshStorage(test_p, read_only=False, disable_locking=False)
@@ -204,6 +202,8 @@ def test_compression_and_decompression_for_mesh_dict():
 
 
 def test_compression_and_decompression_for_voxel_dict():
+    test_p = _setup_testfile('test4')
+
     try:
         # tests least entropy data
         start = time.time()
@@ -285,6 +285,7 @@ def test_compression_and_decompression_for_voxel_dict():
 
 
 def test_compression_and_decompression_for_voxel_dictL():
+    test_p = _setup_testfile('test5')
 
     # tests least entropy data
     try:
@@ -374,12 +375,12 @@ def test_basics_write_txt2kzip():
 
     try:
         txt = 'test'
-        write_txt2kzip(dir_path + '/test.kzip', txt, "test")
+        write_txt2kzip(dir_path + '/test6.kzip', txt, "test")
 
-        if os.path.isfile(dir_path + '/test.kzip'):
-            os.remove(dir_path + '/test.kzip')
-        if os.path.isfile(dir_path + '/test.txt'):
-            os.remove(dir_path + '/test.txt')
+        if os.path.isfile(dir_path + '/test6.kzip'):
+            os.remove(dir_path + '/test6.kzip')
+        if os.path.isfile(dir_path + '/test6.txt'):
+            os.remove(dir_path + '/test6.txt')
         logging.info('PASSED: test_basics_write_txt2kzip')
     except Exception as e:
         logging.warning('FAILED: test_basics_write_txt2kzip' + str(e))
@@ -396,17 +397,17 @@ def test_basics_write_data2kzip():
     """
 
     try:
-        test_file = open(dir_path + '/test.txt', "w+")
+        test_file = open(dir_path + '/test7.txt', "w+")
         test_file.write('This is line test.')
-        write_data2kzip(dir_path + '/test.kzip', dir_path + '/test.txt', fname_in_zip='test')
+        write_data2kzip(dir_path + '/test7.kzip', dir_path + '/test7.txt', fname_in_zip='test')
         logging.info('PASSED: test_basics_write_data2kzip')
     except Exception as e:
         logging.warning('FAILED: test_basics_write_data2kzip' + str(e))
         raise AssertionError
-    if os.path.isfile(dir_path + '/test.kzip'):
-        os.remove(dir_path + '/test.kzip')
-    if os.path.isfile(dir_path + '/test.txt'):
-        os.remove(dir_path + '/test.txt')
+    if os.path.isfile(dir_path + '/test7.kzip'):
+        os.remove(dir_path + '/test7.kzip')
+    if os.path.isfile(dir_path + '/test7.txt'):
+        os.remove(dir_path + '/test7.txt')
 
 
 def test_read_txt_from_zip():
@@ -441,10 +442,11 @@ def test_remove_from_zip():
 
     """
     try:
-        with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode = 'w') as zf:
+        with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode='w') as zf:
             zf.writestr(sys._getframe().f_code.co_name + '.txt', "testing_" + sys._getframe().f_code.co_name)
             zf.close()
-        remove_from_zip(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip',sys._getframe().f_code.co_name + '.txt' )
+        remove_from_zip(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip',
+                        sys._getframe().f_code.co_name + '.txt')
         with pytest.raises(KeyError):
             with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode='r') as zf:
                 zf.open(sys._getframe().f_code.co_name + '.txt')

@@ -15,22 +15,24 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views, \
     find_missing_sv_attributes, find_missing_sv_skeletons, load_so_attr_bulk
 from .. import global_params
-from ..handler.basics import kd_factory
+from ..handler.basics import kd_factory, flatten_list
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc.graphs import create_graph_from_coords, stitch_skel_nx
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
-
+from ..proc.sd_proc import predict_views
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
-
 if TYPE_CHECKING:
     from . import super_segmentation
+    from ..reps.super_segmentation import SuperSegmentationObject
+    from ..reps.segmentation import SegmentationObject
 
+from collections.abc import Iterable
 from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
@@ -39,18 +41,15 @@ import numpy as np
 import scipy
 import scipy.ndimage
 from scipy import spatial
+from skimage.segmentation import watershed
+from skimage.feature import peak_local_max
+from scipy import ndimage
 from knossos_utils.skeleton_utils import annotation_to_nx_graph, \
     load_skeleton as load_skeleton_kzip, Skeleton, SkeletonAnnotation, SkeletonNode
-from collections.abc import Iterable
-
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tool
-
-from skimage.morphology import watershed
-from skimage.feature import peak_local_max
-from scipy import ndimage
 
 
 def majority_vote(anno, prop, max_dist):
@@ -549,8 +548,8 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
 
 
 def map_myelin2coords(coords: np.ndarray,
-                      cube_edge_avg: np.ndarray = np.array([21, 21, 11]),
-                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.1,
+                      cube_edge_avg: np.ndarray = np.array([11, 11, 5]),
+                      thresh_proba: float = 255 // 2, thresh_majority: float = 0.5,
                       mag: int = 1) -> np.ndarray:
     """
     Retrieves a myelin prediction at every location in `coords`. The classification
@@ -605,9 +604,9 @@ def map_myelin2coords(coords: np.ndarray,
     kd = kd_factory(myelin_kd_p)
     myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
     n_cube_vx = np.prod(cube_edge_avg)
+    # convert to mag 1, TODO: requires adaption if anisotropic downsampling was used in KD!
     cube_edge_avg = cube_edge_avg * mag
     for ix, c in enumerate(coords):
-        # switch to mag reference system, afterwards rescale to mag 1 again
         offset = c - cube_edge_avg // 2
         myelin_proba = kd.load_raw(size=cube_edge_avg, offset=offset, mag=mag).swapaxes(0, 2)
         myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
@@ -617,6 +616,14 @@ def map_myelin2coords(coords: np.ndarray,
 
 # New Implementation of skeleton generation which makes use of ssv.rag
 def from_netkx_to_arr(skel_nx: nx.Graph) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+
+    Args:
+        skel_nx:
+
+    Returns:
+
+    """
     skeleton = {}
     skeleton['nodes'] = np.array(
         [skel_nx.node[ix]['position'] for ix in skel_nx.nodes()],
@@ -649,7 +656,7 @@ def sparsify_skeleton_fast(g: nx.Graph, scal: Optional[np.ndarray] = None,
     Reduces nodes in the skeleton.
 
     Args:
-        g: networkx graph of the sso skel.
+        g: networkx graph of the sso skel. Requires 'position' attribute.
         scal: Scale factor; equal to the physical voxel size (nm).
         dot_prod_thresh: the 'straightness' of the edges.
         max_dist_thresh: Maximum distance desired between every node.
@@ -898,7 +905,6 @@ def create_sso_skeleton_fast(sso, pruning_thresh=800, sparsify=True, max_dist_th
             in-between. Used in :func:`~sparsify_skeleton_fast` after
             first sparsening and pruning.
 
-
     Returns:
         The cell reconstruction with sparse skeleton (as MST) and radius
         estimates.
@@ -971,8 +977,6 @@ def get_pca_view_hists(sso, t_net, pca):
 
 def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
                        special_markers=(), special_kwargs=()):
-    import matplotlib
-    matplotlib.use("Agg", warn=False, force=True)
     import matplotlib.pyplot as plt
     import matplotlib.ticker as ticker
     views = sso.load_views()
@@ -1597,6 +1601,37 @@ def pred_sv_chunk_semseg(args):
         label_vd.push()
 
 
+def gliapred_sso_nocache(sso: 'SuperSegmentationObject', model, verbose: bool = True):
+    """
+    Perform a multi-view based astrocyte inference. Result will be stored as 'glia_probas' in the attribute dicts
+    of every ``sso.svs``, e.g. access the probabilities of the first cell supervoxel via
+    ``sso.svs[0].attr_dict['glia_probas']``.
+
+    Args:
+        sso: Cell reconstruction object.
+        model: Pytorch model.
+        verbose: Print additional output.
+    """
+    pred_key = "glia_probas"
+    assert sso.version == 'tmp', 'Only use this method with ssv.version="tmp".'
+
+    coords = sso.sample_locations(cache=False)
+    # len(part_views) == N + 1
+    part_views = np.cumsum([0] + [len(c) for c in coords])
+    flat_coords = np.array(flatten_list(coords))
+    # views are flat
+    views = render_sso_coords(sso, flat_coords, verbose=verbose, add_cellobjects=False, return_rot_mat=False)
+    sv_views = []
+    for ii in range(len(sso.svs)):
+        sv_views.append(views[part_views[ii]:part_views[ii+1]])
+    del views
+    probas = predict_views(model, sv_views, None, return_proba=True, pred_key=pred_key,  nb_cpus=sso.nb_cpus,
+                           verbose=verbose)
+
+    for ii, prob in enumerate(probas):
+        sso.svs[ii].attr_dict[pred_key] = prob
+
+
 @jit(nopython=True)
 def semseg2mesh_counter(index_arr: np.ndarray, label_arr: np.ndarray,
                         bg_label: int, count_arr: np.ndarray) -> np.ndarray:
@@ -1672,8 +1707,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             i_views = sso.load_views(index_view_key).flatten()
         semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
-        log_reps.debug('Time to load index and shape views: '
-                       '{:.2f}s.'.format(ts1 - ts0))
+        # log_reps.debug('Time to load index and shape views: '
+        #                '{:.2f}s.'.format(ts1 - ts0))
         background_id = np.max(i_views)
         background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
@@ -1702,8 +1737,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predicted_vertices = predicted_vertices[predictions != background_id]
             predictions = predictions[predictions != background_id]
         ts2 = time.time()
-        log_reps.debug('Time to map predictions on vertices: '
-                       '{:.2f}s.'.format(ts2 - ts1))
+        # log_reps.debug('Time to map predictions on vertices: '
+        #                '{:.2f}s.'.format(ts2 - ts1))
         # High time complexity!
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
@@ -1711,8 +1746,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 k=k,
                 return_color=False, nb_cpus=sso.nb_cpus)
             ts3 = time.time()
-            log_reps.debug('Time to map predictions on unpredicted vertices'
-                           'with k={}: {:.2f}s.'.format(k, ts3 - ts2))
+            # log_reps.debug('Time to map predictions on unpredicted vertices'
+            #                'with k={}: {:.2f}s.'.format(k, ts3 - ts2))
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
 
@@ -1824,14 +1859,14 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
 
 def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],
                                   nb_views: int, comp_window: int, pred_key_appendix: str = "",
-                                  verbose: bool = False, overwrite: bool = True):
+                                  verbose: bool = False, overwrite: bool = True,
+                                  add_cellobjects: Union[bool, Iterable] = True):
     """
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
     be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
     for an alternative which uses file-system cached views.
-    By default, resulting predictions and probabilities are stored as `latent_morph`
-    and `latent_morph`.
+    By default, resulting predictions are stored as `latent_morph`.
 
     Args:
         sso:
@@ -1843,12 +1878,14 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
         pred_key_appendix:
         verbose: Adds progress bars for view generation.
         overwrite: Overwrite existing views in temporary view dictionary. Key: ``'tmp_views' + pred_key_appendix``.
+        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
+            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
 
     """
     pred_key = "latent_morph"
     pred_key += pred_key_appendix
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
-                       verbose=verbose, add_cellobjects=True,
+                       verbose=verbose, add_cellobjects=add_cellobjects,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
     # this cache is only in-memory, and not file system cache
@@ -1856,11 +1893,12 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
     tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
-        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # ~3 views per comp window
 
         # overwrite default rendering locations (used later on for the view generation)
-        sso._sample_locations = rendering_locs
-        views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
+        sso._sample_locations = rendering_locs[None, ]  # requires auxiliary axis
+        # views shape: N, 4, nb_views, y, x
+        views = render_sso_coords(sso, rendering_locs, **view_kwargs)
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
     else:
         views = sso.view_dict[tmp_view_key]
@@ -1874,7 +1912,8 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
 
     # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
     sso.load_skeleton()
-    hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))  # view location ordering same as views / latent
+    # view location ordering same as views / latent
+    hull_tree = spatial.cKDTree(np.concatenate(sso.sample_locations()))
     dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
     sso.skeleton[pred_key] = latent[ixs]
     sso.save_skeleton()
@@ -1882,7 +1921,8 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
 
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
                           nb_views: int, comp_window: float, k: int = 1,
-                          dest_path: Optional[str] = None, verbose: bool = False):
+                          dest_path: Optional[str] = None, verbose: bool = False,
+                          add_cellobjects: Union[bool, Iterable] = True):
     """
     Renders raw and index views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -1930,6 +1970,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         dest_path: location of kzip in which colored vertices (according to semantic
             segmentation prediction) are stored.
         verbose: Adds progress bars for view generation.
+        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
+            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
 
     Returns:
 
@@ -1948,7 +1990,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
-    sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key, **view_kwargs)
+    sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key,
+                       add_cellobjects=add_cellobjects, **view_kwargs)
     if verbose:
         log_reps.debug('Finished shape-view rendering and sem. seg. prediction.')
     # this generates the index views
@@ -1986,7 +2029,6 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
                     subobject_map_from_mergelist(f.read())
         else:
             raise Exception("sv_mapping has unknown type")
-
 
     for sv_id in mergelist.values():
         ssd.mapping_dict[sv_id] = []
@@ -2117,21 +2159,21 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
     return ratio
 
 
-def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObject',
-                                  ctx_vol=(200, 200, 100)):
+def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObject', ctx_vol=(200, 200, 100)):
     """
+    #  problematic if the same node was assigned different synapses..
+
     Calculate the volume of spine heads based on a watershed procedure on the
-    cell segmentation. Connected components of spine head skeleton nodes
-    are used as starting point to collect mesh vertices with spine predictions
-    within at least ``2*ctx_vol``. The watershed seeds are extracted from local maxima of the
-    cell mask's distance transform. Each seed is assigned the majority label of its
+    cell segmentation. Spine head predictions on the cell mesh are used as starting point. Vertex predictions are
+    then mapped to voxels within at least ``2*ctx_vol + synapse_boundinb_box``. The watershed seeds are extracted
+    from local maxima of the cell mask's distance transform. Each seed is assigned the majority label of its
     k-nearest vertices.
-    Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-    .skeleton` with the key ``spinehead_vol``.
+    Results are stored in :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.attr_dict` with
+    the key ``spinehead_vol``.
 
     Notes:
-        * Requires a (loaded, ``sso.load_skeleton``) skeleton, i.e. ``sso.skeleton`` must be present.
-        * If the results have to be stored, call ``sso.save_skeleton()``
+        * Requires a predicted cell mesh, i.e. 'spiness' must be present in ``label_dict('vertex')['spiness']``.
+        * If the results have to be stored, call ``sso.save_attr_dict()``
 
     Args:
         sso: Cell object.
@@ -2142,13 +2184,12 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     # use bigger skel context to get the correspondence to the voxel as accurate as possible
     ctx_vol = np.array(ctx_vol)
     scaling = sso.scaling
-    if 'spiness' not in sso.skeleton:
-        log_reps.warn(f'"spiness" not available in skeleton of SSO {sso.id}. '
-                      f'Skipping.')
-        sso.skeleton['spinehead_vol'] = np.zeros((len(sso.skeleton['nodes']),)).astype(np.float32)
-        return
+    sso.attr_dict['spinehead_vol'] = {}
+    if 'spiness' not in sso.label_dict('vertex'):
+        msg = f'"spiness" not available in skeleton of SSO {sso.id}.'
+        log_reps.error(msg)
+        raise ValueError(msg)
     ssv_svids = set(sso.sv_ids)
-    sso.skeleton['spinehead_vol'] = np.zeros_like(sso.skeleton['spiness']).astype(np.float32)
     ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
     if len(ssv_syncoords) == 0:
         return
@@ -2168,13 +2209,10 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
     ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
     ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
-    if len(ssv_syncoords) == 0:  # node spine head synapses
+    if len(ssv_syncoords) == 0:  # no spine head synapses
         return
-    kdt = spatial.KDTree(sso.skeleton["nodes"] * sso.scaling)
-    _, close_node_ids = kdt.query(ssv_syncoords * sso.scaling, k=1)
-    # iterate over connected skeleton nodes labeled as spine head
-    for c, node_ix, ssv_id in zip(ssv_syncoords, close_node_ids, ssv_synids):
-        # get closest skeleton node
+    # iterate over spine head synapses
+    for c, ssv_syn_id in zip(ssv_syncoords, ssv_synids):
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
         size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
@@ -2188,6 +2226,11 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 seg[ii] = 0
             else:
                 seg[ii] = 1
+        if np.sum(seg) == 0:
+            msg = (f'Could not find segmentation at {offset} and size {size} for SSVs '
+                   f'{ssv_svids}. syn_ssv ID: {ssv_syn_id}.')
+            log_reps.error(msg)
+            raise ValueError(msg)
         seg = seg.reshape(orig_sh)
         seg = ndimage.binary_fill_holes(seg)
         # set watershed seeds using vertices
@@ -2215,8 +2258,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         max_id = 1
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21),
-                 (c[2] - 10):(c[2] + 11)]
+            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21), (c[2] - 10):(c[2] + 11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]
@@ -2236,7 +2278,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
         n_voxels_spinehead = np.sum(labels == max_id)
         vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
-        sso.skeleton['spinehead_vol'][node_ix] = vol_sh
+        sso.attr_dict['spinehead_vol'][ssv_syn_id] = vol_sh
 
 
 def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):

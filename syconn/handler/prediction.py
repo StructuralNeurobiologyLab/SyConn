@@ -950,8 +950,6 @@ def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module', debug: bool = False
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
-    # m = torch.jit.load(global_params.config.mpath_glia_e3)
-    # m = InferenceModel(m, normalize_func=naive_view_normalization_new)
     m = InferenceModel(global_params.config.mpath_glia_e3, normalize_func=naive_view_normalization_new)
     return m
 
@@ -971,14 +969,6 @@ def get_celltype_model_e3():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_celltype_e3)
     m = InferenceModel(m, bs=40, multi_gpu=True)
-    # m = InferenceModel(global_params.config.mpath_celltype_e3, bs=40)
-    return m
-
-
-def get_semseg_spiness_model_pts():
-    from elektronn3.models.base import InferenceModel
-    m = torch.jit.load(global_params.config.mpath_glia_e3)
-    m = InferenceModel(m)
     return m
 
 
@@ -993,7 +983,6 @@ def get_semseg_spiness_model():
     path = global_params.config.mpath_spiness
     m = torch.jit.load(path)
     m = InferenceModel(m)
-    # m = InferenceModel(path)
     m._path = path
     return m
 
@@ -1009,7 +998,6 @@ def get_semseg_axon_model():
     path = global_params.config.mpath_axonsem
     m = torch.jit.load(path)
     m = InferenceModel(m)
-    # m = InferenceModel(path)
     m._path = path
     return m
 
@@ -1025,7 +1013,6 @@ def get_tripletnet_model_e3():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_tnet)
     m = InferenceModel(m)
-    # m = InferenceModel(global_params.config.mpath_tnet)
     return m
 
 
@@ -1045,7 +1032,6 @@ def get_myelin_cnn():
         raise ImportError(msg)
     m = torch.jit.load(global_params.config.mpath_myelin)
     m = Predictor(m)
-    # m = Predictor(global_params.config.mpath_myelin)
     return m
 
 
@@ -1059,13 +1045,6 @@ def get_pca_tnet_embedding_e3():
     """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
-
-
-def get_pca_tnet_embedding_pts():
-    raise NotImplementedError
-    # collect all embedding vectors
-    # TODO!
-    return pca_tnet_embedding()
 
 
 def naive_view_normalization(d):
@@ -1249,6 +1228,10 @@ def str2int_converter(comment: str, gt_type: str) -> int:
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9)
         return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v2':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10)
+        return str2int_label[comment]
     else:
         raise ValueError("Given groundtruth type is not valid.")
 
@@ -1318,6 +1301,11 @@ def int2str_converter(label: int, gt_type: str) -> str:
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
+    elif gt_type == 'ctgt_j0251_v2':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10)
         int2str_label = {v: k for k, v in str2int_label.items()}
         return int2str_label[label]
     else:

@@ -1,11 +1,10 @@
-# Example run
+# Examples [WIP]
 
-Starting script for an exemplary SyConn run to process 3D electron
-microscope (EM) data. Some exemplary data to run the `example_run`
-are available upon request.
+Example scripts (`SyConn/examples/`) for processing 3D electron
+microscope (EM) data. Example data are available upon request.
 
 
-## The exemplary data structure
+## The example data content
 The folder contains an exemplary 3D EM data.
 One dataset can be provided upon request: cube1 of size 400 x 400 x 600
 * `data1` contains:

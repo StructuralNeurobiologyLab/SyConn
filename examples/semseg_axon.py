@@ -4,11 +4,12 @@ import argparse
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='SyConn spine rendering')
+    parser = argparse.ArgumentParser(description='SyConn compartment (axon, dendrite, some) '
+                                                 'prediction with multi-views.')
     parser.add_argument('--working_dir', type=str,
                         default=os.path.expanduser("~/SyConn/example_cube1/"),
                         help='Working directory of SyConn')
-    parser.add_argument('--kzip', type=str, default='',
+    parser.add_argument('--kzip', type=str, default=None,
                         help='path to kzip file which contains a cell reconstruction (see '
                              'SuperSegmentationObject().export2kzip())')
     parser.add_argument('--modelpath', type=str, default=None,
@@ -19,6 +20,8 @@ if __name__ == '__main__':
     path_to_workingdir = os.path.abspath(os.path.expanduser(args.working_dir))
 
     # path to cell reconstruction k.zip
+    if args.kzip is None:
+        args.kzip = f'{os.path.dirname(os.path.abspath(__file__))}/../data/2_axonexample.k.zip'
     cell_kzip_fn = os.path.abspath(os.path.expanduser(args.kzip))
     if not os.path.isfile(cell_kzip_fn):
         raise FileNotFoundError('Could not find cell reconstruction file at the'
@@ -67,7 +70,7 @@ if __name__ == '__main__':
     # run prediction and store result in new kzip
     cell_kzip_fn_axon = cell_kzip_fn[:-6] + '_axon.k.zip'
     semseg_of_sso_nocache(sso, dest_path=cell_kzip_fn_axon, model=m,
-                          **view_props)
+                          add_cellobjects=('mi', 'vc', 'sj'), **view_props)
 
     node_preds = sso.semseg_for_coords(
         sso.skeleton['nodes'], view_props['semseg_key'],
