@@ -25,7 +25,7 @@ if __name__ == '__main__':
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
-    use_point_models = True
+    use_point_models = False
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
         ('pyopengl_platform', 'egl'),
@@ -83,8 +83,9 @@ if __name__ == '__main__':
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
-    working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size{'_'.join(map(str, cube_size))}_" \
-                  f"{use_point_models}"
+    working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size{'_'.join(map(str, cube_size))}"
+    if use_point_models:
+        working_dir += f'_ptmodels'
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')
 
@@ -247,5 +248,5 @@ if __name__ == '__main__':
     log.info(time_summary_str)
     log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
              'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
+    # os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 

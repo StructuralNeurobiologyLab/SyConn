@@ -2198,15 +2198,15 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_synids = np.array([syn.id for syn in sso.syn_ssv])
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
-    ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
+    ignore_labels = sso.config['spines']['semseg2coords_spines']['ignore_labels']
     for l in ignore_labels:
         verts = verts[sp_semseg != l]
         sp_semseg = sp_semseg[sp_semseg != l]
     curr_sp = sso.semseg_for_coords(ssv_syncoords, 'spiness',
-                                    **global_params.config['spines']['semseg2coords_spines'])
-    pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                    **sso.config['spines']['semseg2coords_spines'])
+    pred_key_ax = "{}_avg{}".format(sso.config['compartments'][
                                         'view_properties_semsegax']['semseg_key'],
-                                    global_params.config['compartments'][
+                                    sso.config['compartments'][
                                         'dist_axoness_averaging'])
     curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
     ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
@@ -2215,29 +2215,22 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         return
     ds = sso.scaling[2] // np.array(sso.scaling)
     assert np.all(ds > 0)
-    kd = kd_factory(global_params.config.kd_seg_path)
+    kd = kd_factory(sso.config.kd_seg_path)
 
     # iterate over spine head synapses
-    # dc_dt = {'io': 0, 'dtf': 0, 'ws': 0, 'rest': 0}
-    # print(dc_dt.items(), end='')
-
     for c, ssv_syn_id in zip(ssv_syncoords, ssv_synids):
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
         size = (bb[1] - bb[0] + ds + 2 * ctx_vol).astype(np.int)
         # get cell segmentation mask
-        start = time.time()
         seg = kd.load_seg(offset=offset, size=size, mag=1).swapaxes(2, 0)
         seg = ndimage.zoom(seg, 1 / ds, order=0)
-        # dc_dt['io'] += time.time() - start
-        # print(dc_dt.items(), end='')
 
         if len(ssv_svids) > 1:
             relabel_vol_nonexist2zero(seg, {k: 1 for k in ssv_svids})
         else:
             seg = (seg == ssv_svids[0]).astype(np.int)
 
-        start = time.time()
         seg = ndimage.binary_fill_holes(seg)
         if np.sum(seg) == 0:
             msg = (f'Could not find segmentation at {offset} and size {size} for SSVs '
@@ -2257,26 +2250,20 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         # relabelled spine neck as 9, actually not needed here
         semseg_bb[semseg_bb == 0] = 9
         distance = ndimage.distance_transform_edt(seg)
-        # dc_dt['dtf'] += time.time() - start
-        # print(dc_dt.items(), end='')
 
-        start = time.time()
         local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3, 3)),
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices; convert maxima coordinates back to mag 1 via 'ds'
         maxima_sp = colorcode_vertices(maxima * ds, verts_bb - offset, semseg_bb,
-                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
+                                       k=sso.config['spines']['semseg2coords_spines']['k'],
                                        return_color=False, nb_cpus=sso.nb_cpus)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         labels[labels != 1] = 0  # only keep spine head locations
         labels, nb_obj = ndimage.label(labels)
-        # dc_dt['ws'] += time.time() - start
-        # print(dc_dt.items(), end='')
 
-        start = time.time()
         c = c - offset
         max_id = 1
         # if more than one spine head object get the one with the majority voxels in vicinity
@@ -2303,8 +2290,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         n_voxels_spinehead = np.sum(labels == max_id)
         vol_sh = n_voxels_spinehead * np.prod(scaling * ds) / 1e9  # in um^3
         sso.attr_dict['spinehead_vol'][ssv_syn_id] = vol_sh
-        # dc_dt['rest'] += time.time() - start
-        # print(dc_dt.items(), end='')
 
 
 def sso_svgraph2kzip(dest_path: str, sso: 'SuperSegmentationObject'):
