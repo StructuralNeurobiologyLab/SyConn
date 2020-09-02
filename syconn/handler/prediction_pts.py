@@ -841,7 +841,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                           batchsize: Optional[int] = None, npoints: Optional[int] = None,
                           ctx_size: Optional[float] = None, transform: Optional[Callable] = None,
                           n_out_pts: int = 100, train=False, base_node_dst: float = 10000,
-                          use_ctx_sampling: bool = True, use_syntype: bool = False,
+                          use_ctx_sampling: bool = True, use_syntype: bool = False, use_myelin: bool = False,
                           use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -865,6 +865,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
         base_node_dst: Distance between base nodes for context retrieval during eval mode.
         use_syntype: Use synapse type as point feature.
         use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm).
+        use_myelin: Use myelin point cloud as inpute feature.
 
     Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
         If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
@@ -888,16 +889,19 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
             del feat_dc['syn_ssv_sym']
         else:
             del feat_dc['syn_ssv']
+    if not use_myelin:
+        del feat_dc['sv_myelin']
     default_kwargs = dict(mesh_caching=False, create=False)
     for curr_ssv_params in ssv_params:
         default_kwargs.update(curr_ssv_params)
         curr_ssv_params = default_kwargs
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(**curr_ssv_params)
+        loader_kwargs = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None, use_myelin)
         if train:
-            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc_cached(loader_kwargs)
         else:
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc(loader_kwargs)
         ssv.clear_cache()
         if train:
             source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
@@ -986,7 +990,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                 sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
                 hc_sub._vertices = sample_pts
                 hc_sub._features = sample_feats
-                hc_sub._nodes = out_coords
+                hc_sub._nodes = np.array(out_coords)
                 # apply augmentations
                 if transform is not None:
                     transform(hc_sub)
@@ -1642,7 +1646,11 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
         mpath = global_params.config.mpath_tnet_pts
     from elektronn3.models.convpoint import ModelNet40, TripletNet
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
-    m = TripletNet(ModelNet40(5, 10, **mkwargs).to(device))
+    if 'myelin' in mpath:
+        inp_dim = 6
+    else:
+        inp_dim = 5
+    m = TripletNet(ModelNet40(inp_dim, 10, **mkwargs).to(device))
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
     return m.eval()
@@ -1708,8 +1716,13 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
+    if 'myelin' in mpath:
+        use_myelin = True
+    else:
+        use_myelin = False
     default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(
-        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True))
+        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True,
+        use_myelin=use_myelin))
     postproc_kwargs = dict(pred_key=pred_key)
     default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_tnet_model_pts, pts_loader_local_skel, pts_pred_embedding,

@@ -1236,6 +1236,8 @@ class SuperSegmentationObject(SegmentationBase):
 
             if dest_path is None:
                 dest_path = self.skeleton_kzip_path
+            elif not dest_path.endswith('.k.zip'):
+                dest_path += '.k.zip'
             write_skeleton_kzip(dest_path, [a])
         except Exception as e:
             log_reps.warning("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
@@ -1288,6 +1290,8 @@ class SuperSegmentationObject(SegmentationBase):
 
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
+        elif not dest_path.endswith('.k.zip'):
+            dest_path += '.k.zip'
         write_skeleton_kzip(dest_path, annotations)
 
     def save_objects_to_kzip_dense(self, obj_types: List[str],
@@ -2320,22 +2324,25 @@ class SuperSegmentationObject(SegmentationBase):
             a.addEdge(n0, n1)
         write_skeleton_kzip(self.skeleton_kzip_path, a)
 
-    def write_locations2kzip(self, dest_path=None):
+    def write_locations2kzip(self, dest_path: Optional[str] = None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
+        elif not dest_path.endswith('.k.zip'):
+            dest_path += '.k.zip'
         loc = np.concatenate(self.sample_locations())
         new_anno = coordpath2anno(loc, add_edges=False)
         new_anno.setComment("sample_locations")
         write_skeleton_kzip(dest_path, [new_anno])
 
-    def mergelist2kzip(self, dest_path=None):
+    def mergelist2kzip(self, dest_path: Optional[str] = None):
         self.load_attr_dict()
         kml = knossos_ml_from_sso(self)
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def mesh2kzip(self, dest_path=None, obj_type="sv", ext_color=None, **kwargs):
+    def mesh2kzip(self, dest_path: Optional[str] = None, obj_type: str = "sv",
+                  ext_color: Optional[np.ndarray] = None, **kwargs):
         """
         Writes mesh of SSV to kzip as .ply file.
 
@@ -2398,8 +2405,9 @@ class SuperSegmentationObject(SegmentationBase):
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply", **kwargs)
 
-    def meshes2kzip(self, dest_path=None, sv_color=None,
-                    synssv_instead_sj=False, object_types=None, **kwargs):
+    def meshes2kzip(self, dest_path: Optional[str] = None, sv_color: Optional[np.ndarray]=None,
+                    synssv_instead_sj: bool = False, object_types: Optional[List[str]]=None,
+                    **kwargs):
         """
         Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip.
 
@@ -2481,6 +2489,8 @@ class SuperSegmentationObject(SegmentationBase):
         # self.save_skeleton_to_kzip(dest_path=dest_path)
         # self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
         #                                  dest_path=dest_path)
+        if not dest_path.endswith('.k.zip'):
+            dest_path += '.k.zip'
         if os.path.isfile(dest_path):
             raise FileExistsError(f'k.zip file already exists at "{dest_path}".')
         tmp_dest_p = []
@@ -2535,8 +2545,7 @@ class SuperSegmentationObject(SegmentationBase):
         if 'skeleton' in attr_keys:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def typedsyns2mesh(self, dest_path: Optional[str] = None,
-                       rewrite: bool = False):
+    def typedsyns2mesh(self, dest_path: Optional[str] = None, rewrite: bool = False):
         """
         Generates typed meshes of 'syn_ssv' and stores it at :py:attr:`~mesh_dc_path`
         (keys: ``'syn_ssv_sym'`` and ``'syn_ssv_asym'``) and writes it to `dest_path` (if given).
@@ -2771,7 +2780,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         if self.skeleton is None:
             self.load_skeleton()
-        d = self.skeleton[pred_key]
+        d = np.array(self.skeleton[pred_key])
         if whiten:
             d -= d.mean(axis=0)
         eig = _calc_pca_components(d)

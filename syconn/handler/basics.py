@@ -339,6 +339,8 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
     Returns:
 
     """
+    if not kzip_path.endswith('.k.zip'):
+        kzip_path += '.k.zip'
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -381,7 +383,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
     data2kzip(kzip_path, [fpath], [fname_in_zip], force_overwrite)
 
 
-def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
+def data2kzip(kzip_path: str, fpaths, fnames_in_zip=None, force_overwrite=True,
               verbose=False):
     """
     Write files to k.zip. Finally removes files at `fpaths`.
@@ -397,6 +399,8 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     Returns:
 
     """
+    if not kzip_path.endswith('.k.zip'):
+        kzip_path += '.k.zip'
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))

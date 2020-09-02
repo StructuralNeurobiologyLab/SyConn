@@ -78,7 +78,7 @@ use_norm = 'gn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
-act = 'relu'
+act = 'swish'
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights_SegSmall3_v3'

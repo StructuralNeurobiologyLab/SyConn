@@ -23,7 +23,7 @@ with open(path_storage_file, 'rb') as f:
 
 sso_ids = args[0]
 
-sd_syn_ssv = SegmentationDataset('syn_ssv', cache_properties=['rep_coord', 'id'])
+sd_syn_ssv = SegmentationDataset('syn_ssv', cache_properties=['rep_coord'])
 
 ssd = SuperSegmentationDataset(sd_lookup={'syn_ssv': sd_syn_ssv})
 for sso in ssd.get_super_segmentation_object(sso_ids):
