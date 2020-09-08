@@ -70,7 +70,7 @@ max_steps = 300000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = False
+cellshape_only = True
 use_syntype = False
 dr = 0.2
 track_running_stats = False
@@ -78,6 +78,9 @@ use_norm = 'gn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
+if cellshape_only:
+    use_subcell = False
+    use_syntype = False
 act = 'relu'
 
 if name is None:
@@ -148,9 +151,9 @@ train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='norma
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform,
-                           batch_size=batch_size, ctx_size=ctx)
+                           batch_size=batch_size, ctx_size=ctx, use_subcell=use_subcell)
 valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False,
-                           batch_size=batch_size, ctx_size=ctx)
+                           batch_size=batch_size, ctx_size=ctx, use_subcell=use_subcell)
 
 # PREPARE AND START TRAINING #
 

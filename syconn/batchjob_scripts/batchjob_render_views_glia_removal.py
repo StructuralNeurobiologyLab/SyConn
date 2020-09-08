@@ -65,10 +65,8 @@ render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
 sso_kwargs = dict(version=version, create=False, working_dir=wd)
 if len(ssvs_small) != 0:
     multi_params = [[ssv.id, ssv.sv_ids] for ssv in ssvs_small]
-    # TODO: inspect! this needed to be changed due to memory errors (probably because wrong memory handling in nested
-    #  multi-processing)
-    # multi_params = chunkify(multi_params, 1)  # n_parallel_jobs)
     multi_params = chunkify(multi_params, n_parallel_jobs)
+    # multi_params = chunkify(multi_params, n_parallel_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]
     path_out = batchjob_script(

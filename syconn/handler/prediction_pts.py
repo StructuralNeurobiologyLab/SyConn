@@ -464,6 +464,10 @@ def _load_ssv_hc(args):
     else:
         ssv, feats, feat_labels, pt_type, radius, map_myelin = args
     vert_dc = dict()
+
+    if pt_type == 'glia':  # at this point skeletons have not been computed
+        ssv.calculate_skeleton(force=True, save=False)
+
     if not ssv.load_skeleton():
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     if map_myelin:

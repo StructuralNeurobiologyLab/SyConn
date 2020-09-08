@@ -26,7 +26,7 @@ assert global_params.config.use_point_models
 
 ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
 
-n_worker = 1
+n_worker = 2
 
 lo_first_n = global_params.config['glia']['subcc_chunk_size_big_ssv']
 working_dir = global_params.config.working_dir
