@@ -108,7 +108,7 @@ if __name__ == '__main__':
     use_myelin = True
 
     if name is None:
-        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}'
+        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}_RUN2'
         if cellshape_only:
             name += '_cellshapeOnly'
         if not use_syntype:

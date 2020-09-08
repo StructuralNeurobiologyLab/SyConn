@@ -63,6 +63,44 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     log.info('Finished extraction of cell morphology embeddings.')
 
 
+def run_cell_embedding(max_n_jobs: Optional[int] = None):
+    """
+    Infer cell embeddings for all neuron reconstructions base on
+    triplet-loss trained cellular morphology learning network (tCMN).
+    The point based model is trained with the pts_loader_scalar (used for celltypes). Multi-views
+    functionality is not implemented.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd`, :func:`~run_neuron_rendering` and
+        :func:`~syconn.exec.skeleton.run_skeleton_generation`.
+    """
+    if max_n_jobs is None:
+        max_n_jobs = global_params.config.ngpu_total * 4
+    log = initialize_logging('morphology_embedding', global_params.config.working_dir
+                             + '/logs/', overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    pred_key_appendix = '_wholecell'
+
+    multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
+    # sort ssv ids according to their number of SVs (descending)
+    multi_params = multi_params[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    if not qu.batchjob_enabled() and global_params.config.use_point_models:
+        ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
+        ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
+        infere_cell_morphology_ssd(ssv_params)
+    else:
+        multi_params = chunkify(multi_params, max_n_jobs)
+        # add ssd parameters
+        multi_params = [(ssv_ids, pred_key_appendix) for ssv_ids in multi_params]
+        qu.batchjob_script(multi_params, "generate_cell_embedding",
+                           n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
+                           log=log, suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
+    log.info('Finished extraction of whole-cell morphology embeddings.')
+
+
 def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
     Run the celltype inference based on the ``img2scalar`` CMN.

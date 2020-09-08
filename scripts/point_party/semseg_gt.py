@@ -189,6 +189,7 @@ def gt_generation(kzip_paths, out_path, version: str = None):
     # start mapping for each kzip in kzip_paths
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
+
 if __name__ == "__main__":
     data_path = "/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05/"
     destination = data_path + '/hc_out_2020_08/'

@@ -72,10 +72,10 @@ use_syntype = args.use_syntype
 if cval is None:
     cval = 0
 
-lr = 5e-4
+lr = 8e-4
 lr_stepsize = 100
-lr_dec = 0.992
-max_steps = 150000
+lr_dec = 0.99
+max_steps = 500000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -85,11 +85,11 @@ track_running_stats = False
 use_norm = 'gn'
 num_classes = 11
 onehot = True
-act = 'swish'
+act = 'relu'
 use_myelin = True
 
 if name is None:
-    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_RUN2'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:

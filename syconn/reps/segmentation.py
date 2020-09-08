@@ -477,7 +477,6 @@ class SegmentationObject(SegmentationBase):
             self._rep_coord = self.attr_dict['rep_coord']
         if self._rep_coord is None and self.attr_dict_exists:
             self._rep_coord = self.lookup_in_attribute_dict("rep_coord")
-
         if self._rep_coord is None:
             self.calculate_rep_coord()
 

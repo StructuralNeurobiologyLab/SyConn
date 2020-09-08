@@ -63,7 +63,7 @@ save_root = args.sr
 ctx = args.ctx
 use_bias = args.use_bias
 
-lr = 5e-4
+lr = 2e-3
 lr_stepsize = 100
 lr_dec = 0.992
 max_steps = 300000
@@ -84,12 +84,13 @@ if cellshape_only:
 act = 'relu'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass{num_classes}_classWeights_SegSmall3_v3'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
+           f'{num_classes}_SegSmall3_boarderMask'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
         name += '_Syntype'
-if use_subcell:
+if not cellshape_only and use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
@@ -118,7 +119,7 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall3(input_channels, num_classes, dropout=dr, use_norm=use_norm,
+model = SegSmall3(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
                   track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
@@ -150,10 +151,11 @@ train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='norma
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
-train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform,
-                           batch_size=batch_size, ctx_size=ctx, use_subcell=use_subcell)
-valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False,
-                           batch_size=batch_size, ctx_size=ctx, use_subcell=use_subcell)
+# mask boarder points with 'num_classes' and set its weight to 0
+train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
+                           batch_size=batch_size, ctx_size=ctx, mask_boarders_with_id=num_classes)
+valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
+                           batch_size=batch_size, ctx_size=ctx)
 
 # PREPARE AND START TRAINING #
 
@@ -180,7 +182,8 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 #     mode='exp_range',
 #     gamma=0.99994,
 # )
-class_weights = torch.tensor([1, 1, 1, 2, 2, 2, 2.], dtype=torch.float32, device=device)
+# set weight of the masking label at context boarders to 0
+class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 
 valid_metrics = {  # mean metrics
@@ -214,7 +217,7 @@ trainer = Trainer3d(
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
-    num_classes=num_classes,
+    num_classes=num_classes + 1,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
     nbatch_avg=5

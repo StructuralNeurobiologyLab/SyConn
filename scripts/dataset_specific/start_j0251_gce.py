@@ -226,6 +226,7 @@ if __name__ == '__main__':
         exec_inference.run_semsegspiness_prediction()
     ftimer.stop()
 
+    # TODO: this step can be launched in parallel with the morphology extraction!
     ftimer.start('Spine head calculation')
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()

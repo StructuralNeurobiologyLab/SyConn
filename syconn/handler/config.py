@@ -439,6 +439,27 @@ class DynConfig(Config):
         return mpath[0]
 
     @property
+    def mpath_tnet_pts_wholecell(self) -> str:
+        """
+        Returns:
+            Path to an encoder network of local cell morphology trained via
+            triplet loss on point data.
+        """
+        mpath = glob.glob(self.model_dir + '/pts/whole_cell_embedding/*tnet*/state_dict.pth')
+        if len(mpath) > 1:
+            ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+            if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
+                return mpath[ixs.index(1)]
+            ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+            if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
+                return mpath[ixs.index(1)]
+            # assume its j0126
+            if 'j0251' not in global_params.config.working_dir and np.sum(ixs) == 1:
+                mpath.pop(ixs.index(1))
+        assert len(mpath) == 1
+        return mpath[0]
+
+    @property
     def mpath_spiness(self) -> str:
         """
         Returns:

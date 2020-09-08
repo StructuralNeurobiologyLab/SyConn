@@ -845,7 +845,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                           batchsize: Optional[int] = None, npoints: Optional[int] = None,
                           ctx_size: Optional[float] = None, transform: Optional[Callable] = None,
                           n_out_pts: int = 100, train=False, base_node_dst: float = 10000,
-                          use_ctx_sampling: bool = True, use_syntype: bool = False,
+                          use_ctx_sampling: bool = True, use_syntype: bool = False, use_myelin: bool = False,
                           use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -869,6 +869,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
         base_node_dst: Distance between base nodes for context retrieval during eval mode.
         use_syntype: Use synapse type as point feature.
         use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm).
+        use_myelin: Use myelin point cloud as inpute feature.
 
     Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
         If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
@@ -892,16 +893,19 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
             del feat_dc['syn_ssv_sym']
         else:
             del feat_dc['syn_ssv']
+    if not use_myelin:
+        del feat_dc['sv_myelin']
     default_kwargs = dict(mesh_caching=False, create=False)
     for curr_ssv_params in ssv_params:
         default_kwargs.update(curr_ssv_params)
         curr_ssv_params = default_kwargs
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(**curr_ssv_params)
+        loader_kwargs = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None, use_myelin)
         if train:
-            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc_cached(loader_kwargs)
         else:
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None))
+            hc = _load_ssv_hc(loader_kwargs)
         ssv.clear_cache()
         if train:
             source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
@@ -990,7 +994,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                 sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
                 hc_sub._vertices = sample_pts
                 hc_sub._features = sample_feats
-                hc_sub._nodes = out_coords
+                hc_sub._nodes = np.array(out_coords)
                 # apply augmentations
                 if transform is not None:
                     transform(hc_sub)
@@ -1169,7 +1173,7 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
 def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                             npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None,
-                            use_subcell: bool = False,
+                            use_subcell: bool = False, mask_boarders_with_id: Optional[int] = None
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -1183,12 +1187,12 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         ctx_size:
         transform:
         use_subcell:
+        mask_boarders_with_id:
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
     """
     feat_dc = dict(pts_feat_dict)
-    # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
     del feat_dc['syn_ssv_sym']
     del feat_dc['sv_myelin']
@@ -1205,6 +1209,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
     for pkl_f in fnames_pkl:
         hc = load_hc_pkl(pkl_f, 'compartment')
         npoints_ssv = min(len(hc.vertices), npoints)
+        # filter valid skeleton nodes (i.e. which were close to manually annotated nodes)
         source_nodes = np.where(hc.node_labels == 1)[0]
         source_nodes = np.random.choice(len(source_nodes), batchsize,
                                         replace=len(source_nodes) < batchsize)
@@ -1230,6 +1235,11 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 while True:
                     node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                    if mask_boarders_with_id is not None:
+                        source_node_c = hc_sub.nodes[hc_sub.relabel_dc[source_node]]
+                        boarder_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
+                                            ctx_size_fluct * 0.8
+                        hc_sub._labels[boarder_vert_mask] = mask_boarders_with_id
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
@@ -1313,7 +1323,6 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
     if type(out_point_label) == str:
         raise NotImplementedError
     feat_dc = dict(pts_feat_dict)
-    # TODO: add use_syntype
     del feat_dc['syn_ssv_asym']
     del feat_dc['syn_ssv_sym']
     if not use_subcell:
@@ -1351,8 +1360,6 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             pcd, idcs = pcd.voxel_down_sample_and_trace(
                 base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
-            # source_nodes = np.array(list(sparsify_skeleton_fast(hc.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=base_node_dst,
-            #                                       max_dist_thresh=base_node_dst, dot_prod_thresh=0).nodes()))
             batchsize = min(len(source_nodes), batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
         if len(source_nodes) % batchsize != 0:
@@ -1369,15 +1376,11 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
-                # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
-                # get target locations
-                # ~1um apart
-                # base_points = sparsify_skeleton_fast(hc_sub.graph(), scal=np.array([1, 1, 1]), min_dist_thresh=1000,
-                #                                      max_dist_thresh=1000, dot_prod_thresh=0, verbose=False).nodes()
+                # get target locations ~1um apart
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
                 pcd, idcs = pcd.voxel_down_sample_and_trace(
@@ -1626,16 +1629,19 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
     n_classes = 8
+    n_inputs = 5
     if 'j0251' in mpath:
         n_classes = 11
+    if 'myelin' in mpath:
+        n_inputs += 1
     try:
-        m = ModelNet40(5, n_classes, **mkwargs).to(device)
+        m = ModelNet40(n_inputs, n_classes, **mkwargs).to(device)
     except RuntimeError as e:
         if not mkwargs['use_bias']:
             mkwargs['use_bias'] = True
         else:
             raise RuntimeError(e)
-        m = ModelNet40(5, n_classes, **mkwargs).to(device)
+        m = ModelNet40(n_inputs, n_classes, **mkwargs).to(device)
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
     return m.eval()
@@ -1646,7 +1652,11 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
         mpath = global_params.config.mpath_tnet_pts
     from elektronn3.models.convpoint import ModelNet40, TripletNet
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
-    m = TripletNet(ModelNet40(5, 10, **mkwargs).to(device))
+    if 'myelin' in mpath:
+        inp_dim = 6
+    else:
+        inp_dim = 5
+    m = TripletNet(ModelNet40(inp_dim, 10, **mkwargs).to(device))
     m.load_state_dict(torch.load(mpath)['model_state_dict'])
     m.loader_kwargs = loader_kwargs
     return m.eval()
@@ -1712,8 +1722,13 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
+    if 'myelin' in mpath:
+        use_myelin = True
+    else:
+        use_myelin = False
     default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(
-        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True))
+        n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True,
+        use_myelin=use_myelin))
     postproc_kwargs = dict(pred_key=pred_key)
     default_kwargs.update(add_kwargs)
     out_dc = predict_pts_plain(ssv_params, get_tnet_model_pts, pts_loader_local_skel, pts_pred_embedding,
@@ -1724,7 +1739,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
 
 
 def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,
-                         da_equals_tan: bool = True, pred_key: Optional[str] = None, map_myelin: bool = False,
+                         da_equals_tan: bool = True, pred_key: Optional[str] = None,
                          show_progress: bool = True, **add_kwargs):
     """
     Perform cell type predictions of cell reconstructions on sampled point sets from the
@@ -1740,7 +1755,6 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         ssv_ids:
         da_equals_tan:
         pred_key:
-        map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
         show_progress: Show progress bar.
 
     Returns:
@@ -1751,6 +1765,10 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
+    if 'myelin' in mpath:
+        map_myelin = True
+    else:
+        map_myelin = False
     default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
     default_kwargs.update(add_kwargs)

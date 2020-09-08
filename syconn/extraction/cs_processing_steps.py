@@ -20,7 +20,8 @@ import pandas
 from knossos_utils import skeleton_utils, skeleton
 from scipy import spatial
 from sklearn import ensemble
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, cross_val_predict
+from sklearn import metrics
 
 from . import log_extraction
 from .. import global_params
@@ -1470,17 +1471,17 @@ def write_conn_gt_kzips(conn, n_objects, folder):
         skeleton_utils.write_skeleton(folder + "/obj_%d.k.zip" % conn_id, [a])
 
 
-def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path2file: str, overwrite: bool = False,
+def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: str, overwrite: bool = False,
                    rfc_path_out: str = None, max_dist_vx: int = 20) -> \
         Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]:
     """
     Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic
-    objects. Features are generated from the objects in `conn` associated with the annotated
+    objects. Features are generated from the objects in `sd_syn_ssv` associated with the annotated
     coordinates stored in `path2file`.
     Will write the trained classifier to ``global_params.config.mpath_syn_rfc``.
 
     Args:
-        conn: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
+        sd_syn_ssv: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
             type ``syn_ssv``. Used to identify synaptic object candidates annotated
             in the kzip/xlsx file at `path2file`.
         path2file: Path to kzip file with synapse labels as node comments
@@ -1505,10 +1506,12 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path2file: str, ove
         else:
             log = initialize_logging('create_syn_rfc', os.path.dirname(rfc_path_out))
         if os.path.isfile(rfc_path_out) and not overwrite:
-            raise FileExistsError()
-    assert conn.type == 'syn_ssv'
+            msg = f''
+            log.error(msg)
+            raise FileExistsError(msg)
+    assert sd_syn_ssv.type == 'syn_ssv'
 
-    log.info(f'Initiated RFC fitting procedure with GT file "{path2file}" and {conn}.')
+    log.info(f'Initiated RFC fitting procedure with GT file "{path2file}" and {sd_syn_ssv}.')
 
     base_dir = os.path.split(path2file)[0]
     mapped_synssv_objects_kzip = f'{base_dir}/mapped_synssv.k.zip'
@@ -1528,11 +1531,18 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path2file: str, ove
             labels.append(c)
             label_coords.append(np.array(node.getCoordinate()))
     else:
-        df = pandas.io.parsers.read_csv(path2file, header=None, names=['ID', 'type']).values
-        ssv_ids = df[:, 0].astype(np.uint)
-        if len(np.unique(ssv_ids)) != len(ssv_ids):
-            raise ValueError('Multi-usage of IDs!')
-        str_labels = df[:, 1]
+        df = pandas.read_excel(path2file, header=0, names=['ixs', 'coord', 'pre', 'post', 'syn']).values
+        for ix in range(df.shape[0]):
+            c = df[ix, -1]
+            if 'yes' in c:
+                unified_comment = 'synaptic'
+            elif 'no' in c:
+                unified_comment = 'non-synaptic'
+            else:
+                log.warn(f'Did not understand GT comment "{c}". Skipping')
+                continue
+            labels.append(unified_comment)
+            label_coords.append(np.array(df[ix, 1].split(','), dtype=np.float32))
 
     labels = np.array(labels)
     label_coords = np.array(label_coords)
@@ -1546,20 +1556,21 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path2file: str, ove
     ixs = np.array(ixs)
     label_coords = label_coords[ixs][ixs_random]
     labels = labels[ixs][ixs_random]
-    conn_kdtree = spatial.cKDTree(conn.rep_coords * conn.scaling)
-    ds, list_ids = conn_kdtree.query(label_coords * conn.scaling)
-    synssv_ids = conn.ids[list_ids]
+    log.info('Setting up kd-trees for coord-to-synapse mapping.')
+    conn_kdtree = spatial.cKDTree(sd_syn_ssv.rep_coords * sd_syn_ssv.scaling)
+    ds, list_ids = conn_kdtree.query(label_coords * sd_syn_ssv.scaling)
+    synssv_ids = sd_syn_ssv.ids[list_ids]
     mask = np.ones(synssv_ids.shape, dtype=np.bool)
-    log.info(f'Mapped {len(labels)} GT coordinates to {conn.type}-objects.')
+    log.info(f'Mapped {len(labels)} GT coordinates to {sd_syn_ssv.type}-objects.')
     for label_id in np.where(ds > 0)[0]:
-        dists, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling,
+        dists, close_ids = conn_kdtree.query(label_coords[label_id] * sd_syn_ssv.scaling,
                                              k=20)
         for close_id in close_ids[np.argsort(dists)]:
-            conn_o = conn.get_segmentation_object(conn.ids[close_id])
+            conn_o = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[close_id])
             vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]),
                            axis=-1)
             if np.min(vx_ds) < max_dist_vx:
-                synssv_ids[label_id] = conn.ids[close_id]
+                synssv_ids[label_id] = sd_syn_ssv.ids[close_id]
                 break
         if np.min(vx_ds) > max_dist_vx:
             mask[label_id] = 0
@@ -1568,53 +1579,68 @@ def create_syn_rfc(conn: 'segmentation.SegmentationDataset', path2file: str, ove
         raise ValueError
     synssv_ids = synssv_ids[mask]
     labels = labels[mask]
-    log.info(f'Found {np.sum(mask)} samples with a distance < {max_dist_vx} vx to the target.')
+    log.info(f'Found {np.sum(mask)}/{len(mask)} samples with a distance < {max_dist_vx} vx to the target.')
 
-    log.info(f'Synapse features will now be generated and written to {mapped_synssv_objects_kzip}.')
+    log.info(f'Synapse features will now be generated.')
     features = []
-    skel = skeleton.Skeleton()
-    anno = skeleton.SkeletonAnnotation()
-    anno.scaling = conn.scaling
     pbar = tqdm.tqdm(total=len(synssv_ids))
     for kk, synssv_id in enumerate(synssv_ids):
-        synssv_o = conn.get_segmentation_object(synssv_id)
-        rep_coord = synssv_o.rep_coord * conn.scaling
-        # synssv_o.mesh2kzip(mapped_synssv_objects_kzip, ext_color=None,
-        # ply_name='{}.ply'.format(synssv_id))
-        n = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
-        n.setComment('{}'.format(labels[kk]))
-        anno.addNode(n)
-        rep_coord = label_coords[kk] * conn.scaling
-        n_l = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
-        n_l.setComment('gt node; {}'.format(labels[kk]))
-        anno.addNode(n_l)
-        anno.addEdge(n, n_l)
+        synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
         features.append(synssv_o_features(synssv_o))
         pbar.update(1)
     pbar.close()
-    skel.add_annotation(anno)
-    skel.to_kzip(mapped_synssv_objects_kzip)
     features = np.array(features)
-    rfc = ensemble.RandomForestClassifier(n_estimators=400, max_features='sqrt',
+    rfc = ensemble.RandomForestClassifier(n_estimators=2000, max_features='sqrt',
                                           n_jobs=-1, random_state=0,
                                           oob_score=True)
     mask_annotated = (labels == "synaptic") | (labels == 'non-synaptic')
     v_features = features[mask_annotated]
     v_labels = labels[mask_annotated]
     v_labels = (v_labels == "synaptic").astype(np.int)
-    score = cross_val_score(rfc, v_features, v_labels, cv=10)
-    log.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
-    log.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
-        np.mean(score), np.std(score)))
+    # score = cross_val_score(rfc, v_features, v_labels, cv=10)
+    # log.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
+    # log.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
+    #     np.mean(score), np.std(score)))
+    # if score < 0.95:
+    #     log.info(f'Individual CV scores: {score}')
+    preds = cross_val_predict(rfc, v_features, v_labels, cv=10)
+    log.info(metrics.classification_report(v_labels, preds, target_names=['non-synaptic', 'synaptic']))
 
     rfc.fit(v_features, v_labels)
     acc = rfc.score(v_features, v_labels)
-    log.info(f'Training accuracy: {acc:.4f}')
+    log.info(f'Training set accuracy: {acc:.4f}')
     feature_names = synssv_o_featurenames()
     feature_imp = rfc.feature_importances_
     assert len(feature_imp) == len(feature_names)
     log.info('RFC importances:\n' + "\n".join(
         [f"{feature_names[ii]}: {feature_imp[ii]}" for ii in range(len(feature_imp))]))
+
+    log.info(f'Synapses will be annotated and written to "{mapped_synssv_objects_kzip}" for '
+             f'manual revision.')
+    skel = skeleton.Skeleton()
+    anno = skeleton.SkeletonAnnotation()
+    anno.scaling = sd_syn_ssv.scaling
+    pbar = tqdm.tqdm(total=len(synssv_ids))
+    for kk, synssv_id in enumerate(synssv_ids):
+        synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
+        rep_coord = synssv_o.rep_coord * sd_syn_ssv.scaling
+        pred_correct = preds[kk] == v_labels[kk]
+        n = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
+        n.setComment(f'{preds[kk]} {pred_correct}')
+        n.data.update({k: v for k, v in zip(feature_names, v_features[kk])})
+        anno.addNode(n)
+        rep_coord = label_coords[kk] * sd_syn_ssv.scaling
+        n_l = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
+        n_l.setComment('gt node; {}'.format(labels[kk]))
+        if not pred_correct:
+            synssv_o.mesh2kzip(mapped_synssv_objects_kzip, ext_color=None, ply_name='{}.ply'.format(synssv_id))
+        anno.addNode(n_l)
+        anno.addEdge(n, n_l)
+        pbar.update(1)
+    pbar.close()
+    skel.add_annotation(anno)
+    skel.to_kzip(mapped_synssv_objects_kzip)
+
     if rfc_path_out is not None:
         joblib.dump(rfc, rfc_path_out)
         log.info(f'Wrote parameters of trained RFC to "{rfc_path_out}".')
