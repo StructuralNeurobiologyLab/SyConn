@@ -441,8 +441,7 @@ if elektronn3_avail:
         def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
                      train=True, batch_size=1, use_subcell=True, ctx_size=20000, mask_boarders_with_id=None):
             if source_dir is None:
-                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt'
-                              '_2020/2020_05//hc_out_2020_08/')
+                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/')
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')
             ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,

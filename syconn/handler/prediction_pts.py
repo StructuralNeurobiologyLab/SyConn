@@ -118,7 +118,11 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
                 break
             time.sleep(0.1)
             continue
-        q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
+        try:
+            q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
+        except Exception as e:
+            log_handler.error(f'Error during worker_postproc "{str(postproc_func)}": {str(e)}')
+            break
     log_handler.debug(f'Worker postproc done.')
     q_out.put('END')
 
@@ -147,27 +151,30 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         n_worker_postporc: Number of postproc worker.
         model_loader_kwargs: Additional keyword arguments for the model loader.
     """
-    if model_loader_kwargs is None:
-        model_loader_kwargs = dict()
-    m = model_loader(mpath, device, **model_loader_kwargs)
-    stops_received = set()
-    while True:
-        if not q_in.empty():
-            inp = q_in.get()
-            if 'STOP' in inp:
-                if inp not in stops_received:
-                    stops_received.add(inp)
-                else:
-                    q_in.put(inp)
-                    time.sleep(np.random.randint(25) / 10)
-                if len(stops_received) == n_worker_load:
-                    break
+    try:
+        if model_loader_kwargs is None:
+            model_loader_kwargs = dict()
+        m = model_loader(mpath, device, **model_loader_kwargs)
+        stops_received = set()
+        while True:
+            if not q_in.empty():
+                inp = q_in.get()
+                if 'STOP' in inp:
+                    if inp not in stops_received:
+                        stops_received.add(inp)
+                    else:
+                        q_in.put(inp)
+                        time.sleep(np.random.randint(25) / 10)
+                    if len(stops_received) == n_worker_load:
+                        break
+                    continue
+            else:
+                time.sleep(0.5)
                 continue
-        else:
-            time.sleep(0.5)
-            continue
-        pred_func(m, inp, q_out, d_out, q_progress, device, bs)
-    log_handler.debug(f'Pred worker {worker_cnt} stopped.')
+            pred_func(m, inp, q_out, d_out, q_progress, device, bs)
+        log_handler.debug(f'Pred worker {worker_cnt} stopped.')
+    except Exception as e:
+        log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
     for _ in range(n_worker_postporc):
         q_out.put(f'STOP{worker_cnt}')
 
@@ -189,7 +196,11 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
             break
         else:
             kwargs = q_loader.get()
-        res = loader_func(**kwargs)
+        try:
+            res = loader_func(**kwargs)
+        except Exception as e:
+            log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
+            break
         for el in res:
             while True:
                 if q_out.full():
@@ -464,6 +475,10 @@ def _load_ssv_hc(args):
     else:
         ssv, feats, feat_labels, pt_type, radius, map_myelin = args
     vert_dc = dict()
+
+    if pt_type == 'glia':  # at this point skeletons have not been computed
+        ssv.calculate_skeleton(force=True, save=False)
+
     if not ssv.load_skeleton():
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     if map_myelin:

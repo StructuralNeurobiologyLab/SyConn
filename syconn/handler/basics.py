@@ -870,14 +870,21 @@ class FileTimer:
     def prepare_report(self, experiment_name: str) -> str:
         # python dicts are insertion sensitive
         dt_tot = np.sum(np.array(list(self.timings.values())))
-        dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+        dt_tot_str = time.strftime("{}d:{}h:{}min:{}s".format(*self._s2str(dt_tot)))
         time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished " \
                            f"after {dt_tot_str}.\n"
         n_steps = len(self.timings)
         for i, (step_name, step_dt) in enumerate(self.timings.items()):
             step_dt_per = int(step_dt / dt_tot * 100)
-            step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(step_dt))
+            step_dt = time.strftime("{}d:{}h:{}min:{}s".format(*self._s2str(step_dt)))
             step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
                                                            step_dt, f'{step_dt_per}%')
             time_summary_str += step_str
         return time_summary_str
+
+    @staticmethod
+    def _s2str(seconds: float) -> tuple:
+        d, h = divmod(seconds, 3600 * 24)
+        h, min = divmod(h, 3600)
+        min, s = divmod(min, 60)
+        return int(d), int(h), int(min), int(s)

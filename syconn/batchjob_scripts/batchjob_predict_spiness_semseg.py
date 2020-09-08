@@ -30,8 +30,6 @@ kwargs_semseg2mesh = global_params.config['spines']['semseg2mesh_spines']
 kwargs_semsegforcoords = global_params.config['spines']['semseg2coords_spines']
 view_props = global_params.config['views']['view_properties']
 
-# TODO: inspect! this needed to be changed due to memory errors (probably because wrong memory handling in nested
-#  multi-processing)
 n_worker = 2
 params = [(ch_sub, view_props, ncpus, kwargs_semseg2mesh, kwargs_semsegforcoords) for ch_sub in
           basics.chunkify(ch, n_worker * 2)]
