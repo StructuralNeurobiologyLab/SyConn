@@ -178,9 +178,8 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     multi_params = [(cube_size, offs, ds) for offs in chunkify_successive(
         list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
     # high memory load
-    # out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
-    #                              n_cores=2, max_iterations=10)
-    out_dir = '/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/SLURM/kimimaroskelgen_nfgtxkfd/out/'
+    out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
+                                 n_cores=2, max_iterations=10)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 

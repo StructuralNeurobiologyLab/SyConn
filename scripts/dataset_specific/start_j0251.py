@@ -29,7 +29,7 @@ if __name__ == '__main__':
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
-        ('use_point_models', False),
+        ('use_point_models', True),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -176,25 +176,24 @@ if __name__ == '__main__':
     # ftimer.start('Synapse detection')
     # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     # ftimer.stop()
-
-    # TDO: remove
-    # exec_skeleton.run_kimimaro_skeletonization()
-
-    log.info('Step 6/9 - Compartment prediction')
-    ftimer.start('Compartment predictions')
-    exec_inference.run_semsegaxoness_prediction()
-    if not global_params.config.use_point_models:
-        exec_inference.run_semsegspiness_prediction()
-    exec_syns.run_spinehead_volume_calc()
-    ftimer.stop()
-
-    # Use multi-views until here
-    raise()
-
-    log.info('Step 7/9 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
+    #
+    # log.info('Step 6/9 - Compartment prediction')
+    # ftimer.start('Compartment predictions')
+    # exec_inference.run_semsegaxoness_prediction()
+    # if not global_params.config.use_point_models:
+    #     exec_inference.run_semsegspiness_prediction()
+    # ftimer.stop()
+    #
+    # # TODO: this step can be launched in parallel with the morphology extraction!
+    # ftimer.start('Spine head volume estimation')
+    # exec_syns.run_spinehead_volume_calc()
+    # ftimer.stop()
+    #
+    # # Used multi-views until here!
+    # log.info('Step 7/9 - Morphology extraction')
+    # ftimer.start('Morphology extraction')
+    # exec_inference.run_morphology_embedding()
+    # ftimer.stop()
 
     log.info('Step 8/9 - Celltype analysis')
     ftimer.start('Celltype analysis')
@@ -208,7 +207,7 @@ if __name__ == '__main__':
 
     time_summary_str = ftimer.prepare_report(experiment_name)
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-             'can be analyzed via the KNOSSOS-SyConn plugin at '
-             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+    #          'can be analyzed via the KNOSSOS-SyConn plugin at '
+    #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # os.system(f'syconn.server --working_dir={example_wd} --port=10001')

@@ -439,7 +439,7 @@ if elektronn3_avail:
 
     class CloudDataSemseg(Dataset):
         def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, batch_size=1, use_subcell=True, ctx_size=20000):
+                     train=True, batch_size=1, use_subcell=True, ctx_size=20000, mask_boarders_with_id=None):
             if source_dir is None:
                 source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt'
                               '_2020/2020_05//hc_out_2020_08/')
@@ -462,6 +462,7 @@ if elektronn3_avail:
             self.num_pts = npoints
             self._batch_size = batch_size
             self.transform = transform
+            self.mask_boarders_with_id = mask_boarders_with_id
 
         def __getitem__(self, item):
             item = np.random.randint(0, len(self.fnames))
@@ -494,7 +495,8 @@ if elektronn3_avail:
             (sample_feats, sample_pts), (out_pts, out_labels) = \
                 [*pts_loader_semseg_train([p], self._batch_size, self.num_pts,
                                           transform=self.transform, ctx_size=self.ctx_size,
-                                          use_subcell=self.use_subcell)][0]
+                                          use_subcell=self.use_subcell,
+                                          mask_boarders_with_id=self.mask_boarders_with_id)][0]
             return sample_pts, sample_feats, out_pts, out_labels
 
 
