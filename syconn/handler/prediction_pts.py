@@ -10,6 +10,7 @@ except ImportError:
     pass  # for sphinx build
 import collections
 import functools
+import sys
 import re
 import os
 import time
@@ -118,7 +119,11 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
                 break
             time.sleep(0.1)
             continue
-        q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
+        try:
+            q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
+        except Exception as e:
+            log_handler.error(f'Error during worker_postproc "{str(postproc_func)}": {str(e)}')
+            break
     log_handler.debug(f'Worker postproc done.')
     q_out.put('END')
 
@@ -147,27 +152,30 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         n_worker_postporc: Number of postproc worker.
         model_loader_kwargs: Additional keyword arguments for the model loader.
     """
-    if model_loader_kwargs is None:
-        model_loader_kwargs = dict()
-    m = model_loader(mpath, device, **model_loader_kwargs)
-    stops_received = set()
-    while True:
-        if not q_in.empty():
-            inp = q_in.get()
-            if 'STOP' in inp:
-                if inp not in stops_received:
-                    stops_received.add(inp)
-                else:
-                    q_in.put(inp)
-                    time.sleep(np.random.randint(25) / 10)
-                if len(stops_received) == n_worker_load:
-                    break
+    try:
+        if model_loader_kwargs is None:
+            model_loader_kwargs = dict()
+        m = model_loader(mpath, device, **model_loader_kwargs)
+        stops_received = set()
+        while True:
+            if not q_in.empty():
+                inp = q_in.get()
+                if 'STOP' in inp:
+                    if inp not in stops_received:
+                        stops_received.add(inp)
+                    else:
+                        q_in.put(inp)
+                        time.sleep(np.random.randint(25) / 10)
+                    if len(stops_received) == n_worker_load:
+                        break
+                    continue
+            else:
+                time.sleep(0.5)
                 continue
-        else:
-            time.sleep(0.5)
-            continue
-        pred_func(m, inp, q_out, d_out, q_progress, device, bs)
-    log_handler.debug(f'Pred worker {worker_cnt} stopped.')
+            pred_func(m, inp, q_out, d_out, q_progress, device, bs)
+        log_handler.debug(f'Pred worker {worker_cnt} stopped.')
+    except Exception as e:
+        log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
     for _ in range(n_worker_postporc):
         q_out.put(f'STOP{worker_cnt}')
 
@@ -189,6 +197,7 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
             break
         else:
             kwargs = q_loader.get()
+        # try:
         res = loader_func(**kwargs)
         for el in res:
             while True:
@@ -197,6 +206,10 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
                 else:
                     break
             q_out.put(el)
+        # except Exception as e:
+        #     log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
+        #     break
+
     time.sleep(1)
     for _ in range(n_worker_pred):
         q_out.put(f'STOP{worker_cnt}')
@@ -223,9 +236,11 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
         else:
             res = q_progress.get()
             if res is None:  # final stop
-                assert cnt_loder_done == nloader
                 if show_progress:
                     pbar.close()
+                if cnt_loder_done != nloader:
+                    log_handler.error(f'Only {cnt_loder_done}/{nloader} loader finished.')
+                    sys.exit(1)
                 break
             if show_progress:
                 pbar.update(res)
@@ -426,16 +441,23 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             cnt_end += 1
             continue
         output_func(dict_out, res)
-
     q_progress.put(None)
     lsnr.join()
+    error_occurred = lsnr.exitcode != 0
+
     for p in producers:
+        if error_occurred:
+            p.terminate()
         p.join()
         p.close()
     for c in consumers:
+        if error_occurred:
+            c.terminate()
         c.join()
         c.close()
     for c in postprocs:
+        if error_occurred:
+            c.terminate()
         c.join()
         c.close()
     # necessary for subsequent runs?
@@ -1992,7 +2014,16 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
                     # replace subsets with zero vertices by another subset (this is probably very rare)
                     ix = 0
                     while len(hc_sub.vertices) == 0:
-                        hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
+                        if ix >= len(hc.nodes):
+                            raise IndexError(f'Could not find suitable context in {ssv} during "pts_loader_cpmt".')
+                        elif ix >= len(node_arrs):
+                            # if the cell fragment, represented by hc, is small and its skeleton not well centered,
+                            # it can happen that all extracted sub-skeletons do not contain any vertex. in that case
+                            # use any node of the skeleton
+                            sn = np.random.randint(0, len(hc.nodes))
+                            hc_sub, idcs_sub = extract_subset(hc, context_splitting_kdt(hc, sn, ctx))
+                        else:
+                            hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
                         ix += 1
                     # fill batches with sampled and transformed subsets
                     for ix, p_t in enumerate(ctx_size[ctx]):
