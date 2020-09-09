@@ -1236,7 +1236,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+            batch_f = np.ones((batchsize, npoints_ssv, len(feat_dc)))
             batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
             batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
             cnt = 0
@@ -1281,7 +1281,8 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                     transform(hc_sub)
                 batch[cnt] = hc_sub.vertices
                 # one hot encoding
-                batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
+                if use_subcell:
+                    batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
                 # get target locations
                 out_pts_mask = (hc_sub.features == 0).squeeze()
                 n_out_pts_actual = np.sum(out_pts_mask)

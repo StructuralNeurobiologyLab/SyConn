@@ -1361,7 +1361,6 @@ def _objects_from_cell_to_syn_dict(args):
             map_dc = dict()
             for ii, ssv_partner_id in enumerate(synssv_o.attr_dict["neuron_partners"]):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                ssv_o.load_attr_dict()
                 cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
