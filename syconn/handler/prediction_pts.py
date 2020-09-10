@@ -10,6 +10,7 @@ except ImportError:
     pass  # for sphinx build
 import collections
 import functools
+import sys
 import re
 import os
 import time
@@ -198,16 +199,17 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
             kwargs = q_loader.get()
         try:
             res = loader_func(**kwargs)
+            for el in res:
+                while True:
+                    if q_out.full():
+                        time.sleep(1)
+                    else:
+                        break
+                q_out.put(el)
         except Exception as e:
             log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
             break
-        for el in res:
-            while True:
-                if q_out.full():
-                    time.sleep(1)
-                else:
-                    break
-            q_out.put(el)
+
     time.sleep(1)
     for _ in range(n_worker_pred):
         q_out.put(f'STOP{worker_cnt}')
@@ -237,6 +239,9 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
                 assert cnt_loder_done == nloader
                 if show_progress:
                     pbar.close()
+                if cnt_loder_done != nloader:
+                    log_handler.error(f'Only {cnt_loder_done}/{nloader} loader finished.')
+                    sys.exit(1)
                 break
             if show_progress:
                 pbar.update(res)
@@ -437,16 +442,23 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             cnt_end += 1
             continue
         output_func(dict_out, res)
-
     q_progress.put(None)
     lsnr.join()
+    error_occurred = lsnr.exitcode != 0
+
     for p in producers:
+        if error_occurred:
+            p.terminate()
         p.join()
         p.close()
     for c in consumers:
+        if error_occurred:
+            c.terminate()
         c.join()
         c.close()
     for c in postprocs:
+        if error_occurred:
+            c.terminate()
         c.join()
         c.close()
     # necessary for subsequent runs?
@@ -2011,7 +2023,16 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
                     # replace subsets with zero vertices by another subset (this is probably very rare)
                     ix = 0
                     while len(hc_sub.vertices) == 0:
-                        hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
+                        if ix >= len(hc.nodes):
+                            raise IndexError(f'Could not find suitable context in {ssv} during "pts_loader_cpmt".')
+                        elif ix >= len(node_arrs):
+                            # if the cell fragment, represented by hc, is small and its skeleton not well centered,
+                            # it can happen that all extracted sub-skeletons do not contain any vertex. in that case
+                            # use any node of the skeleton
+                            sn = np.random.randint(0, len(hc.nodes))
+                            hc_sub, idcs_sub = extract_subset(hc, context_splitting_kdt(hc, sn, ctx))
+                        else:
+                            hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
                         ix += 1
                     # fill batches with sampled and transformed subsets
                     for ix, p_t in enumerate(ctx_size[ctx]):
