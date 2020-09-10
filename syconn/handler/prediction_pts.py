@@ -197,18 +197,18 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
             break
         else:
             kwargs = q_loader.get()
-        # try:
-        res = loader_func(**kwargs)
-        for el in res:
-            while True:
-                if q_out.full():
-                    time.sleep(1)
-                else:
-                    break
-            q_out.put(el)
-        # except Exception as e:
-        #     log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
-        #     break
+        try:
+            res = loader_func(**kwargs)
+            for el in res:
+                while True:
+                    if q_out.full():
+                        time.sleep(1)
+                    else:
+                        break
+                q_out.put(el)
+        except Exception as e:
+            log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
+            break
 
     time.sleep(1)
     for _ in range(n_worker_pred):
@@ -236,6 +236,7 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
         else:
             res = q_progress.get()
             if res is None:  # final stop
+                assert cnt_loder_done == nloader
                 if show_progress:
                     pbar.close()
                 if cnt_loder_done != nloader:
