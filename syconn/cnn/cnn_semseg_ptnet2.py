@@ -85,7 +85,7 @@ act = 'relu'
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall3_boarderMask'
+           f'{num_classes}_PointNet2_boarderMask'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
