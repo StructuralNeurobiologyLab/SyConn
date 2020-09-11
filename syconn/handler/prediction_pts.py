@@ -2230,6 +2230,8 @@ def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
         raise NotImplementedError('Conversion for multi-view predictions is not implemented yet.')
     else:
         raise KeyError(f'Key required for conversion not found. Available keys: {ld.keys()}')
+    if np.ndim(ads) == 2:
+        ads = ads.squeeze(1)
     return ads
 
 # ------------------------------------------------- HELPER METHODS --------------------------------------------------#
