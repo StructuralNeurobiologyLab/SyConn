@@ -84,6 +84,11 @@ class CompressedStorage(StorageClass):
                         "dt": value.dtype.str}
         self._dc_intern[key] = value_intern
 
+    def __delitem__(self, key):
+        del self._dc_intern[key]
+        if key in self._cache_dc:
+            del self._cache_dc[key]
+
 
 class VoxelStorageL(StorageClass):
     """

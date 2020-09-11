@@ -2145,7 +2145,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
             break
     assert len(d_in[sso.id]) == curr_ix
     del d_in[sso.id]
-
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))
