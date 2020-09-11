@@ -2172,9 +2172,78 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
         ld[p_t] = sso_preds
+    # TODO: use single array for all compartment predictions in the whole pipeline
+    # convert to conventional
+    # 'axoness' (0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5: background, 6: unpredicted)
+    # and
+    # 'spiness' (0: shaft, 1: head, 2: neck, 3: other, 4: background, 5: unpredicted)
+    cmpt_preds = convert_cmpt_preds(sso)
+    ax_pred = np.array(cmpt_preds)  # trigger copy
+    # convert spine labels to dendrite
+    ax_pred[ax_pred == 5] = 0
+    ax_pred[ax_pred == 6] = 0
+    ax_pred[ax_pred == -1] = 5  # unpredicted to unpredicted
+    # prepare dendritic compartment labels in multi-view layout
+    sp_pred = np.array(cmpt_preds)
+    sp_pred[cmpt_preds == 1] = 3  # axon to 'other'
+    sp_pred[cmpt_preds == 2] = 3  # soma to 'other'
+    sp_pred[cmpt_preds == 3] = 3  # en-passant to 'other'
+    sp_pred[cmpt_preds == 4] = 3  # terminal to 'other'
+    sp_pred[cmpt_preds == 5] = 1  # head to head
+    sp_pred[cmpt_preds == 6] = 2  # neck to neck
+    sp_pred[cmpt_preds == -1] = 5  # unpredicted to unpredicted
+    ld['axoness'] = ax_pred
+    ld['spiness'] = sp_pred
+    del ld['dnh']
+    del ld['abt']
+    del ld['ads']
     ld.push()
     return [sso.id], [True]
 
+
+def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
+    """
+    Convert vertex predictions in ``label_dict`` of cell reconstruction object to common layout.
+
+    Expected keys in label dict for point cloud based predictions:
+        * Coarse compartments ['ads']: dendrite (0), axon (1), soma (2).
+        * Axon compartments ['abt]: axon (0), en-passant bouton (1), terminal bouton (2).
+        * Dendritic compartments ['dnh']: dendritic shaft (0), spine head (1), spine neck (2).
+
+    Alternative layout from multi-views:
+        * 'axoness': 0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5: background, 6: unpredicted.
+        * 'spiness': 0: shaft, 1: head, 2: neck, 3: other, 4: background, 5: unpredicted.
+
+    Resulting layout:
+        Single array with dendrite (0), axon (1), soma (2), en-passant bouton (3), terminal bouton (4),
+        spine head (5), spine neck (6).
+
+    Args:
+        sso: Cell reconstruction.
+
+    Returns:
+        Single array with compartment predictions.
+    """
+    ld = sso.label_dict('vertex')
+    if 'ads' in ld and 'abt' in ld and 'dnh' in ld:
+        ads = ld['ads']
+        abt = ld['abt']
+        dnh = ld['dnh']
+        a_mask = (ads == 1).reshape(-1)
+        d_mask = (ads == 0).reshape(-1)
+        abt[abt == 0] = 3
+        abt[abt == 2] = 4
+        dnh[dnh == 1] = 5
+        dnh[dnh == 2] = 6
+        ads[a_mask] = abt[a_mask]
+        ads[d_mask] = dnh[d_mask]
+    elif 'axoness' in ld and 'spiness' in ld:
+        adsbt = ld['axoness']
+        shnobu = ld['spiness']
+        raise NotImplementedError('Conversion for multi-view predictions is not implemented yet.')
+    else:
+        raise KeyError(f'Key required for conversion not found. Available keys: {ld.keys()}')
+    return ads
 
 # ------------------------------------------------- HELPER METHODS --------------------------------------------------#
 
