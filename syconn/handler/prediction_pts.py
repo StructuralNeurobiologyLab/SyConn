@@ -706,9 +706,13 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                 g = hc.graph(simple=False)
                 for n in source_nodes:
                     sn_new.append(n)
-                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                    neighs = np.array(list(paths.keys()), dtype=np.int)
-                    sn_new.append(np.random.choice(neighs, 1)[0])
+                    # just choose any node within the cell randomly
+                    if np.isinf(draw_local_dist):
+                        sn_new.append(np.random.randint(0, len(hc.nodes)))
+                    else:
+                        paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                        neighs = np.array(list(paths.keys()), dtype=np.int)
+                        sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
                 # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
