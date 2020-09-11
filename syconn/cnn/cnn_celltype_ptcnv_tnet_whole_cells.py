@@ -108,7 +108,7 @@ if __name__ == '__main__':
     use_myelin = True
 
     if name is None:
-        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}_RUN2'
+        name = f'celltype_pts_tnet_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nDim{Z_DIM}_drawWholeCell'
         if cellshape_only:
             name += '_cellshapeOnly'
         if not use_syntype:
@@ -197,7 +197,7 @@ if __name__ == '__main__':
     train_ds = CellCloudDataTriplet(npoints=npoints, transform=train_transform, cv_val=cval,
                                     cellshape_only=cellshape_only, use_syntype=use_syntype, onehot=onehot,
                                     batch_size=batch_size, ctx_size=ctx, ssd_kwargs=ssd_kwargs,
-                                    map_myelin=use_myelin, draw_local=True, draw_local_dist=ctx)
+                                    map_myelin=use_myelin, draw_local=True, draw_local_dist=np.inf)
 
     # PREPARE AND START TRAINING #
 
