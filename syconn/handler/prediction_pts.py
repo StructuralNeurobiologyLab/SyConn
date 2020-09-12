@@ -602,7 +602,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                     print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes_batch)
                     if use_ctx_sampling:
-                        node_ids = context_splitting_kdt_many(hc, source_node, ctx_size)
+                        node_ids = context_splitting_kdt_many(hc, [source_node], ctx_size)[0]
                     else:
                         node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 sample_feats = hc_sub.features
