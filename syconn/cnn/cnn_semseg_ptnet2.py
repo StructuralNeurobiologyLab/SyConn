@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall, SegSmall2, SegSmall3
+from elektronn3.models.pointnetpp import PointNet2
 from elektronn3.training import Trainer3d, Backup, metrics
 try:
     from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
@@ -85,7 +85,7 @@ act = 'relu'
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall_boarderMask'
+           f'{num_classes}_PointNet2_boarderMask'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -119,8 +119,7 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
-                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+model = PointNet2(num_classes + 1, input_channels)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -183,7 +182,6 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 #     gamma=0.99994,
 # )
 # set weight of the masking label at context boarders to 0
-# class_weights = torch.tensor([1, 0, 0, 0, 0, 1, 1] + [0], dtype=torch.float32, device=device)
 class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 

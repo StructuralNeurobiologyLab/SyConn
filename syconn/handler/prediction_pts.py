@@ -481,14 +481,18 @@ def _load_ssv_hc(args):
     Returns:
 
     """
+    # TODO: refactor
     map_myelin = False
+    recalc_skeletons = False
     if len(args) == 5:
         ssv, feats, feat_labels, pt_type, radius = args
-    else:
+    elif len(args) == 6:
         ssv, feats, feat_labels, pt_type, radius, map_myelin = args
+    else:
+        ssv, feats, feat_labels, pt_type, radius, map_myelin, recalc_skeletons = args
     vert_dc = dict()
 
-    if pt_type == 'glia':  # at this point skeletons have not been computed
+    if pt_type == 'glia' and recalc_skeletons:  # at this point skeletons have not been computed
         ssv.calculate_skeleton(force=True, save=False)
 
     if not ssv.load_skeleton():
@@ -702,9 +706,13 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                 g = hc.graph(simple=False)
                 for n in source_nodes:
                     sn_new.append(n)
-                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                    neighs = np.array(list(paths.keys()), dtype=np.int)
-                    sn_new.append(np.random.choice(neighs, 1)[0])
+                    # just choose any node within the cell randomly
+                    if np.isinf(draw_local_dist):
+                        sn_new.append(np.random.randint(0, len(hc.nodes)))
+                    else:
+                        paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                        neighs = np.array(list(paths.keys()), dtype=np.int)
+                        sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
                 # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
@@ -869,6 +877,7 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                           ctx_size: Optional[float] = None, transform: Optional[Callable] = None,
                           n_out_pts: int = 100, train=False, base_node_dst: float = 10000,
                           use_ctx_sampling: bool = True, use_syntype: bool = False, use_myelin: bool = False,
+                          recalc_skeletons: bool = False,
                           use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -924,7 +933,8 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
         curr_ssv_params = default_kwargs
         # do not write SSV mesh in case it does not exist (will be build from SV meshes)
         ssv = SuperSegmentationObject(**curr_ssv_params)
-        loader_kwargs = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None, use_myelin)
+        loader_kwargs = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'glia', None, use_myelin,
+                         recalc_skeletons)
         if train:
             hc = _load_ssv_hc_cached(loader_kwargs)
         else:
@@ -1248,7 +1258,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
+            batch_f = np.ones((batchsize, npoints_ssv, len(feat_dc)))
             batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
             batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
             cnt = 0
@@ -1293,7 +1303,8 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                     transform(hc_sub)
                 batch[cnt] = hc_sub.vertices
                 # one hot encoding
-                batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
+                if use_subcell:
+                    batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
                 # get target locations
                 out_pts_mask = (hc_sub.features == 0).squeeze()
                 n_out_pts_actual = np.sum(out_pts_mask)
@@ -1709,7 +1720,8 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
     default_kwargs = dict(nloader=10, npredictor=5, bs=10,
-                          loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size'] / 3))
+                          loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size'] / 3,
+                                             recalc_skeletons=True))
     default_kwargs.update(add_kwargs)
     postproc_kwargs_def = global_params.config['points']['glia']['mapping']
     if postproc_kwargs is None:

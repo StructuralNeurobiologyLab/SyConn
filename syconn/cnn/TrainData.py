@@ -48,6 +48,7 @@ import glob
 from scipy import spatial, ndimage
 import time
 import socket
+from torch_geometric.data.data import Data
 # fix random seed.
 np.random.seed(0)
 
@@ -427,10 +428,11 @@ if elektronn3_avail:
             """
             self._curr_ssv_params = self.sso_params[item]
             self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
+            # Changed pts_loader_local_skel=True, 10Sep2020 PS
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
                 [*pts_loader_local_skel([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
                                         self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
-                                        train=True, ctx_size=self.ctx_size)][0]
+                                        train=True, ctx_size=self.ctx_size, recalc_skeletons=True)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:
