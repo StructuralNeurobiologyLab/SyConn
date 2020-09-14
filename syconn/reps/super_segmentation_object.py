@@ -1417,8 +1417,7 @@ class SuperSegmentationObject(SegmentationBase):
 
             edges = np.array(self.skeleton["edges"], dtype=np.uint)
             edge_coords = node_scaled[edges]
-            weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1],
-                                     axis=1)
+            weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1], axis=1)
             self._weighted_graph = nx.Graph()
             self._weighted_graph.add_nodes_from(
                 [(ix, dict(position=coord)) for ix, coord in

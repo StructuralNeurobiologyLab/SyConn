@@ -301,7 +301,7 @@ def run_create_rag():
         required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
     log = initialize_logging('sd_generation', global_params.config.working_dir +
-                             '/logs/', overwrite=True)
+                             '/logs/', overwrite=False)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
     G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint)
     if 0 in G.nodes():

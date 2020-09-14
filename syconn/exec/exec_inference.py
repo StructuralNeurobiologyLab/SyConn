@@ -172,7 +172,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
         path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
                                          suffix="", additional_flags="--gres=gpu:1",
                                          n_cores=n_cores, remove_jobfolder=False)
-        log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
+        log.info(f'Finished compartment prediction of {len(ssd.ssv_ids)} SSVs.')
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
