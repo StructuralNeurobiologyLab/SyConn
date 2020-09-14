@@ -311,7 +311,7 @@ def run_create_rag():
     log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
-    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
+    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir, cache_properties=['size'])
     diff = np.array(list(set(sd.ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single-element connected component SVs which were missing'
              ' in initial RAG.'.format(len(diff)))
@@ -335,9 +335,12 @@ def run_create_rag():
         if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
             G.remove_node(ix)
     cc_gs = list(nx.connected_component_subgraphs(G))
-    log.info("Removed {} SVs from RAG because of size. Final RAG contains {}"
-             " SVs in {} CCs.".format(before_cnt - G.number_of_nodes(),
-                                      G.number_of_nodes(), len(cc_gs)))
+    total_size = 0
+    for n in G.nodes():
+        total_size += sd.get_segmentation_object(n).size
+    total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
+    log.info("Removed {} SVs from RAG because of size. Final RAG contains {} SVs in {} CCs ({} mm^3; {} Gvx).".format(
+        before_cnt - G.number_of_nodes(), G.number_of_nodes(), len(cc_gs), total_size_cmm, total_size / 1e9))
     nx.write_edgelist(G, global_params.config.pruned_rag_path)
 
     if not global_params.config.prior_glia_removal:

@@ -48,7 +48,6 @@ import glob
 from scipy import spatial, ndimage
 import time
 import socket
-from torch_geometric.data.data import Data
 # fix random seed.
 np.random.seed(0)
 

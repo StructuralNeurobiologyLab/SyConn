@@ -352,7 +352,7 @@ def run_glia_splitting():
     # collect all neuron and glia SVs and store them in numpy array
     collect_glia_sv()
 
-    # # here use reconnected RAG or initial rag
+    # use reconnected RAG or initial rag here
     recon_nx = G
     # create glia / neuron RAGs
     write_glia_rag(recon_nx, global_params.config['glia']['min_cc_size_ssv'], log=log)
