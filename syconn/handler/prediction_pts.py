@@ -582,9 +582,9 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         rand_ixs = chunkify(np.random.choice(redundancy_ssv, redundancy_ssv, replace=False), n_batches)
         npoints_ssv = min(len(hc.vertices), npoints)
         if use_ctx_sampling:
-            node_ids_all = np.array(context_splitting_kdt_many(hc, source_nodes_all, ctx_size))
+            node_ids_all = np.array(context_splitting_kdt_many(hc, source_nodes_all, ctx_size), dtype=object)
         else:
-            node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all])
+            node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all], dtype=object)
         for ii in range(n_batches):
             n_samples = min(redundancy_ssv, batchsize)
             redundancy_ssv -= batchsize
@@ -597,13 +597,13 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             source_nodes_batch = source_nodes_all[curr_batch_ixs]
             node_ids_batch = node_ids_all[curr_batch_ixs]
             for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
+                node_ids = node_ids.astype(np.int)
                 # This might be slow
                 while True:
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
-                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes_batch)
                     if use_ctx_sampling:
                         node_ids = context_splitting_kdt_many(hc, [source_node], ctx_size)[0]
@@ -725,7 +725,6 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
-                    log_handler.debug(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes)
 
                 sample_feats = hc_sub.features
@@ -987,7 +986,6 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
-                    log_handler.debug(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{ssv}".')
                     source_node = np.random.choice(source_nodes)
 
                 sample_feats = hc_sub.features
@@ -1276,7 +1274,6 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
-                    print(f'FOUND SOURCE NODE WITH ZERO VERTICES AT {hc.nodes[source_node]} IN "{pkl_f}".')
                     source_node = np.random.choice(source_nodes)
                 sample_pts = hc_sub.vertices
                 sample_labels = hc_sub.labels
@@ -1761,7 +1758,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
         use_myelin = True
     else:
         use_myelin = False
-    default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(
+    default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(
         n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True,
         use_myelin=use_myelin))
     postproc_kwargs = dict(pred_key=pred_key)

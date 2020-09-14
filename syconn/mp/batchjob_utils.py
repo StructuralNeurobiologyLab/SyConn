@@ -368,49 +368,6 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
     t.start()
 
 
-def jobstates_slurm(job_name: str, start_time: str,
-                    max_retry: int = 10) -> Dict[int, str]:
-    """
-    Generates a dictionary which stores the state of every job belonging to
-    `job_name`.
-
-    Args:
-        job_name:
-        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
-            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
-        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
-            sleep in-between).
-
-    Returns:
-        Dictionary with the job states. (key: job ID, value: state)
-    """
-    # TODO: test!
-    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
-    job_states = dict()
-    cnt_retry = 0
-    while True:
-        process = subprocess.Popen(cmd_stat, shell=True,
-                                   stdout=subprocess.PIPE)
-        out, err = process.communicate()
-        if process.returncode != 0:
-            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
-                           f'Attempting again in 5s. {err}')
-            time.sleep(5)
-            cnt_retry += 1
-            if cnt_retry == max_retry:
-                log_mp.error(f'Could not query job states from SLURM: {err}\n'
-                             f'Aborting due to maximum number of retries.')
-                break
-            continue
-        for line in out.decode().split('\n'):
-            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
-            if len(str_parsed) == 1:
-                str_parsed = str_parsed[0]
-                job_states[int(str_parsed[0])] = str_parsed[1]
-        break
-    return job_states
-
-
 def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, python_path=None, remove_jobfolder=False,
                       show_progress=True, log=None, overwrite=False, job_folder=None):
     """
@@ -562,9 +519,97 @@ def fallback_exec(cmd_exec):
     return out_str
 
 
+def jobstates_slurm(job_name: str, start_time: str,
+                    max_retry: int = 10) -> Dict[int, str]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+        job_name:
+        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
+            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
+        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
+            sleep in-between).
+
+    Returns:
+        Dictionary with the job states. (key: job ID, value: state)
+    """
+    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
+    job_states = dict()
+    cnt_retry = 0
+    while True:
+        process = subprocess.Popen(cmd_stat, shell=True,
+                                   stdout=subprocess.PIPE)
+        out, err = process.communicate()
+        if process.returncode != 0:
+            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
+                           f'Attempting again in 5s. {err}')
+            time.sleep(5)
+            cnt_retry += 1
+            if cnt_retry == max_retry:
+                log_mp.error(f'Could not query job states from SLURM: {err}\n'
+                             f'Aborting due to maximum number of retries.')
+                break
+            continue
+        for line in out.decode().split('\n'):
+            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
+            if len(str_parsed) == 1:
+                str_parsed = str_parsed[0]
+                job_states[int(str_parsed[0])] = str_parsed[1]
+        break
+    return job_states
+
+
+def nodestates_slurm() -> Dict[int, dict]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+
+
+    Returns:
+        Dictionary with the node states. (key: job ID, value: state dict)
+    """
+    cmd_stat = f'sinfo -N  -o "%20N %10t %10c %10m %10G"'
+    # yields e.g.
+    """
+    NODELIST             STATE      CPUS       MEMORY     GRES      
+    compute001           idle       32         208990     gpu:GP100G
+    compute002           mix        32         208990     gpu:GP100G
+    compute003           idle       32         208990     gpu:GP100G
+    compute004           idle       32         208990     gpu:GP100G
+    compute005           idle       32         208990     gpu:GP100G
+    compute006           mix        32         208990     gpu:GP100G
+    compute007           idle       32         208990     gpu:GP100G
+    compute008           idle       32         208990     gpu:GP100G
+    compute009           alloc      32         208990     gpu:GP100G
+    compute010           idle       32         208990     gpu:GP100G
+    compute011           idle       32         208990     gpu:GP100G
+    compute012           dead       32         208990     gpu:GP100G
+    """
+    node_states = dict()
+    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', str)]  # TOOD: gres should be number of gpus
+    process = subprocess.Popen(cmd_stat, shell=True, stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    if process.returncode != 0:
+        log_mp.error(f'Error when getting node states with sinfo: {err}')
+        return node_states
+    for line in out.decode().split('\n')[1:]:
+        if len(line) == 0:
+            continue
+        node_uri, *str_parsed = re.findall(r"(\S+)", line)
+        ndc = dict()
+        for k, v in zip(attr_keys, str_parsed):
+            ndc[k[0]] = k[1](v)
+        node_states[node_uri] = ndc
+    return node_states
+
+
 def number_of_running_processes(job_name):
     """
-    Calculates the number of running jobs using qstat
+    Calculates the number of running jobs using qstat/squeue
 
     Parameters
     ----------

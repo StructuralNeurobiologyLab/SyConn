@@ -7,6 +7,7 @@
 
 import os
 import time
+import re
 import numpy as np
 import networkx as nx
 import shutil
@@ -16,7 +17,7 @@ from multiprocessing import Process
 from syconn.handler.basics import FileTimer
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.mp.batchjob_utils import batchjob_enabled
+from syconn.mp.batchjob_utils import batchjob_enabled, nodestates_slurm
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
 
@@ -24,16 +25,23 @@ if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
+    node_state = next(iter(nodestates_slurm().values()))
+    ncores_per_node = node_state['cpus']
+    mem_per_node = node_state['memory']
+    ngpus_per_node = 2  # node_state currently does not hold the number of gpus for 'gres' resource
+    number_of_nodes = 12
+    # check that cluster is configured accordingly
+    assert number_of_nodes == np.sum([v['state'] == 'idle' for v in nodestates_slurm().values()])
     prior_glia_removal = True
     use_point_models = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
-        ('ncores_per_node', 32),
+        ('ncores_per_node', ncores_per_node),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 6),
-        ('mem_per_node', 208000),
+        ('nnodes_total', number_of_nodes),
+        ('mem_per_node', mem_per_node),
         ('use_point_models', use_point_models),
         ('skeleton', {'use_kimimaro': True}),
         ('meshes', {'use_new_meshing': True}),
@@ -84,11 +92,12 @@ if __name__ == '__main__':
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
     working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
-                  f"{'_'.join(map(str, cube_size))}_12nodes"
+                  f"{'_'.join(map(str, cube_size))}_{number_of_nodes}nodes"
     if use_point_models:
         working_dir += f'_ptmodels'
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')
+    shutil.copy(os.path.abspath(__file__), f'{working_dir}/logs/')
 
     log.info('Step 0/10 - Preparation')
     ftimer.start('Preparation')
@@ -128,113 +137,113 @@ if __name__ == '__main__':
                              'working directory "{}".'.format(mpath, working_dir))
     ftimer.stop()
 
-    # Start SyConn
-    # --------------------------------------------------------------------------
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(cube_size))
-    log.info('Example data will be processed in "{}".'.format(working_dir))
-
-    log.info('Step 1/10 - Predicting sub-cellular structures')
-    # ftimer.start('Myelin prediction')
-    # # myelin is not needed before `run_create_neuron_ssd`
-    # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
+    # # Start SyConn
+    # # --------------------------------------------------------------------------
+    # log.info('Finished example cube initialization (shape: {}). Starting'
+    #          ' SyConn pipeline.'.format(cube_size))
+    # log.info('Example data will be processed in "{}".'.format(working_dir))
+    #
+    # log.info('Step 1/10 - Predicting sub-cellular structures')
+    # # ftimer.start('Myelin prediction')
+    # # # myelin is not needed before `run_create_neuron_ssd`
+    # # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
+    # # ftimer.stop()
+    #
+    # log.info('Step 2/10 - Creating SegmentationDatasets (incl. SV meshes)')
+    # ftimer.start('SD generation')
+    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+    #                                 n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
+    #                                 load_cellorganelles_from_kd_overlaycubes=True,
+    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
+    #                                 max_n_jobs=global_params.config.ncore_total * 4)
+    #
+    # # generate flattened RAG
+    # from syconn.reps.segmentation import SegmentationDataset
+    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    # rag_sub_g = nx.Graph()
+    # # add SV IDs to graph via self-edges
+    # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    # log.info('{} SVs were added to the RAG after application of the size '
+    #          'filter.'.format(len(filtered_ids)))
+    # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+    #
+    # exec_init.run_create_rag()
     # ftimer.stop()
-
-    log.info('Step 2/10 - Creating SegmentationDatasets (incl. SV meshes)')
-    ftimer.start('SD generation')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-                                    n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
-                                    load_cellorganelles_from_kd_overlaycubes=True,
-                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
-                                    max_n_jobs=global_params.config.ncore_total * 4)
-
-    # generate flattened RAG
-    from syconn.reps.segmentation import SegmentationDataset
-    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    rag_sub_g = nx.Graph()
-    # add SV IDs to graph via self-edges
-    mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
-    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
-    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    log.info('{} SVs were added to the RAG after application of the size '
-             'filter.'.format(len(filtered_ids)))
-    nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
-
-    exec_init.run_create_rag()
-    ftimer.stop()
-
-    log.info('Step 3/10 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
-        if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
-        else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
-        ftimer.stop()
-
-    log.info('Step 4/10 - Creating SuperSegmentationDataset')
-    ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd()
-    ftimer.stop()
-
-    def start_skel_gen():
-        log.info('Step 6/10 - Skeleton generation')
-        ftimer.start('Skeleton generation')
-        exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
-        ftimer.stop()
-
-    def start_neuron_rendering():
-        if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-            log.info('Step 6.5/10 - Neuron rendering')
-            ftimer.start('Neuron rendering')
-            exec_render.run_neuron_rendering()
-            ftimer.stop()
-
-    def start_syn_gen():
-        log.info('Step 5/10 - Synapse detection')
-        ftimer.start('Synapse detection')
-        exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
-                                     cube_of_interest_bb=cube_of_interest_bb)
-        ftimer.stop()
-
-    # skeleton and synapse generation and rendering have independent dependencies and target storage
-    assert global_params.config.use_onthefly_views, ('"use_onthefly_views" must be True to enable parallel '
-                                                     'execution of skel and syn generation')
-    procs = []
-    for func in [start_syn_gen, start_skel_gen, start_neuron_rendering]:
-        if 1:  # not batchjob_enabled():  # do not use parallel processing for timings
-            func()
-            continue
-        p = Process(target=func)
-        p.start()
-        procs.append(p)
-        time.sleep(10)
-    for p in procs:  # procs is empty list, if batch jobs are disabled.
-        p.join()
-        if p.exitcode != 0:
-            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
-                            f'code {p.exitcode}.')
-        p.close()
-
-    log.info('Step 7/10 - Compartment prediction')
-    ftimer.start('Compartment predictions')
-    exec_inference.run_semsegaxoness_prediction()
-    if not global_params.config.use_point_models:
-        exec_inference.run_semsegspiness_prediction()
-    ftimer.stop()
-
-    # TODO: this step can be launched in parallel with the morphology extraction!
-    ftimer.start('Spine head calculation')
-    exec_syns.run_spinehead_volume_calc()
-    ftimer.stop()
-
-    log.info('Step 8/10 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
+    #
+    # log.info('Step 3/10 - Glia separation')
+    # if global_params.config.prior_glia_removal:
+    #     ftimer.start('Glia separation')
+    #     if not global_params.config.use_point_models:
+    #         exec_render.run_glia_rendering()
+    #         exec_inference.run_glia_prediction()
+    #     else:
+    #         exec_inference.run_glia_prediction_pts()
+    #     exec_inference.run_glia_splitting()
+    #     ftimer.stop()
+    #
+    # log.info('Step 4/10 - Creating SuperSegmentationDataset')
+    # ftimer.start('SSD generation')
+    # exec_init.run_create_neuron_ssd()
+    # ftimer.stop()
+    #
+    # def start_skel_gen():
+    #     log.info('Step 6/10 - Skeleton generation')
+    #     ftimer.start('Skeleton generation')
+    #     exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
+    #     ftimer.stop()
+    #
+    # def start_neuron_rendering():
+    #     if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+    #         log.info('Step 6.5/10 - Neuron rendering')
+    #         ftimer.start('Neuron rendering')
+    #         exec_render.run_neuron_rendering()
+    #         ftimer.stop()
+    #
+    # def start_syn_gen():
+    #     log.info('Step 5/10 - Synapse detection')
+    #     ftimer.start('Synapse detection')
+    #     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
+    #                                  cube_of_interest_bb=cube_of_interest_bb)
+    #     ftimer.stop()
+    #
+    # # skeleton and synapse generation and rendering have independent dependencies and target storage
+    # assert global_params.config.use_onthefly_views, ('"use_onthefly_views" must be True to enable parallel '
+    #                                                  'execution of skel and syn generation')
+    # procs = []
+    # for func in [start_syn_gen, start_skel_gen, start_neuron_rendering]:
+    #     if 1:  # not batchjob_enabled():  # do not use parallel processing for timings
+    #         func()
+    #         continue
+    #     p = Process(target=func)
+    #     p.start()
+    #     procs.append(p)
+    #     time.sleep(10)
+    # for p in procs:  # procs is empty list, if batch jobs are disabled.
+    #     p.join()
+    #     if p.exitcode != 0:
+    #         raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+    #                         f'code {p.exitcode}.')
+    #     p.close()
+    #
+    # log.info('Step 7/10 - Compartment prediction')
+    # ftimer.start('Compartment predictions')
+    # exec_inference.run_semsegaxoness_prediction()
+    # if not global_params.config.use_point_models:
+    #     exec_inference.run_semsegspiness_prediction()
+    # ftimer.stop()
+    #
+    # # TODO: this step can be launched in parallel with the morphology extraction!
+    # ftimer.start('Spine head calculation')
+    # exec_syns.run_spinehead_volume_calc()
+    # ftimer.stop()
+    #
+    # log.info('Step 8/10 - Morphology extraction')
+    # ftimer.start('Morphology extraction')
+    # exec_inference.run_morphology_embedding()
+    # ftimer.stop()
 
     log.info('Step 9/10 - Celltype analysis')
     ftimer.start('Celltype analysis')
