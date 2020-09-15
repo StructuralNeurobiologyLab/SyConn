@@ -107,14 +107,17 @@ def kimimaro_mergeskels(path_list: str, cell_id: int, nb_cpus: bool = None) -> c
     # `stitch_skel_nx` merges all connected components regardless of their distance.
     # TODO: kimimaro.postprocess should probably be executed before `stitch_skel_nx` to remove "dust" - requires
     #  performance monitoring in large, "branchy" neurons and astrocytes.
-    skel = kimimaro.postprocess(
+    skel_post = kimimaro.postprocess(
         skel,
         dust_threshold=500,  # physical units
         tick_threshold=1000  # physical units
     )
+    if skel_post.vertices.size == 0 and skel.vertices.size != 0:
+        skel_post = skel
     # `kimimaro.postprocess` does not guarantee to return a single connected component (?!), merge them again..
-    skel = nxgraph2skelcv(stitch_skel_nx(skelcv2nxgraph(skel)))
-    return skel
+    if skel_post.vertices.size > 0:
+        skel_post = nxgraph2skelcv(stitch_skel_nx(skelcv2nxgraph(skel_post)))
+    return skel_post
 
 
 def skelcv2nxgraph(skel: cloudvolume.Skeleton) -> nx.Graph:
@@ -129,6 +132,8 @@ def skelcv2nxgraph(skel: cloudvolume.Skeleton) -> nx.Graph:
 
     """
     g = nx.Graph()
+    if skel.vertices.size == 0:
+        return g
     g.add_nodes_from([(ix, dict(position=coord, radius=skel.radii[ix])) for ix, coord in enumerate(skel.vertices)])
     g.add_edges_from(skel.edges)
     return g
