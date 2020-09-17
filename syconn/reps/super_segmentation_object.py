@@ -2177,6 +2177,8 @@ class SuperSegmentationObject(SegmentationBase):
         if len(vertices) < 5e6:
             ds_vertices = max(1, ds_vertices // 10)
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
+        if np.ndim(vertex_labels) == 2:
+            vertex_labels = vertex_labels.squeeze(1)
         vertices = vertices[::ds_vertices]
         for ign_l in ignore_labels:
             vertices = vertices[vertex_labels != ign_l]

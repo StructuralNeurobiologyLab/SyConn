@@ -436,9 +436,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
             Number of voxels.
         """
+        if self._size is None and 'size' in self.attr_dict:
+            self._size = self.attr_dict['size']
         if self._size is None and self.attr_dict_exists:
             self._size = self.lookup_in_attribute_dict("size")
-
         if self._size is None:
             self.calculate_size()
 
@@ -456,9 +457,10 @@ class SegmentationObject(SegmentationBase):
 
     @property
     def bounding_box(self) -> np.ndarray:
+        if self._bounding_box is None and 'bounding_box' in self.attr_dict:
+            self._bounding_box = self.attr_dict['bounding_box']
         if self._bounding_box is None and self.attr_dict_exists:
-            self._bounding_box = self.lookup_in_attribute_dict("bounding_box")
-
+            self._bounding_box = self.lookup_in_attribute_dict('bounding_box')
         if self._bounding_box is None:
             self.calculate_bounding_box()
 

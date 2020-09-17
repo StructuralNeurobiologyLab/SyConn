@@ -2198,6 +2198,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_synids = np.array([syn.id for syn in sso.syn_ssv])
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
+    if np.ndim(sp_semseg) == 2:
+        sp_semseg = sp_semseg.squeeze(1)
     ignore_labels = sso.config['spines']['semseg2coords_spines']['ignore_labels']
     for l in ignore_labels:
         verts = verts[sp_semseg != l]
