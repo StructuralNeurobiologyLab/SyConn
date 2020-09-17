@@ -173,11 +173,11 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                 time.sleep(0.5)
                 continue
             pred_func(m, inp, q_out, d_out, q_progress, device, bs)
-        log_handler.debug(f'Pred worker {worker_cnt} stopped.')
     except Exception as e:
         log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
     for _ in range(n_worker_postporc):
         q_out.put(f'STOP{worker_cnt}')
+    log_handler.debug(f'Pred worker {worker_cnt} done.')
 
 
 def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func: Callable,
@@ -213,6 +213,7 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
     time.sleep(1)
     for _ in range(n_worker_pred):
         q_out.put(f'STOP{worker_cnt}')
+    log_handler.debug(f'Loader {worker_cnt} done.')
     q_loader_sync.put('DONE')
 
 
@@ -250,11 +251,12 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
         else:
             _ = q_loader_sync.get()
             cnt_loder_done += 1
+    log_handler.debug(f'Listener done')
 
 
-def _vert_counter(args):
+def _size_counter(args):
     ssv_id, ssd_kwargs = args
-    return SuperSegmentationObject(ssv_id, **ssd_kwargs).mesh[1].shape[0]
+    return SuperSegmentationObject(ssv_id, **ssd_kwargs).size
 
 
 def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
@@ -387,13 +389,12 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             ssv_ids = ssd.ssv_ids
         else:
             ssv_ids = np.array(ssv_ids, np.uint)
-        # redundancy, default: 3 * npoints / #vertices
-        ssv_n_vertices = start_multiprocess_imap(_vert_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
-                                                 nb_cpus=None)
-        ssv_n_vertices = np.array(ssv_n_vertices)
-        sorted_ix = np.argsort(ssv_n_vertices)[::-1]
+        ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
+                                            nb_cpus=None)
+        ssv_sizes = np.array(ssv_sizes)
+        sorted_ix = np.argsort(ssv_sizes)[::-1]
         ssv_ids = ssv_ids[sorted_ix]
-        params_in = [{**params_kwargs, **dict(ssv_ids=ch)} for ch in chunkify(ssv_ids, int(np.ceil(len(ssv_ids) / nloader)))]
+        params_in = [{**params_kwargs, **dict(ssv_ids=[ssv_id])} for ssv_id in ssv_ids]
     else:
         params_kwargs = dict(batchsize=bs, npoints=npoints, transform=transform, ctx_size=ctx_size, **loader_kwargs)
         params_in = [{**params_kwargs, **dict(ssv_params=[ch])} for ch in ssd_kwargs]
@@ -1716,7 +1717,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=10, npredictor=5, bs=10,
+    default_kwargs = dict(nloader=10, npredictor=4, bs=10,
                           loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size'] / 3,
                                              recalc_skeletons=True))
     default_kwargs.update(add_kwargs)
@@ -1801,7 +1802,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         map_myelin = True
     else:
         map_myelin = False
-    default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
+    default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
