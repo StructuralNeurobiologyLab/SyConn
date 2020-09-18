@@ -1871,8 +1871,39 @@ class SegmentationDataset(SegmentationBase):
             property_keys: Property keys. Numpy cache arrays must exist.
         """
         # look-up for so IDs to index in cache arrays
+        property_keys = list(property_keys)  # copy
+        for k in self._property_cache:
+            if k in property_keys:
+                property_keys.remove(k)
         if len(property_keys) == 0:
             return
         if self._soid2ix is None:
             self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
         self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
+
+    def get_volume(self, source: str = 'total') -> float:
+        """
+        Calculate the RAG volume.
+
+        Args:
+            source: Allowed sources: 'total' (all SVs contained), 'neuron' (use glia-free RAG), 'glia' (use glia RAG)
+
+        Returns:
+            Volume in mm^3.
+        """
+        self.enable_property_cache(['size'])
+        if source == 'neuron':
+            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+            svids = g.nodes()
+        elif source == 'glia':
+            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint)
+            svids = g.nodes()
+        elif source == 'total':
+            svids = self.ids
+        else:
+            raise ValueError(f'Unknown source type "{source}".')
+        total_size = 0
+        for svid in svids:
+            total_size += self.get_segmentation_object(svid).size
+        total_size_cmm = np.prod(self.scaling) * total_size / 1e18
+        return total_size_cmm

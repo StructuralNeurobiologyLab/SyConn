@@ -84,8 +84,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
 
-    log = initialize_logging('synapse_detection',
-                             global_params.config.working_dir + '/logs/',
+    log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
 
     kd_seg_path = global_params.config.kd_seg_path
@@ -143,17 +142,10 @@ def run_spinehead_volume_calc():
     log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    # shuffle SV IDs
-    np.random.seed(0)
-
     log.info('Starting spine head volume calculation.')
-    multi_params = ssd.ssv_ids
-    ordering = np.argsort(ssd.load_cached_data('size'))
-    multi_params = multi_params[ordering[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
     multi_params = chunkify(multi_params, min(global_params.config.ncore_total * 10, 1000))
     multi_params = [(ixs,) for ixs in multi_params]
 
-    batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
-                    remove_jobfolder=True)
-    log.info('Finished processing of {} SSVs.'
-             ''.format(len(ordering)))
+    batchjob_script(multi_params, "calculate_spinehead_volume", log=log, remove_jobfolder=True)
+    log.info(f'Finished processing of {len(ssd.ssv_ids)} SSVs.')

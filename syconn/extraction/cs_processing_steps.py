@@ -65,7 +65,8 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                       version=ssd_version)
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
+    for ids_small_chunk in chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]],
+                                    global_params.config.ncore_total * 2):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
     if not qu.batchjob_enabled():
@@ -82,7 +83,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total * 2):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
     if not qu.batchjob_enabled():
@@ -1702,6 +1703,7 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
         log = log_extraction
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
+    log.info(f'Starting export of connectivity matrix as csv file to "{dest_name}".')
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 

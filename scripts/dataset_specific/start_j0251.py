@@ -12,7 +12,7 @@ import networkx as nx
 
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
 
@@ -205,7 +205,7 @@ if __name__ == '__main__':
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
     # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
     #          'can be analyzed via the KNOSSOS-SyConn plugin at '

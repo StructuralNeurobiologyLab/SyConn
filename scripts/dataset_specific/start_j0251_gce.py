@@ -13,8 +13,7 @@ import networkx as nx
 import shutil
 from multiprocessing import Process
 
-
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
 from syconn.mp.batchjob_utils import batchjob_enabled, nodestates_slurm
@@ -30,7 +29,9 @@ if __name__ == '__main__':
     ncores_per_node = node_state['cpus']
     mem_per_node = node_state['memory']
     ngpus_per_node = 2  # node_state currently does not hold the number of gpus for 'gres' resource
-    number_of_nodes = 24
+    number_of_nodes = 20
+    shape_j0251 = np.array([27119, 27350, 15494])
+    cube_size = np.array([2048, 2048, 1024]) * 4
     # check that cluster is configured accordingly
     assert number_of_nodes == np.sum([v['state'] == 'idle' for v in nodestates_slurm().values()])
     prior_glia_removal = True
@@ -60,7 +61,9 @@ if __name__ == '__main__':
           }
          )
     ]
-    chunk_size = (384, 384, 192)
+    chunk_size = (512, 512, 256)
+    if cube_size[0] <= 2048:
+        chunk_size = (256, 256, 256)
     n_folders_fs = 10000
     n_folders_fs_sc = 10000
 
@@ -87,15 +90,11 @@ if __name__ == '__main__':
     # Prepare data
     # --------------------------------------------------------------------------
     # Setup working directory and logging
-    shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) * 4
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
     working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
                   f"{'_'.join(map(str, cube_size))}_{number_of_nodes}nodes"
-    if use_point_models:
-        working_dir += f'_ptmodels'
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')
     shutil.copy(os.path.abspath(__file__), f'{working_dir}/logs/')
@@ -176,9 +175,10 @@ if __name__ == '__main__':
 
     log.info('Step 3/10 - Glia separation')
     if global_params.config.prior_glia_removal:
-        ftimer.start('Glia prediction (multiv-views)')
         global_params.config['use_point_models'] = False
         global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Glia prediction (multi-views)')
         # if not global_params.config.use_point_models:
         exec_render.run_glia_rendering()
         exec_inference.run_glia_prediction()
@@ -186,9 +186,10 @@ if __name__ == '__main__':
 
         # else:
         if test_point_models:
-            ftimer.start('Glia prediction (points)')
             global_params.config['use_point_models'] = True
             global_params.config.write_config()
+            time.sleep(10)  # wait for changes to apply
+            ftimer.start('Glia prediction (points)')
             exec_inference.run_glia_prediction_pts()
             ftimer.stop()
 
@@ -241,12 +242,14 @@ if __name__ == '__main__':
         p.close()
 
     log.info('Step 7/10 - Compartment prediction')
-    ftimer.start('Compartment predictions (multi-views)')
     global_params.config['use_point_models'] = False
     global_params.config.write_config()
+    time.sleep(10)  # wait for changes to apply
+    ftimer.start('Compartment predictions (multi-views)')
     exec_inference.run_semsegaxoness_prediction()
     exec_inference.run_semsegspiness_prediction()
     ftimer.stop()
+    # TODO: requires inspection
     # if not global_params.config.use_point_models:
     if test_point_models:
         ftimer.start('Compartment predictions (points)')
@@ -261,28 +264,32 @@ if __name__ == '__main__':
     ftimer.stop()
 
     log.info('Step 8/10 - Morphology extraction')
-    ftimer.start('Morphology extraction (multi-views)')
     global_params.config['use_point_models'] = False
     global_params.config.write_config()
+    time.sleep(10)  # wait for changes to apply
+    ftimer.start('Morphology extraction (multi-views)')
     exec_inference.run_morphology_embedding()
     ftimer.stop()
     if test_point_models:
-        ftimer.start('Morphology extraction (points)')
         global_params.config['use_point_models'] = True
         global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Morphology extraction (points)')
         exec_inference.run_morphology_embedding()
         ftimer.stop()
 
     log.info('Step 9/10 - Celltype analysis')
-    ftimer.start('Celltype analysis (multi-views)')
     global_params.config['use_point_models'] = False
     global_params.config.write_config()
+    time.sleep(10)  # wait for changes to apply
+    ftimer.start('Celltype analysis (multi-views)')
     exec_inference.run_celltype_prediction()
     ftimer.stop()
     if test_point_models:
-        ftimer.start('Celltype analysis (points)')
         global_params.config['use_point_models'] = True
         global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Celltype analysis (points)')
         exec_inference.run_celltype_prediction()
         ftimer.stop()
 
@@ -291,9 +298,10 @@ if __name__ == '__main__':
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
-             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+
+    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
+    #          'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
     # os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 

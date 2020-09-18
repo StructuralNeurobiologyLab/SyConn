@@ -221,6 +221,17 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
             else global_params.config.ncore_total * 4
     log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=True)
+
+    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+
+    # precompute rendering locations
+    multi_params = chunkify(sds.so_dir_paths, global_params.config.ncore_total * 4)
+    so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
+    multi_params = [[par, so_kwargs] for par in multi_params]
+    # TODO: remove comment as soon as glia separation supports on the fly view generation
+    # if not global_params.config.use_onthefly_views:
+    _ = qu.batchjob_script(multi_params, "sample_location_caching", remove_jobfolder=True, log=log)
+
     log.info("Preparing RAG.")
     np.random.seed(0)
 
@@ -234,7 +245,6 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
 
     # generate parameter for view rendering of individual SSV
-    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
     bbs = sds.load_cached_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):

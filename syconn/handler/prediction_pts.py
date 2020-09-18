@@ -16,7 +16,7 @@ import os
 import time
 import glob
 from collections import defaultdict
-from multiprocessing import Process, Queue, Manager
+from multiprocessing import Process, Queue, Manager, queues
 from typing import Iterable, Union, Optional, Tuple, Callable, List
 import morphx.processing.clouds as clouds
 import networkx as nx
@@ -33,6 +33,7 @@ from syconn import global_params
 from syconn.handler import log_handler
 from syconn.handler.basics import chunkify_successive, chunkify
 from syconn.mp.mp_utils import start_multiprocess_imap
+from syconn.handler.prediction import certainty_estimate
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
@@ -48,7 +49,6 @@ pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2,
 pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
-m_postproc = Manager()
 
 
 # TODO: move to handler.basics
@@ -103,24 +103,25 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
     """
     stops_received = set()
     while True:
-        if not q_postproc.empty():
-            inp = q_postproc.get()
+        try:
+            inp = q_postproc.get_nowait()
             if 'STOP' in inp:
                 if inp not in stops_received:
                     stops_received.add(inp)
                 else:
-                    q_postproc.put(inp)
+                    q_postproc.put_nowait(inp)
                     time.sleep(np.random.randint(2))
                 if len(stops_received) == n_worker_pred:
                     break
                 continue
-        else:
+        except queues.Empty:
             if len(stops_received) == n_worker_pred:
                 break
-            time.sleep(0.1)
+            time.sleep(0.5)
             continue
         try:
-            q_out.put(postproc_func(inp, d_postproc, **postproc_kwargs))
+            res = postproc_func(inp, d_postproc, **postproc_kwargs)
+            q_out.put_nowait(res)
         except Exception as e:
             log_handler.error(f'Error during worker_postproc "{str(postproc_func)}": {str(e)}')
             break
@@ -129,7 +130,7 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
 
 
 def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q_in: Queue,
-                model_loader: Callable, pred_func: Callable, n_worker_load: int, n_worker_postporc: int,
+                model_loader: Callable, pred_func: Callable, n_worker_load: int, n_worker_postproc: int,
                 device: str, mpath: Optional[str] = None, bs: Optional[int] = None,
                 model_loader_kwargs: Optional[dict] = None):
     """
@@ -149,7 +150,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         device: Device
         bs: Batch size.
         n_worker_load: Number of loader.
-        n_worker_postporc: Number of postproc worker.
+        n_worker_postproc: Number of postproc worker.
         model_loader_kwargs: Additional keyword arguments for the model loader.
     """
     try:
@@ -158,24 +159,24 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         m = model_loader(mpath, device, **model_loader_kwargs)
         stops_received = set()
         while True:
-            if not q_in.empty():
-                inp = q_in.get()
+            try:
+                inp = q_in.get_nowait()
                 if 'STOP' in inp:
                     if inp not in stops_received:
                         stops_received.add(inp)
                     else:
-                        q_in.put(inp)
+                        q_in.put_nowait(inp)
                         time.sleep(np.random.randint(25) / 10)
                     if len(stops_received) == n_worker_load:
                         break
                     continue
-            else:
-                time.sleep(0.5)
+            except queues.Empty:
+                time.sleep(0.25)
                 continue
             pred_func(m, inp, q_out, d_out, q_progress, device, bs)
     except Exception as e:
         log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
-    for _ in range(n_worker_postporc):
+    for _ in range(n_worker_postproc):
         q_out.put(f'STOP{worker_cnt}')
     log_handler.debug(f'Pred worker {worker_cnt} done.')
 
@@ -193,19 +194,23 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
         n_worker_pred:
     """
     while True:
-        if q_loader.empty():
+        kwargs = q_loader.get()
+        if kwargs is None:
             break
-        else:
-            kwargs = q_loader.get()
         try:
             res = loader_func(**kwargs)
             for el in res:
+                dt = 0
                 while True:
-                    if q_out.full():
-                        time.sleep(1)
-                    else:
+                    if dt > 60:
+                        log_handler.error(f'Loader {worker_cnt}: Locked for {dt} s.')
+                    try:
+                        q_out.put_nowait(el)
+                    except queues.Full:
+                        time.sleep(0.25)
+                        dt += 1
+                    finally:
                         break
-                q_out.put(el)
         except Exception as e:
             log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
             break
@@ -233,9 +238,9 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
     cnt_loder_done = 0
     while True:
         if q_progress.empty():
-            time.sleep(0.2)
+            time.sleep(0.25)
         else:
-            res = q_progress.get()
+            res = q_progress.get_nowait()
             if res is None:  # final stop
                 assert cnt_loder_done == nloader
                 if show_progress:
@@ -249,7 +254,7 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
         if q_loader_sync.empty() or cnt_loder_done == nloader:
             pass
         else:
-            _ = q_loader_sync.get()
+            _ = q_loader_sync.get_nowait()
             cnt_loder_done += 1
     log_handler.debug(f'Listener done')
 
@@ -357,7 +362,6 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
 
     """
-    global m_postproc
     if loader_kwargs is None:
         loader_kwargs = dict()
     if model_loader_kwargs is None:
@@ -405,14 +409,17 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         nsamples_tot *= loader_kwargs['redundancy']
 
     q_loader = Queue()
-    for el in params_in:
-        q_loader.put(el)
-    q_load = Queue(maxsize=20 * npredictor)
+    # fill 1 param per worker now; fill the rest one after another s.t. number of elements in 'q_load' is controlled
+    for el in params_in[:nloader]:
+        q_loader.put_nowait(el)
+
+    q_load = Queue()
     q_progress = Queue()
-    d_postproc = m_postproc.dict()
+    d_postproc = dict()
     for k in ssv_ids:
-        d_postproc[k] = m_postproc.list()
-    q_postproc = m_postproc.Queue()
+        d_postproc[k] = Queue()
+    q_postproc = Queue()
+
     q_out = Queue()
     q_loader_sync = Queue()
     producers = [Process(target=worker_load, args=(ii, q_loader, q_load, q_loader_sync, loader_func, npredictor))
@@ -428,6 +435,12 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                                                        npredictor)) for _ in range(npostproc)]
     for c in postprocs:
         c.start()
+
+    for el in params_in[nloader:] + [None] * nloader:
+        while q_load.qsize() > 20:
+            time.sleep(1)
+        q_loader.put(el)
+
     dict_out = collections.defaultdict(list)
     cnt_end = 0
     lsnr = Process(target=listener, args=(q_progress, q_loader_sync, nloader, nsamples_tot, show_progress))
@@ -438,15 +451,14 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
                 break
             time.sleep(0.5)
             continue
-        res = q_out.get()
+        res = q_out.get_nowait()
         if res == 'END':
             cnt_end += 1
             continue
         output_func(dict_out, res)
-    q_progress.put(None)
+    q_progress.put_nowait(None)
     lsnr.join()
     error_occurred = lsnr.exitcode != 0
-
     for p in producers:
         if error_occurred:
             p.terminate()
@@ -462,9 +474,6 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             c.terminate()
         c.join()
         c.close()
-    # necessary for subsequent runs?
-    del m_postproc
-    m_postproc = Manager()
     return dict_out
 
 
@@ -563,7 +572,6 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
     """
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    # TODO: add `use_syntype kwarg and cellshape only
     feat_dc = dict(pts_feat_dict)
     if 'syn_ssv' in feat_dc:
         del feat_dc['syn_ssv']
@@ -575,6 +583,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         ssv = ssd.get_super_segmentation_object(ssv_id)
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin))
         ssv.clear_cache()
+
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
         pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
@@ -582,6 +591,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         source_nodes_all = np.random.choice(nodes, redundancy_ssv, replace=len(nodes) < redundancy_ssv)
         rand_ixs = chunkify(np.random.choice(redundancy_ssv, redundancy_ssv, replace=False), n_batches)
         npoints_ssv = min(len(hc.vertices), npoints)
+        if npoints_ssv == 0:
+            log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
         if use_ctx_sampling:
             node_ids_all = np.array(context_splitting_kdt_many(hc, source_nodes_all, ctx_size), dtype=object)
         else:
@@ -600,16 +611,23 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
                 node_ids = node_ids.astype(np.int)
                 # This might be slow
+                sn_cnt = 1
                 while True:
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                     sample_feats = hc_sub.features
-                    if len(sample_feats) > 0:
+                    if len(sample_feats) > 0 or npoints_ssv == 0:
                         break
-                    source_node = np.random.choice(source_nodes_batch)
+                    if sn_cnt >= len(source_nodes_all):
+                        msg = (f'Crould not find context with > 0 vertices during batch generation of {ssv} '
+                               f'in method "pts_loader_scalar_infer".')
+                        log_handler.error(msg)
+                        raise ValueError(msg)
+                    source_node = source_nodes_all[sn_cnt]
                     if use_ctx_sampling:
                         node_ids = context_splitting_kdt_many(hc, [source_node], ctx_size)[0]
                     else:
                         node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                    sn_cnt += 1
                 sample_feats = hc_sub.features
                 sample_pts = hc_sub.vertices
                 # make sure there is always the same number of points within a batch
@@ -716,8 +734,11 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
-                # local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
+                cnt = 0
                 while True:
+                    if cnt > 2*len(source_nodes):
+                        raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
+                    cnt += 1
                     if use_ctx_sampling:
                         node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     else:
@@ -783,11 +804,10 @@ def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
     del inp
     res = dict(probas=np.concatenate(res), n_batches=n_batches)
 
-    q_cnt.put(n_samples)
-
+    q_cnt.put_nowait(n_samples)
+    d_out[ssv_kwargs['ssv_id']].put(res)
     if batch_progress == 1:
-        q_out.put(ssv_kwargs)
-    d_out[ssv_kwargs['ssv_id']].append(res)
+        q_out.put_nowait(ssv_kwargs)
 
 
 def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
@@ -816,8 +836,8 @@ def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
             out = m(*g_inp).cpu().numpy()
         res.append(out)
     del inp
-    q_cnt.put(n_samples)
-    q_out.put(([ssv_kwargs['ssv_id']] * n_samples, res))
+    q_cnt.put_nowait(n_samples)
+    q_out.put_nowait(([ssv_kwargs['ssv_id']] * n_samples, res))
 
 
 def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = None,
@@ -841,15 +861,16 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
     sso = SuperSegmentationObject(**ssv_kwargs)
     sso.load_attr_dict()
     celltype_probas = []
+
     while True:
-        if len(d_in[sso.id]) < curr_ix + 1:
-            time.sleep(0.1)
+        try:
+            # res: [(dict(t_pts=.., t_label, batch_process)]
+            res = d_in[sso.id].get_nowait()
+            curr_ix += 1
+        except queues.Empty:
+            time.sleep(0.25)
             continue
-        # res: [(dict(probas=.., batch_process)]
-        res = d_in[sso.id][curr_ix]
         celltype_probas.append(res['probas'])
-        d_in[sso.id][curr_ix] = None
-        curr_ix += 1
         if curr_ix == res['n_batches']:
             break
 
@@ -865,10 +886,9 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
     cls = np.argmax(logit, axis=1).squeeze()
     cls_maj = collections.Counter(cls).most_common(1)[0][0]
 
-    sso.save_attributes([pred_key], [cls_maj])
-    sso.save_attributes([f"{pred_key}_probas"], [logit])
+    sso.save_attributes([pred_key, f"{pred_key}_probas", f"{pred_key}_certainty"],
+                        [cls_maj, logit, certainty_estimate(logit)])
 
-    del d_in[sso.id]
     return [sso.id], [True]
 
 
@@ -901,6 +921,8 @@ def pts_loader_local_skel(ssv_params: List[dict], out_point_label: Optional[List
         base_node_dst: Distance between base nodes for context retrieval during eval mode.
         use_syntype: Use synapse type as point feature.
         use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm).
+        recalc_skeletons: Do not use existing cell skeleton but recalculate it with
+            :py:func:`syconn.reps.super_segmentation_object.SuperSegmentationObject.calculate_skeleton`.
         use_myelin: Use myelin point cloud as inpute feature.
 
     Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
@@ -1072,10 +1094,10 @@ def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
             res.append(out)
     res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
 
-    q_cnt.put(1. / n_batches)
+    q_cnt.put_nowait(1. / n_batches)
+    d_out[ssv_params['ssv_id']].put(res)
     if batch_progress == 1:
-        q_out.put(ssv_params)
-    d_out[ssv_params['ssv_id']].append(res)
+        q_out.put_nowait(ssv_params)
 
 
 def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: Optional[int] = None,
@@ -1085,21 +1107,21 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
     sso = SuperSegmentationObject(**ssv_params)
     node_probas = []
     node_coords = []
+
     while True:
-        if len(d_in[sso.id]) < curr_ix + 1:
-            time.sleep(0.5)
+        try:
+            # res: [(dict(t_pts=.., t_label, batch_process)]
+            res = d_in[sso.id].get_nowait()
+            curr_ix += 1
+        except queues.Empty:
+            time.sleep(0.25)
             continue
-        # res: [(dict(t_pts=.., t_label, batch_process)]
-        res = d_in[sso.id][curr_ix]
         # el['t_l'] has shape (b, num_points, n_classes) -> (n_nodes, n_classes)
         node_probas.append(res['t_l'].reshape(-1, 2))
         # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
         node_coords.append(res['t_pts'].reshape(-1, 3))
-        d_in[sso.id][curr_ix] = None
-        curr_ix += 1
         if curr_ix == res['n_batches']:
             break
-    del d_in[sso.id]
     node_probas = np.concatenate(node_probas)
     if apply_softmax:
         node_probas = scipy.special.softmax(node_probas, axis=1)
@@ -1162,10 +1184,10 @@ def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
             res.append(out)
     res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
 
-    q_cnt.put(1. / n_batches)
+    q_cnt.put_nowait(1. / n_batches)
+    d_out[ssv_params['ssv_id']].put(res)
     if batch_progress == 1:
         q_out.put(ssv_params)
-    d_out[ssv_params['ssv_id']].append(res)
 
 
 def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str] = None
@@ -1175,20 +1197,20 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
     node_embedding = []
     node_coords = []
     while True:
-        if len(d_in[sso.id]) < curr_ix + 1:
+        # res: [(dict(t_pts=.., t_label, batch_process)]
+        try:
+            res = d_in[sso.id].get_nowait()
+            curr_ix += 1
+        except queues.Empty:
             time.sleep(0.5)
             continue
-        # res: [(dict(t_pts=.., t_label, batch_process)]
-        res = d_in[sso.id][curr_ix]
         # el['t_l'] has shape (b, num_points, n_latent_dim) -> (n_nodes, n_latent_dim)
         node_embedding.append(res['t_l'].reshape(-1, res['t_l'].shape[-1]))
         # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
         node_coords.append(res['t_pts'].reshape(-1, 3))
-        d_in[sso.id][curr_ix] = None
-        curr_ix += 1
         if curr_ix == res['n_batches']:
             break
-    del d_in[sso.id]
+
     node_embedding = np.concatenate(node_embedding)
     node_coords = np.concatenate(node_coords)
 
@@ -1485,10 +1507,10 @@ def pts_pred_semseg(m, inp, q_out, d_out, q_cnt, device, bs):
             res.append(out)
     res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
 
-    q_cnt.put(1. / n_batches)
+    q_cnt.put_nowait(1. / n_batches)
+    d_out[ssv_params['ssv_id']].put(res)
     if batch_progress == 1:
-        q_out.put(ssv_params)
-    d_out[ssv_params['ssv_id']].append(res)
+        q_out.put_nowait(ssv_params)
 
 
 def pts_postproc_semseg(ssv_id: int, d_in: dict, working_dir: Optional[str] = None,
@@ -1512,12 +1534,15 @@ def pts_postproc_semseg(ssv_id: int, d_in: dict, working_dir: Optional[str] = No
     skel = sso.skeleton
     node_preds = []
     node_coords = []
+
     while True:
-        if len(d_in[ssv_id]) < curr_ix + 1:
-            time.sleep(0.5)
+        try:
+            # res: [(dict(t_pts=.., t_label, batch_process)]
+            res = d_in[sso.id].get_nowait()
+            curr_ix += 1
+        except queues.Empty:
+            time.sleep(0.25)
             continue
-        # res: [(dict(t_pts=.., t_label, batch_process)]
-        res = d_in[ssv_id][curr_ix]
         # el['t_l'] has shape (b, num_points, n_classes) -> (n_nodes, 1)
         node_preds.append(np.argmax(res['t_l'].reshape(-1, 2), axis=1)[..., None])
         # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
@@ -1535,7 +1560,6 @@ def pts_postproc_semseg(ssv_id: int, d_in: dict, working_dir: Optional[str] = No
         node_pred[ii] = collections.Counter(preds).most_common(1)[0][0]
     # every node has at least one prediction
     assert np.sum(node_pred == -1) == 0, "Unpredicted skeleton node."
-    d_in[ssv_id][curr_ix] = None
     return [ssv_id], [True]
 
 
@@ -1717,7 +1741,7 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
-    default_kwargs = dict(nloader=10, npredictor=4, bs=10,
+    default_kwargs = dict(nloader=8, npredictor=4, npostproc=2, bs=10,
                           loader_kwargs=dict(n_out_pts=200, base_node_dst=loader_kwargs['ctx_size'] / 3,
                                              recalc_skeletons=True))
     default_kwargs.update(add_kwargs)
@@ -1759,7 +1783,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
         use_myelin = True
     else:
         use_myelin = False
-    default_kwargs = dict(nloader=10, npredictor=4, bs=10, loader_kwargs=dict(
+    default_kwargs = dict(nloader=8, npredictor=4, npostproc=2, bs=10, loader_kwargs=dict(
         n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True,
         use_myelin=use_myelin))
     postproc_kwargs = dict(pred_key=pred_key)
@@ -1802,7 +1826,8 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         map_myelin = True
     else:
         map_myelin = False
-    default_kwargs = dict(nloader=10, npredictor=5, bs=10, loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
+    default_kwargs = dict(nloader=8, npredictor=4, bs=10, npostproc=2,
+                          loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
@@ -1874,7 +1899,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=10, npredictor=2, npostproc=10, bs=batchsizes)
+    default_kwargs = dict(nloader=8, npredictor=3, npostproc=2, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
@@ -2097,11 +2122,12 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
     # batch_progress: (batch_progress, n_batches, p_t, pred_types), or (batch_progress, n_batches, p_t)
     res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
                batch_progress=batch_progress, idcs_voxel=idcs_voxel)
-    q_cnt.put(1./batch_progress[1]/len(batch_progress[3]))
+    q_cnt.put_nowait(1./batch_progress[1]/len(batch_progress[3]))
     pred_types = batch_progress[3]
+
+    d_out[ssv_params['ssv_id']].put(res)
     if batch_progress[0] == 1 and batch_progress[2] == pred_types[0]:
         q_out.put(ssv_params)
-    d_out[ssv_params['ssv_id']].append(res)
 
 
 def pts_postproc_cpmt(sso_params: dict, d_in: dict):
@@ -2125,11 +2151,15 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     pred_types = None
     p_t_progress = {}
     p_t_done = {}
+
     while True:
-        if len(d_in[sso.id]) < curr_ix + 1:
-            time.sleep(0.5)
+        try:
+            # res: [(dict(t_pts=.., t_label, batch_process)]
+            res = d_in[sso.id].get_nowait()
+            curr_ix += 1
+        except queues.Empty:
+            time.sleep(0.25)
             continue
-        res = d_in[sso.id][curr_ix]
         if voxel_idcs is None:
             voxel_idcs = res['idcs_voxel']
         if pred_types is None:
@@ -2142,8 +2172,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         p_t = res['batch_progress'][2]
         preds[p_t].append(np.argmax(res['preds'], axis=1))
         preds_idcs[p_t].append(res['idcs'])
-        d_in[sso.id][curr_ix] = None
-        curr_ix += 1
         # check if all predictions for this sso were received (all pred_types must evaluate to True)
         p_t_progress[p_t] += 1
         if p_t_progress[p_t] == res['batch_progress'][1]:
@@ -2154,7 +2182,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         if done:
             break
     assert len(d_in[sso.id]) == curr_ix
-    del d_in[sso.id]
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))

@@ -109,7 +109,7 @@ class SuperSegmentationDataset(SegmentationBase):
     def __init__(self, working_dir: Optional[str] = None, version: Optional[str] = None, ssd_type: str = 'ssv',
                  version_dict: Optional[Dict[str, str]] = None, sv_mapping: Optional[Union[Dict[int, int], str]] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
-                 sso_caching: bool = False, sso_locking: bool = False,
+                 sso_caching: bool = False, sso_locking: bool = False, create: bool = False,
                  sd_lookup: Optional[Dict[str, SegmentationDataset]] = None):
         """
         Args:
@@ -129,7 +129,7 @@ class SuperSegmentationDataset(SegmentationBase):
             sso_locking: If True, locking is enabled for SSV files.
             sd_lookup: Lookup dict for :py:class:`~syconn.reps.segmentation.SegmentationDataset`, this will enable
                 usage of property cache arrays whenever possible. Only works for the attributes specified during init.
-
+            create: Create folder.
         """
         self.ssv_dict = {}
         self._mapping_dict = None
@@ -190,8 +190,8 @@ class SuperSegmentationDataset(SegmentationBase):
             else:
                 raise ValueError("No version dict specified in config")
 
-        # TODO: add create kwarg and and only do this if create=True
-        os.makedirs(self.path, exist_ok=True)
+        if create:
+            os.makedirs(self.path, exist_ok=True)
 
         if sv_mapping is not None:
             if type(sv_mapping) is dict and 0 in sv_mapping:
@@ -431,6 +431,7 @@ class SuperSegmentationDataset(SegmentationBase):
             sv_mapping: Supervoxel agglomeration.
 
         """
+        os.makedirs(self.path, exist_ok=True)
         assemble_from_mergelist(self, sv_mapping)
 
     def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]], new_mapping: bool = False,
