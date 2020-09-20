@@ -173,7 +173,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                 time.sleep(0.5)
                 continue
             pred_func(m, inp, q_out, d_out, q_progress, device, bs)
-        log_handler.debug(f'Pred worker {worker_cnt} stopped.')
+        log_handler.debug(f'Pred worker {worker_cnt} done.')
     except Exception as e:
         log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
     for _ in range(n_worker_postporc):
@@ -214,6 +214,7 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
     for _ in range(n_worker_pred):
         q_out.put(f'STOP{worker_cnt}')
     q_loader_sync.put('DONE')
+    log_handler.debug(f'Loader {worker_cnt} done.')
 
 
 def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
@@ -242,6 +243,7 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
                 if cnt_loder_done != nloader:
                     log_handler.error(f'Only {cnt_loder_done}/{nloader} loader finished.')
                     sys.exit(1)
+                log_handler.debug(f'Listener done.')
                 break
             if show_progress:
                 pbar.update(res)

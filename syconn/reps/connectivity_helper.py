@@ -425,38 +425,51 @@ def diverge_map(high=(239 / 255., 65 / 255., 50 / 255.),
     return make_colormap([low, c('white'), 0.5, c('white'), high])
 
 
-def connectivity_hists_j0251(proba_thresh: float = 0.8, r=(0.05, 2)):
+def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltype: float = None,
+                             r=(0.05, 2)):
     """
     Args:
-        proba_thresh: Synapse probability. Filters synapses below threshold.
-        cap_size: Cap maximum synapse mesh area (um^2).
+        proba_thresh_syn: Synapse probability. Filters synapses below threshold.
+        proba_thresh_celltype: Cell type probability. Filters cells below threshold.
+        r: Range of synapse mesh area (um^2).
 
     Returns:
 
     """
-    from syconn.handler.prediction import int2str_converter
+    from syconn.handler.prediction import int2str_converter, certainty_estimate
     from syconn.reps.segmentation import SegmentationDataset
+    from syconn.reps.super_segmentation import SuperSegmentationDataset
+    from scipy.special import softmax
     import pandas as pd
     import tqdm
     import os
     import seaborn as sns
     def ctclass_converter(x): return int2str_converter(x, gt_type='ctgt_j0251_v2')
-    target_dir = f'/wholebrain/scratch/pschuber/tmp/thresh{int(proba_thresh * 100)}/'
+    target_dir = f'/wholebrain/scratch/pschuber/tmp/thresh{int(proba_thresh_syn * 100)}/'
     os.makedirs(target_dir, exist_ok=True)
     nclass = 11
     log_scale = True
-    plot_n_celltypes = 4
+    plot_n_celltypes = 5
     palette = sns.color_palette('dark', n_colors=nclass)
     palette = {ctclass_converter(kk): palette[kk] for kk in range(nclass)}
     sd_syn_ssv = SegmentationDataset('syn_ssv')
+    if proba_thresh_celltype is not None:
+        ssd = SuperSegmentationDataset()
+        ct_probas = [certainty_estimate(proba) for proba in tqdm.tqdm(ssd.load_cached_data('celltype_cnn_e3_probas'),
+                                                                      desc='Cells')]
+        ct_proba_lookup = {cellid: ct_probas[k] for k, cellid in enumerate(ssd.ssv_ids)}
+        del ct_probas
     ax = sd_syn_ssv.load_cached_data('partner_axoness')
     ct = sd_syn_ssv.load_cached_data('partner_celltypes')
     area = sd_syn_ssv.load_cached_data('mesh_area')
-    syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    # size = sd_syn_ssv.load_cached_data('size')
+    # syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
     # area *= syn_sign
+    partners = sd_syn_ssv.load_cached_data('neuron_partners')
+
     proba = sd_syn_ssv.load_cached_data('syn_prob')
-    m = (proba >= proba_thresh) & (area >= r[0]) & (area <= r[1])
-    print(f'Found {np.sum(m)} synapses after filtering with probaility threshold {proba_thresh} and '
+    m = (proba >= proba_thresh_syn) & (area >= r[0]) & (area <= r[1])
+    print(f'Found {np.sum(m)} synapses after filtering with probaility threshold {proba_thresh_syn} and '
           f'size filter (min/max [um^2]: {r}).')
     ax[(ax == 3) | (ax == 4)] = 1  # set boutons to axon class
     ax[(ax == 5) | (ax == 6)] = 0  # set spine head and neck to dendrite class
@@ -465,13 +478,20 @@ def connectivity_hists_j0251(proba_thresh: float = 0.8, r=(0.05, 2)):
     ct = ct[m]
     ax = ax[m]
     area = area[m]
+    # size = size[m]
+    partners = partners[m]
     if log_scale:
         area = np.log10(area)
         r = np.log(r)
     ct_receiving = {ctclass_converter(k): {ctclass_converter(kk): [] for kk in range(nclass)} for k in range(nclass)}
     ct_targets = {ctclass_converter(k): {ctclass_converter(kk): [] for kk in range(nclass)} for k in range(nclass)}
-    for ix in tqdm.tqdm(range(area.shape[0]), total=area.shape[0]):
+    for ix in tqdm.tqdm(range(area.shape[0]), total=area.shape[0], desc='Synapses'):
         post_ix, pre_ix = np.argsort(ax[ix])
+        if proba_thresh_celltype is not None:
+            post_cell_id, pre_cell_id = partners[ix][post_ix], partners[ix][pre_ix]
+            celltype_probas = np.array([ct_proba_lookup[post_cell_id], ct_proba_lookup[pre_cell_id]])
+            if np.any(celltype_probas < proba_thresh_celltype):
+                continue
         syn_ct = ct[ix]
         pre_ct = ctclass_converter(syn_ct[pre_ix])
         post_ct = ctclass_converter(syn_ct[post_ix])
@@ -484,13 +504,20 @@ def connectivity_hists_j0251(proba_thresh: float = 0.8, r=(0.05, 2)):
         df = pd.DataFrame(data={'mesh_area': np.concatenate([data_rec[k] for k in highest_cts]),
                                 'cell_type': np.concatenate([[k]*len(data_rec[k]) for k in highest_cts])})
         create_kde(f'{target_dir}/incoming{ct_label}.png', df, palette=palette, r=r)
-
+        df = pd.DataFrame(data={'mesh_area[um^2]': [np.sum(10**np.array(data_rec[k])) for k in data_rec],
+                                'n_synapses': [len(data_rec[k]) for k in data_rec],
+                                'cell_type': [k for k in data_rec]})
+        df.to_csv(f'{target_dir}/incoming{ct_label}_sum.csv')
         data_out = ct_targets[ct_label]
         sizes = np.argsort([len(v) for v in data_out.values()])[::-1]
         highest_cts = np.array(list(data_out.keys()))[sizes][:plot_n_celltypes]
         df = pd.DataFrame(data={'mesh_area': np.concatenate([data_out[k] for k in highest_cts]),
                                 'cell_type': np.concatenate([[k]*len(data_out[k]) for k in highest_cts])})
         create_kde(f'{target_dir}/outgoing{ct_label}.png', df, palette=palette, r=r)
+        df = pd.DataFrame(data={'mesh_area[um^2]': [np.sum(10**np.array(data_out[k])) for k in data_out],
+                                'n_synapses': [len(data_out[k]) for k in data_out],
+                                'cell_type': [k for k in data_out]})
+        df.to_csv(f'{target_dir}/outgoing{ct_label}_sum.csv')
 
 
 def create_kde(dest_p, qs, ls=20, legend=False, r=None, **kwargs):
@@ -517,7 +544,7 @@ def create_kde(dest_p, qs, ls=20, legend=False, r=None, **kwargs):
     # fill=True, kde=True, kde_kws=dict(bw_adjust=0.5), common_bins=False,
     sns.displot(data=qs, x="mesh_area", hue="cell_type",
                 # kind="kde", bw_adjust=0.5,
-                fill=True, kde=True, kde_kws=dict(bw_adjust=0.75), common_bins=True,
+                fill=True, kde=True, kde_kws=dict(bw_adjust=0.5), common_bins=True,
                 edgecolor='none', multiple="layer", common_norm=False, stat='density',
                 **kwargs)  # , common_norm=False
     if r is not None:

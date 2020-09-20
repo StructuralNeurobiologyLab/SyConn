@@ -304,6 +304,9 @@ class SuperSegmentationObject(SegmentationBase):
         return (f'{type(self).__name__}(ssv_id={self.id}, ssd_type="{self.type}", '
                 f'version="{self.version}", working_dir="{self.working_dir}")')
 
+    def __getitem__(self, item):
+        return self.attr_dict[item]
+
     # IMMEDIATE PARAMETERS
     @property
     def type(self) -> str:
