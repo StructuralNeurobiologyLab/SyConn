@@ -304,6 +304,9 @@ class SuperSegmentationObject(SegmentationBase):
         return (f'{type(self).__name__}(ssv_id={self.id}, ssd_type="{self.type}", '
                 f'version="{self.version}", working_dir="{self.working_dir}")')
 
+    def __getitem__(self, item):
+        return self.attr_dict[item]
+
     # IMMEDIATE PARAMETERS
     @property
     def type(self) -> str:
@@ -1415,7 +1418,7 @@ class SuperSegmentationObject(SegmentationBase):
 
             node_scaled = self.skeleton["nodes"] * self.scaling
 
-            edges = np.array(self.skeleton["edges"], dtype=np.uint)
+            edges = np.array(self.skeleton["edges"], dtype=np.int)
             edge_coords = node_scaled[edges]
             weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1], axis=1)
             self._weighted_graph = nx.Graph()

@@ -1531,12 +1531,19 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
             labels.append(c)
             label_coords.append(np.array(node.getCoordinate()))
     else:
-        df = pandas.read_excel(path2file, header=0, names=['ixs', 'coord', 'pre', 'post', 'syn']).values
+        df = pandas.read_excel(path2file, header=0, names=[
+            'ixs', 'coord', 'pre', 'post', 'syn', 'doublechecked', 'triplechecked', '?', 'comments']).values
+        df = df[:, :7]
         for ix in range(df.shape[0]):
-            c = df[ix, -1]
-            if 'yes' in c:
+            c_orig = df[ix, 5]
+            c = df[ix, 6]
+            if type(c) != float and 'yes' in c:
                 unified_comment = 'synaptic'
-            elif 'no' in c:
+            elif type(c) != float and 'no' in c:
+                unified_comment = 'non-synaptic'
+            elif 'yes' in c_orig:
+                unified_comment = 'synaptic'
+            elif 'no' in c_orig:
                 unified_comment = 'non-synaptic'
             else:
                 log.warn(f'Did not understand GT comment "{c}". Skipping')
@@ -1583,13 +1590,14 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
 
     log.info(f'Synapse features will now be generated.')
     features = []
-    pbar = tqdm.tqdm(total=len(synssv_ids))
+    pbar = tqdm.tqdm(total=len(synssv_ids), leave=False)
     for kk, synssv_id in enumerate(synssv_ids):
         synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
         features.append(synssv_o_features(synssv_o))
         pbar.update(1)
     pbar.close()
     features = np.array(features)
+    log.info('Performing 10-fold cross validation.')
     rfc = ensemble.RandomForestClassifier(n_estimators=2000, max_features='sqrt',
                                           n_jobs=-1, random_state=0,
                                           oob_score=True)
@@ -1603,7 +1611,8 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     #     np.mean(score), np.std(score)))
     # if score < 0.95:
     #     log.info(f'Individual CV scores: {score}')
-    preds = cross_val_predict(rfc, v_features, v_labels, cv=10)
+    probas = cross_val_predict(rfc, v_features, v_labels, cv=10, method='predict_proba')
+    preds = np.argmax(probas, axis=1)
     log.info(metrics.classification_report(v_labels, preds, target_names=['non-synaptic', 'synaptic']))
 
     rfc.fit(v_features, v_labels)
@@ -1620,13 +1629,13 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     skel = skeleton.Skeleton()
     anno = skeleton.SkeletonAnnotation()
     anno.scaling = sd_syn_ssv.scaling
-    pbar = tqdm.tqdm(total=len(synssv_ids))
+    pbar = tqdm.tqdm(total=len(synssv_ids), leave=False)
     for kk, synssv_id in enumerate(synssv_ids):
         synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
         rep_coord = synssv_o.rep_coord * sd_syn_ssv.scaling
         pred_correct = preds[kk] == v_labels[kk]
         n = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
-        n.setComment(f'{preds[kk]} {pred_correct}')
+        n.setComment(f'{preds[kk]} {pred_correct} {probas[kk][1]:.2f}')
         n.data.update({k: v for k, v in zip(feature_names, v_features[kk])})
         anno.addNode(n)
         rep_coord = label_coords[kk] * sd_syn_ssv.scaling

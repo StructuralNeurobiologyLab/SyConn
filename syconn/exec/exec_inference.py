@@ -84,7 +84,7 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    pred_key_appendix = '_wholecell'
+    pred_key_appendix = '_wholecell_v2'
 
     # sort ssv ids according to their number of SVs (descending)
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]

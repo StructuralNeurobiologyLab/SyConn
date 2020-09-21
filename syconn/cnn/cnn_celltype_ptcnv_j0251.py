@@ -72,7 +72,7 @@ use_syntype = args.use_syntype
 if cval is None:
     cval = 0
 
-lr = 8e-4
+lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.99
 max_steps = 500000
@@ -89,7 +89,7 @@ act = 'relu'
 use_myelin = True
 
 if name is None:
-    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_RUN2'
+    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_RUN3'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -221,7 +221,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=5,
+    num_workers=20,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

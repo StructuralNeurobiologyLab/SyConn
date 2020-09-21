@@ -110,7 +110,8 @@ class SuperSegmentationDataset(SegmentationBase):
                  version_dict: Optional[Dict[str, str]] = None, sv_mapping: Optional[Union[Dict[int, int], str]] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
                  sso_caching: bool = False, sso_locking: bool = False, create: bool = False,
-                 sd_lookup: Optional[Dict[str, SegmentationDataset]] = None):
+                 sd_lookup: Optional[Dict[str, SegmentationDataset]] = None,
+                 cache_properties: Optional[List[str]] = None):
         """
         Args:
             working_dir: Path to the working directory.
@@ -128,8 +129,13 @@ class SuperSegmentationDataset(SegmentationBase):
                 `get_super_segmentation_object`
             sso_locking: If True, locking is enabled for SSV files.
             sd_lookup: Lookup dict for :py:class:`~syconn.reps.segmentation.SegmentationDataset`, this will enable
-                usage of property cache arrays whenever possible. Only works for the attributes specified during init.
+                usage of property cache arrays for all attributes which have been specified in `property_cache` during
+                init. of `SegmentationDataset` (see :class:`~syconn.reps.segmentation.SegmentationObject`).
+            cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
+                :py:class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` via
+                :py:func:`~get_super_segmentation_object`.
             create: Create folder.
+
         """
         self.ssv_dict = {}
         self._mapping_dict = None
@@ -140,6 +146,11 @@ class SuperSegmentationDataset(SegmentationBase):
         self._type = ssd_type
         self._id_changer = []
         self._ssv_ids = None
+        # cache mechanism
+        self._ssoid2ix = None
+        self._property_cache = dict()
+        if cache_properties is None:
+            cache_properties = tuple()
 
         if version == 'temp':
             version = 'tmp'
@@ -197,6 +208,8 @@ class SuperSegmentationDataset(SegmentationBase):
             if type(sv_mapping) is dict and 0 in sv_mapping:
                 raise ValueError
             self.apply_mergelist(sv_mapping)
+
+        self.enable_property_cache(cache_properties)
 
     def __repr__(self):
         return (f'{type(self).__name__}(ssd_type="{self.type}", '
@@ -391,7 +404,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.load_id_changer()
         return self._id_changer
 
-    def load_cached_data(self, prop_name: str):
+    def load_cached_data(self, prop_name: str, allow_nonexisting: bool = True):
         """
         Todo:
             * remove 's' appendix in file names.
@@ -399,6 +412,7 @@ class SuperSegmentationDataset(SegmentationBase):
         Args:
             prop_name: Identifier for requested cache array. Ordering of the
                 array is the same as :py:attr:`~ssv_ids`.
+            allow_nonexisting: If False, will fail for missing numpy files.
 
         Returns:
             Numpy array of cached property.
@@ -406,8 +420,11 @@ class SuperSegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
-            log_reps.warning(f'Requested data cache "{prop_name}" '
-                             f'did not exist.')
+            msg = f'Requested data cache "{prop_name}" did not exist.'
+            if not allow_nonexisting:
+                log_reps.error(msg)
+                raise FileNotFoundError(msg)
+            log_reps.warning(msg)
 
     def sv_id_to_ssv_id(self, sv_id: int) -> int:
         """
@@ -471,6 +488,8 @@ class SuperSegmentationDataset(SegmentationBase):
                                               sv_ids=self.mapping_dict[obj_id], **kwargs_def)
             else:
                 sso = SuperSegmentationObject(obj_id, self.version, self.version_dict, self.working_dir, **kwargs_def)
+            for k, v in self._property_cache.items():
+                sso.attr_dict[k] = v[self._ssoid2ix[obj_id]]
             sso._ssd = self
         else:
             sso = []
@@ -591,6 +610,20 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         assert self.id_changer_exists
         self._id_changer = np.load(self.id_changer_path)
+
+    def enable_property_cache(self, property_keys: List[str]):
+        """
+        Add properties to cache.
+
+        Args:
+            property_keys: Property keys. Numpy cache arrays must exist.
+        """
+        # look-up for so IDs to index in cache arrays
+        if len(property_keys) == 0:
+            return
+        if self._ssoid2ix is None:
+            self._ssoid2ix = {k: ix for ix, k in enumerate(self.ssv_ids)}
+        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
 
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
