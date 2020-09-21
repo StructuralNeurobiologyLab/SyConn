@@ -109,7 +109,7 @@ class SuperSegmentationDataset(SegmentationBase):
     def __init__(self, working_dir: Optional[str] = None, version: Optional[str] = None, ssd_type: str = 'ssv',
                  version_dict: Optional[Dict[str, str]] = None, sv_mapping: Optional[Union[Dict[int, int], str]] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
-                 sso_caching: bool = False, sso_locking: bool = False,
+                 sso_caching: bool = False, sso_locking: bool = False, create: bool = False,
                  sd_lookup: Optional[Dict[str, SegmentationDataset]] = None,
                  cache_properties: Optional[List[str]] = None):
         """
@@ -134,6 +134,7 @@ class SuperSegmentationDataset(SegmentationBase):
             cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
                 :py:class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` via
                 :py:func:`~get_super_segmentation_object`.
+            create: Create folder.
 
         """
         self.ssv_dict = {}
@@ -200,8 +201,8 @@ class SuperSegmentationDataset(SegmentationBase):
             else:
                 raise ValueError("No version dict specified in config")
 
-        # TODO: add create kwarg and and only do this if create=True
-        os.makedirs(self.path, exist_ok=True)
+        if create:
+            os.makedirs(self.path, exist_ok=True)
 
         if sv_mapping is not None:
             if type(sv_mapping) is dict and 0 in sv_mapping:
@@ -447,6 +448,7 @@ class SuperSegmentationDataset(SegmentationBase):
             sv_mapping: Supervoxel agglomeration.
 
         """
+        os.makedirs(self.path, exist_ok=True)
         assemble_from_mergelist(self, sv_mapping)
 
     def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]], new_mapping: bool = False,

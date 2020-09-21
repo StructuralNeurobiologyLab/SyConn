@@ -222,8 +222,7 @@ class FSBase(StorageBase):
             log_extraction.warning('"push" called but Storage object was initialized '
                                    'with "None". Content will not be written.')
             return
-        write_obj2pkl(dest + ".tmp", self._dc_intern)
-        shutil.move(dest + ".tmp", dest)
+        write_obj2pkl(dest, self._dc_intern)
         if not self.read_only and not self.disable_locking:
             self.a_lock.release()
 
