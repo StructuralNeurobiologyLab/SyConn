@@ -613,22 +613,12 @@ class FileTimer:
         self.timings = {}
         self.t0, self.t1, self.interval = None, None, None
         self._load_prev()
-        # get data set properties
-        conf = Config(self.working_dir)
-        try:
-            bb = np.array(conf.entries['cube_of_interest_bb'])
-        except KeyError:
-            bb = None
-        self.kd = kd_factory(conf.entries['paths']['kd_seg'])
-        if bb is None:
-            bb = np.array([np.zeros(3, dtype=np.int), self.kd.boundary])
-        self.dataset_shape = bb[1] - bb[0]
-        self.dataset_nvoxels = np.prod(self.dataset_shape) / 1e9
-        self.dataset_mm3 = {'cube': np.prod(self.dataset_shape * self.kd.scale) / 1e18}
-        if add_detail_vols:
-            sd = SegmentationDataset('sv', working_dir=self.working_dir)
-            for k in ['total', 'glia', 'neuron']:
-                self.dataset_mm3[k] = sd.get_volume(k)
+
+        self.add_detail_vols = add_detail_vols
+        self.kd = None
+        self.dataset_shape = None
+        self.dataset_nvoxels = None
+        self.dataset_mm3 = None
 
     def _load_prev(self):
         if os.path.isfile(self.fname):
@@ -669,7 +659,30 @@ class FileTimer:
     def __exit__(self, *args):
         self.stop()
 
+    def prepare_vol_info(self):
+        # get data set properties
+        if self.dataset_mm3 is not None:
+            return
+        conf = Config(self.working_dir)
+        try:
+            bb = conf.entries['cube_of_interest_bb']
+        except KeyError:
+            bb = None
+        self.kd = kd_factory(conf.entries['paths']['kd_seg'])
+        if bb is None:
+            bb = np.array([np.zeros(3, dtype=np.int), self.kd.boundary])
+        else:
+            bb = np.array(bb)
+        self.dataset_shape = bb[1] - bb[0]
+        self.dataset_nvoxels = np.prod(self.dataset_shape) / 1e9
+        self.dataset_mm3 = {'cube': np.prod(self.dataset_shape * self.kd.scale) / 1e18}
+        if self.add_detail_vols:
+            sd = SegmentationDataset('sv', working_dir=self.working_dir)
+            for k in ['total', 'glia', 'neuron']:
+                self.dataset_mm3[k] = sd.get_volume(k)
+
     def prepare_report(self) -> str:
+        self.prepare_vol_info()
         experiment_str = f'{self.kd.experiment_name} ({self.dataset_mm3["cube"]}' \
                          f' mm^3; {self.dataset_nvoxels} GVx)'
         # python dicts are insertion order sensitive

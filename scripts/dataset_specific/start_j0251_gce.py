@@ -29,9 +29,9 @@ if __name__ == '__main__':
     ncores_per_node = node_state['cpus']
     mem_per_node = node_state['memory']
     ngpus_per_node = 2  # node_state currently does not hold the number of gpus for 'gres' resource
-    number_of_nodes = 20
+    number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) * 4
+    cube_size = np.array([2048, 2048, 1024]) * 3
     # check that cluster is configured accordingly
     assert number_of_nodes == np.sum([v['state'] == 'idle' for v in nodestates_slurm().values()])
     prior_glia_removal = True
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
     # cube_of_interest_bb = None  # process the entire cube!
     working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
-                  f"{'_'.join(map(str, cube_size))}_{number_of_nodes}nodes"
+                  f"{'_'.join(map(str, cube_size))}_{number_of_nodes}nodes_run2"
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')
     shutil.copy(os.path.abspath(__file__), f'{working_dir}/logs/')
