@@ -12,7 +12,7 @@ from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvot
 from syconn import global_params
 from morphx.classes.cloudensemble import CloudEnsemble
 from morphx.classes.hybridmesh import HybridMesh
-from morphx.data.basics import load_pkl
+from morphx.processing.basics import load_pkl
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 

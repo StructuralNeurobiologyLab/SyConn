@@ -14,7 +14,7 @@ if __name__ == "__main__":
     global_params.wd = "/wholebrain/scratch/areaxfs3/"
     with open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v3.pkl'), 'rb') as f:
         data = pkl.load(f)
-    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/ds_full/')
+    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/2020_09_18_4000_4000/borders_1000/')
     save_path_examples = save_path + 'examples/'
     if not os.path.exists(save_path_examples):
         os.makedirs(save_path_examples)
@@ -28,8 +28,8 @@ if __name__ == "__main__":
 
             # 0: dendrite, 1: axon, 2: soma
             pc_ads = replace_preds(sso, 'ads', [])
-            # 0: dendrite, 1: spine
-            pc_dnh = replace_preds(sso, 'ds', [])
+            # 0: dendrite, 1: neck, 2: head
+            pc_dnh = replace_preds(sso, 'dnh_borders', [])
 
             tree_ads = cKDTree(pc_ads.vertices)
             tree_dnh = cKDTree(pc_dnh.vertices)
@@ -40,35 +40,32 @@ if __name__ == "__main__":
             gt = data[str(sso_id)+'_l']
 
             pc_ads.save2pkl(os.path.expanduser(save_path + f'{sso_id}_ads.pkl'))
-            pc_dnh.save2pkl(os.path.expanduser(save_path + f'{sso_id}_dnh.pkl'))
+            pc_dnh.save2pkl(os.path.expanduser(save_path + f'{sso_id}_donh.pkl'))
 
             mask = np.ones((len(coords), 1), dtype=bool)
 
             # 0: dendrite, 1: axon, 2: head, 3: soma
             for ix in range(len(gt)):
-                # if gt[ix] == 1 or gt[ix] == 3:
-                #     mask[ix] = False
-                #     continue
+                if gt[ix] == 1 or gt[ix] == 3:
+                    mask[ix] = False
+                    continue
                 preds = pc_ads.labels[ind_ads[ix]].reshape(-1).astype(int)
                 mv = np.argmax(np.bincount(preds))
                 tree = tree_ads
                 pc = pc_ads
                 if mv != 0:
-                    if mv == 2:
-                        result[ix] = 3
-                    else:
-                        result[ix] = mv
+                    result[ix] = 3
                 else:
                     preds = pc_dnh.labels[ind_dnh[ix]].reshape(-1).astype(int)
                     mv = np.argmax(np.bincount(preds))
                     tree = tree_dnh
                     pc = pc_dnh
-                    if mv != 0:
-                        result[ix] = 2
+                    if mv == 1:
+                        result[ix] = 1
                     else:
-                        result[ix] = 0
+                        result[ix] = mv
                 if result[ix] != gt[ix]:
-                    idcs_ball = tree.query_ball_point(coords[ix], 2000)
+                    idcs_ball = tree.query_ball_point(coords[ix], 5000)
                     verts = np.concatenate((pc.vertices[idcs_ball], coords[ix].reshape((-1, 3))))
                     labels = np.concatenate((pc.labels[idcs_ball], np.array([4]).reshape((-1, 1))))
                     pc_local = PointCloud(vertices=verts, labels=labels)
@@ -82,7 +79,7 @@ if __name__ == "__main__":
                 total_gt = np.concatenate((total_gt, gt.reshape((-1, 1))[mask]))
                 total_preds = np.concatenate((total_preds, result.reshape((-1, 1))[mask]))
 
-    targets = ['dendrite', 'axon', 'head', 'soma']
+    targets = ['dendrite', 'neck', 'head']
     # targets = ['dendrite', 'head']
     # total_preds[total_preds == 2] = 1
     # total_gt[total_gt == 2] = 1

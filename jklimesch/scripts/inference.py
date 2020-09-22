@@ -17,7 +17,8 @@ from neuronx.classes.argscontainer import ArgsContainer
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 
-def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str, model_args_p: str, pred_key: str):
+def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str, model_args_p: str, pred_key: str,
+                redundancy: int, border_exclusion: int = 0):
     model_p = os.path.expanduser(model_p)
     model_args_p = os.path.expanduser(model_args_p)
 
@@ -66,6 +67,7 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
         offset = 0
         obj_bounds = {}
         for ix, k in enumerate(parts):
+            # build cell representation by adding cell surface and possible organelles
             pcd = o3d.geometry.PointCloud()
             verts = sso.load_mesh(k)[1].reshape(-1, 3)
             pcd.points = o3d.utility.Vector3dVector(verts)
@@ -90,14 +92,23 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
         if not sso.load_skeleton():
             raise ValueError(f'Couldnt find skeleton of {sso}')
         nodes, edges = sso.skeleton['nodes'] * sso.scaling, sso.skeleton['edges']
-        hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats, obj_bounds=obj_bounds)
-        node_arrs = splitting.split_single(hc, argscont.chunk_size, argscont.chunk_size / 20)
+        hc = HybridCloud(nodes, edges, vertices=sample_pts, labels=np.ones((len(sample_pts), 1)),
+                         features=sample_feats, obj_bounds=obj_bounds)
+        node_arrs, source_nodes = splitting.split_single(hc, argscont.chunk_size, argscont.chunk_size / redundancy)
 
         transform = clouds.Compose(argscont.val_transforms)
         samples = []
-        for node_arr in tqdm(node_arrs):
+        for ix, node_arr in enumerate(tqdm(node_arrs)):
+            # vertices which correspond to nodes in node_arr
             sample, idcs_sub = objects.extract_cloud_subset(hc, node_arr)
+            # random subsampling of the corresponding vertices
             sample, idcs_sample = clouds.sample_cloud(sample, argscont.sample_num, padding=argscont.padding)
+            if border_exclusion > 0:
+                sample.mark_borders(-1, argscont.chunk_size-border_exclusion, centroid=hc.nodes[source_nodes[ix]])
+                marked_idcs = idcs_sample[(sample.labels == -1).reshape(-1)]
+                # exclude borders from majority votes
+                idcs_sub[marked_idcs] = -1
+            # indices with respect to the total cell
             idcs_global = idcs_sub[idcs_sample.astype(int)]
             bounds = hc.obj_bounds['sv']
             sv_mask = np.logical_and(idcs_global < bounds[1], idcs_global >= bounds[0])
@@ -172,10 +183,10 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 
 if __name__ == '__main__':
-    m_path = '~/thesis/current_work/paper/dnh/2020_08_18_4000_4000_spgt_ds_no_co_randelastic_scale/' \
-             'models/state_dict_e450.pth'
-    argscont_path = '~/thesis/current_work/paper/dnh/2020_08_18_4000_4000_spgt_ds_no_co_randelastic_scale/argscont.pkl'
+    base_path = '~/thesis/current_work/paper/dnh/2020_09_18_4000_4000/'
+    m_path = base_path + 'models/state_dict_e250.pth'
+    argscont_path = base_path + 'argscont.pkl'
     predict_sso([141995, 11833344, 28410880, 28479489],
                 SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/"),
-                m_path, argscont_path, 'ds_highred20')
+                m_path, argscont_path, pred_key='dnh_borders', redundancy=5, border_exclusion=1000)
 
