@@ -556,7 +556,7 @@ def create_kde(dest_p, qs, ls=20, legend=False, r=None, **kwargs):
         plt.xlim(r)
     # if not legend:
     #     plt.gca().legend().set_visible(False)
-    # # set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
+    # # sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     # ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
     #                length=4, width=3, right="off", top="off", pad=10)
     # ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',

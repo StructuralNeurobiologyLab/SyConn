@@ -242,7 +242,6 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
         else:
             res = q_progress.get_nowait()
             if res is None:  # final stop
-                assert cnt_loder_done == nloader
                 if show_progress:
                     pbar.close()
                 if cnt_loder_done != nloader:
@@ -458,21 +457,21 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         output_func(dict_out, res)
     q_progress.put_nowait(None)
     lsnr.join()
-    error_occurred = lsnr.exitcode != 0
+    # at this point all jobs should have finished
     for p in producers:
-        if error_occurred:
-            p.terminate()
-        p.join()
+        p.join(timeout=10)
+        if p.is_alive():
+            raise ValueError(f'Job {p} is still running.')
         p.close()
     for c in consumers:
-        if error_occurred:
-            c.terminate()
-        c.join()
+        c.join(timeout=10)
+        if c.is_alive():
+            raise ValueError(f'Job {c} is still running.')
         c.close()
     for c in postprocs:
-        if error_occurred:
-            c.terminate()
-        c.join()
+        c.join(timeout=10)
+        if c.is_alive():
+            raise ValueError(f'Job {c} is still running.')
         c.close()
     return dict_out
 
@@ -1899,7 +1898,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=8, npredictor=3, npostproc=2, bs=batchsizes)
+    default_kwargs = dict(nloader=8, npredictor=4, npostproc=4, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
@@ -2156,7 +2155,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         try:
             # res: [(dict(t_pts=.., t_label, batch_process)]
             res = d_in[sso.id].get_nowait()
-            curr_ix += 1
         except queues.Empty:
             time.sleep(0.25)
             continue
@@ -2181,7 +2179,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
             done = done and p_t_done[p_t]
         if done:
             break
-    assert len(d_in[sso.id]) == curr_ix
     # evaluate predictions and map them to the original sso vertices (with respect to
     # indices which were chosen during voxelization
     sso_vertices = sso.mesh[1].reshape((-1, 3))

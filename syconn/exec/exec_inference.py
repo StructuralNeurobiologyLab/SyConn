@@ -58,7 +58,7 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
         multi_params = chunkify(multi_params[:half_ix], max_n_jobs // 2) + \
                        chunkify(multi_params[half_ix:], max_n_jobs // 2)
         # add ssd parameters
-        multi_params = [(ssv_ids, pred_key_appendix) for ssv_ids in multi_params]
+        multi_params = [(ssv_ids, pred_key_appendix, global_params.config.use_point_models) for ssv_ids in multi_params]
         qu.batchjob_script(multi_params, "generate_morphology_embedding",
                            n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
                            log=log, suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
@@ -130,7 +130,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
                        chunkify(multi_params[half_ix:], max_n_jobs_gpu // 2)
         # job parameter will be read sequentially, i.e. in order to provide only
         # one list as parameter one needs an additonal axis
-        multi_params = [(ixs,) for ixs in multi_params]
+        multi_params = [(ixs, global_params.config.use_point_models) for ixs in multi_params]
         qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
                            n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
                            remove_jobfolder=True)
@@ -166,12 +166,12 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
 
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-        predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=multi_params, bs=2)
+        predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=multi_params, bs=1)
     else:
         multi_params = chunkify(multi_params, max_n_jobs_gpu)
         # job parameter will be read sequentially, i.e. in order to provide only
         # one list as parameter one needs an additonal axis
-        multi_params = [(ixs,) for ixs in multi_params]
+        multi_params = [(ixs, global_params.config.use_point_models) for ixs in multi_params]
         path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
                                          suffix="", additional_flags="--gres=gpu:1",
                                          n_cores=n_cores, remove_jobfolder=False)

@@ -617,8 +617,34 @@ class FileTimer:
         self.add_detail_vols = add_detail_vols
         self.kd = None
         self.dataset_shape = None
-        self.dataset_nvoxels = None
-        self.dataset_mm3 = None
+        self._dataset_nvoxels = None
+        self._dataset_mm3 = None
+
+    @property
+    def dataset_nvoxels(self) -> float:
+        """
+
+        Returns:
+            Data set size in giga voxels.
+        """
+        if self._dataset_nvoxels is None:
+            self.prepare_vol_info()
+        if not self.add_detail_vols:
+            return self._dataset_nvoxels['cube']  # whole data cube size
+        return self._dataset_nvoxels
+
+    @property
+    def dataset_mm3(self) -> float:
+        """
+
+        Returns:
+            Data set size in cubic mm.
+        """
+        if self._dataset_mm3 is None:
+            self.prepare_vol_info()
+        if not self.add_detail_vols:
+            return self._dataset_mm3['cube']  # whole data cube size
+        return self._dataset_mm3
 
     def _load_prev(self):
         if os.path.isfile(self.fname):
@@ -661,7 +687,7 @@ class FileTimer:
 
     def prepare_vol_info(self):
         # get data set properties
-        if self.dataset_mm3 is not None:
+        if self._dataset_mm3 is not None:
             return
         conf = Config(self.working_dir)
         try:
@@ -674,16 +700,18 @@ class FileTimer:
         else:
             bb = np.array(bb)
         self.dataset_shape = bb[1] - bb[0]
-        self.dataset_nvoxels = np.prod(self.dataset_shape) / 1e9
-        self.dataset_mm3 = {'cube': np.prod(self.dataset_shape * self.kd.scale) / 1e18}
+        self._dataset_nvoxels = {'cube': np.prod(self.dataset_shape) / 1e9}
+        self._dataset_mm3 = {'cube': np.prod(self.dataset_shape * self.kd.scale) / 1e18}
         if self.add_detail_vols:
             sd = SegmentationDataset('sv', working_dir=self.working_dir)
             for k in ['total', 'glia', 'neuron']:
-                self.dataset_mm3[k] = sd.get_volume(k)
+                vol_mm3 = sd.get_volume(k)
+                self._dataset_mm3[k] = vol_mm3
+                self._dataset_nvoxels[k] = vol_mm3 * 1e9 / np.prod(self.kd.scale)  # in GVx -> 1e18 / 1e9 = 1e9
 
     def prepare_report(self) -> str:
         self.prepare_vol_info()
-        experiment_str = f'{self.kd.experiment_name} ({self.dataset_mm3["cube"]}' \
+        experiment_str = f'{self.kd.experiment_name} ({self.dataset_mm3}' \
                          f' mm^3; {self.dataset_nvoxels} GVx)'
         # python dicts are insertion order sensitive
         dt_tot = np.sum(np.array(list(self.timings.values())))
@@ -692,9 +720,9 @@ class FileTimer:
                            f"after {dt_tot_str}.\n"
         n_steps = len(self.timings)
         for i, (step_name, step_dt) in enumerate(self.timings.items()):
-            step_dt_per = int(step_dt / dt_tot * 100)
+            step_dt_per = f"{(step_dt / dt_tot * 100):.1f}"
             step_dt = time.strftime("{}d:{}h:{}min:{}s".format(*self._s2str(step_dt)))
-            step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
+            step_str = '{:<10}{:<40}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
                                                            step_dt, f'{step_dt_per}%')
             time_summary_str += step_str
         return time_summary_str
