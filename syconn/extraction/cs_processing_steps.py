@@ -127,8 +127,8 @@ def _collect_properties_from_ssv_partners_thread(args):
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
         ssv_o.load_attr_dict()
-        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
-                                     read_only=False, disable_locking=True)
+        cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl",
+                                 read_only=False, disable_locking=True)
 
         curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
                         (syn_neuronpartners[:, 1] == ssv_id)
@@ -197,7 +197,7 @@ def _from_cell_to_syn_dict(args):
 
             for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
+                cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl")
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:

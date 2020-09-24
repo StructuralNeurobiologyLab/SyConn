@@ -81,7 +81,7 @@ class StorageBase(dict):
 
     def items(self):
         for k in self._dc_intern.keys():
-            yield (k, self[k])
+            yield k, self[k]
 
     def values(self):
         for k in self._dc_intern.keys():
