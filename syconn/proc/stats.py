@@ -616,9 +616,20 @@ class FileTimer:
 
         self.add_detail_vols = add_detail_vols
         self.kd = None
-        self.dataset_shape = None
+        self._dataset_shape = None
         self._dataset_nvoxels = None
         self._dataset_mm3 = None
+
+    @property
+    def dataset_shape(self) -> float:
+        """
+
+        Returns:
+            Data set size in giga voxels.
+        """
+        if self._dataset_shape is None:
+            self.prepare_vol_info()
+        return self._dataset_shape
 
     @property
     def dataset_nvoxels(self) -> float:
@@ -699,7 +710,7 @@ class FileTimer:
             bb = np.array([np.zeros(3, dtype=np.int), self.kd.boundary])
         else:
             bb = np.array(bb)
-        self.dataset_shape = bb[1] - bb[0]
+        self._dataset_shape = bb[1] - bb[0]
         self._dataset_nvoxels = {'cube': np.prod(self.dataset_shape) / 1e9}
         self._dataset_mm3 = {'cube': np.prod(self.dataset_shape * self.kd.scale) / 1e18}
         if self.add_detail_vols:
