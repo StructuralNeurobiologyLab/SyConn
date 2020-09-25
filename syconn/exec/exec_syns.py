@@ -144,7 +144,7 @@ def run_spinehead_volume_calc():
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     log.info('Starting spine head volume calculation.')
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
-    multi_params = chunkify(multi_params, min(global_params.config.ncore_total * 10, 1000))
+    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
     multi_params = [(ixs,) for ixs in multi_params]
 
     batchjob_script(multi_params, "calculate_spinehead_volume", log=log, remove_jobfolder=True)

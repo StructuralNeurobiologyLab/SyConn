@@ -309,8 +309,8 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     rel_ssv_with_syn_ids = filter_relevant_syn(syn_sd, ssd)
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
-    n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
-                       len(rel_ssv_with_syn_ids), 1000)
+    n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
+                       len(rel_ssv_with_syn_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
     # target SD for SSV syn objects

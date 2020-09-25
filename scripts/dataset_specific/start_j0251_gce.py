@@ -32,7 +32,7 @@ if __name__ == '__main__':
     number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
     # j0251_off8439_8555_5187_size10240_10240_5120_24nodes stopped after run_create_neuron_ssd and before glia_splitting
-    cube_size = np.array([2048, 2048, 1024]) * 3
+    cube_size = np.array([2048, 2048, 1024]) * 5
     cube_offset = (shape_j0251 - cube_size) // 2
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size])
     # cube_of_interest_bb = None  # process the entire cube!
