@@ -41,7 +41,7 @@ def labels2mesh(args):
     # load cell and cell organelles
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh]
     # load new synapse version
-    meshes.append(sso._load_obj_mesh('sj', rewrite=False))
+    meshes.append(sso._load_obj_mesh('syn_ssv', rewrite=False))
     label_map = [-1, 7, 8, 9]
     hcs = []
     faces = None
@@ -167,18 +167,23 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    # labels2mesh(params[7])
+    for param in params:
+        print(param)
+        try:
+            labels2mesh(param)
+        except TypeError:
+            pass
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
+    # start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/raw/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/raw/areafs_v6/"
     data_path = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/annotations/v3/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
-    global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    gt_generation(file_paths, destination, version='spgt')
+    # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+    # gt_generation(file_paths, destination, version='spgt')
     # axon GT
-    # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-    # gt_generation(file_paths, destination)
+    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    gt_generation(file_paths, destination)
