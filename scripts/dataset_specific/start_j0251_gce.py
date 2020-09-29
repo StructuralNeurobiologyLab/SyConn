@@ -31,10 +31,10 @@ if __name__ == '__main__':
     ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
     number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
-    # j0251_off8439_8555_5187_size10240_10240_5120_24nodes stopped after run_create_neuron_ssd and before glia_splitting
-    cube_size = np.array([2048, 2048, 1024]) * 5
-    cube_offset = (shape_j0251 - cube_size) // 2
-    cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size])
+    # cube_size = np.array([2048, 2048, 1024]) * 6  # interrupted at synapse detection
+    cube_size = (np.array([2048, 2048, 1024]) * 2.5).astype(np.int)
+    cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
+    cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
     # cube_of_interest_bb = None  # process the entire cube!
     # check that cluster is configured accordingly
     assert number_of_nodes == np.sum([v['state'] == 'idle' for v in nodestates_slurm().values()])
@@ -144,7 +144,7 @@ if __name__ == '__main__':
              ' SyConn pipeline.'.format(cube_size))
     log.info('Example data will be processed in "{}".'.format(working_dir))
 
-    log.info('Step 1/10 - Predicting sub-cellular structures')
+    # log.info('Step 1/10 - Predicting sub-cellular structures')
     # ftimer.start('Myelin prediction')
     # # myelin is not needed before `run_create_neuron_ssd`
     # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)

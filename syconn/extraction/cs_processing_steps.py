@@ -145,7 +145,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
 
         try:
-            ct = ssv_o.attr_dict['celltype_cnn_e3']  # TODO: add keyword to global_params.py
+            ct = ssv_o.attr_dict['celltype_cnn_e3']
         except KeyError:
             ct = -1
         celltypes = [ct] * len(ssv_synids)
@@ -1213,8 +1213,8 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         # start = time.time()
         if overwrite and os.path.isfile(ssv_o.ssv_dir + "/cache_syn.pkl"):
             os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
-        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
-                                     read_only=False, disable_locking=True)
+        cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl",
+                                 read_only=False, disable_locking=True)
         if not overwrite and ('n_vc_vxs' in cache_dc):
             continue
         # dts['directio'] += time.time() - start
@@ -1362,7 +1362,7 @@ def _objects_from_cell_to_syn_dict(args):
             map_dc = dict()
             for ii, ssv_partner_id in enumerate(synssv_o.attr_dict["neuron_partners"]):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
+                cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl")
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:

@@ -153,29 +153,29 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         n_worker_postproc: Number of postproc worker.
         model_loader_kwargs: Additional keyword arguments for the model loader.
     """
-    try:
-        if model_loader_kwargs is None:
-            model_loader_kwargs = dict()
-        m = model_loader(mpath, device, **model_loader_kwargs)
-        stops_received = set()
-        while True:
-            try:
-                inp = q_in.get_nowait()
-                if 'STOP' in inp:
-                    if inp not in stops_received:
-                        stops_received.add(inp)
-                    else:
-                        q_in.put_nowait(inp)
-                        time.sleep(np.random.randint(25) / 10)
-                    if len(stops_received) == n_worker_load:
-                        break
-                    continue
-            except queues.Empty:
-                time.sleep(0.25)
+    # try:
+    if model_loader_kwargs is None:
+        model_loader_kwargs = dict()
+    m = model_loader(mpath, device, **model_loader_kwargs)
+    stops_received = set()
+    while True:
+        try:
+            inp = q_in.get_nowait()
+            if 'STOP' in inp:
+                if inp not in stops_received:
+                    stops_received.add(inp)
+                else:
+                    q_in.put_nowait(inp)
+                    time.sleep(np.random.randint(25) / 10)
+                if len(stops_received) == n_worker_load:
+                    break
                 continue
-            pred_func(m, inp, q_out, d_out, q_progress, device, bs)
-    except Exception as e:
-        log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
+        except queues.Empty:
+            time.sleep(0.25)
+            continue
+        pred_func(m, inp, q_out, d_out, q_progress, device, bs)
+    # except Exception as e:
+    #     log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
     for _ in range(n_worker_postproc):
         q_out.put(f'STOP{worker_cnt}')
     log_handler.debug(f'Pred worker {worker_cnt} done.')
@@ -361,6 +361,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
 
     """
+    apply_proxy_fix()
+    m = Manager()
+
     if loader_kwargs is None:
         loader_kwargs = dict()
     if model_loader_kwargs is None:
@@ -401,7 +404,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     else:
         params_kwargs = dict(batchsize=bs, npoints=npoints, transform=transform, ctx_size=ctx_size, **loader_kwargs)
         params_in = [{**params_kwargs, **dict(ssv_params=[ch])} for ch in ssd_kwargs]
-        ssv_ids = [el['ssv_id'] for el in ssd_kwargs]
+        ssv_ids = np.array([el['ssv_id'] for el in ssd_kwargs])
 
     nsamples_tot = len(ssv_ids)
     if 'redundancy' in loader_kwargs:
@@ -414,9 +417,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
 
     q_load = Queue()
     q_progress = Queue()
-    d_postproc = dict()
+    d_postproc = m.dict()
     for k in ssv_ids:
-        d_postproc[k] = Queue()
+        d_postproc[k] = m.Queue()
     q_postproc = Queue()
 
     q_out = Queue()
@@ -436,7 +439,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.start()
 
     for el in params_in[nloader:] + [None] * nloader:
-        while q_load.qsize() > 20:
+        while q_load.qsize() > 10:
             time.sleep(1)
         q_loader.put(el)
 
@@ -473,6 +476,10 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         if c.is_alive():
             raise ValueError(f'Job {c} is still running.')
         c.close()
+    if len(dict_out) != len(ssv_ids):
+        raise ValueError(f'Missing {len(ssv_ids) - len(dict_out)} cell predictions: '
+                         f'{set(list(dict_out.keys())).difference(set(ssv_ids.tolist()))}')
+    m.shutdown()
     return dict_out
 
 
@@ -872,7 +879,6 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
         celltype_probas.append(res['probas'])
         if curr_ix == res['n_batches']:
             break
-
     logit = np.concatenate(celltype_probas)
 
     if 'j0126' in sso.config.working_dir and da_equals_tan:
@@ -1898,7 +1904,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=8, npredictor=4, npostproc=4, bs=batchsizes)
+    default_kwargs = dict(nloader=6, npredictor=4, npostproc=4, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
@@ -2193,7 +2199,7 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
         ld[p_t] = sso_preds
-    # TODO: use single array for all compartment predictions in the whole pipeline
+    # TODO: use single array for all compartment predictions in the entire pipeline
     # convert to conventional
     # 'axoness' (0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5: background, 6: unpredicted)
     # and
@@ -2384,3 +2390,57 @@ def add_myelin(ssv: SuperSegmentationObject, hc: HybridCloud, average: bool = Tr
     types = np.zeros(len(hc.vertices))
     types[myel_vertices] = 1
     hc.set_types(types)
+
+
+
+# Backport of https://github.com/python/cpython/pull/4819
+# Improvements to the Manager / proxied shared values code
+# broke handling of proxied objects without a custom proxy type,
+# as the AutoProxy function was not updated.
+#
+# This code adds a wrapper to AutoProxy if it is missing the
+# new argument.
+
+from inspect import signature
+from functools import wraps
+from multiprocessing import managers
+orig_AutoProxy = managers.AutoProxy
+
+
+@wraps(managers.AutoProxy)
+def AutoProxy(*args, incref=True, manager_owned=False, **kwargs):
+    # Create the autoproxy without the manager_owned flag, then
+    # update the flag on the generated instance. If the manager_owned flag
+    # is set, `incref` is disabled, so set it to False here for the same
+    # result.
+    autoproxy_incref = False if manager_owned else incref
+    proxy = orig_AutoProxy(*args, incref=autoproxy_incref, **kwargs)
+    proxy._owned_by_manager = manager_owned
+    return proxy
+
+
+def apply_proxy_fix():
+    """
+    See https://stackoverflow.com/questions/46779860/multiprocessing-managers-and-custom-classes
+    """
+    if "manager_owned" in signature(managers.AutoProxy).parameters:
+        return
+
+    log_handler.debug("Patching multiprocessing.managers.AutoProxy to add manager_owned")
+    managers.AutoProxy = AutoProxy
+
+    # re-register any types already registered to SyncManager without a custom
+    # proxy type, as otherwise these would all be using the old unpatched AutoProxy
+    SyncManager = managers.SyncManager
+    registry = managers.SyncManager._registry
+    for typeid, (callable, exposed, method_to_typeid, proxytype) in registry.items():
+        if proxytype is not orig_AutoProxy:
+            continue
+        create_method = hasattr(managers.SyncManager, typeid)
+        SyncManager.register(
+            typeid,
+            callable=callable,
+            exposed=exposed,
+            method_to_typeid=method_to_typeid,
+            create_method=create_method,
+        )

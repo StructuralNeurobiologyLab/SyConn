@@ -1886,7 +1886,8 @@ class SegmentationDataset(SegmentationBase):
         Calculate the RAG volume.
 
         Args:
-            source: Allowed sources: 'total' (all SVs contained), 'neuron' (use glia-free RAG), 'glia' (use glia RAG)
+            source: Allowed sources: 'total' (all SVs contained in SegmentationDataset('sv')),
+                'neuron' (use glia-free RAG), 'glia' (use glia RAG).
 
         Returns:
             Volume in mm^3.
