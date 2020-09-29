@@ -334,15 +334,16 @@ def run_create_rag():
               "on bounding box diagonal of corresponding SVs.")
     before_cnt = len(G.nodes())
     for ix in list(G.nodes()):
-        if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
+        if ccsize_dict[ix] <= global_params.config['glia']['min_cc_size_ssv']:
             G.remove_node(ix)
     total_size = 0
     for n in G.nodes():
         total_size += sd.get_segmentation_object(n).size
     total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
     cc_gs = list(nx.connected_component_subgraphs(G))
-    log.info("Removed {} SVs from RAG because of size. Final RAG contains {} SVs in {} CCs ({} mm^3; {} Gvx).".format(
-        before_cnt - G.number_of_nodes(), G.number_of_nodes(), len(cc_gs), total_size_cmm, total_size / 1e9))
+    log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
+             f"{global_params.config['glia']['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
+             f"{len(cc_gs)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
     nx.write_edgelist(G, global_params.config.pruned_rag_path)
 
     if not global_params.config.prior_glia_removal:
