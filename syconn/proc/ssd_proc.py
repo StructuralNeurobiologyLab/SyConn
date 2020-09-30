@@ -147,8 +147,7 @@ def _apply_mapping_decisions_thread(args):
                                                         cache_properties=['size'])
         if lower_ratio is None:
             try:
-                lower_ratio = cell_objects_dc["lower_mapping_ratios"][
-                    obj_t]
+                lower_ratio = cell_objects_dc["lower_mapping_ratios"][obj_t]
             except KeyError:
                 msg = "Lower ratio undefined."
                 log_proc.critical(msg)
@@ -156,8 +155,7 @@ def _apply_mapping_decisions_thread(args):
 
         if upper_ratio is None:
             try:
-                upper_ratio = cell_objects_dc["upper_mapping_ratios"][
-                    obj_t]
+                upper_ratio = cell_objects_dc["upper_mapping_ratios"][obj_t]
             except KeyError:
                 log_proc.error(f"Upper ratio undefined - 1. assumed.")
                 upper_ratio = 1.

@@ -95,7 +95,7 @@ if __name__ == '__main__':
     # Prepare data
     # --------------------------------------------------------------------------
     # Setup working directory and logging
-    working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
+    working_dir = f"/glusterfs/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
                   f"{'_'.join(map(str, cube_size))}_{number_of_nodes}nodes"
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')

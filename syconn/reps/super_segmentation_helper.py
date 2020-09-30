@@ -1757,7 +1757,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ld[semseg_key] = maj_vote
         ld.push()
     else:
-        maj_vote = ld[semseg_key]
+        maj_vote = ld[semseg_key].astype(np.int)
     if colors is not None:
         col = colors[maj_vote].astype(np.uint8)
         if np.sum(col) == 0:

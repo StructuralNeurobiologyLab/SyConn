@@ -2219,8 +2219,9 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     sp_pred[cmpt_preds == 5] = 1  # head to head
     sp_pred[cmpt_preds == 6] = 2  # neck to neck
     sp_pred[cmpt_preds == -1] = 5  # unpredicted to unpredicted
-    ld['axoness'] = ax_pred
-    ld['spiness'] = sp_pred
+
+    ld['axoness'] = ax_pred.astype(np.int)
+    ld['spiness'] = sp_pred.astype(np.int)
     del ld['dnh']
     del ld['abt']
     del ld['ads']
@@ -2234,8 +2235,8 @@ def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
 
     Expected keys in label dict for point cloud based predictions:
         * Coarse compartments ['ads']: dendrite (0), axon (1), soma (2).
-        * Axon compartments ['abt]: axon (0), en-passant bouton (1), terminal bouton (2).
-        * Dendritic compartments ['dnh']: dendritic shaft (0), spine head (1), spine neck (2).
+        * Axon compartments ['abt']: axon (0), en-passant bouton (1), terminal bouton (2).
+        * Dendritic compartments ['dnh']: dendritic shaft (0), spine neck (1), spine head (2)
 
     Alternative layout from multi-views:
         * 'axoness': 0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5: background, 6: unpredicted.
@@ -2258,10 +2259,10 @@ def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
         dnh = ld['dnh']
         a_mask = (ads == 1).reshape(-1)
         d_mask = (ads == 0).reshape(-1)
-        abt[abt == 0] = 3
+        abt[abt == 1] = 3
         abt[abt == 2] = 4
-        dnh[dnh == 1] = 5
-        dnh[dnh == 2] = 6
+        dnh[dnh == 1] = 6
+        dnh[dnh == 2] = 5
         ads[a_mask] = abt[a_mask]
         ads[d_mask] = dnh[d_mask]
     elif 'axoness' in ld and 'spiness' in ld:
