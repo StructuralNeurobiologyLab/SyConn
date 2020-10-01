@@ -23,6 +23,8 @@ from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
     test_point_models = True
+    test_view_models = True
+    assert test_point_models or test_view_models
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     node_state = next(iter(nodestates_slurm().values()))
@@ -31,8 +33,7 @@ if __name__ == '__main__':
     ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
     number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
-    # cube_size = np.array([2048, 2048, 1024]) * 6  # interrupted at synapse detection
-    cube_size = (np.array([2048, 2048, 1024]) * 2.5).astype(np.int)
+    cube_size = (np.array([2048, 2048, 1024]) * 3.5).astype(np.int)
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
     # cube_of_interest_bb = None  # process the entire cube!
@@ -176,14 +177,15 @@ if __name__ == '__main__':
 
     log.info('Step 3/10 - Glia separation')
     if global_params.config.prior_glia_removal:
-        global_params.config['use_point_models'] = False
-        global_params.config.write_config()
-        time.sleep(10)  # wait for changes to apply
-        ftimer.start('Glia prediction (multi-views)')
-        # if not global_params.config.use_point_models:
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
-        ftimer.stop()
+        if test_view_models:
+            global_params.config['use_point_models'] = False
+            global_params.config.write_config()
+            time.sleep(10)  # wait for changes to apply
+            ftimer.start('Glia prediction (multi-views)')
+            # if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+            ftimer.stop()
 
         # else:
         if test_point_models:
@@ -243,13 +245,14 @@ if __name__ == '__main__':
         p.close()
 
     log.info('Step 7/10 - Compartment prediction')
-    global_params.config['use_point_models'] = False
-    global_params.config.write_config()
-    time.sleep(10)  # wait for changes to apply
-    ftimer.start('Compartment predictions (multi-views)')
-    exec_inference.run_semsegaxoness_prediction()
-    exec_inference.run_semsegspiness_prediction()
-    ftimer.stop()
+    if test_view_models:
+        global_params.config['use_point_models'] = False
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Compartment predictions (multi-views)')
+        exec_inference.run_semsegaxoness_prediction()
+        exec_inference.run_semsegspiness_prediction()
+        ftimer.stop()
     # if not global_params.config.use_point_models:
     if test_point_models:
         ftimer.start('Compartment predictions (points)')
@@ -264,12 +267,13 @@ if __name__ == '__main__':
     ftimer.stop()
 
     log.info('Step 8/10 - Morphology extraction')
-    global_params.config['use_point_models'] = False
-    global_params.config.write_config()
-    time.sleep(10)  # wait for changes to apply
-    ftimer.start('Morphology extraction (multi-views)')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
+    if test_view_models:
+        global_params.config['use_point_models'] = False
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Morphology extraction (multi-views)')
+        exec_inference.run_morphology_embedding()
+        ftimer.stop()
     if test_point_models:
         global_params.config['use_point_models'] = True
         global_params.config.write_config()
@@ -279,12 +283,13 @@ if __name__ == '__main__':
         ftimer.stop()
 
     log.info('Step 9/10 - Celltype analysis')
-    global_params.config['use_point_models'] = False
-    global_params.config.write_config()
-    time.sleep(10)  # wait for changes to apply
-    ftimer.start('Celltype analysis (multi-views)')
-    exec_inference.run_celltype_prediction()
-    ftimer.stop()
+    if test_view_models:
+        global_params.config['use_point_models'] = False
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Celltype analysis (multi-views)')
+        exec_inference.run_celltype_prediction()
+        ftimer.stop()
     if test_point_models:
         global_params.config['use_point_models'] = True
         global_params.config.write_config()
@@ -305,3 +310,13 @@ if __name__ == '__main__':
     #          'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
     # os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 
+    # remove unimportant stuff
+    import glob, tqdm
+    for fname in tqdm.tqdm(glob.glob(working_dir + '/sv_0/so_storage*/*/*/views.pkl'), desc='Views'):
+        os.remove(fname)
+    tmp_del_dir = f'{working_dir}/DEL_{cube_size[0]}_cube/'
+    os.makedirs(tmp_del_dir)
+    for d in tqdm.tqdm(['vc_0', 'sj_0', 'syn_ssv_0', 'syn_0', 'ssv_0', 'models', 'mi_0', 'cs_0',
+                        'knossosdatasets', 'SLURM', 'tmp', 'chunkdatasets'], desc='Folders'):
+        shutil.move(f'{working_dir}/{d}', tmp_del_dir)
+    shutil.move(tmp_del_dir, f'{working_dir}/../')

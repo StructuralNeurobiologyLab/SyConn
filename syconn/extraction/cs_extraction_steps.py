@@ -228,8 +228,8 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
         scale = np.array(global_params.config['scaling'])
         target_kd.scales = [scale, ]
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ])
-        target_kd = basics.kd_factory(path)
+                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+        target_kd = basics.kd_factory(path)  # test if init is possible
         export_cset_to_kd_batchjob({ot: path}, cset, ot, [ot],  offset=offset, size=size,
                                    stride=chunk_size, as_raw=False,
                                    orig_dtype=np.uint64, unified_labels=False, log=log)

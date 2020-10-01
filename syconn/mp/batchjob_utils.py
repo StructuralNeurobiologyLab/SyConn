@@ -262,6 +262,7 @@ def batchjob_script(params: list, name: str,
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
     nb_completed_compare = 0
+    last_failed = 0
     while True:
         nb_failed = 0
         # get internal job ids from current job dict
@@ -283,7 +284,7 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            if requeue_dc[j] == 20:
+            if requeue_dc[j] == 20:  # TODO: use global_params NCORES_PER_NODE
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
@@ -292,6 +293,13 @@ def batchjob_script(params: list, name: str,
             # increment number of cores by one.
             job_cmd = f'sbatch --cpus-per-task={new_core_init + n_cores} {job_exec_dc[j]}'
             max_relaunch_cnt = 0
+            err_msg = None
+            if time.time() - last_failed > 5:
+                # if a job failed within the last 5 seconds, do not print the error
+                # message (assume same error)
+                with open(f"{path_to_err}/job_{j}.log") as f:
+                    err_msg = f.read()
+                last_failed = time.time()
             while True:
                 process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
                 out_str, err = process.communicate()
@@ -313,6 +321,8 @@ def batchjob_script(params: list, name: str,
             slurm2job_dc[slurm_id] = j
             log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
                               f'{slurm_id_orig} (old).')
+            if err_msg is not None:
+                log_batchjob.warning(f'Job {j} failed with: {err_msg}')
         nb_completed = np.sum(job_states == 'COMPLETED')
         pbar.update(nb_completed - nb_completed_compare)
         nb_completed_compare = nb_completed

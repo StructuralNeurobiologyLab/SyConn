@@ -225,7 +225,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
     # precompute rendering locations
-    multi_params = chunkify(sds.so_dir_paths, global_params.config.ncore_total * 4)
+    multi_params = chunkify(sds.so_dir_paths, global_params.config.ncore_total * 2)
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
     multi_params = [[par, so_kwargs] for par in multi_params]
     # TODO: remove comment as soon as glia separation supports on the fly view generation

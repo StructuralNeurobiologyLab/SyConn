@@ -245,7 +245,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         chunk_size = [512, 512, 512]
     chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 4
+        max_n_jobs = global_params.config.ncore_total * 2
         # loading cached data or adapt number of jobs/cache size dynamically,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
