@@ -300,6 +300,8 @@ def batchjob_script(params: list, name: str,
                 with open(f"{path_to_err}/job_{j}.log") as f:
                     err_msg = f.read()
                 last_failed = time.time()
+                if 'exceeded memory limit' in err_msg:
+                    err_msg = None  # do not report message of OOM errors
             while True:
                 process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
                 out_str, err = process.communicate()
