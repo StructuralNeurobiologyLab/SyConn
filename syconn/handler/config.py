@@ -3,16 +3,19 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-from typing import Tuple, Optional, Union, Dict, Any, List
-import yaml
-import logging
-from logging import Logger
-import coloredlogs
+# Authors: Philipp Schubert
 import datetime
-import numpy as np
-from termcolor import colored
+import glob
+import logging
 import os
+from logging import Logger
+from typing import Tuple, Optional, Union, Dict, Any, List
+
+import coloredlogs
+import numpy as np
+import yaml
+from termcolor import colored
+
 from .. import global_params
 
 __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
@@ -24,12 +27,14 @@ class Config(object):
     in `working_dir` :py:attr:`~initialized` will be False without raising an
     error.
     """
+
     def __init__(self, working_dir):
         self._config = None
         self._configspec = None
         self._working_dir = working_dir
         self.initialized = False
         if self._working_dir is not None and len(self._working_dir) > 0:
+            self._working_dir = os.path.abspath(self._working_dir)
             self.parse_config()
 
     def __eq__(self, other: 'Config') -> bool:
@@ -87,8 +92,7 @@ class Config(object):
         Reads the content stored in the config file.
         """
         try:
-            self._config = yaml.load(open(self.path_config, 'r'),
-                                     Loader=yaml.FullLoader)
+            self._config = yaml.load(open(self.path_config, 'r'), Loader=yaml.FullLoader)
             self.initialized = True
         except FileNotFoundError:
             pass
@@ -110,6 +114,11 @@ class Config(object):
             fname_conf = target_dir + '/config.yml'
         with open(fname_conf, 'w') as f:
             f.write(yaml.dump(self.entries, default_flow_style=False))
+
+    @staticmethod
+    def version():
+        from syconn import __version__
+        return __version__
 
 
 class DynConfig(Config):
@@ -136,16 +145,22 @@ class DynConfig(Config):
             cfg = global_params.config  # this is the `DynConfig` object
 
     """
-    def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None):
+
+    def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None, fix_config: bool = False):
         """
         Args:
             wd: Path to working directory
+            log:
+            fix_config: Keep config constant.
         """
         verbose = False
         if wd is None:
             wd = global_params.wd
             verbose = True if wd is not None else False
         super().__init__(wd)
+        self.fix_config = fix_config
+        if fix_config and self.working_dir is None:
+            raise ValueError('Fixed config must have a valid working directory.')
         self._default_conf = None
         if log is None:
             log = logging.getLogger('syconn')
@@ -223,16 +238,17 @@ class DynConfig(Config):
         Checks os.environ and global_params and triggers an update if the therein
          specified WD is not the same as :py:attr:`~working dir`.
         """
-        # first check if working directory was set in environ,
-        # else check if it was changed in memory.
+        if self.fix_config:
+            return
+        # first check if working directory was set in environ, else check if it was changed in memory.
         new_wd = None
-        if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
-            len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
-            if super().working_dir != os.environ['syconn_wd']:
-                new_wd = os.environ['syconn_wd']
-        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
-                (global_params.wd != "None") and (super().working_dir != global_params.wd):
-            new_wd = global_params.wd
+        if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and len(os.environ['syconn_wd']) > 0 \
+                and os.environ['syconn_wd'] != "None":
+            if super().working_dir != os.path.abspath(os.environ['syconn_wd']):
+                new_wd = os.path.abspath(os.environ['syconn_wd'])
+        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and (global_params.wd != "None") and \
+                (super().working_dir != os.path.abspath(global_params.wd)):
+            new_wd = os.path.abspath(global_params.wd)
         if new_wd is None:
             return
         super().__init__(new_wd)
@@ -356,10 +372,8 @@ class DynConfig(Config):
         Returns:
             Path to temporary directory used to store data caches.
         """
-        # return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
         return "{}/tmp/".format(self.working_dir)
 
-    # TODO: Work-in usage of init_rag_path
     @property
     def init_rag_path(self) -> str:
         """
@@ -397,21 +411,32 @@ class DynConfig(Config):
     def mpath_tnet(self) -> str:
         """
         Returns:
-            Path to tCMN - a decoder network of local cell morphology trained via
+            Path to tCMN - an encoder network of local cell morphology trained via
             triplet loss.
         """
-        return self.model_dir + '/tCMN/'
+        return self.model_dir + '/tCMN/model.pts'
+        # return self.model_dir + '/tCMN/'
 
     @property
-    def mpath_tnet_large(self) -> str:
+    def mpath_tnet_pts(self) -> str:
         """
-        Trained on a large field of view.
-
         Returns:
-            Path to tCMN - a decoder network of cell morphology trained via
-            triplet loss.
+            Path to an encoder network of local cell morphology trained via
+            triplet loss on point data.
         """
-        return self.model_dir + '/tCMN_large/'
+        mpath = glob.glob(self.model_dir + '/pts/*tnet*/state_dict.pth')
+        if len(mpath) > 1:
+            ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+            if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
+                return mpath[ixs.index(1)]
+            ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+            if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
+                return mpath[ixs.index(1)]
+            # assume its j0126
+            if 'j0251' not in global_params.config.working_dir and np.sum(ixs) == 1:
+                mpath.pop(ixs.index(1))
+        assert len(mpath) == 1
+        return mpath[0]
 
     @property
     def mpath_spiness(self) -> str:
@@ -420,23 +445,27 @@ class DynConfig(Config):
             Path to model trained on detecting spine head, neck, dendritic shaft,
             and ``other`` (soma and axon) via 2D projections (-> semantic segmentation).
         """
-        return self.model_dir + '/spiness/'
+        return self.model_dir + '/spiness/model.pts'
+        # return self.model_dir + '/spiness/'
 
     @property
     def mpath_axonsem(self) -> str:
         """
         Returns:
             Path to model trained on detecting axon, terminal boutons and en-passant,
-            dendrites and somata via 2D projections (-> semantic segmentation).
+            dendrites and somata via 2D projections.
         """
-        return self.model_dir + '/axoness_semseg/'
+        return self.model_dir + '/axoness_semseg/model.pts'
+        # return self.model_dir + '/axoness_semseg/'
 
     @property
-    def mpath_celltype(self) -> str:
+    def mpath_compartment_pts(self) -> str:
         """
-        Deprecated.
+        Returns:
+            Path to model trained on detecting axon, terminal and en-passant boutons,
+            dendritic shaft, spine head and neck, and soma from point data.
         """
-        return self.model_dir + '/celltype/celltype.mdl'
+        return self.model_dir + '/compartment_pts/'
 
     @property
     def mpath_celltype_e3(self) -> str:
@@ -444,38 +473,28 @@ class DynConfig(Config):
         Returns:
             Path to model trained on prediction cell types from multi-view sets.
         """
-        return self.model_dir + '/celltype_e3/'
+        return self.model_dir + '/celltype_e3/model.pts'
 
     @property
-    def mpath_celltype_large_e3(self) -> str:
+    def mpath_celltype_pts(self) -> str:
         """
-        Trained on a large field of view.
-
         Returns:
-            Path to model trained to infer cell types from multi-view sets.
+            Path to model trained on prediction cell types from point data.
         """
-        return self.model_dir + '/celltype_large_e3/'
-
-    @property
-    def mpath_axoness(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/axoness/axoness.mdl'
-
-    @property
-    def mpath_axoness_e3(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/axoness_e3/'
-
-    @property
-    def mpath_glia(self) -> str:
-        """
-        Deprecated.
-        """
-        return self.model_dir + '/glia/glia.mdl'
+        mpath = glob.glob(self.model_dir + '/pts/*celltype*/state_dict.pth')
+        if len(mpath) > 1:
+            mpath = [m for m in mpath if 'tnet' not in m]
+        ixs = [int('j0126' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+        if 'j0126' in global_params.config.working_dir and np.sum(ixs) == 1:
+            return mpath[ixs.index(1)]
+        ixs = [int('j0251' in os.path.split(os.path.dirname(m))[1]) for m in mpath]
+        if 'j0251' in global_params.config.working_dir and np.sum(ixs) == 1:
+            return mpath[ixs.index(1)]
+        # assume its j0126
+        if 'j0251' not in global_params.config.working_dir and np.sum(ixs) == 1:
+            mpath.pop(ixs.index(1))
+        assert len(mpath) == 1
+        return mpath[0]
 
     @property
     def mpath_glia_e3(self) -> str:
@@ -487,13 +506,24 @@ class DynConfig(Config):
         return self.model_dir + '/glia_e3/'
 
     @property
+    def mpath_glia_pts(self) -> str:
+        """
+        Returns:
+            Path to point-based model trained to classify local 2D projections into glia
+            vs. neuron.
+        """
+        mpath = glob.glob(self.model_dir + '/pts/*glia*/state_dict.pth')
+        assert len(mpath) == 1
+        return mpath[0]
+
+    @property
     def mpath_myelin(self) -> str:
         """
         Returns:
             Path to model trained on identifying myelinated cell parts
             within 3D EM raw data.
         """
-        return self.model_dir + '/myelin/model.pt'
+        return self.model_dir + '/myelin/model.pts'
 
     @property
     def mpath_syntype(self) -> str:
@@ -514,15 +544,10 @@ class DynConfig(Config):
         If ``True``, meshes are not provided for cell supervoxels and will be
         computed from scratch, see :attr:`~syconn.handler.config.DynConf.use_new_meshing`.
         """
-        try:
-            if self.entries['meshes']['allow_mesh_gen_cells'] is None:
-                raise KeyError
-            return self.entries['meshes']['allow_mesh_gen_cells']
-        except KeyError:
-            return False
+        return bool(self['meshes']['allow_mesh_gen_cells'])
 
     @property
-    def allow_skel_gen(self) -> bool:
+    def allow_ssv_skel_gen(self) -> bool:
         """
         Controls whether cell supervoxel skeletons are provided a priori or
         can be computed from scratch. Currently this is done via a naive sampling
@@ -531,7 +556,16 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        return self.entries['skeleton']['allow_skel_gen']
+        return bool(self['skeleton']['allow_ssv_skel_gen'])
+
+    @property
+    def use_kimimaro(self) -> bool:
+        """
+        Controls if skeletons should be generated with kimimaro
+        Returns: value stores in config.yml file
+
+        """
+        return bool(self['skeleton']['use_kimimaro'])
 
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
@@ -543,27 +577,28 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['dataset']['syntype_avail'] is None:
-                raise KeyError
-            return self.entries['dataset']['syntype_avail']
-        except KeyError:
-            return True
+        return bool(self['syntype_avail'])
 
     @property
-    def use_large_fov_views_ct(self) -> bool:
+    def use_point_models(self) -> bool:
         """
-        Use views with large field of view for cell type prediction.
+        Use point cloud based models instead of multi-views.
 
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['views']['use_large_fov_views_ct'] is None:
-                raise KeyError
-            return self.entries['views']['use_large_fov_views_ct']
-        except KeyError:
-            return False
+        return bool(self['use_point_models'])
+
+
+    @property
+    def use_onthefly_views(self) -> bool:
+        """
+        Generate views for cell type prediction on the fly.
+
+        Returns:
+            Value stored at the config.yml file.
+        """
+        return bool(self['views']['use_onthefly_views'])
 
     @property
     def use_new_renderings_locs(self) -> bool:
@@ -574,12 +609,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['views']['use_new_renderings_locs'] is None:
-                raise KeyError
-            return self.entries['views']['use_new_renderings_locs']
-        except KeyError:
-            return False
+        return bool(self['views']['use_new_renderings_locs'])
 
     @property
     def use_new_meshing(self) -> bool:
@@ -590,12 +620,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.yml file.
         """
-        try:
-            if self.entries['meshes']['use_new_meshing'] is None:
-                raise KeyError
-            return self.entries['meshes']['use_new_meshing']
-        except KeyError:
-            return False
+        return bool(self['meshes']['use_new_meshing'])
 
     @property
     def qsub_work_folder(self) -> str:
@@ -619,7 +644,6 @@ class DynConfig(Config):
         """
         return self.entries['glia']['prior_glia_removal']
 
-
     @property
     def use_new_subfold(self) -> bool:
         """
@@ -629,12 +653,10 @@ class DynConfig(Config):
         Returns:
             Value stored in ``config.yml``.
         """
-        try:
-            if self['paths']['use_new_subfold'] is not None:
-                return self['paths']['use_new_subfold']
-            else:
-                raise KeyError
-        except KeyError:
+        use_new_subfold = self['paths']['use_new_subfold']
+        if use_new_subfold is not None:
+            return bool(use_new_subfold)
+        else:
             return False
 
     @property
@@ -652,27 +674,19 @@ class DynConfig(Config):
 
     @property
     def asym_label(self) -> Optional[int]:
-        try:
-            return self.entries['cell_objects']['asym_label']
-        except KeyError:
-            return None
+        return self['cell_objects']['asym_label']
 
     @property
     def sym_label(self) -> Optional[int]:
-        try:
-            return self.entries['cell_objects']['sym_label']
-        except KeyError:
-            return None
+        return self['cell_objects']['sym_label']
 
 
 def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           syntype_avail: bool = True,
-                          use_large_fov_views_ct: bool = False,
-                          allow_skel_gen: bool = True,
                           use_new_renderings_locs: bool = True,
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
-                          kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
+                          kd_sj: Optional[str] = None, kd_mi: Optional[str] = None,
                           kd_vc: Optional[str] = None, init_rag_p: str = "",
                           prior_glia_removal: bool = True,
                           use_new_meshing: bool = True,
@@ -698,251 +712,13 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     working directory.
 
     Examples:
-        # General properties of the data set
-        scaling: [1, 1, 1]
-
-        # File system, 'FS' is currently the only supported option
-        backend: "FS"
-
-        # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
-        pyopengl_platform: 'egl'
-
-        existing_cell_organelles: ['mi', 'sj', 'vc']
-        syntype_avail:
-
-        # Compute backend: 'QSUB', 'SLURM', None
-        batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
-
-        # the here defined parameters
-        batch_pe: 'default'
-        batch_queue: 'all.q'
-
-        mem_per_node: 128000  # in MB
-        ncores_per_node: 16
-        ngpus_per_node: 1
-        nnodes_total: 1
-
-        # --------- LOGGING
-        # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
-        # Logs of executed scripts (syconn/scripts) will be stored at the
-        # working directory + '/logs/' nonetheless.
-        default_log_dir:
-        log_level: 10  # INFO: 20, DEBUG: 10
-        # file logging for individual modules, and per job. Only use in case of
-        # debugging with single core processing. Logs for scripts are located in 'SyConn/scripts/'
-        # will be stored at wd + '/logs/'.
-        disable_file_logging: True
-
-        # File locking - deprecated.
-        disable_locking: False
-
-        # Data paths
-        paths:
-          kd_seg:
-          kd_sym:
-          kd_asym:
-          kd_sj:
-          kd_vc:
-          kd_mi:
-          init_rag:
-          use_new_subfold:
-
-        # (Super-)SegmentationDataset versions
-        versions:
-          sv: 0
-          vc: 0
-          sj: 0
-          syn: 0
-          syn_ssv: 0
-          mi: 0
-          ssv: 0
-          ax_gt: 0
-          cs: 0
-
-        # Cell object properties
-        cell_objects:
-          # threshold applied during object extraction
-          min_obj_vx:
-            mi: 100
-            sj: 100
-            vc: 100
-            sv: 1  # all cell supervoxels are extracted
-            cs: 10  # contact sites tend to be small
-            syn: 10  # these are overlayed with contact sites and therefore tend to be small
-            syn_ssv: 100 # minimum number of voxel for synapses in SSVs
-
-          lower_mapping_ratios:
-            mi: 0.5
-            sj: 0.1
-            vc: 0.5
-
-          upper_mapping_ratios:
-            mi: 1.
-            sj: 0.9
-            vc: 1.
-
-          # size threshold (in voxels) applied when mapping them to cells
-          sizethresholds:
-            mi: 2786
-            sj: 498
-            vc: 1584
-
-          probathresholds:
-            mi: 0.428571429
-            sj: 0.19047619
-            vc: 0.285714286
-
-          # Hook for morphological operations from scipy.ndimage applied during object extraction.
-          # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
-          extract_morph_op:
-            mi: []
-            sj: []
-            vc: []
-            sv: []  # these are the cell supervoxels
-
-          # bounding box criteria for mapping mitochondria objects
-          thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
-
-          # --------- CONTACT SITE AND SYNAPSE PARAMETERS
-          # Synaptic junction bounding box diagonal threshold in nm; objects above will
-          # not be used during `syn_gen_via_cset`
-          thresh_sj_bbd_syngen: 25000  # bounding box diagonal in NM
-          # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
-          # into 'syn_ssv'
-          cs_gap_nm: 250
-          cs_filtersize: [13, 13, 7]
-          cs_nclosings: 7
-          # Parameters of agglomerated synapses 'syn_ssv'
-          # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
-          # organelles to syn_ssv
-          max_vx_dist_nm: 2000
-          max_rep_coord_dist_nm: 4000
-          # RFC probability used for classifying whether syn or not
-          thresh_synssv_proba: 0.5
-          # > sym_thresh will be assigned synaptic sign -1 (inhibitory) and <= will be
-          # (1, excitatory)
-          sym_thresh: 0.225
-          # labels are None by default
-          asym_label:
-          sym_label:
-
-        meshes:
-          allow_mesh_gen_cells:
-          use_new_meshing:
-
-          downsampling:
-            sv: [4, 4, 2]
-            sj: [2, 2, 1]
-            vc: [4, 4, 2]
-            mi: [8, 8, 4]
-            cs: [2, 2, 1]
-            syn_ssv: [2, 2, 1]
-
-          closings:
-            sv: 0
-            s: 0
-            vc: 0
-            mi: 0
-            cs: 0
-            syn_ssv: 0
-
-          mesh_min_obj_vx: 100  # adapt to size threshold
-
-          meshing_props:
-            normals: False  # True
-            simplification_factor: 300
-            max_simplification_error: 40  # in nm
-
-        skeleton:
-          allow_skel_gen: True
-          feature_context_rfc: # in nm
-            axoness: 8000
-            spiness: 1000
-
-        views:
-          use_large_fov_views_ct:
-          use_new_renderings_locs:
-          nb_views: 2  # used for default view rendering (glia separation, spine detection)
-
-        glia:
-          prior_glia_removal: True
-          # min. connected component size of glia nodes/SV after thresholding glia proba
-          min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
-
-          # Threshold for glia classification
-          glia_thresh: 0.161489
-          # number of sv used during local rendering. The total number of SV used are
-          # subcc_size_big_ssv + 2*(subcc_chunk_size_big_ssv-1)
-          subcc_size_big_ssv: 35
-          rendering_max_nb_sv: 5000
-          # number of SV for which views are rendered in one pass
-          subcc_chunk_size_big_ssv: 9
-
-        # --------- SPINE PARAMETERS
-        spines:
-          min_spine_cc_size: 10
-          min_edge_dist_spine_graph: 110
-          gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
-
-          # mapping parameters of the semantic segmentation prediction to the cell mesh
-          # Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
-          # via nearest neighbors.
-          semseg2mesh_spines:
-            semseg_key: "spiness"
-            force_recompute: True
-            k: 0
-
-          # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
-          # and 5 (unpredicted), use labels of the k-nearest vertices
-          semseg2coords_spines:
-            k: 50
-            ds_vertices: 1
-            ignore_labels: [4, 5]
-
-
-        compartments:
-          dist_axoness_averaging: 10000  # also used for myelin averaging
-          gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'
-
-          # `k=0` will not map predictions to unpredicted vertices -> faster
-          # `k` is the parameter used in `semseg2mesh`
-          view_properties_semsegax:
-            verbose: False
-            ws: [1024, 512]
-            nb_views: 3
-            comp_window: 40960  # in NM
-            semseg_key: 'axoness'
-            k: 0
-          # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
-          # and 6 (unpredicted), use labels of the k-nearest vertices
-          map_properties_semsegax:
-            k: 50
-            ds_vertices: 1
-            ignore_labels: [5, 6]
-
-
-        celltype:
-          view_properties_large:
-            verbose: False
-            ws: [512, 512]
-            nb_views_render: 6
-            comp_window: 40960
-            nb_views_model: 4
-
-        # --------- MORPHOLOGY EMBEDDING
-        tcmn:
-          ndim_embedding: 10
-
+        The default config content is located at SyConn/syconn/handler/config.yml
 
     Args:
         working_dir: Folder of the working directory.
         scaling: Voxel size in NM.
         syntype_avail: If True, synapse objects will contain additional type
             property (symmetric vs asymmetric).
-        use_large_fov_views_ct: If True, uses on-the-fly, large view renderings
-            for predicting cell types.
-        allow_skel_gen: If True, allow cell skeleton generation from rendering
-            locations (inaccurate).
         use_new_renderings_locs: If True, uses new heuristic for generating
             rendering locations.
         kd_seg: Path to the KnossosDataset which contains the cell segmentation.
@@ -989,14 +765,12 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     if type(scaling) is np.ndarray:
         scaling = scaling.tolist()
     entries['scaling'] = scaling
+    entries['version'] = default_conf.version()
     entries['syntype_avail'] = syntype_avail
 
     entries['meshes']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
     entries['meshes']['use_new_meshing'] = use_new_meshing
 
-    entries['skeleton']['allow_skel_gen'] = allow_skel_gen
-
-    entries['views']['use_large_fov_views_ct'] = use_large_fov_views_ct
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal
@@ -1005,7 +779,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
         raise ValueError(f'Overwrite attempt of existing config file at '
-                         f'{default_conf.path_config}.')
+                         f'"{default_conf.path_config}".')
     default_conf.write_config(working_dir)
 
 
@@ -1052,10 +826,11 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
         except TypeError:
             if not os.path.isdir(log_dir):
                 os.makedirs(log_dir)
-        if overwrite and os.path.isfile(log_dir + log_name + '.log'):
-            os.remove(log_dir + log_name + '.log')
+        log_fname = log_dir + '/' + log_name + '.log'
+        if overwrite and os.path.isfile(log_fname):
+            os.remove(log_fname)
         # add the handlers to logger
-        fh = logging.FileHandler(log_dir + log_name + ".log")
+        fh = logging.FileHandler(log_fname)
         fh.setLevel(level)
         formatter = logging.Formatter(
             '%(asctime)s (%(relative)smin) - %(name)s - %(levelname)s - %(message)s')
@@ -1067,14 +842,15 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
 
 class TimeFilter(logging.Filter):
     """https://stackoverflow.com/questions/31521859/python-logging-module-time-since-last-log"""
+
     def filter(self, record):
         try:
-          last = self.last
+            last = self.last
         except AttributeError:
-          last = record.relativeCreated
+            last = record.relativeCreated
 
-        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - \
-                datetime.datetime.fromtimestamp(last/1000.0)
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated / 1000.0) - \
+                datetime.datetime.fromtimestamp(last / 1000.0)
 
         record.relative = '{0:.1f}'.format(delta.seconds / 60.)
 

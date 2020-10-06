@@ -17,7 +17,7 @@ except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
     cython_out = None
 
-VERSION = '0.2'
+VERSION = '0.3'
 
 
 def read_readme():
@@ -28,8 +28,7 @@ def read_readme():
 
 
 def write_version_py(filename='syconn/version.py'):
-    content = """
-# THIS FILE IS GENERATED FROM SYCONN SETUP.PY
+    content = """# THIS FILE IS GENERATED FROM SYCONN SETUP.PY
 #
 version = '%(version)s'
 """
@@ -37,9 +36,12 @@ version = '%(version)s'
         f.write(content % {'version': VERSION})
 
 
+write_version_py()
+
+
 setup(
     name='SyConn',
-    version='0.2',
+    version=VERSION,
     description='Analysis pipeline for EM raw data based on deep and '
                 'supervised learning to extract high level biological'
                 'features and connectivity.',
@@ -59,7 +61,7 @@ setup(
     ],
     platforms=["Linux", ],
     keywords='connectomics machinelearning imageprocessing',
-    packages=find_packages(exclude=['scripts']),
+    packages=find_packages(exclude=['scripts', 'tests']),
     python_requires='>=3.6, <4',
     package_data={'syconn': ['handler/config.yml']},
     include_package_data=True,
@@ -67,7 +69,7 @@ setup(
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [
-            'syconn.server=syconn.kplugin.server:main'
+            'syconn.server=syconn.analysis.server:main'
         ],
     },
 )

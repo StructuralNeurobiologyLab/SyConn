@@ -5,8 +5,11 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 from syconn.handler.prediction import *
+import pytest
+pytest.mark.filterwarnings("ignore:Initialized working directory without existing config file at")
 
 
+# TODO: loading pytorch3 models currently let's gitlab-runners get stuck after running tests
 def _setup_working_dir():
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',

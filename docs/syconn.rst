@@ -8,7 +8,6 @@ Subpackages
 
     syconn.reps
     syconn.exec
-    syconn.config
     syconn.proc
     syconn.extraction
     syconn.handler

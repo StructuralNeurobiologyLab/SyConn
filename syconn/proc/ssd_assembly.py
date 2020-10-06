@@ -4,16 +4,17 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-import numpy as np
-import zipfile
 import os
-import shutil
-import re
 import pickle as pkl
-from ..handler.basics import read_mesh_from_zip
-from ..reps.super_segmentation import SuperSegmentationObject
-from .. import global_params
+import re
+import zipfile
+
 import networkx as nx
+import numpy as np
+
+from .. import global_params
+from ..handler.basics import read_mesh_from_zip, read_meshes_from_zip
+from ..reps.super_segmentation import SuperSegmentationObject
 
 
 def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
@@ -43,8 +44,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     """
     if sso_id is None:
         sso_id = int(re.findall(r"/(\d+).", path)[0])
-    zip = zipfile.ZipFile(path)
-    files = zip.namelist()
+    files = list(zipfile.ZipFile(path).namelist())
 
     # attribute dictionary
     with zipfile.ZipFile(path, allowZip64=True) as z:
@@ -69,6 +69,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     # TODO: change those properties in SSO constructor
     # Required to enable prediction in 'tmp' SSVs
     sso._mesh_caching = True
+    sso._object_caching = True
     sso._view_caching = True
 
     # meshes
@@ -76,18 +77,20 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
         ply_name = "{}.ply".format(obj_type)
         if ply_name in files:
             sso._meshes[obj_type] = read_mesh_from_zip(path, ply_name)
+            files.remove(ply_name)
 
     # skeleton
     if "skeleton.pkl" in files:
         with zipfile.ZipFile(path, allowZip64=True) as z:
             f = z.open("skeleton.pkl")
             sso.skeleton = pkl.load(f)  # or loads?  returns a dict
-
+        files.remove("skeleton.pkl")
     # attribute dictionary
     if "attr_dict.pkl" in files:
         with zipfile.ZipFile(path, allowZip64=True) as z:
             f = z.open("attr_dict.pkl")
             sso.attr_dict = pkl.load(f)
+        files.remove("attr_dict.pkl")
 
     # Sample locations
     if "sample_locations.pkl" in files:
@@ -98,6 +101,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
             # https://stackoverflow.com/questions/33742544/zip-file-not-seekable
             # f = z.open("sample_locations.npy", mode='r')
             # sso._sample_locations = np.load(f)
+        files.remove("sample_locations.pkl")
 
     # RAG
     if "rag.bz2" in files:
@@ -108,6 +112,23 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
             sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint)
             os.remove(tmp_p)
             _ = sso.rag  # invoke node conversion into SegmentationObjects
+        files.remove("rag.bz2")
+    ply_files = []
+    sv_ids = []
+    for fname in files:
+        match = re.match(r'sv_(\d+).ply', fname)
+        if match is not None:
+            ply_files.append(fname)
+            sv_ids.append(int(match[1]))
+    if len(ply_files):
+        if 'sv' in sso.attr_dict:
+            if len(np.setdiff1d(sv_ids, sso.attr_dict['sv'])):
+                raise ValueError(f'Inconsistency in cell supervoxel IDs (attr_dict vs meshes).')
+        else:
+            sso.attr_dict['sv'] = sv_ids
+        sv_meshes = read_meshes_from_zip(path, ply_files)
+        for m, sv in zip(sv_meshes, sso.svs):
+            sv._mesh = m
     return sso
 
 

@@ -5,18 +5,20 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
-import numpy as np
-from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, Dict, List
+from ..backend import StorageClass
 from ..backend import log_backend
+from ..handler.basics import kd_factory
+from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
 
-from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
-from ..handler.basics import kd_factory
-from ..backend import StorageClass
+from collections import defaultdict
+from typing import Any, Tuple, Optional, Union, List
+
+import numpy as np
 
 
 class AttributeDict(StorageClass):
@@ -24,6 +26,7 @@ class AttributeDict(StorageClass):
     General purpose dictionary class inherited from
     :class:`syconn.backend.base.StorageClass`.
     """
+
     def __init__(self, inp_p, **kwargs):
         super(AttributeDict, self).__init__(inp_p, **kwargs)
 
@@ -51,6 +54,7 @@ class CompressedStorage(StorageClass):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
+
     def __init__(self, inp: str, **kwargs):
         super(CompressedStorage, self).__init__(inp, **kwargs)
 
@@ -96,7 +100,7 @@ class VoxelStorageL(StorageClass):
         """
 
         Args:
-            item ():
+            item:
 
         Returns:
             Decompressed voxel masks with corresponding offsets.
@@ -212,7 +216,7 @@ class VoxelStorageDyn(CompressedStorage):
     object ID in the segmentation.
 
     Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
-    manipulation of the object's bounding box. In this case `voxeldata_path`
+    manipulation of the object's bounding boxes. In this case `voxeldata_path`
     has to be given or already be existent in loaded dictionary. Expects the
     source path of a KnossoDataset (see knossos_utils), like:
 
@@ -235,12 +239,12 @@ class VoxelStorageDyn(CompressedStorage):
                  voxeldata_path: Optional[str] = None, **kwargs):
         super().__init__(inp, **kwargs)
         self.voxel_mode = voxel_mode
-        if not 'meta' in self._dc_intern:
+        if 'meta' not in self._dc_intern:
             # add meta information about underlying voxel data set to internal dictionary
             self._dc_intern['meta'] = dict(voxeldata_path=voxeldata_path)
-        if not 'size' in self._dc_intern:
+        if 'size' not in self._dc_intern:
             self._dc_intern['size'] = defaultdict(int)
-        if not 'rep_coord' in self._dc_intern:
+        if 'rep_coord' not in self._dc_intern:
             self._dc_intern['rep_coord'] = dict()
         if voxeldata_path is not None:
             old_p = self._dc_intern['meta']['voxeldata_path']
@@ -277,7 +281,7 @@ class VoxelStorageDyn(CompressedStorage):
                 curr_mask = self.voxeldata.load_seg(
                     size=size, offset=off, mag=1) == item
                 res.append(curr_mask.swapaxes(0, 2))
-            return res, bbs[:, 0]  # N, 3 --> all offset
+            return res, bbs[:, 0]  # (N, 3 --> all offset
         else:
             return super().__getitem__(item)
 
@@ -305,7 +309,17 @@ class VoxelStorageDyn(CompressedStorage):
             log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
         self._dc_intern['rep_coord'][item] = value
 
-    def get_voxeldata(self, item):
+    def get_voxeldata(self, item: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        """
+        Get the object binary mask as list of 3D cubes with the respective offsets
+        (in voxels). All in xyz.
+
+        Args:
+            item: Object ID.
+
+        Returns:
+            List of 3D binary masks and offsets (in voxels; xyz).
+        """
         old_vx_mode = self.voxel_mode
         self.voxel_mode = True
         if self._dc_intern['meta']['voxeldata_path'] is None:
@@ -319,7 +333,35 @@ class VoxelStorageDyn(CompressedStorage):
         self.voxel_mode = old_vx_mode
         return res
 
-    def get_boundingdata(self, item):
+    def get_voxel_data_cubed(self, item: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Get the object binary mask as dense 3D array (xyz).
+
+        Args:
+            item: Object ID.
+
+        Returns:
+            3D mask, cube offset in voxels (xyz).
+        """
+        bin_arrs, block_offsets = self[item]
+        min_off = np.min(block_offsets, axis=0)
+        size = np.max(block_offsets, axis=0) - min_off
+        block_offsets -= min_off
+        voxel_arr = np.zeros(size, dtype=np.uint8)
+        for bin_arr, off in zip(bin_arrs, block_offsets):
+            sh = bin_arr.shape
+            voxel_arr[off[0]:sh[0], off[1]:sh[1], off[2]:sh[2]] = bin_arr
+        return voxel_arr, min_off
+
+    def get_boundingdata(self, item: int) -> List[np.ndarray]:
+        """
+        Get the object bounding boxes.
+        Args:
+            item: Object ID.
+
+        Returns:
+            List of bounding boxes (in voxels; xyz).
+        """
         old_vx_mode = self.voxel_mode
         self.voxel_mode = False
         res = self[item]
@@ -328,7 +370,7 @@ class VoxelStorageDyn(CompressedStorage):
 
     def keys(self):
         # do not return 'meta' and other helper items in self._dc_intern, only object IDs
-        # TODO: make this a generator
+        # TODO: make this a generator, check usages beforehand!
         obj_elements = list([k for k in self._dc_intern.keys() if (type(k) is str and k.isdigit())
                              or (type(k) is not str)])
         return obj_elements
@@ -346,17 +388,14 @@ class MeshStorage(StorageClass):
         self.load_colarr = load_colarr
         super(MeshStorage, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]) -> List[np.ndarray]:
         """
 
-        Parameters
-        ----------
-        item : int/str
+        Args:
+            item: Key.
 
-        Returns
-        -------
-        List[np.arrays]
-            [indices, vertices, normals, colors/labels]
+        Returns:
+            Flat arrays: (indices, vertices, [normals, [colors/labels]])
         """
         try:
             return self._cache_dc[item]
@@ -379,7 +418,7 @@ class MeshStorage(StorageClass):
             self._cache_dc[item] = decomp_arrs
         return decomp_arrs
 
-    def __setitem__(self, key, mesh):
+    def __setitem__(self, key: int, mesh: List[np.ndarray]):
         """
 
         Parameters
@@ -389,9 +428,9 @@ class MeshStorage(StorageClass):
             [indices, vertices, normals, colors/labels]
         """
         if len(mesh) == 2:
-            mesh.append(np.zeros((0, ), dtype=np.float32))
+            mesh.append(np.zeros((0,), dtype=np.float32))
         if len(mesh) == 3:
-            mesh.append(np.zeros((0, ), dtype=np.uint8))
+            mesh.append(np.zeros((0,), dtype=np.uint8))
         if self._cache_decomp:
             self._cache_dc[key] = mesh
         if len(mesh[1]) != len(mesh[2]) > 0:
@@ -412,8 +451,7 @@ class MeshStorage(StorageClass):
 
 class SkeletonStorage(StorageClass):
     """
-    Stores skeleton dictionaries (keys: "nodes", "diameters", "edges") as
-    compressed numpy arrays.
+    Stores skeleton dictionaries (keys: "nodes", "diameters", "edges") as compressed numpy arrays.
     """
 
     def __init__(self, inp, **kwargs):
@@ -438,6 +476,9 @@ class SkeletonStorage(StorageClass):
         skeleton = {"nodes": lz4string_listtoarr(comp_arrs[0], dtype=np.uint32),
                     "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
                     "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
+        if len(comp_arrs) > 3:
+            for k, v in comp_arrs[3].items():
+                skeleton[k] = v
         if self._cache_decomp:
             self._cache_dc[item] = skeleton
         return skeleton
@@ -449,11 +490,17 @@ class SkeletonStorage(StorageClass):
         ----------
         key : int/str
         skeleton : dict
-            keys: nodes diameters edges
+            keys: nodes diameters edges and other attributes (uncompressed).
         """
         if self._cache_decomp:
             self._cache_dc[key] = skeleton
         comp_n = arrtolz4string_list(skeleton["nodes"].astype(dtype=np.uint32))
         comp_d = arrtolz4string_list(skeleton["diameters"].astype(dtype=np.float32))
         comp_e = arrtolz4string_list(skeleton["edges"].astype(dtype=np.uint32))
-        self._dc_intern[key] = [comp_n, comp_d, comp_e]
+        entry = [comp_n, comp_d, comp_e, dict()]
+        if len(skeleton) > 3:
+            for k, v in skeleton.items():
+                if k in ['nodes', 'diameters', 'edges']:
+                    continue
+                entry[3][k] = v
+        self._dc_intern[key] = entry

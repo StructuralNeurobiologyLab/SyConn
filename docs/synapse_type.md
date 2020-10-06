@@ -15,5 +15,4 @@ The CNN prediction follows the standard steps of predicting any class in a volum
 These predictions need to be transformed into `knossosdataset`. Finally, the synapse type for each object is extracted with
 
     from syconn.proc import sd_proc
-    sd_proc.extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
-                                 n_max_co_processes=200)
+    sd_proc.extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path)

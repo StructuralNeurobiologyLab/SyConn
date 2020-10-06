@@ -63,7 +63,7 @@ every `SegmentationObject` has the former three while only supervoxels (`sv`) ow
 are predefined datatypes, attributes are an arbitrary key value store. It is adviced though to be consistent in type and
 naming of attributes across the `SegmentationDataset` to avoid problems with the aforementioned column stores.
 
-The different datatypes can be accessed by
+The different data structures can be accessed by e.g.
 
 ```
 voxels = sj_obj.voxels

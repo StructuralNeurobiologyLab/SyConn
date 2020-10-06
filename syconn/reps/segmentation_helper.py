@@ -4,23 +4,31 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
-    VoxelStorage, SkeletonStorage, VoxelStorageDyn
-from ..handler.basics import chunkify
-from ..mp.mp_utils import start_multiprocess_imap
-from . import log_reps
-from .. import global_params
-
 import glob
-import numpy as np
-from scipy import ndimage
 import os
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
+from collections import defaultdict
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable, Any
+
+import numpy as np
+
+from . import log_reps
+from . import rep_helper as rh
+from .rep_helper import surface_samples
+from .. import global_params
+from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
+    VoxelStorage, SkeletonStorage
+from ..handler.basics import chunkify
+from ..handler.multiviews import generate_rendering_locs
+from ..mp.mp_utils import start_multiprocess_imap
+from ..proc.graphs import create_graph_from_coords
+
 if TYPE_CHECKING:
-    from ..reps import segmentation
+    from ..reps.segmentation import SegmentationObject
+MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
+                 Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
 
-def glia_pred_so(so: 'segmentation.SegmentationObject', thresh: float,
+def glia_pred_so(so: 'SegmentationObject', thresh: float,
                  pred_key_appendix: str) -> int:
     """
     Perform the glia classification of a cell supervoxel (0: neuron, 1: glia).
@@ -35,7 +43,7 @@ def glia_pred_so(so: 'segmentation.SegmentationObject', thresh: float,
     """
     assert so.type == "sv"
     pred_key = "glia_probas" + pred_key_appendix
-    if not pred_key in so.attr_dict:
+    if pred_key not in so.attr_dict:
         so.load_attr_dict()
     try:
         preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int)
@@ -49,6 +57,24 @@ def glia_pred_so(so: 'segmentation.SegmentationObject', thresh: float,
     if glia_votes > int(len(preds) * 0.7):
         return 1
     return 0
+
+
+def glia_proba_so(so: 'SegmentationObject', pred_key_appendix: str) -> float:
+    """
+    Get mean glia probability of a cell supervoxel (0: neuron, 1: glia).
+
+    Args:
+        so: The cell supervoxel object.
+        pred_key_appendix: Additional prediction key.
+
+    Returns:
+
+    """
+    assert so.type == "sv"
+    pred_key = "glia_probas" + pred_key_appendix
+    if pred_key not in so.attr_dict:
+        so.load_attr_dict()
+    return np.mean(so.attr_dict[pred_key][:, 1])
 
 
 def acquire_obj_ids(sd: 'SegmentationDataset'):
@@ -78,7 +104,7 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
         np.save(sd.path_ids, sd._ids)
 
 
-def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
+def save_voxels(so: 'SegmentationObject', bin_arr: np.ndarray,
                 offset: np.ndarray, overwrite: bool = False):
     """
     Helper function to save SegmentationObject voxels.
@@ -106,13 +132,11 @@ def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
     voxel_dc.push(so.voxel_path)
 
 
-def load_voxels(so: 'segmentation.SegmentationObject',
-                voxel_dc: Optional[Dict] = None) -> np.ndarray:
+def load_voxels_depr(so: 'SegmentationObject',
+                     voxel_dc: Optional[VoxelStorage] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
-
-    Todo:
-        * Currently the attribute ``so._bounding_box`` is always resetred.
+    Also calculates size and bounding box and assigns it to `so._size` and `so._bounding_box` respectively.
 
     Args:
         so: SegmentationObject
@@ -128,9 +152,9 @@ def load_voxels(so: 'segmentation.SegmentationObject',
 
     so._size = 0
     if so.id not in voxel_dc:
-        log_reps.error("Voxels for SO object %d of type %s do not exist"
-                       "" % (so.id, so.type))
-        return -1
+        msg = f"Voxels of {so} do not exist!"
+        log_reps.error(msg)
+        raise KeyError(msg)
 
     bin_arrs, block_offsets = voxel_dc[so.id]
     block_extents = []
@@ -153,27 +177,26 @@ def load_voxels(so: 'segmentation.SegmentationObject',
         so._size += np.sum(bin_arrs[i_bin_arr])
 
         voxels[box[0][0]: box[1][0],
-               box[0][1]: box[1][1],
-               box[0][2]: box[1][2]][bin_arrs[i_bin_arr]] = True
+        box[0][1]: box[1][1],
+        box[0][2]: box[1][2]][bin_arrs[i_bin_arr]] = True
 
     return voxels
 
 
-def load_voxels_downsampled(
-        so: 'segmentation.SegmentationObject',
-        downsampling: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
+def load_voxels_downsampled(so: 'SegmentationObject',
+                            ds: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
     if isinstance(so.voxels, int):
         return []
 
-    return so.voxels[::downsampling[0], ::downsampling[1], ::downsampling[2]]
+    return so.voxels[::ds[0], ::ds[1], ::ds[2]]
 
 
-def load_voxel_list(so: 'segmentation.SegmentationObject'):
+def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject.
 
     Args:
-        so: SegmentationObject
+        so: SegmentationObject.
 
     Returns: np.array
         2D array of coordinates to all voxels in SegmentationObject.
@@ -233,18 +256,16 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so: 'segmentation.SegmentationObject',
-              recompute: bool = False)\
-        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
     """
     Load mesh of SegmentationObject.
-    TODO: Currently ignores potential color/label array
+    TODO: Currently ignores potential color/label array.
 
     Args:
         so: SegmentationObject
         recompute: bool
 
-    Returns: Tuple[np.array]
+    Returns:
         indices, vertices, normals; all flattened
 
     """
@@ -254,22 +275,22 @@ def load_mesh(so: 'segmentation.SegmentationObject',
                                disable_locking=True)[so.id]
             if len(mesh) == 2:
                 indices, vertices = mesh
-                normals = np.zeros((0, ), dtype=np.float32)
+                normals = np.zeros((0,), dtype=np.float32)
             elif len(mesh) == 3:
                 indices, vertices, normals = mesh
                 col = np.zeros(0, dtype=np.uint8)
             elif len(mesh) == 4:
                 indices, vertices, normals, col = mesh
         except Exception as e:
-            msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)"\
+            msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)" \
                   "with id %d.".format(e, so.type, so.id)
             log_reps.error(msg)
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
+            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,))]
     else:
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
-            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
-        indices, vertices, normals = so._mesh_from_scratch()
+            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,))]
+        indices, vertices, normals = so.mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
             so._save_mesh(indices, vertices, normals)
@@ -280,74 +301,63 @@ def load_mesh(so: 'segmentation.SegmentationObject',
     indices = np.array(indices, dtype=np.int)
     normals = np.array(normals, dtype=np.float32)
     col = np.array(col, dtype=np.uint8)
-    return indices, vertices, normals
+    return [indices, vertices, normals]
 
 
-def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False) \
-        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
     """
 
     Args:
         so: SegmentationObject
-        recompute: bool
+        recompute: Compute skeleton, will not store it in ``SkeletonStorage``.
 
-    Returns: Tuple[np.array]
-        nodes, diameters, edges; all flattened
+    Returns:
+        Dictionary with "nodes", "diameters" and "edges".
 
     """
+    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int), edges=np.zeros((0, 2)),
+                      diameters=np.zeros((0,)).astype(np.int))
     if not recompute and so.skeleton_exists:
         try:
-            skeleton_dc = SkeletonStorage(so.skeleton_path,
-                                          disable_locking=not so.enable_locking)
-            nodes = skeleton_dc[so.id]['nodes']
-            diameters = skeleton_dc[so.id]['diameters']
-            edges = skeleton_dc[so.id]['edges']
+            skeleton_dc = SkeletonStorage(so.skeleton_path, disable_locking=not so.enable_locking)
+            skel = skeleton_dc[so.id]
+            if np.ndim(skel['nodes']) == 1:
+                skel['nodes'] = skel['nodes'].reshape((-1, 3))
+            if np.ndim(skel['edges']) == 1:
+                skel['edges'] = skel['edges'].reshape((-1, 2))
         except Exception as e:
             log_reps.error("\n{}\nException occured when loading skeletons.pkl"
                            " of SO ({}) with id {}.".format(e, so.type, so.id))
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )), \
-                   np.zeros((0, )).astype(np.int)
+            return empty_skel
+    elif recompute:
+        skel = generate_skeleton_sv(so)
     else:
-        msg = "Skeleton of SV {} (size: {}) not found.\n".format(so.id, so.size)
+        msg = f"Skeleton of {so} (size: {so.size}) not found.\n"
         if so.type == "sv":
             if so.size == 1:  # small SVs don't have a skeleton
                 log_reps.debug(msg)
             else:
                 log_reps.error(msg)
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )),\
-                   np.zeros((0, )).astype(np.int)
-
-    nodes = np.array(nodes, dtype=np.int)
-    diameters = np.array(diameters, dtype=np.float)
-    edges = np.array(edges, dtype=np.int)
-
-    return nodes, diameters, edges
+                raise ValueError(msg)
+        return empty_skel
+    return skel
 
 
-def save_skeleton(so: 'segmentation.SegmentationObject', overwrite: bool = False):
-    skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
-                                  disable_locking=not so.enable_locking)
+def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
+    """
+
+    Args:
+        so:
+        overwrite:
+
+    Returns:
+
+    """
+    skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False, disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:
-        raise ValueError("Skeleton of SV {} already exists.".format(so.id))
-    sv_skel = {"nodes": so.skeleton[0], "edges": so.skeleton[2],
-               "diameters": so.skeleton[1]}
-    skeleton_dc[so.id] = sv_skel
+        raise ValueError(f"Skeleton of {so} already exists.")
+    skeleton_dc[so.id] = so.skeleton
     skeleton_dc.push()
-
-
-def binary_closing(vx, n_iterations=13):
-    n_iterations = int(n_iterations)
-    assert n_iterations > 0
-
-    vx = np.pad(vx, [[n_iterations]*2]*3, mode='constant')
-
-    vx = ndimage.morphology.binary_closing(vx, iterations=n_iterations)
-
-    vx = vx[n_iterations: -n_iterations,
-            n_iterations: -n_iterations,
-            n_iterations: -n_iterations]
-
-    return vx
 
 
 def sv_view_exists(args):
@@ -375,7 +385,7 @@ def find_missing_sv_views(sd, woglia, n_cores=20):
 def sv_skeleton_missing(sv):
     if sv.skeleton is None:
         sv.load_skeleton()
-    return (sv.skeleton is None) or (len(sv.skeleton[0]) == 0)
+    return (sv.skeleton is None) or (len(sv.skeleton['nodes']) == 0)
 
 
 def find_missing_sv_skeletons(svs, n_cores=20):
@@ -411,3 +421,201 @@ def find_missing_sv_attributes(sd, attr_key, n_cores=20):
     res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
                                   debug=False)
     return np.concatenate(res)
+
+
+def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['SegmentationObject']],
+                        use_new_subfold: bool = True, cache_decomp=True) -> MeshStorage:
+    """
+    Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
+    This will not assign the ``_mesh`` attribute!
+
+    Args:
+        sos: SegmentationObjects
+        use_new_subfold: Use new sub-folder structure
+        cache_decomp: Cache decompressed meshes.
+
+    Returns:
+        Dictionary, key: ID, value: mesh
+    """
+    md_out = MeshStorage(None)  # in-memory dict with compression
+    if len(sos) == 0:
+        return md_out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        if so._mesh is None:
+            subf = subf_from_ix(so.id, nf)
+            sub2ids[subf].append(so.id)
+        else:
+            md_out[so.id] = so._mesh
+    for subfold, ids in sub2ids.items():
+        mesh_path = f'{base_path}/{subfold}/mesh.pkl'
+        md = MeshStorage(mesh_path, disable_locking=True,
+                         cache_decomp=cache_decomp)
+        for so_id in ids:
+            md_out._dc_intern[so_id] = md._dc_intern[so_id]
+    assert len(md_out) == len(sos)
+    return md_out
+
+
+def load_so_attr_bulk(sos: List['SegmentationObject'],
+                      attr_keys: Union[str, Iterable[str]],
+                      use_new_subfold: bool = True,
+                      allow_missing: bool = False) -> Union[Dict[str, Dict[int, Any]], Dict[int, Any]]:
+    """
+    Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
+    Returns a single dict if only one attr_key is provided or a dict of dicts if many.
+    This method will also check if the requested attribute(s) already exist in the object's ``attr_dict``. This means
+    using ``cache_properties`` when initializing ``SegmentationDataset`` might be beneficial to avoid exhaustive file
+    reads in case `sos` is large.
+
+    Args:
+        sos: SegmentationObjects
+        attr_keys: Attribute key(s).
+        use_new_subfold: Use new sub-folder structure
+        allow_missing: If True, sets attribute value to None if missing. If False and missing, raise KeyError.
+
+    Returns:
+        (Dict. with key: attr_key of) dict. with key: ID, value: attribute value
+    """
+    if type(attr_keys) is str:
+        attr_keys = [attr_keys]
+    out = {attr_k: dict() for attr_k in attr_keys}
+    if len(sos) == 0:
+        if len(attr_keys) == 1:
+            out = out[attr_keys[0]]
+        return out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        keys_missing = len(attr_keys)
+        # use cached/loaded attributes
+        for k in attr_keys:
+            if k in so.attr_dict:
+                out[k][so.id] = so.attr_dict[k]
+                keys_missing -= 1
+        if keys_missing == 0:
+            continue
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    for subfold, ids in sub2ids.items():
+        attr_p = f'{base_path}/{subfold}/attr_dict.pkl'
+        ad = AttributeDict(attr_p, disable_locking=True)
+        for so_id in ids:
+            so_dict = ad[so_id]
+            for attr_key in attr_keys:
+                try:
+                    out[attr_key][so_id] = so_dict[attr_key]
+                except KeyError as e:
+                    if allow_missing:
+                        out[attr_key][so_id] = None
+                    else:
+                        raise KeyError(e)
+    if len(attr_keys) == 1:
+        out = out[attr_keys[0]]
+    return out
+
+
+def load_so_voxels_bulk(sos: List['SegmentationObject'],
+                        use_new_subfold: bool = True, cache_decomp=True):
+    """
+
+    Args:
+        sos:
+        use_new_subfold:
+        cache_decomp:
+
+    Returns:
+
+    """
+    raise NotImplementedError('WIP')
+    vd_out = VoxelStorage(None, cache_decomp=cache_decomp)  # in-memory dict with compression
+    if len(sos) == 0:
+        return vd_out
+    base_path = sos[0].so_storage_path
+    nf = sos[0].n_folders_fs
+    subf_from_ix = rh.subfold_from_ix_new if use_new_subfold else \
+        rh.subfold_from_ix_OLD
+    sub2ids = defaultdict(list)
+    for so in sos:
+        subf = subf_from_ix(so.id, nf)
+        sub2ids[subf].append(so.id)
+    cnt = 0
+    for subfold, ids in sub2ids.items():
+        voxel_path = f'{base_path}/{subfold}/voxel.pkl'
+        vd = VoxelStorage(voxel_path, disable_locking=True)
+        for so_id in ids:
+            cnt += 1
+            vd_out._dc_intern[so_id] = vd._dc_intern[so_id]
+    assert cnt == len(sos)
+    return vd_out
+
+
+def _helper_func(args):
+    ps, use_vxsize = args
+    out = []
+    for p in ps:
+        if not use_vxsize:
+            w = len(AttributeDict(p + '/attr_dict.pkl', disable_locking=True))
+        else:
+            w = np.sum([v['size'] for v in AttributeDict(p + '/attr_dict.pkl', disable_locking=True).values()])
+        out.append(w)
+    return out
+
+
+def get_sd_load_distribution(sd: 'SegmentationDataset', use_vxsize: bool = True) -> np.ndarray:
+    """
+    Get the load distribution (number of objects per storage) of the SegmentationDataset's AttributeDicts.
+
+    Args:
+        sd: SegmentationDataset
+        use_vxsize:
+
+    Returns:
+        Load array.
+    """
+    n_objects = start_multiprocess_imap(_helper_func, [(ch, use_vxsize) for ch in chunkify(sd.so_dir_paths, 1000)],
+                                        nb_cpus=None)
+    return np.concatenate(n_objects).astype(np.int)
+
+
+def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
+    """
+    Poor man's solution to generate a SV "skeleton". Used for glia predictions.
+
+    Args:
+        so:
+
+    Returns:
+        Dictionary with keys "nodes", "edges" and "diameters" (all 1).
+    """
+    verts = so.mesh[1].reshape(-1, 3)
+    # choose random subset of surface vertices
+    np.random.seed(0)
+    ixs = np.arange(len(verts))
+    np.random.shuffle(ixs)
+    ixs = ixs[:int(0.5 * len(ixs))]
+    if global_params.config.use_new_renderings_locs:
+        locs = generate_rendering_locs(verts[ixs], 1000)
+    else:
+        locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+                               max_nb_samples=10000, r=500)
+    g = create_graph_from_coords(locs, mst=True)
+    if g.number_of_edges() == 1:
+        edge_list = np.array(list(g.edges()))
+    else:
+        edge_list = np.array(g.edges())
+    del g
+    if edge_list.ndim != 2:
+        raise ValueError("Edge list ist not a 2D array: {}\n{}".format(
+            edge_list.shape, edge_list))
+    skeleton = dict()
+    skeleton["nodes"] = (locs / np.array(so.scaling)).astype(np.int)
+    skeleton["edges"] = edge_list
+    skeleton["diameters"] = np.ones(len(locs))
+    return skeleton

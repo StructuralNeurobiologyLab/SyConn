@@ -4,51 +4,53 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 # import here, otherwise it might fail if it is imported after importing torch
 # see https://github.com/pytorch/pytorch/issues/19739
-import open3d as o3d
-from ..handler.config import initialize_logging
-from ..reps import log_reps
-from ..mp import batchjob_utils as qu
-from ..handler.basics import chunkify
 
-from ..handler import log_handler, log_main, basics
-from .compression import load_from_h5py, save_to_h5py
-from .basics import read_txt_from_zip, get_filepaths_from_dir,\
-    parse_cc_dict_from_kzip
-from .. import global_params
-
-import networkx as nx
-import re
-import numpy as np
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 import os
-import sys
-import time
-import tqdm
-from logging import Logger
-import functools
-from morphx.classes.hybridcloud import HybridCloud
+import re
 import shutil
-from sklearn.preprocessing import label_binarize
-from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices
-from typing import Iterable, Union, Optional, Any, Tuple, Callable
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.decomposition import PCA
 from collections import Counter
-from knossos_utils.knossosdataset import KnossosDataset
-from scipy.stats import entropy
-from scipy.special import softmax
-from knossos_utils.chunky import ChunkDataset, save_dataset
+from logging import Logger
+from typing import Iterable, Union, Optional, Any, Tuple, List
+
+import numpy as np
 from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
+from knossos_utils.chunky import ChunkDataset, save_dataset
+from knossos_utils.knossosdataset import KnossosDataset
+from scipy.special import softmax
+from scipy.stats import entropy
+from sklearn.decomposition import PCA
+from sklearn.neighbors import KNeighborsClassifier
+
+from .basics import read_txt_from_zip, get_filepaths_from_dir, \
+    parse_cc_dict_from_kzip
+from .compression import load_from_h5py, save_to_h5py
+from .. import global_params
+from ..handler import log_handler, log_main, basics
+from ..handler.basics import chunkify
+from ..handler.config import initialize_logging
+from ..mp import batchjob_utils as qu
+from ..proc.image import apply_morphological_operations
+from ..reps import log_reps
+
+# for readthedocs build
+try:
+    import torch
+except ImportError:
+    pass
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
                       mag=1):
     """
     Loads ground truth from zip file, generated with Knossos. Corresponding
-    dataset config file is locatet at kd_p.
+    dataset config file is located at kd_p.
 
     Args:
         zip_fname: str
@@ -62,24 +64,25 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         verbose: bool
         mag: int
             Data mag. level.
+
     Returns: np.array, np.array
         raw data (float32) (multiplied with 1/255.), label data (uint16)
 
     """
     if type(kd_p) is str or type(kd_p) is bytes:
         kd_p = [kd_p]
-    bb = parse_movement_area_from_zip(zip_fname)
-    offset, size = bb[0], bb[1] - bb[0]
     raw_data = []
     label_data = []
     for curr_p in kd_p:
         kd = basics.kd_factory(curr_p)
+        bb = kd.get_movement_area(zip_fname)
+        offset, size = bb[0], bb[1] - bb[0]
         scaling = np.array(kd.scale, dtype=np.int)
         if np.isscalar(raw_data_offset):
             raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
                                        dtype=np.int)
             if verbose:
-                print('Using scale adapted raw offset:', raw_data_offset)
+                log_handler.debug(f'Using scale adapted raw offset: {raw_data_offset}')
         elif len(raw_data_offset) != 3:
             raise ValueError("Offset for raw cubes has to have length 3.")
         else:
@@ -87,11 +90,10 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         raw = kd.load_raw(size=(size // mag + 2 * raw_data_offset) * mag,
                           offset=(offset // mag - raw_data_offset) * mag,
                           mag=mag).swapaxes(0, 2)
-        raw_data.append(raw[None, ])
-        # TODO: use load_kzip_seg
-        label = kd._load_kzip_seg(zip_fname, offset, size, mag=mag, apply_mergelist=False).swapaxes(0, 2)
+        raw_data.append(raw[None,])
+        label = kd.load_kzip_seg(zip_fname, mag=mag).swapaxes(0, 2)
         label = label
-        label_data.append(label[None, ])
+        label_data.append(label[None,])
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
     label = np.concatenate(label_data, axis=0)
     try:
@@ -142,7 +144,7 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
                       override_mfp_to_active=mfp_active, imposed_batch_size=1)
         original_do_rates = m.dropout_rates
         m.dropout_rates = ([0.0, ] * len(original_do_rates))
-        pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
+        pred = m.predict_dense(raw[None,], pad_raw=True)[1]
         # remove area without sufficient FOV
         pred = zxy2xyz(pred)
         raw = zxy2xyz(raw)
@@ -205,7 +207,7 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
                   override_mfp_to_active=mfp_active, imposed_batch_size=1)
     original_do_rates = m.dropout_rates
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
-    pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
+    pred = m.predict_dense(raw[None,], pad_raw=True)[1]
     pred = zxy2xyz(pred)
     raw = zxy2xyz(raw)
     if as_uint8:
@@ -309,8 +311,9 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
                         foreground_ids: Optional[Iterable[int]] = None,
                         overwrite: bool = True, raw_data_offset: int = 75,
                         debug: bool = False, mag: int = 1,
-                        squeeze_data: int = False,
-                        target_labels: Optional[Iterable[int]] = None):
+                        squeeze_data: int = True,
+                        target_labels: Optional[Iterable[int]] = None,
+                        apply_mops_seg: Optional[List[str]] = None):
     """
     Create .h5 files for ELEKTRONN (zyx) input. Only supports binary labels
     (0=background, 1=foreground).
@@ -348,7 +351,10 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
         target_labels: If set, `foreground_ids` must also be set. Each ID in
             `foreground_ids` will be mapped to the corresponding label in
             `target_labels`.
+        apply_mops_seg: List of string identifiers for ndimage morphological operations.
     """
+    if not squeeze_data and apply_mops_seg is not None:
+        raise ValueError('Data might have axis with length one if squeeze_data=False.')
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
     fname, ext = os.path.splitext(zip_fname)
@@ -377,13 +383,14 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
         print("Foreground IDs not assigned. Inferring from "
               "'mergelist.txt' in k.zip.:", foreground_ids)
     create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug,
-                      target_labels=target_labels)
+                      target_labels=target_labels, apply_mops_seg=apply_mops_seg)
 
 
 def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
                       foreground_ids: Optional[Iterable[int]] = None,
                       target_labels: Optional[Iterable[int]] = None,
-                      debug: bool = False):
+                      debug: bool = False,
+                      apply_mops_seg: Optional[List[str]] = None):
     """
     Create .h5 files for ELEKTRONN input from two arrays.
     Only supports binary labels (0=background, 1=foreground). E.g. for creating
@@ -404,9 +411,7 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
             be mapped to the corresponding label in `target_labels`.
         debug: bool
             will store labels and raw as uint8 ranging from 0 to 255
-
-    Returns:
-
+        apply_mops_seg: List of string identifiers for ndimage morphological operations.
     """
     if target_labels is not None and foreground_ids is None:
         raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
@@ -415,9 +420,12 @@ def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
     label = binarize_labels(label, foreground_ids, target_labels=target_labels)
     label = xyz2zxy(label)
     raw = xyz2zxy(raw)
+    if apply_mops_seg is not None:
+        label = apply_morphological_operations(label, morph_ops=apply_mops_seg)
+    label = label.astype(np.uint16)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label (after mapping):", label.shape, label.dtype, label.min(), label.max())
-    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
+    print("-----------------\nGT Summary:\n%s\n" % str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
     if debug:
@@ -548,8 +556,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         chunks = ch_dc.values()[i::n]
     else:
         chunks = ch_dc.values()
-    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks),
-                                                            gpu_id))
+    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks), gpu_id))
 
     if not overwrite:
         for chunk in chunks:
@@ -580,8 +587,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        #overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
-                        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
+                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        cube_of_interest: Optional[Tuple[np.ndarray]] = None,
+                        overwrite: bool = False):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -592,7 +600,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     Otherwise the classification results will be written to the overlay channel.
 
     Notes:
-        *  TODO: Currently has a high GPU memory requirement (minimum 12GB).
+        * Has a high GPU memory requirement (minimum 12GB). Does should be controlable from the config or determined
+          automatically.
+        * Resulting KnossosDatasets currently do not use pyknossos confs.
 
     Args:
         kd_path: Path to KnossosDataset .conf file of the raw data.
@@ -626,15 +636,11 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
+        overwrite: Overwrite existing KDs.
 
     """
-    # TODO: switch to pyk confs
     if log is None:
-        log_name = 'dense_prediction'
-        if target_names is not None:
-            log_name += '_' + "".join(target_names)
-        log = initialize_logging(log_name, global_params.config.working_dir + '/logs/',
-                                 overwrite=False)
+        log = initialize_logging('dense_predictions', global_params.config.working_dir + '/logs/', overwrite=False)
     if target_names is None:
         target_names = ['pred']
     if target_channels is None:
@@ -653,10 +659,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     # TODO: these should be config parameters
     overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
-    if qu.batchjob_enabled():
-        chunk_size = np.array([1024, 1024, 512])
-    else:  # assume small dataset volume
-        chunk_size = np.array([482, 481, 236])
+    chunk_size = np.array([482, 481, 236])
+    # if qu.batchjob_enabled():
+    #     chunk_size *= 2
     tile_shape = [271, 181, 138]
 
     cd = ChunkDataset()
@@ -664,16 +669,20 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                   box_coords=cube_of_interest[0], list_of_coords=[],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
-    # init target KnossosDatasets:
-    target_kd_path_list = [target_path+'/{}/'.format(tn) for tn in target_names]
+    # init target KnossosDatasets
+    target_kd_path_list = [target_path + '/{}/'.format(tn) for tn in target_names]
     for path in target_kd_path_list:
         if os.path.isdir(path):
+            if not overwrite:
+                msg = f'Found existing KD at "{path}" but overwrite is set to False.'
+                log.error(msg)
+                raise ValueError(msg)
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(6)],)
+                                          kd.experiment_name, [2 ** x for x in range(6)], )
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
     # init batchjob parameters
@@ -683,13 +692,12 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
                     for ch_ids in multi_params]
-    log.info('Started dense prediction of {} in {:d} chunk(s).'.format(
-        ", ".join(target_names), len(chunk_ids)))
-    n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
-        'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
-    qu.batchjob_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
-                       n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
-                       additional_flags="--gres=gpu:1")
+    log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
+    n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if \
+        qu.batchjob_enabled() else global_params.config['ncores_per_node']
+
+    qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
+                       remove_jobfolder=True, log=log, additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
@@ -719,9 +727,8 @@ def dense_predictor(args):
     # TODO: remove chunk necessity
     # TODO: clean up (e.g. redundant chunk sizes, ...)
     #
-    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles,\
-    tile_shape, chunk_size, n_channel, target_channels, target_kd_path_list, \
-    channel_thresholds, mag, cube_of_interest = args
+    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
+    target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -767,8 +774,7 @@ def dense_predictor(args):
                           f'{tile_shape} to reduce memory requirements.')
             ix = (ix + 1) % 3  # permute spatial dimension which is reduced
 
-    # predict Chunks:
-    print(f'Starting prediction of {len(chunk_ids)} Chunks with size {chunk_size}.')
+    # predict Chunks
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
@@ -778,21 +784,13 @@ def dense_predictor(args):
 
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
-        start = time.time()
-        raw = kd.load_raw(size=size*mag, offset=coords*mag, mag=mag)
-        print(f'loading took {time.time()-start}. {raw.shape}')
+        raw = kd.load_raw(size=size * mag, offset=coords * mag, mag=mag)
 
-        start = time.time()
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
                                       is_zyx=True, return_zyx=True)
 
-        dt = time.time() - start
-        print(f'Finished prediction after {dt}s, That is'
-              f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s. {pred.shape}')
-
         # slice out the original input volume along ZYX, i.e. the last three axes
         pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
-        # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
@@ -816,16 +814,14 @@ def dense_predictor(args):
                     data = pred[label]
             if save_as_raw:
                 target_kd_dict[path].save_raw(
-                    offset=ch.coordinates*mag, data=data.astype(np.uint8),
-                    data_mag=mag, mags=[mag, mag*2, mag*4],
+                    offset=ch.coordinates * mag, data=data.astype(np.uint8),
+                    data_mag=mag, mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
             else:
                 target_kd_dict[path].save_seg(
                     offset=ch.coordinates * mag, data=data, data_mag=mag,
                     mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
-        # dt = time.time() - start
-        # print(f'Finished writing data after {dt}s.')
 
 
 def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False,
@@ -835,6 +831,8 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False
     Args:
         raw: The input data array in CXYZ.
         predictor: The model which performs the inference. Requires ``predictor.predict``.
+        is_zyx:
+        return_zyx:
 
     Returns:
         The inference result in CXYZ as uint8 between 0..255.
@@ -843,7 +841,7 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False
     if not is_zyx:
         raw = xyz2zyx(raw)
     # predict: pred of the form (N, C, [D,], H, W)
-    pred = predictor.predict(raw[None, None])
+    pred = predictor.predict(raw[None, None]).numpy()
     pred = np.array(pred[0]) * 255  # remove N-axis
     pred = pred.astype(np.uint8)
     if not return_zyx:
@@ -883,7 +881,7 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset,
                   box_coords=np.zeros(3), fit_box_size=True)
     kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1,2,4,8])
+                                    kd.experiment_name, mags=[1, 2, 4, 8])
     cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                          stride=[256, 256, 256])
 
@@ -929,8 +927,7 @@ def prediction_helper(raw, model, override_mfp=True,
     return zxy2xyz(pred)
 
 
-def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
-               debug: bool = False):
+def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module', debug: bool = False):
     """
     Helper function to write chunks.
 
@@ -950,142 +947,10 @@ def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
         ch.save_chunk(raw, "pred", "raw", overwrite=False)
 
 
-class NeuralNetworkInterface(object):
-    """
-    Inference class for elektronn2 models, support will end at some point.
-    Switching to 'InferenceModel' in elektronn3.model.base in the long run.
-    """
-    def __init__(self, model_path, arch='', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
-                 normalize_data=False, normalize_func=None, init_gpu=None):
-        self.imposed_batch_size = imposed_batch_size
-        self.channels_to_load = channels_to_load
-        self.arch = arch
-        self._path = model_path
-        self._fname = os.path.split(model_path)[1]
-        self.nb_labels = nb_labels
-        self.normal = normal
-        self.normalize_data = normalize_data
-        self.normalize_func = normalize_func
-
-        if init_gpu is None:
-            init_gpu = 'auto'
-        from elektronn2.config import config as e2config
-        if e2config.device is None:
-            from elektronn2.utils.gpu import initgpu
-            initgpu(init_gpu)
-        import elektronn2
-        elektronn2.logger.setLevel("ERROR")
-        from elektronn2.neuromancer.model import modelload
-        self.model = modelload(model_path, replace_bn='const',
-                               imposed_batch_size=imposed_batch_size)
-        self.original_do_rates = self.model.dropout_rates
-        self.model.dropout_rates = ([0.0, ] * len(self.original_do_rates))
-
-    def predict_proba(self, x, verbose=False):
-        x = x.astype(np.float32)
-        if self.normalize_data:
-            if self.normalize_func is not None:
-                x = self.normalize_func(x)
-            else:
-                x = naive_view_normalization(x)
-        bs = self.imposed_batch_size
-        # using floor now and remaining samples are treated later
-        if self.arch == "rec_view":
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(int(np.floor(x.shape[1] / bs)))]
-            proba = np.ones((x.shape[1], 4, self.nb_labels))
-        elif self.arch == "triplet":
-            x = views2tripletinput(x)
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(int(np.floor(len(x) / bs)))]
-            # nb_labels represents latent space dim.; 3 -> view triplet
-            proba = np.ones((len(x), self.nb_labels, 3))
-        else:
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(int(np.floor(len(x) / bs)))]
-            proba = np.ones((len(x), self.nb_labels))
-        if verbose:
-            cnt = 0
-            start = time.time()
-            pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
-                             unit='it', unit_scale=True, dynamic_ncols=False)
-        for b in batches:
-            if verbose:
-                sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
-                sys.stdout.flush()
-                cnt += 1
-                pbar.update()
-            x_b = x[b]
-            proba[b] = self.model.predict(x_b)[None, ]
-        overhead = len(x) % bs
-        # TODO: add proper axis handling, maybe introduce axistags
-        if overhead != 0:
-            new_x_b = x[-overhead:]
-            if len(new_x_b) < bs:
-                add_shape = list(new_x_b.shape)
-                add_shape[0] = bs - len(new_x_b)
-                new_x_b = np.concatenate((np.zeros((add_shape),
-                                                   dtype=np.float32), new_x_b))
-            proba[-overhead:] = self.model.predict(new_x_b)[-overhead:]
-        if verbose:
-            end = time.time()
-            sys.stdout.write("\r%0.2f\n" % 1.0)
-            sys.stdout.flush()
-            print("Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
-                  (len(x), end-start, (end-start)/len(x)))
-            pbar.close()
-        if self.arch == "triplet":
-            return proba[..., 0]
-        return proba
-
-
-def get_axoness_model():
-    """
-    Retrained with GP dendrites. May 2018.
-    """
-    m = NeuralNetworkInterface(global_params.config.mpath_axoness,
-                               imposed_batch_size=200,
-                               nb_labels=3, normalize_data=True)
-    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
-    return m
-
-
-def get_axoness_model_e3():
-    """Those networks are typically trained with `naive_view_normalization_new` """
-    from elektronn3.models.base import InferenceModel
-    path = global_params.config.mpath_axoness_e3
-    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
-    return m
-
-
-def get_glia_model():
-    m = NeuralNetworkInterface(global_params.config.mpath_glia,
-                               imposed_batch_size=200, nb_labels=2,
-                               normalize_data=True)
-    _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
-    return m
-
-
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
-    path = global_params.config.mpath_glia_e3
-    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
-    return m
-
-
-def get_celltype_model(init_gpu=None):
-    """
-    Retrained on new GT on Jan. 13th, 2019.
-    """
-    # this model was trained with 'naive_view_normalization_new'
-    m = NeuralNetworkInterface(global_params.config.mpath_celltype,
-                               imposed_batch_size=2, nb_labels=4,
-                               normalize_data=True,
-                               normalize_func=naive_view_normalization_new,
-                               init_gpu=init_gpu)
-    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    m = InferenceModel(global_params.config.mpath_glia_e3, normalize_func=naive_view_normalization_new)
     return m
 
 
@@ -1102,26 +967,8 @@ def get_celltype_model_e3():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    path = global_params.config.mpath_celltype_e3
-    m = InferenceModel(path, bs=40)
-    return m
-
-
-def get_celltype_model_large_e3():
-    """Those networks are typically trained with `naive_view_normalization_new`
-     Unlike the other e3 InferenceModel instances, here the view normalization
-     is applied in the downstream inference method (`predict_sso_celltype`)
-      because the celltype model also gets scalar values as input which should
-      not be normalized."""
-    try:
-        from elektronn3.models.base import InferenceModel
-    except ImportError as e:
-        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
-              "com/ELEKTRONN/elektronn3' for more information.".format(e)
-        log_main.error(msg)
-        raise ImportError(msg)
-    path = global_params.config.mpath_celltype_large_e3
-    m = InferenceModel(path)
+    m = torch.jit.load(global_params.config.mpath_celltype_e3)
+    m = InferenceModel(m, bs=40, multi_gpu=True)
     return m
 
 
@@ -1134,7 +981,8 @@ def get_semseg_spiness_model():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_spiness
-    m = InferenceModel(path)
+    m = torch.jit.load(path)
+    m = InferenceModel(m)
     m._path = path
     return m
 
@@ -1148,7 +996,8 @@ def get_semseg_axon_model():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_axonsem
-    m = InferenceModel(path)
+    m = torch.jit.load(path)
+    m = InferenceModel(m)
     m._path = path
     return m
 
@@ -1162,22 +1011,8 @@ def get_tripletnet_model_e3():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    m_path = global_params.config.mpath_tnet
-    m = InferenceModel(m_path)
-    return m
-
-
-def get_tripletnet_model_large_e3():
-    """Those networks are typically trained with `naive_view_normalization_new` """
-    try:
-        from elektronn3.models.base import InferenceModel
-    except ImportError as e:
-        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
-              "com/ELEKTRONN/elektronn3' for more information.".format(e)
-        log_main.error(msg)
-        raise ImportError(msg)
-    m_path = global_params.config.mpath_tnet_large
-    m = InferenceModel(m_path)
+    m = torch.jit.load(global_params.config.mpath_tnet)
+    m = InferenceModel(m)
     return m
 
 
@@ -1195,17 +1030,19 @@ def get_myelin_cnn():
               "com/ELEKTRONN/elektronn3' for more information.".format(e)
         log_main.error(msg)
         raise ImportError(msg)
-    m_path = global_params.config.mpath_myelin
-    m = Predictor(m_path)
+    m = torch.jit.load(global_params.config.mpath_myelin)
+    m = Predictor(m)
     return m
 
 
 def get_knn_tnet_embedding_e3():
+    """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
+    """OUTDATED"""
     tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
 
@@ -1353,229 +1190,123 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
         proba = softmax(inp, axis=1)
     else:
         proba = inp
-    # sum probabilities across samples
-    proba = np.sum(proba, axis=0)
-    # normalize
-    proba = proba / np.sum(proba)
-    # maximum entropy at equal probabilities: -sum(1/N*ln(1/N) = ln(N)
+    # sum probabilities across samples and normalize
+    proba = np.mean(proba, axis=0)
+    # maximum entropy at equal probabilities: -sum(1/N*ln(1/N)) = ln(N)
     entr_max = np.log(len(proba))
     entr_norm = entropy(proba) / entr_max
     # convert to certainty estimate
     return 1 - entr_norm
 
 
-pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2)
-# in nm, should be replaced by Poisson disk sampling
-pts_feat_ds_dict = dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100)
-
-
-def generate_pts_sample(sample_pts: dict, feat_dc: dict, cellshape_only: bool,
-                        num_obj_types: int, onehot: bool = True,
-                        npoints: Optional[int] = None, use_syntype: bool = True,
-                        downsample: Optional[float] = None):
-    # TODO: add optional downsampling here
-    feat_dc = dict(feat_dc)
-    if use_syntype:
-        if 'syn_ssv' in feat_dc:
-            del feat_dc['syn_ssv']
-    else:
-        if 'syn_ssv_sym' in feat_dc:
-            del feat_dc['syn_ssv_sym']
-        if 'syn_ssv_asym' in feat_dc:
-            del feat_dc['syn_ssv_asym']
-    if cellshape_only is True:
-        sample_pts = sample_pts['sv']
-        sample_feats = np.ones((len(sample_pts), 1)) * feat_dc['sv']
-    else:
-        sample_feats = np.concatenate([[feat_dc[k]] * len(sample_pts[k])
-                                       for k in feat_dc.keys()])
-        if onehot:
-            sample_feats = label_binarize(sample_feats, classes=np.arange(num_obj_types))
+def str2int_converter(comment: str, gt_type: str) -> int:
+    if gt_type == "axgt":
+        if comment == "gt_axon":
+            return 1
+        elif comment == "gt_dendrite":
+            return 0
+        elif comment == "gt_soma":
+            return 2
+        elif comment == "gt_bouton":
+            return 3
+        elif comment == "gt_terminal":
+            return 4
         else:
-            sample_feats = sample_feats[..., None]
-        # len(sample_feats) is the equal to the total number of vertices
-        sample_pts = np.concatenate([sample_pts[k] for k in feat_dc.keys()])
-    if npoints is not None:
-        idx_arr = np.random.choice(np.arange(len(sample_pts)),
-                                   npoints, replace=len(sample_pts) < npoints)
-        sample_pts = sample_pts[idx_arr]
-        sample_feats = sample_feats[idx_arr]
-    return sample_pts, sample_feats
+            return -1
+    elif gt_type == "spgt":
+        if "head" in comment:
+            return 1
+        elif "neck" in comment:
+            return 0
+        elif "shaft" in comment:
+            return 2
+        elif "other" in comment:
+            return 3
+        else:
+            return -1
+    elif gt_type == 'ctgt_j0251':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9)
+        return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v2':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10)
+        return str2int_label[comment]
+    else:
+        raise ValueError("Given groundtruth type is not valid.")
 
 
-@functools.lru_cache(256)
-def _load_ssv_hc(args):
-    ssv, feats, feat_labels = args
-    vert_dc = dict()
-    # TODO: replace by poisson disk sampling
-    for k in feats:
-        pcd = o3d.geometry.PointCloud()
-        verts = ssv.load_mesh(k)[1].reshape(-1, 3)
-        pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd = pcd.voxel_down_sample(voxel_size=pts_feat_ds_dict[k])
-        vert_dc[k] = np.asarray(pcd.points)
-    sample_feats = np.concatenate([[feat_labels[ii]] * len(vert_dc[k])
-                                   for ii, k in enumerate(feats)])
-    sample_pts = np.concatenate([vert_dc[k] for k in feats])
-    if not ssv.load_skeleton():
-        raise ValueError(f'Couldnt find skeleton of {ssv}')
-    nodes, edges = ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['edges']
-    hc = HybridCloud(nodes, edges, vertices=sample_pts, features=sample_feats)
-    # cache verts2node
-    _ = hc.verts2node
-    return hc
+# create function that converts information in string type to the
+# information in integer type
 
-
-def pts_loader_ssvs(ssd_kwargs, ssv_ids, batchsize, npoints,
-                    transform: Optional[Callable] = None, train=False,
-                    draw_local=False, draw_local_dist=1000):
+def int2str_converter(label: int, gt_type: str) -> str:
     """
+    TODO: remove redundant definitions.
+    Converts integer label into semantic string.
 
     Args:
-        ssd_kwargs:
-        ssv_ids:
-        batchsize:
-        npoints:
-        transform:
-        train:
-        draw_local: Will draw similar contexts from approx.
-            the same location, requires a single unique element in ssv_ids
-        draw_local_dist: Maximum distance to similar source node in nm.
+        label: int
+        gt_type: str
+            e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
 
-    Returns:
+    Returns: str
 
     """
-    from ..reps.super_segmentation import SuperSegmentationDataset
-    np.random.shuffle(ssv_ids)
-    ssd = SuperSegmentationDataset(**ssd_kwargs)
-    # TODO: add `use_syntype kwarg and cellshape only
-    feat_dc = dict(pts_feat_dict)
-    if 'syn_ssv' in feat_dc:
-        del feat_dc['syn_ssv']
-    if not train:
-        if draw_local:
-            raise NotImplementedError()
-        for ssv_id, occ in zip(*np.unique(ssv_ids, return_counts=True)):
-            if draw_local and occ % 2:
-                raise ValueError(f'draw_local is set to True but the number of SSV samples is uneven.')
-            ssv = ssd.get_super_segmentation_object(ssv_id)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values())))
-            npoints_ssv = min(len(hc.vertices), npoints)
-            batch = np.zeros((occ, npoints_ssv, 3))
-            batch_f = np.zeros((occ, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((occ,), dtype=np.uint) * ssv_id
-            cnt = 0
-            # TODO: this should be deterministic during inference
-            nodes = hc.base_points(density_mode=False, threshold=5000, source=len(hc.nodes)//2)
-            source_nodes = np.random.choice(nodes, occ, replace=len(nodes) < occ)
-            for source_node in source_nodes:
-                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                sample_feats = pc.features
-                sample_pts = pc.vertices
-                # make sure there is always the same number of points within a batch
-                sample_ixs = np.arange(len(sample_pts))
-                # np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                pc._vertices = sample_pts
-                pc._features = sample_feats
-                if transform is not None:
-                    transform(pc)
-                batch[cnt] = pc.vertices
-                batch_f[cnt] = pc.features
-                cnt += 1
-            assert cnt == occ
-            yield (ixs, (batch_f, batch))
+    if type(label) == str:
+        label = int(label)
+    if gt_type == "axgt":
+        if label == 1:
+            return "gt_axon"
+        elif label == 0:
+            return "gt_dendrite"
+        elif label == 2:
+            return "gt_soma"
+        elif label == 3:
+            return "gt_bouton"
+        elif label == 4:
+            return "gt_terminal"
+        else:
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    elif gt_type == "spgt":
+        if label == 1:
+            return "head"
+        elif label == 0:
+            return "neck"
+        elif label == 2:
+            return "shaft"
+        elif label == 3:
+            return "other"
+        else:
+            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
+    elif gt_type == 'ctgt':
+        if label == 1:
+            return "MSN"
+        elif label == 0:
+            return "EA"
+        elif label == 2:
+            return "GP"
+        elif label == 3:
+            return "INT"
+        else:
+            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
+    elif gt_type == 'ctgt_v2':
+        # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`
+        l_dc_inv = dict(STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6)
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            print('Unknown label "{}"'.format(label))
+            return -1
+    elif gt_type == 'ctgt_j0251':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
+    elif gt_type == 'ctgt_j0251_v2':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
     else:
-        ssv_ids = np.unique(ssv_ids)
-
-        for curr_ssvids in ssv_ids:
-            ssv = ssd.get_super_segmentation_object(curr_ssvids)
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(
-                feat_dc.values())))
-            npoints_ssv = min(len(hc.vertices), npoints)
-            # add a +-10% fluctuation in the number of input points
-            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-            npoints_ssv += npoints_add
-            batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
-            cnt = 0
-            source_nodes = np.random.choice(np.arange(len(hc.nodes)), batchsize,
-                                            replace=len(hc.nodes) < batchsize)
-            if draw_local:
-                # only use half of the nodes and choose a close-by node as root for similar context retrieval
-                source_nodes = source_nodes[::2]
-                sn_new = []
-                g = hc.graph(simple=False)
-                for n in source_nodes:
-                    sn_new.append(n)
-                    paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                    neighs = np.array(list(paths.keys()), dtype=np.int)
-                    sn_new.append(np.random.choice(neighs, 1)[0])
-                source_nodes = sn_new
-            for source_node in source_nodes:
-                local_bfs = bfs_vertices(hc, source_node, npoints_ssv)
-                pc = extract_subset(hc, local_bfs)[0]  # only pass PointCloud
-                sample_feats = pc.features
-                sample_pts = pc.vertices
-                # shuffling
-                sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add up to 10% of duplicated points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(np.arange(len(sample_pts)), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                pc._vertices = sample_pts
-                pc._features = sample_feats
-                if transform is not None:
-                    transform(pc)
-                batch[cnt] = pc.vertices
-                batch_f[cnt] = pc.features
-                cnt += 1
-            assert cnt == batchsize
-            yield (ixs, (batch_f, batch))
-
-
-# TODO: move to handler.basics
-def write_ply(fn, verts, colors):
-    ply_header = '''ply
-    format ascii 1.0
-    element vertex %(vert_num)d
-    property float x
-    property float y
-    property float z
-    property uchar red
-    property uchar green
-    property uchar blue
-    end_header
-
-    '''
-    verts = np.hstack([verts, colors])
-    with open(fn, 'wb') as f:
-        f.write((ply_header % dict(vert_num=len(verts))).encode('utf-8'))
-        np.savetxt(f, verts, fmt='%f %f %f %d %d %d ')
-
-
-def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray):
-    col_dc = {0: [[200, 200, 200]], 1: [[100, 100, 200]], 3: [[200, 100, 200]],
-              4: [[250, 100, 100]], 2: [[100, 200, 100]]}
-    cols = np.zeros(pts.shape, dtype=np.uint8)
-    for k in pts_feat_dict.values():
-        mask = feats[:, k] == 1
-        cols[mask] = col_dc[k]
-    write_ply(fname, pts, cols)
+        raise ValueError("Given ground truth type is not valid.")

@@ -17,20 +17,20 @@ It consists of two steps: (1) Finding and extracting contact sites between super
 * KnossosDataset of symmetric, asymmetric and SJ predictions (WIP)
 
 ## Finding Contact Sites
+# TODO: this needs to be adapted to the new extraction procedure
 
 Contact sites are detected from a segmentation stored in knossos overlaycubes and saved to a chunk dataset (see `chunk_prediction` for details on how to create chunk datasets).
 This combines all contact sites between two supervoxels into a single object. `combine_and_split_cs_agg` splits these apart later, based on connected components.
 The first step reads from a KNOSSOS dataset with the segmentation and saves the extracted contact sites into an hdf5 chunk dataset.
 
     from syconn.extraction import cs_extraction_steps as ces
-    ces.find_contact_sites(cset, knossos_path, n_max_co_processes=200)
+    ces.find_contact_sites(cset, knossos_path)
 
 The second step used the hdf5 chunk dataset and generates a segmentation dataset with the results.
 
     from syconn.extraction import cs_extraction_steps as ces
     ces.extract_agg_contact_sites(cset, working_dir,
-                                  n_folders_fs=10000, suffix="",
-                                  n_max_co_processes=200)
+                                  n_folders_fs=10000, suffix=""
 
 Next, the resulting contact sites are overlapped with synaptic
  junction objects (SJ) using the previous CS ChunkDataset, which will create

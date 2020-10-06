@@ -5,10 +5,9 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
 import os
 import networkx as nx
+from knossos_utils import knossosdataset
 import numpy as np
 from syconn import global_params
 from syconn.handler.prediction import parse_movement_area_from_zip

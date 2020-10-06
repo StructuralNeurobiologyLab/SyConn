@@ -1,6 +1,4 @@
-import sys
 import subprocess
-from syconn.handler import basics
 from multiprocessing import Process, Queue
 
 
@@ -21,7 +19,7 @@ def start_training(q_in: Queue):
 
 def worker_train(args):
     """
-    Launch ``len(args)`` trainings. Currently `n_workers` is ahrd-coded to 6, i.e. this method with launch 6 threads
+    Launch ``len(args)`` trainings. Currently `n_workers` is hard-coded to 5, i.e. this method with launch 5 threads
     each running one training.
 
     Args:
@@ -33,7 +31,7 @@ def worker_train(args):
     q_in = Queue()
     for el in args:
         q_in.put(el)
-    trainers = [Process(target=start_training, args=(q_in, )) for _ in range(n_worker)]
+    trainers = [Process(target=start_training, args=(q_in,)) for _ in range(n_worker)]
     for t in trainers:
         t.start()
     for t in trainers:

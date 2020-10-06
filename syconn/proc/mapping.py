@@ -5,17 +5,15 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
-from scipy import spatial
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
+from scipy import spatial
 from skimage.segmentation import find_boundaries
 
-from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
-from ..reps.segmentation import SegmentationDataset, SegmentationObject
-from ..reps.super_segmentation import SuperSegmentationObject
 from . import log_proc
 from .. import global_params
+from ..reps.segmentation import SegmentationDataset, SegmentationObject
+from ..reps.super_segmentation import SuperSegmentationObject
+from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
@@ -167,7 +165,7 @@ def map_cs_properties(cs):
     partner_ct = np.zeros(2, dtype=np.uint8)
     for kk, ix in enumerate(partners):
         sso = SuperSegmentationObject(ix, working_dir="/wholebrain"
-                                                         "/scratch/areaxfs/")
+                                                      "/scratch/areaxfs/")
         sso.load_attr_dict()
         ax = get_sso_axoness_from_coord(sso, cs.rep_coord)
         partner_ax[kk] = np.uint(ax)

@@ -5,28 +5,30 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 import glob
-import numpy as np
 import os
 import re
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-import joblib
-import matplotlib
-matplotlib.use("Agg", warn=False, force=True)
-from matplotlib import pyplot as plt
 
 from . import skel_based_classifier_helper as sbch
 from ..handler.basics import load_pkl2obj
 from ..handler.config import initialize_logging
-from ..reps import super_segmentation as ss
-from ..proc.stats import model_performance
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
+from ..proc.stats import model_performance
+from ..reps import super_segmentation as ss
+
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+import joblib
+
+from matplotlib import pyplot as plt
+
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
@@ -38,7 +40,7 @@ colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.35, 0.725, 0.106, 1.],
              [0.100, 0.200, 0.600, 1.],
              [0.05, 0.05, 0.05, 1.],
-             [0.25, 0.25, 0.25, 1.]] + [[0.45, 0.45, 0.45, 1.]]*20
+             [0.25, 0.25, 0.25, 1.]] + [[0.45, 0.45, 0.45, 1.]] * 20
 
 colors = {"axgt": [colorVals[0], ".7", ".3"],
           "spgt": [".7", "r", "k"],
@@ -47,15 +49,26 @@ colors = {"axgt": [colorVals[0], ".7", ".3"],
 
 legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
                  "ctgt": ("EA", "MSN", "GP", "INT"),
-                 "spgt": ("Shaft", "Head")}#, "Neck")}
+                 "spgt": ("Shaft", "Head")}  # , "Neck")}
 
 comment_converter = {"axgt": {"soma": 2, "axon": 1, "dendrite": 0},
                      "spgt": {"shaft": 0, "head": 1, "neck": 2},
                      "ctgt": {}}
 
 
-class SkelClassifier(object):
+class SkelClassifier():
+    """
+
+    """
+
     def __init__(self, target_type, working_dir=None, create=False):
+        """
+
+        Args:
+            target_type:
+            working_dir:
+            create:
+        """
         assert target_type in ["axoness", "spiness"]
         if target_type == "axoness":
             ssd_version = "axgt"
@@ -172,7 +185,7 @@ class SkelClassifier(object):
                                      self.working_dir,
                                      fc_block,
                                      self.feat_path + "/features_%d_%d.npy",
-                                    comment_converter[self.ssd_version], overwrite])
+                                     comment_converter[self.ssd_version], overwrite])
 
         if not qu.batchjob_enabled():
             sm.start_multiprocess(sbch.generate_clf_data_thread,
@@ -259,8 +272,8 @@ class SkelClassifier(object):
                 continue
             this_feats = np.load(self.feat_path +
                                  "/features_{}_{}.npy".format(feature_context_nm, sso_id))
-            labels_fname = self.feat_path +\
-                            "/labels_{}_{}.npy".format(feature_context_nm, sso_id)
+            labels_fname = self.feat_path + \
+                           "/labels_{}_{}.npy".format(feature_context_nm, sso_id)
             if not os.path.isfile(labels_fname):
                 this_labels = [self.label_dict[sso_id]] * len(this_feats)
             else:
@@ -306,7 +319,7 @@ class SkelClassifier(object):
         labels = np.array(labels, dtype=np.int)
         classes = np.unique(labels)
         if balanced:
-            weights = 1.e8/np.unique(labels, return_counts=True)[1]
+            weights = 1.e8 / np.unique(labels, return_counts=True)[1]
             labels = labels.copy()
             label_weights = np.zeros_like(labels, dtype=np.float)
             for i_class in range(len(classes)):
@@ -379,7 +392,6 @@ class SkelClassifier(object):
             v_labels = v_labels[:40]
             te_labels = te_labels[:40]
 
-
         if production:
             tr_feats = np.concatenate([tr_feats, v_feats, te_feats])
             # v_feats = tr_feats
@@ -434,7 +446,7 @@ class SkelClassifier(object):
         feat_imps = feat_imps[sorting]
 
         summary_str += "\nFEATURE IMPORTANCES--------------------\n"
-        for i_feat in range(np.min([5, len(feat_imps)])):#len(feat_imps)):
+        for i_feat in range(np.min([5, len(feat_imps)])):  # len(feat_imps)):
             summary_str += "%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat])
         print("{}".format(summary_str))
         if save:
@@ -443,7 +455,7 @@ class SkelClassifier(object):
             self.save_classifier(clf, name, feature_context_nm,
                                  production=production, prefix=prefix)
             with open(self.plots_path + prefix + "_summary.txt", 'w') as f:
-                      f.write(summary_str)
+                f.write(summary_str)
         if not production:
             v_proba = clf.predict_proba(v_feats)
             if len(te_feats) > 0:
@@ -472,7 +484,7 @@ class SkelClassifier(object):
         return ext
 
     def train_mlp(self, feature_context_nm=5000):
-        raise(NotImplementedError)
+        raise (NotImplementedError)
         print("\n --- MLP ---\n")
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
             self.load_data(feature_context_nm=feature_context_nm)
@@ -519,13 +531,14 @@ class SkelClassifier(object):
 
     def save_classifier(self, clf, name, feature_context_nm, production=False,
                         prefix=""):
-        save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (name, feature_context_nm, "_prod" if production else "", prefix)
+        save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (
+        name, feature_context_nm, "_prod" if production else "", prefix)
         joblib.dump(clf, save_p)
 
     def load_classifier(self, name, feature_context_nm, production=False,
                         prefix=""):
         save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (
-        name, feature_context_nm, "_prod" if production else "", prefix)
+            name, feature_context_nm, "_prod" if production else "", prefix)
         try:
             clf = joblib.load(save_p)
         except AttributeError:
@@ -580,7 +593,7 @@ class SkelClassifier(object):
     def get_curves(self, probs, labels):
         classes = np.unique(labels)
         labels = np.array(labels, dtype=np.int)
-        weights = 1.e8/np.unique(labels, return_counts=True)[1]
+        weights = 1.e8 / np.unique(labels, return_counts=True)[1]
         labels = labels.copy()
         label_weights = np.zeros_like(labels, dtype=np.float)
         for i_class in range(len(classes)):
@@ -598,7 +611,8 @@ class SkelClassifier(object):
             for t in np.arange(0.0, 1.0, 0.01):
                 pred = probs[:, i_class] >= t
                 false_pos = float(np.sum(pred[labels != i_class].astype(np.float) * label_weights[labels != i_class]))
-                false_neg = float(np.sum(np.invert(pred[labels == i_class]).astype(np.float) * label_weights[labels == i_class]))
+                false_neg = float(
+                    np.sum(np.invert(pred[labels == i_class]).astype(np.float) * label_weights[labels == i_class]))
                 true_pos = float(np.sum(pred[labels == i_class].astype(np.float) * label_weights[labels == i_class]))
 
                 if true_pos + false_pos == 0:

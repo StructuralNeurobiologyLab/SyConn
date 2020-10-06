@@ -4,25 +4,30 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+import os
+
 import numpy as np
-import matplotlib
-matplotlib.use("Agg", warn=False, force=True)
+
+from . import log_proc
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker
-from sklearn.metrics import precision_recall_curve, roc_auc_score, \
-    classification_report, precision_recall_fscore_support, accuracy_score,\
+from sklearn.metrics import precision_recall_curve, classification_report, precision_recall_fscore_support, accuracy_score, \
     average_precision_score
 from sklearn.manifold import TSNE as TSNE_sc
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
-import os
 from sklearn.preprocessing import label_binarize
-import seaborn as sns
 import joblib
 import matplotlib.patches as mpatches
-from . import log_proc
+
+# required for readthedocs build
+try:
+    import seaborn as sns
+except ImportError:
+    pass
 
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
@@ -58,7 +63,7 @@ def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
     header += classification_report(y_true, y_pred, digits=4,
-                                target_names=target_names, labels=labels)
+                                    target_names=target_names, labels=labels)
     header += "acc.: {:.4f} -- {} wrongly predicted samples." \
               "".format(accuracy_score(y_true, y_pred), np.sum(y_true != y_pred))
     header += "\n-------------------------------------------------\n"
@@ -77,10 +82,10 @@ def hist(vals, labels=None, dest_path=None, axis_labels=None, x_lim=None,
     sns.set_style("white")
     fig, ax = plt.subplots()
     fig.patch.set_facecolor('white')
-    ax.tick_params(axis='x', which='major', labelsize=ls-4, direction='out',
-                    length=4, width=3,  right="off", top="off", pad=10)
-    ax.tick_params(axis='y', which='major', labelsize=ls-4, direction='out',
-                    length=4, width=3,  right="off", top="off", pad=10)
+    ax.tick_params(axis='x', which='major', labelsize=ls - 4, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+    ax.tick_params(axis='y', which='major', labelsize=ls - 4, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
     #
     # ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
     #                 length=4, width=3, right="off", top="off", pad=10)
@@ -151,7 +156,7 @@ def fscore(rec, prec, beta=1.):
     """
     prec = np.array(prec)
     rec = np.array(rec)
-    f_score = (1. + beta**2) * (prec * rec) / (beta**2 * prec + rec)
+    f_score = (1. + beta ** 2) * (prec * rec) / (beta ** 2 * prec + rec)
     return np.nan_to_num(f_score)
 
 
@@ -172,14 +177,14 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
     fig, ax = plt.subplots()
     fig.patch.set_facecolor('white')
     ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
-                    length=4, width=3,  right="off", top="off", pad=10)
+                   length=4, width=3, right="off", top="off", pad=10)
     ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
-                    length=4, width=3,  right="off", top="off", pad=10)
+                   length=4, width=3, right="off", top="off", pad=10)
 
     ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
-                    length=4, width=3, right="off", top="off", pad=10)
+                   length=4, width=3, right="off", top="off", pad=10)
     ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
-                    length=4, width=3, right="off", top="off", pad=10)
+                   length=4, width=3, right="off", top="off", pad=10)
 
     ax.spines['left'].set_linewidth(3)
     ax.spines['bottom'].set_linewidth(3)
@@ -199,10 +204,11 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
     if save_path is not None:
         dest_dir, fname = os.path.split(save_path)
         if legend_labels is not None:
-            ll = [["legend labels"]+list(legend_labels)]
+            ll = [["legend labels"] + list(legend_labels)]
         else:
             ll = [[]]
-        array2xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xlsx", ll + [["labels", xlabel, ylabel]] + [xtick_labels] + [precision] + [recall])
+        array2xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xlsx",
+                  ll + [["labels", xlabel, ylabel]] + [xtick_labels] + [precision] + [recall])
 
     plt.tight_layout()
     if isinstance(recall, list):
@@ -284,7 +290,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     summary_txt += "3D latent space results for %s:" % prefix
     summary_txt += "Captured variance: {}".format(pca.explained_variance_ratio_)
     summary_txt += classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names, digits=4)
+                                         target_names=target_names, digits=4)
     plt.figure()
     colors = []
     for i in range(len(target_names)):
@@ -310,7 +316,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     pred = rfc.predict_proba(valid_d)
     summary_txt += "Complete latent space results for %s using RFC:" % prefix
     summary_txt += str(classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names, digits=4))
+                                             target_names=target_names, digits=4))
 
     # kNN classification for whole latent space
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='kd_tree', n_jobs=16,
@@ -319,7 +325,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     pred = nbrs.predict_proba(valid_d)
     summary_txt += "Complete latent space results for %s using kNN:" % prefix
     summary_txt += str(classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names, digits=4))
+                                             target_names=target_names, digits=4))
 
     text_file = open(fold + '/%s_performance_summary.txt' % prefix, "w")
     text_file.write(summary_txt)
@@ -348,9 +354,9 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     # plot densities in pca or tSNE latent space
     # if not os.path.isfile(fold + "/%s_train_kde_pca.png" % prefix):
     _ = projection_pca(valid_d, valid_l, fold + "/%s_valid_kde_pca.png" %
-                         prefix, pca=pca, colors=colors, target_names=target_names)
+                       prefix, pca=pca, colors=colors, target_names=target_names)
     _ = projection_pca(train_d, train_l, fold + "/%s_train_kde_pca.png" %
-                         prefix, pca=pca, colors=colors, target_names=target_names)
+                       prefix, pca=pca, colors=colors, target_names=target_names)
     tsne_kwargs = {"n_components": 2, "random_state": 0,
                    "perplexity": 20, "n_iter": 10000}
     # projection_tSNE(train_d, train_l, fold + "/%s_train_kde_tsne.png" % prefix,
@@ -360,7 +366,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
 
 
 def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
-                     target_names=None):
+                   target_names=None):
     """
 
     Parameters
@@ -406,7 +412,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         ax.patch.set_facecolor('white')
         ax.collections[0].set_alpha(0)
         plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
-                                s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
     handles = []
     for ii in range(len(target_names)):
         handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
@@ -430,7 +436,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
             ax.patch.set_facecolor('white')
             ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
-                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+                        s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
         handles = []
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
@@ -454,7 +460,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
             ax.patch.set_facecolor('white')
             ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
-                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+                        s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
         handles = []
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
@@ -520,7 +526,7 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         # ax.patch.set_facecolor('white')
         # ax.collections[0].set_alpha(0)
         plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
-                                s=1.2, lw=0, alpha=1, color=colors[i], label=target_names[i])
+                    s=1.2, lw=0, alpha=1, color=colors[i], label=target_names[i])
     handles = []
     for ii in range(len(target_names)):
         handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
@@ -542,14 +548,13 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
             # ax.patch.set_facecolor('white')
             # ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
-                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+                        s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
         handles = []
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
         plt.legend(handles=handles, loc="best")
         plt.savefig(os.path.splitext(dest_path)[0] + "_2.png", dpi=300)
         plt.close()
-
 
         # density plot 2nd and 3rd PC
         plt.figure()
@@ -564,7 +569,7 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
             # ax.patch.set_facecolor('white')
             # ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
-                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+                        s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
         handles = []
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))

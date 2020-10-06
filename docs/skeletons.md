@@ -24,8 +24,8 @@ sso.calculate_skeleton()
 The object `sso` then has a attribute `sso.skeleton` which stores nodes, edges
 and possible properties in a dictionary.
 
-In order to precompute the skeletons of all SSV, the QSUB script `QSUB_export_skeletons_new`
-in the `QSUB_scripts` folder inside `syconn` is used by calling the
+In order to precompute the skeletons of all SSV, the QSUB script `QSUB_export_skeletons_fallback`
+in the `batchjob_scripts` folder inside `syconn` is used by calling the
 script `generation.py` in `scripts/skeletons/`.
 
 ## Skeleton-based classification
@@ -38,7 +38,7 @@ script `generation.py` in `scripts/skeletons/`.
 
 Skeleton-based features can be extracted by calling `sso.skel_features(ctx)` of
 a SuperSegmentationObject instance. Note that this is already precomputed
-for two context windiws when running the 'QSUB_export_skeletons_new' script.
+for two context windiws when running the 'batchjob_export_skeletons_fallback' script.
 
 Based on these features, supervised models like random forest classifiers (RFCs)
 can be trained to predict cell type, compartments and spines. The class

@@ -5,37 +5,30 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from collections import defaultdict
 import collections
-import numpy as np
-import h5py
+import contextlib
+import gc
+import glob
 import os
+import pickle as pkl
+import re
+import time
 import shutil
+import signal
 import tempfile
 import zipfile
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
-from knossos_utils import KnossosDataset
-import re
-import gc
-import signal
+from collections import defaultdict
+from typing import List, Union, Optional
+
 import networkx as nx
-import contextlib
-import glob
+import numpy as np
 import tqdm
-from typing import List, Union
+from knossos_utils import KnossosDataset
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 from plyfile import PlyData
+
 from . import log_handler
 from .. import global_params
-
-__all__ = ['crop_bool_array', 'get_filepaths_from_dir', 'write_obj2pkl', 'load_pkl2obj',
-           'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
-           'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
-           'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g', 'chunkify_successive']
 
 
 def kd_factory(kd_path: str, channel: str = 'jpg'):
@@ -117,7 +110,6 @@ def group_ids_to_so_storage(ids, params, significant_digits=5):
         for i_param in range(len(params)):
             param_dicts[i_param][this_id_str[-significant_digits:]].\
                 append(params[i_param][i_id])
-
     return [id_dict] + param_dicts
 
 
@@ -289,6 +281,32 @@ def read_mesh_from_zip(zip_fname, fname_in_zip):
     return [ind, vert, None]
 
 
+def read_meshes_from_zip(zip_fname, fnames_in_zip):
+    """
+    Read ply files from zip. Currently does not support normals!
+
+    Args:
+        zip_fname: str
+        fnames_in_zip: str
+
+    Returns: np.array, np.array, np.array
+
+    """
+    meshes = []
+    with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
+        for fname_in_zip in fnames_in_zip:
+            txt = z.open(fname_in_zip)
+            plydata = PlyData.read(txt)
+            vert = plydata['vertex'].data
+            vert = vert.view((np.float32, len(vert.dtype.names))).flatten()
+            ind = np.array(plydata['face'].data['vertex_indices'].tolist()).flatten()
+            # TODO: support normals
+            # norm = plydata['normals'].data
+            # norm = vert.view((np.float32, len(vert.dtype.names))).flatten()
+            meshes.append((ind, vert, None))
+    return meshes
+
+
 def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
     """
     Write string to file in k.zip.
@@ -430,8 +448,8 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     for ii in range(nb_files):
         os.remove(fpaths[ii])
     if verbose:
-        log_handler.info('Done writing {} files to .zip.'.format(nb_files))
         pbar.close()
+        log_handler.info('Done writing files to .zip.')
 
 
 def remove_from_zip(zipfname, *filenames):
@@ -540,7 +558,8 @@ def chunkify(lst: Union[list, np.ndarray], n: int) -> List[list]:
 
 def chunkify_weighted(lst, n, weights):
     """
-    splits list into n-subists according to weights
+    splits list into n sub-lists according to weights.
+
     Args:
         lst: list
         n: int
@@ -551,7 +570,7 @@ def chunkify_weighted(lst, n, weights):
     """
     if len(lst) < n:
         n = len(lst)
-        return [lst[i::n] for i in range(n)] #no weighting needed
+        return [lst[i::n] for i in range(n)]  # no weighting needed
     ordered = np.argsort(weights)
     lst = lst[ordered[::-1]]
     return [lst[i::n] for i in range(n)]
@@ -748,3 +767,113 @@ def temp_seed(seed):
         yield
     finally:
         np.random.set_state(state)
+
+
+def str_delta_sec(seconds: int) -> str:
+    """
+    String time formatting - omits time units which are zero.
+
+    Examples:
+        >>> sec = 2 * 24 * 3600 + 12 * 3600 + 5 * 60 + 1
+        >>> str_rep = str_delta_sec(sec)
+        >>> assert str_rep == '2d:12h:05min:01s'
+        >>> assert str_delta_sec(4 * 3600 + 20 * 60 + 10) == '4h:20min:10s'
+
+    Args:
+        seconds: Number of seconds, e.g. result of a time delta.
+
+    Returns:
+        String representation, e.g. ``'2d:12h:05min:01s'`` for
+        ``sec = 1 + 5 * 60 + 12 * 3600 + 2 * 24 * 3600``.
+    """
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    d, h = divmod(h, 24)
+    str_rep = ''
+    if d > 0:
+        str_rep += f'{d:d}d:'
+    if h > 0:
+        str_rep += f'{h:d}h:'
+    if m > 0:
+        str_rep += f'{m:02d}min:'
+    str_rep += f'{s:02d}s'
+    return str_rep
+
+
+class FileTimer:
+    """
+    ContextDecorator for timing. Stores the results as dict in a pkl file.
+
+    Examples:
+        The script SyConn/examples/start.py uses `FileTimer` to track the execution time of several
+        major steps of the analysis. The results are written as ``dict`` to the file '.timing.pkl'
+        in the working directory. The timing data can be accessed after the run to by initializing
+        `FileTimer` with the output file:
+
+            ft = FileTimer(path_to_timings_pkl)
+            # this is a dict with the step names as keys and the timings in seconds as values
+            print(ft.timings)
+
+    """
+    def __init__(self, fname: str, overwrite: bool = False):
+        self.fname = fname
+        self.step_name = None
+        self.overwrite = overwrite
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        self.timings = {}
+        self.t0, self.t1, self.interval = None, None, None
+        self._load_prev()
+
+    def _load_prev(self):
+        if os.path.isfile(self.fname):
+            if self.overwrite:
+                os.remove(self.fname)
+            else:
+                prev = load_pkl2obj(self.fname)
+                if not type(prev) is dict:
+                    raise TypeError(f'Incompatible FileTimer type "{type(prev)}".')
+                self.timings = prev
+
+    def start(self, step_name: str):
+        if self.step_name is not None:
+            raise ValueError(f'Previous timing was not stopped.')
+        self.t0 = time.perf_counter()
+        self.step_name = step_name
+
+    def stop(self):
+        self.t1 = time.perf_counter()
+        self.interval = self.t1 - self.t0
+        if self.step_name is None:
+            raise ValueError(f'No step name set. Please call the FileTimer instance and pass the '
+                             f'step name as string.')
+        self._load_prev()
+        self.timings[self.step_name] = self.interval
+        write_obj2pkl(self.fname, self.timings)
+        self.step_name = None
+
+    def __enter__(self):
+        # do not start counting here to enable manual (with start and stop methods) interface and
+        # context decorators. Timing difference between __enter__ and __call__ is not relevant for
+        # our applications
+        return self
+
+    def __call__(self, step_name: str):
+        self.start(step_name)
+
+    def __exit__(self, *args):
+        self.stop()
+
+    def prepare_report(self, experiment_name: str) -> str:
+        # python dicts are insertion sensitive
+        dt_tot = np.sum(np.array(list(self.timings.values())))
+        dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+        time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished " \
+                           f"after {dt_tot_str}.\n"
+        n_steps = len(self.timings)
+        for i, (step_name, step_dt) in enumerate(self.timings.items()):
+            step_dt_per = int(step_dt / dt_tot * 100)
+            step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(step_dt))
+            step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
+                                                           step_dt, f'{step_dt_per}%')
+            time_summary_str += step_str
+        return time_summary_str

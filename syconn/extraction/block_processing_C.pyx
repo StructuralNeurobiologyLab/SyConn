@@ -180,3 +180,27 @@ def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
                         cs_sym[key] = 1
     return [rep_coords, bounding_box, sizes], \
            [rep_coords_syn, bounding_box_syn, sizes_syn], cs_asym, cs_sym
+
+
+def relabel_vol(n_type[:, :, :] vol, um_uint2uint label_map):
+    sh = vol.shape
+
+    for x in range(sh[0]):
+        for y in range(sh[1]):
+            for z in range(sh[2]):
+                prev = vol[x, y, z]
+                if label_map.count(prev):
+                    vol[x, y, z] = label_map[prev]
+
+
+def relabel_vol_nonexist2zero(n_type[:, :, :] vol, um_uint2uint label_map):
+    sh = vol.shape
+
+    for x in range(sh[0]):
+        for y in range(sh[1]):
+            for z in range(sh[2]):
+                prev = vol[x, y, z]
+                if label_map.count(prev):
+                    vol[x, y, z] = label_map[prev]
+                else:
+                    vol[x, y, z] = 0

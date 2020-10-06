@@ -5,23 +5,21 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from knossos_utils import knossosdataset
-knossosdataset._set_noprint(True)
 import os
 import time
 import argparse
-import networkx as nx
 import re
+import networkx as nx
 from knossos_utils import knossosdataset
 import numpy as np
+from knossos_utils import knossosdataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
-knossosdataset._set_noprint(True)
 from syconn.handler.config import initialize_logging
 from syconn import global_params
-from syconn.exec import exec_syns, exec_multiview, exec_skeleton, exec_init
+from syconn.exec import exec_syns, exec_render, exec_skeleton, exec_init, exec_inference
 
 
 # TODO add materialize button and store current process in config.ini
@@ -78,14 +76,14 @@ if __name__ == '__main__':
 
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')
-        exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction(e3=True)
-        exec_multiview.run_glia_splitting()
+        exec_render.run_glia_rendering()
+        exec_inference.run_glia_prediction()
+        exec_inference.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd()
+    exec_init.run_create_neuron_ssd()
     exec_skeleton.map_myelin_global()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
@@ -122,29 +120,29 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 4/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering()
+    exec_render.run_neuron_rendering()
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_semsegaxoness_prediction()
-    exec_multiview.run_semsegaxoness_mapping()
+    exec_inference.run_semsegaxoness_prediction()
+    exec_inference.run_semsegaxoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
     log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction()
+    exec_inference.run_spiness_prediction()
     exec_syns.run_spinehead_volume_calc()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
     log.info('Step 7/9 - Morphology extraction')
-    exec_multiview.run_morphology_embedding()
+    exec_inference.run_morphology_embedding()
     time_stamps.append(time.time())
     step_idents.append('Morphology extraction')
 
     log.info('Step 8/9 - Celltype analysis')
-    exec_multiview.run_celltype_prediction()
+    exec_inference.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 

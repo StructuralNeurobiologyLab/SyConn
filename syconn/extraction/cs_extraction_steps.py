@@ -6,53 +6,43 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from collections import defaultdict
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from typing import Optional, Dict, List, Tuple, Union
-import time
-import shutil
-import tqdm
-from logging import Logger
 import glob
+import os
+import pickle as pkl
+import shutil
+import time
+from collections import defaultdict
+from logging import Logger
+from typing import Optional, Dict, List, Tuple, Union
+
+from multiprocessing import Process
 import numpy as np
 import scipy.ndimage
-from knossos_utils import knossosdataset
+import tqdm
 from knossos_utils import chunky
-knossosdataset._set_noprint(True)
-import os
-from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage, CompressedStorage
-from ..reps import rep_helper
-from ..mp import batchjob_utils as qu
-from ..handler import compression, basics
-from ..reps import segmentation
-from . object_extraction_steps import export_cset_to_kd_batchjob
+from knossos_utils import knossosdataset
+
 from . import log_extraction
+from .block_processing_C import extract_cs_syntype
+from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
+from .object_extraction_steps import export_cset_to_kd_batchjob
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
+from .. import global_params
+from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage, CompressedStorage
+from ..handler import compression, basics
+from ..mp import batchjob_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
-from ..proc.image import multi_mop_backgroundonly
-import multiprocessing
-try:
-    from .block_processing_C import process_block_nonzero as process_block_nonzero_C
-    from .block_processing_C import extract_cs_syntype
-
-    def process_block_nonzero(*args):
-        return np.asarray(process_block_nonzero_C(*args))
-
-except ImportError as e:
-    extract_cs_syntype = None
-    log_extraction.warning('Could not import cython version of `block_processing`. {}'.format(
-        str(e)))
-    from .block_processing import process_block_nonzero
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
-from .. import global_params
+from ..reps import rep_helper
+from ..reps import segmentation
 
 
-def extract_contact_sites(n_max_co_processes: Optional[int] = None,
-                          chunk_size: Optional[Tuple[int, int, int]] = None,
+def process_block_nonzero(*args):
+    return np.asarray(process_block_nonzero_cpp(*args))
+
+
+def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
                           log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None,
                           cube_of_interest_bb: Optional[np.ndarray] = None,
@@ -67,7 +57,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     objects (keys: ``sym_prop``, ``asym_prop``).
 
     Todo:
-        extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
+        Replace sj_0 Segmentation dataset by the overlapping CS<->
         sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
         syn_0 -> use syns as new sjs during rendering!
         -> Run CS generation in parallel with mapping to at least get the syn objects before
@@ -75,11 +65,11 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         vc and syn (instead of sj)).
 
     Notes:
-        Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
-        `syn_gen_via_cset`` and ``extract_synapse_type``.
+        * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
+        * Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
+          `syn_gen_via_cset`` and ``extract_synapse_type``.
 
     Args:
-        n_max_co_processes: Number of parallel workers.
         chunk_size: Sub-cube volume which is processed at a time.
         log: Logger.
         max_n_jobs: Maximum number of jobs, only used as a lower bound.
@@ -136,7 +126,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{dir_props}" ' \
+                  f'because temporary files already exist at "{dir_props}" ' \
                   f'and overwrite was set to False.'
             log.error(msg)
             raise FileExistsError(msg)
@@ -145,7 +135,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     if os.path.isdir(cset.path_head_folder):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already existed at "{cset.path_head_folder}" ' \
+                  f'because temporary files already exist at "{cset.path_head_folder}" ' \
                   f'and overwrite was set to False.'
             log.error(msg)
             raise FileExistsError(msg)
@@ -155,7 +145,6 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     os.makedirs(cset.path_head_folder)
 
     multi_params = []
-    # TODO: currently pickles Chunk objects -> job submission might be slow
     if max_n_jobs > len(chunk_list) // 50:
         iter_params = basics.chunkify(chunk_list, max_n_jobs)
     else:
@@ -167,13 +156,12 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     # reduce step
     start = time.time()
     cs_worker_dc_fname = f'{global_params.config.temp_path}/cs_worker_dict.pkl'
-    dict_paths_tmp = [cs_worker_dc_fname]
+    dict_paths_tmp = [cs_worker_dc_fname, dir_props, cset.path_head_folder]
     syn_ids = []
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction",
-                                         n_max_co_processes=n_max_co_processes, log=log)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -185,10 +173,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
             cs_ids.append(cs_ids_curr)
             cs_worker_mapping[worker_nr] = cs_ids_curr
     else:
-        results = start_multiprocess_imap(
-            _contact_site_extraction_thread, multi_params, nb_cpus=n_max_co_processes,
-            verbose=False, debug=False)
-
+        results = start_multiprocess_imap(_contact_site_extraction_thread,
+                                          multi_params, verbose=False)
         for worker_nr, worker_res in tqdm.tqdm(results, leave=False):
             syn_ids_curr = np.array(worker_res['syn'], dtype=np.uint64)
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)
@@ -232,11 +218,11 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
     # write cs and syn segmentation to KD and SD
     chunky.save_dataset(cset)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
+
     # convert Chunkdataset to syn and cs KD
-    # TODO: spawn in parallel
-    for obj_type in ['cs', 'syn']:
+    def _convert_cd_to_kd(ot):
         path = "{}/knossosdatasets/{}_seg/".format(
-            global_params.config.working_dir, obj_type)
+            global_params.config.working_dir, ot)
         if os.path.isdir(path):
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
@@ -247,19 +233,31 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
                                           mags=[1, ])
         target_kd = basics.kd_factory(path)
-        export_cset_to_kd_batchjob({obj_type: path},
-            cset, obj_type, [obj_type],
-            offset=offset, size=size, stride=chunk_size, as_raw=False,
-            orig_dtype=np.uint64, unified_labels=False,
-            n_max_co_processes=n_max_co_processes, log=log)
+        export_cset_to_kd_batchjob({ot: path}, cset, ot, [ot],  offset=offset, size=size,
+                                   stride=chunk_size, as_raw=False,
+                                   orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
                   ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
+
+    procs = [Process(target=_convert_cd_to_kd, args=('cs',)),
+             Process(target=_convert_cd_to_kd, args=('syn',))]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
+        p.close()
 
     # create folders for existing (sub-)cell supervoxels to prevent concurrent makedirs
     for ii, struct in enumerate(['cs', 'syn']):
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=struct,
             version=0, n_folders_fs=n_folders_fs)
+        if os.path.isdir(sc_sd.path):
+            log.debug('Found existing SD at {}. Removing it now.'.format(sc_sd.path))
+            shutil.rmtree(sc_sd.path)
         ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
         for ix in tqdm.tqdm(ids, leave=False):
             curr_dir = sc_sd.so_storage_path + target_dir_func(
@@ -278,21 +276,33 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                                 multi_params, nb_cpus=1, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=1, n_max_co_processes=max_n_jobs,
-                           remove_jobfolder=True)
+                           n_cores=1, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (currently only syn_ssv exist)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
-    dataset_analysis(sd_syn, recompute=True, compute_meshprops=False)
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
-    log.info(f'Identified {n_cs}) contact sites and {n_syn} synapses within size threshold.')
-    dataset_analysis(sd_cs, recompute=True, compute_meshprops=False)
+    da_kwargs = dict(recompute=True, compute_meshprops=False)
+    procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
+             Process(target=dataset_analysis, args=(sd_cs,), kwargs=da_kwargs)]
+    for p in procs:
+        p.start()
+    for p in procs:
+        p.join()
+        if p.exitcode != 0:
+            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
+                            f'code {p.exitcode}.')
+        p.close()
+
+    # remove temporary files
     for p in dict_paths_tmp:
-        os.remove(p)
+        if os.path.isfile(p):
+            os.remove(p)
+        elif os.path.isdir(p):
+            shutil.rmtree(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
     if qu.batchjob_enabled():
-        shutil.rmtree(path_to_out, ignore_errors=True)
+        shutil.rmtree(path_to_out + '/../', ignore_errors=True)
 
 
 def _contact_site_extraction_thread(args: Union[tuple, list]) \
@@ -323,8 +333,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     os.makedirs(worker_dir_props, exist_ok=True)
 
     if global_params.config.syntype_available and \
-       (global_params.config.sym_label == global_params.config.asym_label) and \
-       (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
+            (global_params.config.sym_label == global_params.config.asym_label) and \
+            (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
         raise ValueError('Both KnossosDatasets and labels for symmetric and '
                          'asymmetric synapses are identical. Either one '
                          'must differ.')
@@ -332,7 +342,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     kd = basics.kd_factory(knossos_path)
     # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
     #  see below.
-    kd_syn = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
+    kd_sj = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
     if global_params.config.syntype_available:
         kd_syntype_sym = basics.kd_factory(global_params.config.kd_sym_path)
         kd_syntype_asym = basics.kd_factory(global_params.config.kd_asym_path)
@@ -369,10 +379,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
-        # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
+        # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
-        syn_d = (kd_syn.load_seg(size=size, offset=offset, mag=1,
-                                 datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
+        sj_d = (kd_sj.load_seg(size=size, offset=offset, mag=1,
+                               datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
@@ -391,9 +401,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                     asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
                               == global_params.config.asym_label).astype(np.uint8, copy=False)
             else:
-                assert global_params.config.asym_label is not None,\
+                assert global_params.config.asym_label is not None, \
                     'Label of asymmetric synapses is not set.'
-                assert global_params.config.sym_label is not None,\
+                assert global_params.config.sym_label is not None, \
                     'Label of symmetric synapses is not set.'
                 # load synapse type classification results stored in the same KD
                 sym_d = kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
@@ -401,8 +411,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                 asym_d = np.array(sym_d == global_params.config.asym_label, dtype=np.uint8)
                 sym_d = np.array(sym_d == global_params.config.sym_label, dtype=np.uint8)
         else:
-            sym_d = np.zeros_like(syn_d)
-            asym_d = np.zeros_like(syn_d)
+            sym_d = np.zeros_like(sj_d)
+            asym_d = np.zeros_like(sj_d)
         cum_dt_data += time.time() - start
 
         # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
@@ -424,8 +434,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
             # TODO: add to parameters to config
-            res = scipy.ndimage.binary_dilation(
-                res, iterations=2)
+            res = scipy.ndimage.binary_dilation(res, iterations=2)
             # only update background or the objects itself
             proc_mask = (binary_mask == 1) | (sub_vol == 0)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
@@ -436,7 +445,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # and the asym and sym voxels, do not use overlap here!
         curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
-            syn_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
+            sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             asym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap])
         cum_dt_proc += time.time() - start
@@ -445,7 +454,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                                   overlap:-overlap]], chunk.folder + "cs.h5",
                                  ['cs'], overwrite=True)
         # syn segmentation only contain the overlap voxels between SJ and CS
-        contacts[syn_d == 0] = 0
+        contacts[sj_d == 0] = 0
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "syn.h5",
                                  ['syn'], overwrite=True)
@@ -604,19 +613,12 @@ def _write_props_to_syn_thread(args):
             this_attr_dc[cs_id]["sym_prop"] = sym_prop
             this_attr_dc[cs_id]["asym_prop"] = asym_prop
 
-            # TODO: should be refactored at some point, changed to bounding box of
-            #  the overlap object instead of the SJ bounding box. Also the background ratio was adapted
-            n_vxs_in_sjbb = np.prod(bb[1] - bb[0]) # number of CS voxels in syn BB
-            id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
-            cs_ratio = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
-            background_overlap_ratio = 1 - id_ratio  # TODO: not the same as before anymore: local
+            cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
             # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
-            add_feat_dict = {'sj_id': cs_id, 'cs_id': cs_id,
-                             'id_sj_ratio': id_ratio,
-                             'sj_size_pseudo': n_vxs_in_sjbb,
-                             'id_cs_ratio': cs_ratio,
-                             'cs_size': size_cs,
-                             'background_overlap_ratio': background_overlap_ratio}
+            # cs_id is the same as the syn_id, not necessary to store this
+            add_feat_dict = {'cs_id': cs_id,
+                             'id_cs_ratio': cs_ratio_vx,
+                             'cs_size': size_cs}
             this_attr_dc[cs_id].update(add_feat_dict)
             voxel_dc[cs_id] = bbs
             voxel_dc.increase_object_size(cs_id, size)
@@ -701,7 +703,7 @@ def merge_type_dicts(type_dicts):
                 tot_map[cs_id] = cnt
 
 
-def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
+def find_contact_sites(cset, knossos_path, filename='cs',
                        size=None, offset=None):
     """
     # TODO: add additional chunk-chunking (less number of submitted jobs)
@@ -711,7 +713,6 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     cset :
     knossos_path :
     filename :
-    n_max_co_processes :
     size :
     offset :
 
@@ -734,11 +735,10 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
 
     if not qu.batchjob_enabled():
         _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-                                    debug=False, nb_cpus=n_max_co_processes)
+                                    debug=False)
     else:
         _ = qu.batchjob_script(
-            multi_params, "contact_site_detection",
-            n_max_co_processes=n_max_co_processes)
+            multi_params, "contact_site_detection")
     chunky.save_dataset(cset)
 
 
@@ -787,8 +787,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
 
 
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
-                              n_folders_fs=10000, suffix="",
-                              n_max_co_processes=None, n_chunk_jobs=2000, size=None,
+                              n_folders_fs=10000, suffix="", n_chunk_jobs=2000, size=None,
                               offset=None, log=None, cube_shape=None):
     """
 
@@ -800,7 +799,6 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     hdf5name :
     n_folders_fs :
     suffix :
-    n_max_co_processes :
     n_chunk_jobs :
     size :
     offset :
@@ -830,16 +828,14 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
 
     # convert Chunkdataset to KD
     export_cset_to_kd_batchjob({hdf5name: path},
-        cset, '{}'.format(filename), [hdf5name],
-        offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-        orig_dtype=np.uint64, unified_labels=False,
-        n_max_co_processes=n_max_co_processes)
+                               cset, '{}'.format(filename), [hdf5name],
+                               offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
+                               orig_dtype=np.uint64, unified_labels=False)
     log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
         cset.path_head_folder, target_kd.knossos_path))
 
     # get CS SD
     from_ids_to_objects(cset, filename, overlaydataset_path=target_kd.conf_path,
-                        n_chunk_jobs=n_chunk_jobs, hdf5names=[hdf5name],
-                        n_max_co_processes=n_max_co_processes, workfolder=working_dir,
+                        n_chunk_jobs=n_chunk_jobs, hdf5names=[hdf5name], workfolder=working_dir,
                         n_folders_fs=n_folders_fs, use_combined_extraction=True, suffix=suffix,
                         size=size, offset=offset, log=log)
