@@ -77,7 +77,6 @@ def labels2mesh(args):
     a_edges = np.array(g.edges)
     # propagate labels, nodes with no label get label from nearest node with label
     if -1 in a_node_labels:
-        print("label_search")
         cached_labels = a_node_labels.copy()
         for node in g.nodes:
             if g.nodes[node]['label'] == -1:
@@ -94,6 +93,7 @@ def labels2mesh(args):
             vertices = hcs[0].vertices
             hm = HybridCloud(vertices=vertices, labels=np.ones(len(vertices))*-1, nodes=a_node_coords, edges=a_edges,
                              encoding=encoding, node_labels=a_node_labels)
+            # hm.node_sliding_window_bfs(predictions=False)
             hm.nodel2vertl()
             sso.load_skeleton()
             skel = sso.skeleton
@@ -104,24 +104,24 @@ def labels2mesh(args):
         else:
             hcs[ix].set_encoding({obj_names[ix]: label_map[ix]})
             clouds[obj_names[ix]] = hcs[ix]
-    ce = CloudEnsemble(clouds, hc, no_pred=['mi', 'vc', 'sy'])
 
     # add myelin (see docstring of map_myelin2coords)
-    # sso.load_skeleton()
-    # sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
-    # majorityvote_skeleton_property(sso, 'myelin')
-    # myelinated = sso.skeleton['myelin_avg10000']
-    # hm_myelin = HybridCloud(vertices=hcs[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
-    # nodes_idcs = np.arange(len(hm_myelin.nodes))
-    # myel_nodes = nodes_idcs[myelinated.astype(bool)]
-    # myel_vertices = []
-    # for node in myel_nodes:
-    #     myel_vertices.extend(hm_myelin.verts2node[node])
-    # # myelinated vertices get type 1, not myelinated vertices get type 0
-    # types = np.zeros(len(hm.vertices))
-    # types[myel_vertices] = 1
-    # hm.set_types(types)
+    sso.load_skeleton()
+    sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    majorityvote_skeleton_property(sso, 'myelin')
+    myelinated = sso.skeleton['myelin_avg10000']
+    hm_myelin = HybridCloud(vertices=hcs[0].vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
+    nodes_idcs = np.arange(len(hm_myelin.nodes))
+    myel_nodes = nodes_idcs[myelinated.astype(bool)]
+    myel_vertices = []
+    for node in myel_nodes:
+        myel_vertices.extend(hm_myelin.verts2node[node])
+    # myelinated vertices get type 1, not myelinated vertices get type 0
+    types = np.zeros(len(hc.vertices))
+    types[myel_vertices] = 1
+    hc.set_types(types)
 
+    ce = CloudEnsemble(clouds, hc, no_pred=['mi', 'vc', 'sy'])
     # save generated cloud ensemble to file
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
 
@@ -142,6 +142,8 @@ def comment2int(comment: str):
         return 5
     elif comment == "gt_head" or comment == "head":
         return 6
+    elif comment == "ignore":
+        return -2
     else:
         return -1
 
@@ -167,19 +169,17 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    for param in params:
-        print(param)
-        try:
-            labels2mesh(param)
-        except TypeError:
-            pass
-    # start mapping for each kzip in kzip_paths
-    # start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
+    # for param in params:
+    #     print(param)
+    #     import ipdb
+    #     ipdb.set_trace()
+    #     labels2mesh(param)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 
 if __name__ == "__main__":
-    destination = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/raw/areafs_v6/"
-    data_path = "/wholebrain/u/jklimesch/thesis/gt/cmn/dnh/annotations/v3/"
+    destination = "/wholebrain/u/jklimesch/thesis/gt/new_GT/"
+    data_path = "/wholebrain/u/jklimesch/thesis/gt/new_GT/"
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # spine GT
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
