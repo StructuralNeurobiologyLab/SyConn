@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+from collections import defaultdict
 import os
 import glob
 
@@ -14,8 +15,8 @@ def get_speed_plots():
     wds = glob.glob('/mnt/example_runs/j0251_*')
     base_dir = '/mnt/example_runs/timings/'
     os.makedirs(base_dir, exist_ok=True)
-    res_dc = {'time': [], 'step': [], 'datasize[um3]': [], 'datasize[GVx]': [],
-              'speed[um3]': [], 'speed[GVx]': []}
+    res_dc = {'time': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': [],
+              'speed[mm3]': [], 'speed[GVx]': []}
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
         if wd in ['/mnt/example_runs/j0251_off7415_7531_4675_size12288_12288_6144_24nodes']:  # not done
@@ -30,7 +31,7 @@ def get_speed_plots():
             dt = dt / 3600
             res_dc['time'].append(dt)
             res_dc['step'].append(name)
-            res_dc['datasize[um3]'].append(ft.dataset_mm3['cube'])
+            res_dc['datasize[mm3]'].append(ft.dataset_mm3['cube'])
             res_dc['datasize[GVx]'].append(ft.dataset_nvoxels['cube'])
             # use actually processed volums (e.g. all for synapses, glia-free rag for cell type inference)
             if 'glia' in name.lower():
@@ -42,7 +43,7 @@ def get_speed_plots():
             else:
                 vol_mm3 = ft.dataset_mm3['neuron']
                 vol_nvox = ft.dataset_nvoxels['neuron']
-            res_dc['speed[um3]'].append(vol_mm3 / dt)
+            res_dc['speed[mm3]'].append(vol_mm3 / dt)
             res_dc['speed[GVx]'].append(vol_nvox / dt)
     assert len(wds) > 0
     df = pd.DataFrame(data=res_dc)
@@ -74,6 +75,7 @@ def get_speed_plots():
     plt.subplots_adjust(right=0.5)
     plt.savefig(base_dir + '/speed_pointplot.png')
     plt.close()
+
     print('\n-----------------------------------------------------------\n')
 
 
@@ -82,8 +84,8 @@ def get_timing_plots():
     wds = glob.glob('/mnt/example_runs/j0251_*')
     base_dir = '/mnt/example_runs/timings/'
     os.makedirs(base_dir, exist_ok=True)
-    res_dc = {'time': [], 'time_rel': [], 'step': [], 'datasize[um3]': [], 'datasize[GVx]': []}
-
+    res_dc = {'time': [], 'time_rel': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': []}
+    high_level_res_dc = defaultdict(list)
     # /mnt/example_runs/j0251_off9463_9579_5699_size8192_8192_4096_24nodes_run2 is currently the only WD with
     # probably reasonably outcome; PS 23Sep2020
 
@@ -104,15 +106,25 @@ def get_timing_plots():
         print(ft.dataset_mm3, ft.dataset_nvoxels)
         print(f'Time points to views: {dt_points / dt_views}')
         print(f'Total time (using points): {dt_points + dt_database + dt_syns}')
+        # gigavoxels per h; excluding views
+        high_level_res_dc['speed_total_nvox[h/GVx]'].append(ft.dataset_nvoxels / dt_tot * 3600)
+        high_level_res_dc['datasize [GVx]'].append(ft.dataset_nvoxels)  # in giga voxels
+        high_level_res_dc['datasize [mm3]'].append(ft.dataset_mm3)
+        high_level_res_dc['total_time [h]'].append(dt_tot / 3600)  # excluding views
+        high_level_res_dc['dt_views [h]'].append(dt_views / 3600)  # in h
+        high_level_res_dc['dt_points [h]'].append(dt_points / 3600)  # in h
+        high_level_res_dc['dt_points_over_views'].append(dt_points / dt_views)
         for name, dt in [('total', dt_tot), ('views', dt_views), ('points', dt_points),
                          ('data structure', dt_database), ('synapses', dt_syns), ('synapse enrichment', dt_syn_enrich)]:
             dt = dt / 3600
             res_dc['time'].append(dt)
             res_dc['time_rel'].append(dt / dt_tot * 100)
             res_dc['step'].append(name)
-            res_dc['datasize[um3]'].append(ft.dataset_mm3)
+            res_dc['datasize[mm3]'].append(ft.dataset_mm3)
             res_dc['datasize[GVx]'].append(ft.dataset_nvoxels)
     assert len(wds) > 0
+    df_highlevel = pd.DataFrame(data=high_level_res_dc)
+    df_highlevel.to_csv(f'{base_dir}/data_timings_highlevel.csv')
     df = pd.DataFrame(data=res_dc)
     df.to_csv(f'{base_dir}/data_timings.csv')
     fmt = '{:0.2f}'
@@ -204,6 +216,7 @@ def get_timing_plots():
     plt.subplots_adjust(right=0.75)
     plt.savefig(base_dir + '/time_stackedbarplot.png')
     plt.close()
+
     print('\n-----------------------------------------------------------\n')
 
 
