@@ -136,34 +136,34 @@ if __name__ == '__main__':
     # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
     # exec_init.run_create_rag()
     # ftimer.stop()
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
-        if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
-        else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
-        ftimer.stop()
-    else:
-        log.info('Glia separation disabled. Skipping.')
-
-    log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd()
-    ftimer.stop()
-
-    log.info('Step 5/10 - Creating SuperSegmentationDataset')
-    ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
-    ftimer.stop()
-
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 4.5/9 - Neuron rendering')
-        ftimer.start('Neuron rendering')
-        exec_render.run_neuron_rendering()
-        ftimer.stop()
+    # log.info('Step 3/9 - Glia separation')
+    # if global_params.config.prior_glia_removal:
+    #     ftimer.start('Glia separation')
+    #     if not global_params.config.use_point_models:
+    #         exec_render.run_glia_rendering()
+    #         exec_inference.run_glia_prediction()
+    #     else:
+    #         exec_inference.run_glia_prediction_pts()
+    #     exec_inference.run_glia_splitting()
+    #     ftimer.stop()
+    # else:
+    #     log.info('Glia separation disabled. Skipping.')
+    #
+    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    # ftimer.start('SSD generation')
+    # exec_init.run_create_neuron_ssd()
+    # ftimer.stop()
+    #
+    # log.info('Step 5/10 - Creating SuperSegmentationDataset')
+    # ftimer.start('Skeleton generation')
+    # exec_skeleton.run_skeleton_generation()
+    # ftimer.stop()
+    #
+    # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+    #     log.info('Step 4.5/9 - Neuron rendering')
+    #     ftimer.start('Neuron rendering')
+    #     exec_render.run_neuron_rendering()
+    #     ftimer.stop()
 
     log.info('Step 5/9 - Synapse detection')
     ftimer.start('Synapse detection')
