@@ -13,7 +13,7 @@ import numpy as np
 
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 
 from knossos_utils import knossosdataset
 
@@ -221,7 +221,7 @@ def test_full_run():
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
 
     if os.environ.get('syconn_wd') is not None:

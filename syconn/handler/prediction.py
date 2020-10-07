@@ -574,6 +574,15 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     save_dataset(cd)
 
     # single gpu processing also exports the cset to kd
+    """TODO: Use pyknossos conf like here to support bigger cube size:
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape
+        scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
+        target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
+                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+        target_kd = basics.kd_factory(path)  # test if init is possible
+    """
     if n is None:
         kd_pred = KnossosDataset()
         kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
@@ -589,7 +598,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         log: Optional[Logger] = None, mag: int = 1,
                         overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
                         cube_of_interest: Optional[Tuple[np.ndarray]] = None,
-                        overwrite: bool = False):
+                        overwrite: bool = False,
+                        cube_shape_kd: Optional[Tuple[int]] = None):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -637,6 +647,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
         overwrite: Overwrite existing KDs.
+        cube_shape_kd: Cube shape used to store sub-volumes in KnossosDataset on the file system.
 
     """
     if log is None:
@@ -655,7 +666,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     kd = basics.kd_factory(kd_path)
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
-
+    if cube_shape_kd is None:
+        cube_shape_kd = (256, 256, 256)
     # TODO: these should be config parameters
     overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
@@ -681,10 +693,14 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             shutil.rmtree(path)
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape_kd
+        scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2 ** x for x in range(6)], )
+                                          kd.experiment_name, [2 ** x for x in range(6)],
+                                          create_pyk_conf=True, create_knossos_conf=False)
         target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
+        target_kd.initialize_from_knossos_path(path)  # make sure init works
     # init batchjob parameters
     multi_params = chunk_ids
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
@@ -880,6 +896,15 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
     cd = ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset,
                   box_coords=np.zeros(3), fit_box_size=True)
+    """TODO: Use pyknossos conf like here to support bigger cube size:
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape
+        scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
+        target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
+                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+        target_kd = basics.kd_factory(path)  # test if init is possible
+    """
     kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
                                     kd.experiment_name, mags=[1, 2, 4, 8])
     cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,

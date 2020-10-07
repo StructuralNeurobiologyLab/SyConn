@@ -48,7 +48,6 @@ import glob
 from scipy import spatial, ndimage
 import time
 import socket
-from torch_geometric.data.data import Data
 # fix random seed.
 np.random.seed(0)
 
@@ -337,7 +336,8 @@ if elektronn3_avail:
             nonglia_ssv_ids = np.array([
                 10919937, 16096256, 23144450, 2734465, 34811392, 491527,
                 15933443, 16113665, 24414208, 2854913, 37558272, 8339462,
-                15982592, 18571264, 26501121, 33581058, 46319619], dtype=np.uint)
+                15982592, 18571264, 26501121, 33581058, 46319619
+            ], dtype=np.uint)
             # use celltype GT
             csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values

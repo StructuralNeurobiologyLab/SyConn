@@ -690,6 +690,8 @@ def stitch_skel_nx(skel_nx: nx.Graph, n_jobs: int = 1) -> nx.Graph:
     Returns:
         Single connected component graph.
     """
+    if skel_nx.number_of_nodes() == 0:
+        return skel_nx
     no_of_seg = nx.number_connected_components(skel_nx)
     if no_of_seg == 1:
         return skel_nx

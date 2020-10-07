@@ -1757,7 +1757,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ld[semseg_key] = maj_vote
         ld.push()
     else:
-        maj_vote = ld[semseg_key]
+        maj_vote = ld[semseg_key].astype(np.int)
     if colors is not None:
         col = colors[maj_vote].astype(np.uint8)
         if np.sum(col) == 0:
@@ -2198,6 +2198,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ssv_synids = np.array([syn.id for syn in sso.syn_ssv])
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
+    if np.ndim(sp_semseg) == 2:
+        sp_semseg = sp_semseg.squeeze(1)
     ignore_labels = sso.config['spines']['semseg2coords_spines']['ignore_labels']
     for l in ignore_labels:
         verts = verts[sp_semseg != l]

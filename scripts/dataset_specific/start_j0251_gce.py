@@ -7,33 +7,48 @@
 
 import os
 import time
+import re
 import numpy as np
 import networkx as nx
 import shutil
 from multiprocessing import Process
 
-
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.mp.batchjob_utils import batchjob_enabled
+from syconn.mp.batchjob_utils import batchjob_enabled, nodestates_slurm
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
+    test_point_models = True
+    test_view_models = True
+    assert test_point_models or test_view_models
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
+    node_state = next(iter(nodestates_slurm().values()))
+    ncores_per_node = node_state['cpus']
+    mem_per_node = node_state['memory']
+    ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
+    number_of_nodes = 24
+    shape_j0251 = np.array([27119, 27350, 15494])
+    cube_size = (np.array([2048, 2048, 1024]) * 3).astype(np.int)
+    cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
+    cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
+    # cube_of_interest_bb = None  # process the entire cube!
+    # check that cluster is configured accordingly
+    assert number_of_nodes == np.sum([v['state'] == 'idle' for v in nodestates_slurm().values()])
     prior_glia_removal = True
     use_point_models = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
-        ('ncores_per_node', 32),
+        ('ncores_per_node', ncores_per_node),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 6),
-        ('mem_per_node', 208000),
+        ('nnodes_total', number_of_nodes),
+        ('mem_per_node', mem_per_node),
         ('use_point_models', use_point_models),
         ('skeleton', {'use_kimimaro': True}),
         ('meshes', {'use_new_meshing': True}),
@@ -49,9 +64,12 @@ if __name__ == '__main__':
                                'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
-         )
+         ),
+        ('cube_of_interest_bb', cube_of_interest_bb.tolist())
     ]
-    chunk_size = (384, 384, 192)
+    chunk_size = (512, 512, 256)
+    if cube_size[0] <= 2048:
+        chunk_size = (256, 256, 256)
     n_folders_fs = 10000
     n_folders_fs_sc = 10000
 
@@ -78,17 +96,11 @@ if __name__ == '__main__':
     # Prepare data
     # --------------------------------------------------------------------------
     # Setup working directory and logging
-    shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = np.array([2048, 2048, 1024]) * 4
-    cube_offset = (shape_j0251 - cube_size) // 2
-    cube_of_interest_bb = (cube_offset, cube_offset + cube_size)
-    # cube_of_interest_bb = None  # process the entire cube!
-    working_dir = f"/mnt/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
-                  f"{'_'.join(map(str, cube_size))}_12nodes"
-    if use_point_models:
-        working_dir += f'_ptmodels'
+    working_dir = f"/glusterfs/example_runs/j0251_off{'_'.join(map(str, cube_offset))}_size" \
+                  f"{'_'.join(map(str, cube_size))}_{number_of_nodes}nodes"
     log = initialize_logging(experiment_name, log_dir=working_dir + '/logs/')
     ftimer = FileTimer(working_dir + '/.timing.pkl')
+    shutil.copy(os.path.abspath(__file__), f'{working_dir}/logs/')
 
     log.info('Step 0/10 - Preparation')
     ftimer.start('Preparation')
@@ -105,7 +117,6 @@ if __name__ == '__main__':
     if global_params.wd is not None:
         log.critical('Example run started. Original working directory defined in `global_params.py` '
                      'is overwritten and set to "{}".'.format(working_dir))
-
     generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
                           kd_vc=vc_kd_path, kd_sj=sj_kd_path, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
                           key_value_pairs=key_val_pairs_conf, force_overwrite=True)
@@ -128,50 +139,63 @@ if __name__ == '__main__':
                              'working directory "{}".'.format(mpath, working_dir))
     ftimer.stop()
 
-    # # Start SyConn
-    # # --------------------------------------------------------------------------
-    # log.info('Finished example cube initialization (shape: {}). Starting'
-    #          ' SyConn pipeline.'.format(cube_size))
-    # log.info('Example data will be processed in "{}".'.format(working_dir))
+    # Start SyConn
+    # --------------------------------------------------------------------------
+    log.info('Finished example cube initialization (shape: {}). Starting'
+             ' SyConn pipeline.'.format(cube_size))
+    log.info('Example data will be processed in "{}".'.format(working_dir))
     #
     # log.info('Step 1/10 - Predicting sub-cellular structures')
-    # # ftimer.start('Myelin prediction')
-    # # # myelin is not needed before `run_create_neuron_ssd`
-    # # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
-    # # ftimer.stop()
-    #
-    # log.info('Step 2/10 - Creating SegmentationDatasets (incl. SV meshes)')
-    # ftimer.start('SD generation')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-    #                                 n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
-    #                                 load_cellorganelles_from_kd_overlaycubes=True,
-    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
-    #                                 max_n_jobs=global_params.config.ncore_total * 4)
-    #
-    # # generate flattened RAG
-    # from syconn.reps.segmentation import SegmentationDataset
-    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    # rag_sub_g = nx.Graph()
-    # # add SV IDs to graph via self-edges
-    # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
-    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
-    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # log.info('{} SVs were added to the RAG after application of the size '
-    #          'filter.'.format(len(filtered_ids)))
-    # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
-    #
-    # exec_init.run_create_rag()
+    # ftimer.start('Myelin prediction')
+    # # myelin is not needed before `run_create_neuron_ssd`
+    # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
     # ftimer.stop()
+
+    log.info('Step 2/10 - Creating SegmentationDatasets (incl. SV meshes)')
+    ftimer.start('SD generation')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+                                    n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
+                                    load_cellorganelles_from_kd_overlaycubes=True,
+                                    transf_func_kd_overlay=cellorganelle_transf_funcs)
+
+    # generate flattened RAG
+    from syconn.reps.segmentation import SegmentationDataset
+    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    rag_sub_g = nx.Graph()
+    # add SV IDs to graph via self-edges
+    mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    log.info('{} SVs were added to the RAG after application of the size '
+             'filter.'.format(len(filtered_ids)))
+    nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+
+    exec_init.run_create_rag()
+    ftimer.stop()
 
     log.info('Step 3/10 - Glia separation')
     if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
-        if not global_params.config.use_point_models:
+        if test_view_models:
+            global_params.config['use_point_models'] = False
+            global_params.config.write_config()
+            time.sleep(10)  # wait for changes to apply
+            ftimer.start('Glia prediction (multi-views)')
+            # if not global_params.config.use_point_models:
             exec_render.run_glia_rendering()
             exec_inference.run_glia_prediction()
-        else:
+            ftimer.stop()
+
+        # else:
+        if test_point_models:
+            global_params.config['use_point_models'] = True
+            global_params.config.write_config()
+            time.sleep(10)  # wait for changes to apply
+            ftimer.start('Glia prediction (points)')
             exec_inference.run_glia_prediction_pts()
+            ftimer.stop()
+
+        ftimer.start('Glia splitting')
         exec_inference.run_glia_splitting()
         ftimer.stop()
 
@@ -220,11 +244,21 @@ if __name__ == '__main__':
         p.close()
 
     log.info('Step 7/10 - Compartment prediction')
-    ftimer.start('Compartment predictions')
-    exec_inference.run_semsegaxoness_prediction()
-    if not global_params.config.use_point_models:
+    if test_view_models:
+        global_params.config['use_point_models'] = False
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Compartment predictions (multi-views)')
+        exec_inference.run_semsegaxoness_prediction()
         exec_inference.run_semsegspiness_prediction()
-    ftimer.stop()
+        ftimer.stop()
+    # if not global_params.config.use_point_models:
+    if test_point_models:
+        ftimer.start('Compartment predictions (points)')
+        global_params.config['use_point_models'] = True
+        global_params.config.write_config()
+        exec_inference.run_semsegaxoness_prediction()
+        ftimer.stop()
 
     # TODO: this step can be launched in parallel with the morphology extraction!
     ftimer.start('Spine head calculation')
@@ -232,23 +266,57 @@ if __name__ == '__main__':
     ftimer.stop()
 
     log.info('Step 8/10 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
+    if test_view_models:
+        global_params.config['use_point_models'] = False
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Morphology extraction (multi-views)')
+        exec_inference.run_morphology_embedding()
+        ftimer.stop()
+    if test_point_models:
+        global_params.config['use_point_models'] = True
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Morphology extraction (points)')
+        exec_inference.run_morphology_embedding()
+        ftimer.stop()
 
     log.info('Step 9/10 - Celltype analysis')
-    ftimer.start('Celltype analysis')
-    exec_inference.run_celltype_prediction()
-    ftimer.stop()
+    if test_view_models:
+        global_params.config['use_point_models'] = False
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Celltype analysis (multi-views)')
+        exec_inference.run_celltype_prediction()
+        ftimer.stop()
+    if test_point_models:
+        global_params.config['use_point_models'] = True
+        global_params.config.write_config()
+        time.sleep(10)  # wait for changes to apply
+        ftimer.start('Celltype analysis (points)')
+        exec_inference.run_celltype_prediction()
+        ftimer.stop()
 
     log.info('Step 10/10 - Matrix export')
     ftimer.start('Matrix export')
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
+
     log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
              'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # os.system(f'syconn.server --working_dir={working_dir} --port=10001')
+    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 
+    # remove unimportant stuff for timings
+    import glob, tqdm
+    if test_view_models:
+        for fname in tqdm.tqdm(glob.glob(working_dir + '/sv_0/so_storage*/*'), desc='SVs'):
+            shutil.rmtree(fname)
+    tmp_del_dir = f'{working_dir}/DEL_{cube_size[0]}_cube/'
+    os.makedirs(tmp_del_dir)
+    for d in tqdm.tqdm(['models', 'vc_0', 'sj_0', 'syn_ssv_0', 'syn_0', 'ssv_0', 'mi_0', 'cs_0',
+                        'knossosdatasets', 'SLURM', 'tmp', 'chunkdatasets', 'ssv_gliaremoval'], desc='Folders'):
+        shutil.move(f'{working_dir}/{d}', tmp_del_dir)
+    shutil.move(tmp_del_dir, f'{working_dir}/../')

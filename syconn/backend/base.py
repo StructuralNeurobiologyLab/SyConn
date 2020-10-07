@@ -30,9 +30,6 @@ except ImportError:
 __all__ = ['FSBase', 'BTBase']
 
 
-# TODO: adapt to new class interface all-over syconn
-
-
 class StorageBase(dict):
     """
     Interface class for data IO.
@@ -84,7 +81,7 @@ class StorageBase(dict):
 
     def items(self):
         for k in self._dc_intern.keys():
-            yield (k, self[k])
+            yield k, self[k]
 
     def values(self):
         for k in self._dc_intern.keys():
@@ -203,7 +200,7 @@ class FSBase(StorageBase):
 
     def items(self):
         for k in self._dc_intern.keys():
-            yield (k, self[k])
+            yield k, self[k]
 
     def values(self):
         for k in self._dc_intern.keys():
@@ -225,8 +222,7 @@ class FSBase(StorageBase):
             log_extraction.warning('"push" called but Storage object was initialized '
                                    'with "None". Content will not be written.')
             return
-        write_obj2pkl(dest + ".tmp", self._dc_intern)
-        shutil.move(dest + ".tmp", dest)
+        write_obj2pkl(dest, self._dc_intern)
         if not self.read_only and not self.disable_locking:
             self.a_lock.release()
 

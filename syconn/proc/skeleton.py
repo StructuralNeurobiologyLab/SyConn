@@ -101,18 +101,23 @@ def kimimaro_mergeskels(path_list: str, cell_id: int, nb_cpus: bool = None) -> c
         return skel
     # convert cloud volume skeleton to networkx graph
     skel = skelcv2nxgraph(skel)
-    # Fuse all remaining components into a single skeleton and covnert it back to cloud volume skeleton
+    # Fuse all remaining components into a single skeleton and convert it back to cloud volume skeleton
     skel = nxgraph2skelcv(stitch_skel_nx(skel, n_jobs=nb_cpus))
     # remove small stubs and single connected components with less than 500 nodes. The latter is not applicable as
     # `stitch_skel_nx` merges all connected components regardless of their distance.
     # TODO: kimimaro.postprocess should probably be executed before `stitch_skel_nx` to remove "dust" - requires
     #  performance monitoring in large, "branchy" neurons and astrocytes.
-    skel = kimimaro.postprocess(
+    skel_post = kimimaro.postprocess(
         skel,
         dust_threshold=500,  # physical units
         tick_threshold=1000  # physical units
     )
-    return skel
+    if skel_post.vertices.size == 0 and skel.vertices.size != 0:
+        skel_post = skel
+    # `kimimaro.postprocess` does not guarantee to return a single connected component (?!), merge them again..
+    if skel_post.vertices.size > 0:
+        skel_post = nxgraph2skelcv(stitch_skel_nx(skelcv2nxgraph(skel_post)))
+    return skel_post
 
 
 def skelcv2nxgraph(skel: cloudvolume.Skeleton) -> nx.Graph:
@@ -127,12 +132,14 @@ def skelcv2nxgraph(skel: cloudvolume.Skeleton) -> nx.Graph:
 
     """
     g = nx.Graph()
+    if skel.vertices.size == 0:
+        return g
     g.add_nodes_from([(ix, dict(position=coord, radius=skel.radii[ix])) for ix, coord in enumerate(skel.vertices)])
     g.add_edges_from(skel.edges)
     return g
 
 
-def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
+def nxgraph2skelcv(g: nx.Graph, radius_key: str = 'radius') -> cloudvolume.Skeleton:
     # transform networkx node IDs (non-consecutive) into a consecutive ID space
     old2new_ixs = dict()
     for ii, n in enumerate(g.nodes()):
@@ -145,7 +152,7 @@ def nxgraph2skelcv(g: nx.Graph) -> cloudvolume.Skeleton:
         e1, e2 = edges[ii]
         edges[ii] = (old2new_ixs[e1], old2new_ixs[e2])
     skel = cloudvolume.Skeleton(np.array([g.node[ix]['position'] for ix in g.nodes()], dtype=np.float32),
-                                edges, np.array([g.node[ix]['radius'] for ix in g.nodes()], dtype=np.float32))
+                                edges, np.array([g.node[ix][radius_key] for ix in g.nodes()], dtype=np.float32))
     return skel
 
 

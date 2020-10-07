@@ -71,7 +71,7 @@ if len(ssvs_small) != 0:
     multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]
     path_out = batchjob_script(
         multi_params, "render_views", suffix="_SSV{}".format(ssvs_small[0].id),
-        n_cores=1, disable_batchjob=True, overwrite=True)
+        n_cores=1, disable_batchjob=True, overwrite=True, show_progress=False)
     folder_del = os.path.abspath(path_out + "/../")
     shutil.rmtree(folder_del, ignore_errors=True)
 with open(path_out_file, "wb") as f:

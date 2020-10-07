@@ -1,5 +1,6 @@
 # General properties of the data set
 scaling: [1, 1, 1]
+cube_of_interest_bb:   # only used for documentation
 
 # File system, 'FS' is currently the only supported option
 backend: "FS"

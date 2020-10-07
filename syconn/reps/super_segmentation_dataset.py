@@ -109,8 +109,9 @@ class SuperSegmentationDataset(SegmentationBase):
     def __init__(self, working_dir: Optional[str] = None, version: Optional[str] = None, ssd_type: str = 'ssv',
                  version_dict: Optional[Dict[str, str]] = None, sv_mapping: Optional[Union[Dict[int, int], str]] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
-                 sso_caching: bool = False, sso_locking: bool = False,
-                 sd_lookup: Optional[Dict[str, SegmentationDataset]] = None):
+                 sso_caching: bool = False, sso_locking: bool = False, create: bool = False,
+                 sd_lookup: Optional[Dict[str, SegmentationDataset]] = None,
+                 cache_properties: Optional[List[str]] = None):
         """
         Args:
             working_dir: Path to the working directory.
@@ -128,7 +129,12 @@ class SuperSegmentationDataset(SegmentationBase):
                 `get_super_segmentation_object`
             sso_locking: If True, locking is enabled for SSV files.
             sd_lookup: Lookup dict for :py:class:`~syconn.reps.segmentation.SegmentationDataset`, this will enable
-                usage of property cache arrays whenever possible. Only works for the attributes specified during init.
+                usage of property cache arrays for all attributes which have been specified in `property_cache` during
+                init. of `SegmentationDataset` (see :class:`~syconn.reps.segmentation.SegmentationObject`).
+            cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
+                :py:class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` via
+                :py:func:`~get_super_segmentation_object`.
+            create: Create folder.
 
         """
         self.ssv_dict = {}
@@ -140,6 +146,11 @@ class SuperSegmentationDataset(SegmentationBase):
         self._type = ssd_type
         self._id_changer = []
         self._ssv_ids = None
+        # cache mechanism
+        self._ssoid2ix = None
+        self._property_cache = dict()
+        if cache_properties is None:
+            cache_properties = tuple()
 
         if version == 'temp':
             version = 'tmp'
@@ -190,13 +201,15 @@ class SuperSegmentationDataset(SegmentationBase):
             else:
                 raise ValueError("No version dict specified in config")
 
-        # TODO: add create kwarg and and only do this if create=True
-        os.makedirs(self.path, exist_ok=True)
+        if create:
+            os.makedirs(self.path, exist_ok=True)
 
         if sv_mapping is not None:
             if type(sv_mapping) is dict and 0 in sv_mapping:
                 raise ValueError
             self.apply_mergelist(sv_mapping)
+
+        self.enable_property_cache(cache_properties)
 
     def __repr__(self):
         return (f'{type(self).__name__}(ssd_type="{self.type}", '
@@ -391,7 +404,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.load_id_changer()
         return self._id_changer
 
-    def load_cached_data(self, prop_name: str):
+    def load_cached_data(self, prop_name: str, allow_nonexisting: bool = True):
         """
         Todo:
             * remove 's' appendix in file names.
@@ -399,6 +412,7 @@ class SuperSegmentationDataset(SegmentationBase):
         Args:
             prop_name: Identifier for requested cache array. Ordering of the
                 array is the same as :py:attr:`~ssv_ids`.
+            allow_nonexisting: If False, will fail for missing numpy files.
 
         Returns:
             Numpy array of cached property.
@@ -406,8 +420,11 @@ class SuperSegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
-            log_reps.warning(f'Requested data cache "{prop_name}" '
-                             f'did not exist.')
+            msg = f'Requested data cache "{prop_name}" did not exist.'
+            if not allow_nonexisting:
+                log_reps.error(msg)
+                raise FileNotFoundError(msg)
+            log_reps.warning(msg)
 
     def sv_id_to_ssv_id(self, sv_id: int) -> int:
         """
@@ -431,6 +448,7 @@ class SuperSegmentationDataset(SegmentationBase):
             sv_mapping: Supervoxel agglomeration.
 
         """
+        os.makedirs(self.path, exist_ok=True)
         assemble_from_mergelist(self, sv_mapping)
 
     def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]], new_mapping: bool = False,
@@ -470,6 +488,8 @@ class SuperSegmentationDataset(SegmentationBase):
                                               sv_ids=self.mapping_dict[obj_id], **kwargs_def)
             else:
                 sso = SuperSegmentationObject(obj_id, self.version, self.version_dict, self.working_dir, **kwargs_def)
+            for k, v in self._property_cache.items():
+                sso.attr_dict[k] = v[self._ssoid2ix[obj_id]]
             sso._ssd = self
         else:
             sso = []
@@ -485,6 +505,7 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         self.save_version_dict()
         self.save_mapping_dict()
+        self.save_mapping_dict_reversed()
         self.save_id_changer()
 
     def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
@@ -554,6 +575,8 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         if len(self.mapping_dict) > 0:
             write_obj2pkl(self.mapping_dict_path, self.mapping_dict)
+        else:
+            log_reps.warn(f'No entries in mapping dict of {self}.')
 
     def save_mapping_dict_reversed(self):
         """
@@ -562,6 +585,8 @@ class SuperSegmentationDataset(SegmentationBase):
         if len(self.mapping_dict_reversed) > 0:
             write_obj2pkl(self.mapping_dict_reversed_path,
                           self._mapping_dict_reversed)
+        else:
+            log_reps.warn(f'No entries in reverse mapping dict of {self}.')
 
     def load_mapping_dict(self):
         """
@@ -590,6 +615,20 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         assert self.id_changer_exists
         self._id_changer = np.load(self.id_changer_path)
+
+    def enable_property_cache(self, property_keys: List[str]):
+        """
+        Add properties to cache.
+
+        Args:
+            property_keys: Property keys. Numpy cache arrays must exist.
+        """
+        # look-up for so IDs to index in cache arrays
+        if len(property_keys) == 0:
+            return
+        if self._ssoid2ix is None:
+            self._ssoid2ix = {k: ix for ix, k in enumerate(self.ssv_ids)}
+        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
 
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
@@ -792,84 +831,6 @@ def _export_ssv_to_knossosdataset_thread(args):
             kd.from_matrix_to_cubes(offset,
                                     data=ssv_obj.voxels.astype(np.uint64) *
                                          ssv_obj_id,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
-                           stride=256, nb_cpus=None):
-    ssd.save_dataset_shallow()
-    sv_kd = kd_factory(sv_kd_path)
-    if not os.path.exists(ssv_kd_path):
-        ssv_kd = knossosdataset.KnossosDataset()
-        scale = np.array(ssd.config['scaling'], dtype=np.float32)
-        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
-                                       sv_kd.experiment_name, mags=[1])
-
-    size = np.ones(3, dtype=np.int) * stride
-    multi_params = []
-    offsets = []
-    for x in range(0, sv_kd.boundary[0], stride):
-        for y in range(0, sv_kd.boundary[1], stride):
-            for z in range(0, sv_kd.boundary[2], stride):
-                offsets.append([x, y, z])
-                if len(offsets) >= 20:
-                    multi_params.append([ssd.version, ssd.version_dict,
-                                         ssd.working_dir, nb_cpus,
-                                         sv_kd_path, ssv_kd_path, offsets,
-                                         size])
-                    offsets = []
-
-    if len(offsets) > 0:
-        multi_params.append([ssd.version, ssd.version_dict,
-                             ssd.working_dir, nb_cpus,
-                             sv_kd_path, ssv_kd_path, offsets,
-                             size])
-
-    if not qu.batchjob_enabled():
-        sm.start_multiprocess(_convert_knossosdataset_thread,
-                              multi_params, nb_cpus=nb_cpus)
-
-    else:
-        qu.batchjob_script(multi_params, "convert_knossosdataset")
-
-
-def _convert_knossosdataset_thread(args):
-    version = args[0]
-    version_dict = args[1]
-    working_dir = args[2]
-    nb_threads = args[3]
-    sv_kd_path = args[4]
-    ssv_kd_path = args[5]
-    offsets = args[6]
-    size = args[7]
-
-    sv_kd = kd_factory(sv_kd_path)
-    ssv_kd = kd_factory(ssv_kd_path)
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_id_changer()
-
-    for offset in offsets:
-        block = sv_kd.from_overlaycubes_to_matrix(size, offset,
-                                                  datatype=np.uint32,
-                                                  nb_threads=nb_threads)
-
-        block = ssd.id_changer[block]
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=block.astype(np.uint32),
-                                    datatype=np.uint32,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-        raw = sv_kd.from_raw_cubes_to_matrix(size, offset,
-                                             nb_threads=nb_threads)
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=raw,
-                                    datatype=np.uint8,
-                                    as_raw=True,
                                     overwrite=False,
                                     nb_threads=nb_threads)
 

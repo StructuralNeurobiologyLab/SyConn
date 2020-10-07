@@ -304,6 +304,9 @@ class SuperSegmentationObject(SegmentationBase):
         return (f'{type(self).__name__}(ssv_id={self.id}, ssd_type="{self.type}", '
                 f'version="{self.version}", working_dir="{self.working_dir}")')
 
+    def __getitem__(self, item):
+        return self.attr_dict[item]
+
     # IMMEDIATE PARAMETERS
     @property
     def type(self) -> str:
@@ -1415,10 +1418,9 @@ class SuperSegmentationObject(SegmentationBase):
 
             node_scaled = self.skeleton["nodes"] * self.scaling
 
-            edges = np.array(self.skeleton["edges"], dtype=np.uint)
+            edges = np.array(self.skeleton["edges"], dtype=np.int)
             edge_coords = node_scaled[edges]
-            weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1],
-                                     axis=1)
+            weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1], axis=1)
             self._weighted_graph = nx.Graph()
             self._weighted_graph.add_nodes_from(
                 [(ix, dict(position=coord)) for ix, coord in
@@ -2178,6 +2180,8 @@ class SuperSegmentationObject(SegmentationBase):
         if len(vertices) < 5e6:
             ds_vertices = max(1, ds_vertices // 10)
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
+        if np.ndim(vertex_labels) == 2:
+            vertex_labels = vertex_labels.squeeze(1)
         vertices = vertices[::ds_vertices]
         for ign_l in ignore_labels:
             vertices = vertices[vertex_labels != ign_l]

@@ -262,6 +262,7 @@ def batchjob_script(params: list, name: str,
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
     nb_completed_compare = 0
+    last_failed = 0
     while True:
         nb_failed = 0
         # get internal job ids from current job dict
@@ -283,7 +284,7 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            if requeue_dc[j] == 20:
+            if requeue_dc[j] == 20:  # TODO: use global_params NCORES_PER_NODE
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
@@ -292,6 +293,15 @@ def batchjob_script(params: list, name: str,
             # increment number of cores by one.
             job_cmd = f'sbatch --cpus-per-task={new_core_init + n_cores} {job_exec_dc[j]}'
             max_relaunch_cnt = 0
+            err_msg = None
+            if time.time() - last_failed > 5:
+                # if a job failed within the last 5 seconds, do not print the error
+                # message (assume same error)
+                with open(f"{path_to_err}/job_{j}.log") as f:
+                    err_msg = f.read()
+                last_failed = time.time()
+                if 'exceeded memory limit' in err_msg:
+                    err_msg = None  # do not report message of OOM errors
             while True:
                 process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
                 out_str, err = process.communicate()
@@ -313,6 +323,8 @@ def batchjob_script(params: list, name: str,
             slurm2job_dc[slurm_id] = j
             log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
                               f'{slurm_id_orig} (old).')
+            if err_msg is not None:
+                log_batchjob.warning(f'Job {j} failed with: {err_msg}')
         nb_completed = np.sum(job_states == 'COMPLETED')
         pbar.update(nb_completed - nb_completed_compare)
         nb_completed_compare = nb_completed
@@ -366,49 +378,6 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
                          args=(dirname, log, timeout))
     t.setDaemon(True)
     t.start()
-
-
-def jobstates_slurm(job_name: str, start_time: str,
-                    max_retry: int = 10) -> Dict[int, str]:
-    """
-    Generates a dictionary which stores the state of every job belonging to
-    `job_name`.
-
-    Args:
-        job_name:
-        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
-            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
-        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
-            sleep in-between).
-
-    Returns:
-        Dictionary with the job states. (key: job ID, value: state)
-    """
-    # TODO: test!
-    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
-    job_states = dict()
-    cnt_retry = 0
-    while True:
-        process = subprocess.Popen(cmd_stat, shell=True,
-                                   stdout=subprocess.PIPE)
-        out, err = process.communicate()
-        if process.returncode != 0:
-            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
-                           f'Attempting again in 5s. {err}')
-            time.sleep(5)
-            cnt_retry += 1
-            if cnt_retry == max_retry:
-                log_mp.error(f'Could not query job states from SLURM: {err}\n'
-                             f'Aborting due to maximum number of retries.')
-                break
-            continue
-        for line in out.decode().split('\n'):
-            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
-            if len(str_parsed) == 1:
-                str_parsed = str_parsed[0]
-                job_states[int(str_parsed[0])] = str_parsed[1]
-        break
-    return job_states
 
 
 def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, python_path=None, remove_jobfolder=False,
@@ -562,9 +531,97 @@ def fallback_exec(cmd_exec):
     return out_str
 
 
+def jobstates_slurm(job_name: str, start_time: str,
+                    max_retry: int = 10) -> Dict[int, str]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+        job_name:
+        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
+            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
+        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
+            sleep in-between).
+
+    Returns:
+        Dictionary with the job states. (key: job ID, value: state)
+    """
+    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
+    job_states = dict()
+    cnt_retry = 0
+    while True:
+        process = subprocess.Popen(cmd_stat, shell=True,
+                                   stdout=subprocess.PIPE)
+        out, err = process.communicate()
+        if process.returncode != 0:
+            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
+                           f'Attempting again in 5s. {err}')
+            time.sleep(5)
+            cnt_retry += 1
+            if cnt_retry == max_retry:
+                log_mp.error(f'Could not query job states from SLURM: {err}\n'
+                             f'Aborting due to maximum number of retries.')
+                break
+            continue
+        for line in out.decode().split('\n'):
+            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
+            if len(str_parsed) == 1:
+                str_parsed = str_parsed[0]
+                job_states[int(str_parsed[0])] = str_parsed[1]
+        break
+    return job_states
+
+
+def nodestates_slurm() -> Dict[int, dict]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+
+
+    Returns:
+        Dictionary with the node states. (key: job ID, value: state dict)
+    """
+    cmd_stat = f'sinfo -N  -o "%20N %10t %10c %10m %10G"'
+    # yields e.g.
+    """
+    NODELIST             STATE      CPUS       MEMORY     GRES      
+    compute001           idle       32         208990     gpu:GP100G
+    compute002           mix        32         208990     gpu:GP100G
+    compute003           idle       32         208990     gpu:GP100G
+    compute004           idle       32         208990     gpu:GP100G
+    compute005           idle       32         208990     gpu:GP100G
+    compute006           mix        32         208990     gpu:GP100G
+    compute007           idle       32         208990     gpu:GP100G
+    compute008           idle       32         208990     gpu:GP100G
+    compute009           alloc      32         208990     gpu:GP100G
+    compute010           idle       32         208990     gpu:GP100G
+    compute011           idle       32         208990     gpu:GP100G
+    compute012           dead       32         208990     gpu:GP100G
+    """
+    node_states = dict()
+    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', str)]  # TOOD: gres should be number of gpus
+    process = subprocess.Popen(cmd_stat, shell=True, stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    if process.returncode != 0:
+        log_mp.error(f'Error when getting node states with sinfo: {err}')
+        return node_states
+    for line in out.decode().split('\n')[1:]:
+        if len(line) == 0:
+            continue
+        node_uri, *str_parsed = re.findall(r"(\S+)", line)
+        ndc = dict()
+        for k, v in zip(attr_keys, str_parsed):
+            ndc[k[0]] = k[1](v)
+        node_states[node_uri] = ndc
+    return node_states
+
+
 def number_of_running_processes(job_name):
     """
-    Calculates the number of running jobs using qstat
+    Calculates the number of running jobs using qstat/squeue
 
     Parameters
     ----------

@@ -65,7 +65,8 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                       version=ssd_version)
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
+    for ids_small_chunk in chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]],
+                                    global_params.config.ncore_total * 2):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
     if not qu.batchjob_enabled():
@@ -82,7 +83,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total * 2):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
     if not qu.batchjob_enabled():
@@ -126,8 +127,8 @@ def _collect_properties_from_ssv_partners_thread(args):
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
         ssv_o.load_attr_dict()
-        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
-                                     read_only=False, disable_locking=True)
+        cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl",
+                                 read_only=False, disable_locking=True)
 
         curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
                         (syn_neuronpartners[:, 1] == ssv_id)
@@ -144,7 +145,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
 
         try:
-            ct = ssv_o.attr_dict['celltype_cnn_e3']  # TODO: add keyword to global_params.py
+            ct = ssv_o.attr_dict['celltype_cnn_e3']
         except KeyError:
             ct = -1
         celltypes = [ct] * len(ssv_synids)
@@ -196,7 +197,7 @@ def _from_cell_to_syn_dict(args):
 
             for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
+                cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl")
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:
@@ -308,8 +309,8 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     rel_ssv_with_syn_ids = filter_relevant_syn(syn_sd, ssd)
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
-    n_used_paths = min(global_params.config.ncore_total * 10, len(storage_location_ids),
-                       len(rel_ssv_with_syn_ids), 1000)
+    n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
+                       len(rel_ssv_with_syn_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
     # target SD for SSV syn objects
@@ -1212,8 +1213,8 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         # start = time.time()
         if overwrite and os.path.isfile(ssv_o.ssv_dir + "/cache_syn.pkl"):
             os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
-        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
-                                     read_only=False, disable_locking=True)
+        cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl",
+                                 read_only=False, disable_locking=True)
         if not overwrite and ('n_vc_vxs' in cache_dc):
             continue
         # dts['directio'] += time.time() - start
@@ -1361,7 +1362,7 @@ def _objects_from_cell_to_syn_dict(args):
             map_dc = dict()
             for ii, ssv_partner_id in enumerate(synssv_o.attr_dict["neuron_partners"]):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
+                cache_dc = AttributeDict(ssv_o.ssv_dir + "/cache_syn.pkl")
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:
@@ -1530,12 +1531,19 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
             labels.append(c)
             label_coords.append(np.array(node.getCoordinate()))
     else:
-        df = pandas.read_excel(path2file, header=0, names=['ixs', 'coord', 'pre', 'post', 'syn']).values
+        df = pandas.read_excel(path2file, header=0, names=[
+            'ixs', 'coord', 'pre', 'post', 'syn', 'doublechecked', 'triplechecked', '?', 'comments']).values
+        df = df[:, :7]
         for ix in range(df.shape[0]):
-            c = df[ix, -1]
-            if 'yes' in c:
+            c_orig = df[ix, 5]
+            c = df[ix, 6]
+            if type(c) != float and 'yes' in c:
                 unified_comment = 'synaptic'
-            elif 'no' in c:
+            elif type(c) != float and 'no' in c:
+                unified_comment = 'non-synaptic'
+            elif 'yes' in c_orig:
+                unified_comment = 'synaptic'
+            elif 'no' in c_orig:
                 unified_comment = 'non-synaptic'
             else:
                 log.warn(f'Did not understand GT comment "{c}". Skipping')
@@ -1582,13 +1590,14 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
 
     log.info(f'Synapse features will now be generated.')
     features = []
-    pbar = tqdm.tqdm(total=len(synssv_ids))
+    pbar = tqdm.tqdm(total=len(synssv_ids), leave=False)
     for kk, synssv_id in enumerate(synssv_ids):
         synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
         features.append(synssv_o_features(synssv_o))
         pbar.update(1)
     pbar.close()
     features = np.array(features)
+    log.info('Performing 10-fold cross validation.')
     rfc = ensemble.RandomForestClassifier(n_estimators=2000, max_features='sqrt',
                                           n_jobs=-1, random_state=0,
                                           oob_score=True)
@@ -1602,7 +1611,8 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     #     np.mean(score), np.std(score)))
     # if score < 0.95:
     #     log.info(f'Individual CV scores: {score}')
-    preds = cross_val_predict(rfc, v_features, v_labels, cv=10)
+    probas = cross_val_predict(rfc, v_features, v_labels, cv=10, method='predict_proba')
+    preds = np.argmax(probas, axis=1)
     log.info(metrics.classification_report(v_labels, preds, target_names=['non-synaptic', 'synaptic']))
 
     rfc.fit(v_features, v_labels)
@@ -1619,13 +1629,13 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     skel = skeleton.Skeleton()
     anno = skeleton.SkeletonAnnotation()
     anno.scaling = sd_syn_ssv.scaling
-    pbar = tqdm.tqdm(total=len(synssv_ids))
+    pbar = tqdm.tqdm(total=len(synssv_ids), leave=False)
     for kk, synssv_id in enumerate(synssv_ids):
         synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
         rep_coord = synssv_o.rep_coord * sd_syn_ssv.scaling
         pred_correct = preds[kk] == v_labels[kk]
         n = skeleton.SkeletonNode().from_scratch(anno, rep_coord[0], rep_coord[1], rep_coord[2])
-        n.setComment(f'{preds[kk]} {pred_correct}')
+        n.setComment(f'{preds[kk]} {pred_correct} {probas[kk][1]:.2f}')
         n.data.update({k: v for k, v in zip(feature_names, v_features[kk])})
         anno.addNode(n)
         rep_coord = label_coords[kk] * sd_syn_ssv.scaling
@@ -1702,6 +1712,7 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
         log = log_extraction
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
+    log.info(f'Starting export of connectivity matrix as csv file to "{dest_name}".')
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 
