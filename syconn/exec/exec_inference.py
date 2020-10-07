@@ -45,7 +45,7 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     pred_key_appendix = ""
-
+    log.info(f'Starting local morphology generation with {"points" if global_params.config.use_point_models else "views"}.')
     # sort ssv ids according to their number of SVs (descending)
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
@@ -84,7 +84,10 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    pred_key_appendix = '_wholecell_v2'
+    pred_key_appendix = '_wholecell'
+
+    log.info(f'Starting cell morphology generation with'
+             f' {"points" if global_params.config.use_point_models else "views"}.')
 
     # sort ssv ids according to their number of SVs (descending)
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
@@ -121,6 +124,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    log.info(f'Starting cell type prediction with {"points" if global_params.config.use_point_models else "views"}.')
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         predict_celltype_ssd(ssd_kwargs=dict(working_dir=global_params.config.working_dir), ssv_ids=multi_params)
     else:

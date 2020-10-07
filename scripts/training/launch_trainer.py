@@ -3,10 +3,10 @@ from syconn.mp.batchjob_utils import batchjob_script
 
 
 if __name__ == '__main__':
-    cnn_script = '/wholebrain/u/pschuber/devel/SyConn/syconn/cnn/cnn_celltype_ptcnv.py'
+    cnn_script = '/wholebrain/u/pschuber/devel/SyConn/syconn/cnn/cnn_celltype_ptcnv_j0251.py'
     params = []
     # for npoints in [5000, 25000, 50000, 75000, 100000]:
-    for npoints, ctx in zip([25000], [5000]):
+    for npoints, ctx in zip([25000, 10000], [2500, 10000], [50000, 10000]):
         scale = int(ctx / 10)
         for run in range(3):
             base_dir = f'/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes/' \

@@ -219,19 +219,19 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
 
     # convert Chunkdataset to syn and cs KD
     def _convert_cd_to_kd(ot):
-        path = "{}/knossosdatasets/{}_seg/".format(
+        path_kd = "{}/knossosdatasets/{}_seg/".format(
             global_params.config.working_dir, ot)
-        if os.path.isdir(path):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path))
-            shutil.rmtree(path)
+        if os.path.isdir(path_kd):
+            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+            shutil.rmtree(path_kd)
         target_kd = knossosdataset.KnossosDataset()
         target_kd._cube_shape = cube_shape
         scale = np.array(global_params.config['scaling'])
         target_kd.scales = [scale, ]
-        target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
+        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
                                           mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
-        target_kd = basics.kd_factory(path)  # test if init is possible
-        export_cset_to_kd_batchjob({ot: path}, cset, ot, [ot],  offset=offset, size=size,
+        target_kd = basics.kd_factory(path_kd)  # test if init is possible
+        export_cset_to_kd_batchjob({ot: path_kd}, cset, ot, [ot],  offset=offset, size=size,
                                    stride=chunk_size, as_raw=False,
                                    orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
@@ -300,7 +300,11 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
             shutil.rmtree(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
     if qu.batchjob_enabled():
-        shutil.rmtree(path_to_out + '/../', ignore_errors=True)
+        jobfolder = os.path.abspath(f'{path_to_out}/../')
+        try:
+            shutil.rmtree(jobfolder, ignore_errors=False)
+        except Exception as e:
+            log.error(f'Could not delete job folder at "{jobfolder}". {str(e)}')
 
 
 def _contact_site_extraction_thread(args: Union[tuple, list]) \

@@ -26,7 +26,7 @@ import matplotlib.patches as mpatches
 
 # required for readthedocs build
 from ..handler.basics import kd_factory, load_pkl2obj, write_obj2pkl
-from ..handler.config import Config
+from ..handler.config import Config, DynConfig
 from ..reps.segmentation import SegmentationDataset
 
 try:
@@ -700,7 +700,7 @@ class FileTimer:
         # get data set properties
         if self._dataset_mm3 is not None:
             return
-        conf = Config(self.working_dir)
+        conf = DynConfig(wd=self.working_dir, fix_config=True)
         try:
             bb = conf.entries['cube_of_interest_bb']
         except KeyError:
@@ -714,7 +714,7 @@ class FileTimer:
         self._dataset_nvoxels = {'cube': np.prod(self.dataset_shape) / 1e9}
         self._dataset_mm3 = {'cube': np.prod(self.dataset_shape * self.kd.scale) / 1e18}
         if self.add_detail_vols:
-            sd = SegmentationDataset('sv', working_dir=self.working_dir)
+            sd = SegmentationDataset('sv', config=conf)
             for k in ['total', 'glia', 'neuron']:
                 vol_mm3 = sd.get_volume(k)
                 self._dataset_mm3[k] = vol_mm3

@@ -27,7 +27,7 @@ with open(path_storage_file, 'rb') as f:
 
 ssv_ids = args[0]
 pred_key_appendix = args[1]
-use_point_models = args[1]
+use_point_models = args[2]
 assert ssv_ids.size == np.unique(ssv_ids).size
 ssd = SuperSegmentationDataset()
 if use_point_models:
@@ -40,7 +40,7 @@ else:
     params = basics.chunkify(ssv_ids, n_worker * 4)
     res = start_multiprocess_imap(exctract_ssv_morphology_embedding,
                                   [(p, ncpus, pred_key_appendix) for p in params],
-                                  nb_cpus=n_worker)
+                                  nb_cpus=n_worker, show_progress=False)
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

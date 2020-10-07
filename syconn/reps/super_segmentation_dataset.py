@@ -505,6 +505,7 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         self.save_version_dict()
         self.save_mapping_dict()
+        self.save_mapping_dict_reversed()
         self.save_id_changer()
 
     def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
@@ -574,6 +575,8 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         if len(self.mapping_dict) > 0:
             write_obj2pkl(self.mapping_dict_path, self.mapping_dict)
+        else:
+            log_reps.warn(f'No entries in mapping dict of {self}.')
 
     def save_mapping_dict_reversed(self):
         """
@@ -582,6 +585,8 @@ class SuperSegmentationDataset(SegmentationBase):
         if len(self.mapping_dict_reversed) > 0:
             write_obj2pkl(self.mapping_dict_reversed_path,
                           self._mapping_dict_reversed)
+        else:
+            log_reps.warn(f'No entries in reverse mapping dict of {self}.')
 
     def load_mapping_dict(self):
         """

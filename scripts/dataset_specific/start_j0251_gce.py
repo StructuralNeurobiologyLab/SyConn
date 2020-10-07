@@ -33,7 +33,7 @@ if __name__ == '__main__':
     ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
     number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = (np.array([2048, 2048, 1024]) * 3.5).astype(np.int)
+    cube_size = (np.array([2048, 2048, 1024]) * 3).astype(np.int)
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
     # cube_of_interest_bb = None  # process the entire cube!
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     log.info('Finished example cube initialization (shape: {}). Starting'
              ' SyConn pipeline.'.format(cube_size))
     log.info('Example data will be processed in "{}".'.format(working_dir))
-
+    #
     # log.info('Step 1/10 - Predicting sub-cellular structures')
     # ftimer.start('Myelin prediction')
     # # myelin is not needed before `run_create_neuron_ssd`
@@ -156,8 +156,7 @@ if __name__ == '__main__':
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
                                     n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
                                     load_cellorganelles_from_kd_overlaycubes=True,
-                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
-                                    max_n_jobs=global_params.config.ncore_total * 4)
+                                    transf_func_kd_overlay=cellorganelle_transf_funcs)
 
     # generate flattened RAG
     from syconn.reps.segmentation import SegmentationDataset
@@ -306,17 +305,18 @@ if __name__ == '__main__':
     time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
 
-    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
-    #          'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # os.system(f'syconn.server --working_dir={working_dir} --port=10001')
+    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
+             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 
-    # remove unimportant stuff
+    # remove unimportant stuff for timings
     import glob, tqdm
-    for fname in tqdm.tqdm(glob.glob(working_dir + '/sv_0/so_storage*/*/*/views.pkl'), desc='Views'):
-        os.remove(fname)
+    if test_view_models:
+        for fname in tqdm.tqdm(glob.glob(working_dir + '/sv_0/so_storage*/*'), desc='SVs'):
+            shutil.rmtree(fname)
     tmp_del_dir = f'{working_dir}/DEL_{cube_size[0]}_cube/'
     os.makedirs(tmp_del_dir)
-    for d in tqdm.tqdm(['vc_0', 'sj_0', 'syn_ssv_0', 'syn_0', 'ssv_0', 'models', 'mi_0', 'cs_0',
-                        'knossosdatasets', 'SLURM', 'tmp', 'chunkdatasets'], desc='Folders'):
+    for d in tqdm.tqdm(['models', 'vc_0', 'sj_0', 'syn_ssv_0', 'syn_0', 'ssv_0', 'mi_0', 'cs_0',
+                        'knossosdatasets', 'SLURM', 'tmp', 'chunkdatasets', 'ssv_gliaremoval'], desc='Folders'):
         shutil.move(f'{working_dir}/{d}', tmp_del_dir)
     shutil.move(tmp_del_dir, f'{working_dir}/../')
