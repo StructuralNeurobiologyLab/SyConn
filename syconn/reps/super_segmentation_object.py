@@ -2406,7 +2406,7 @@ class SuperSegmentationObject(SegmentationBase):
                         ply_fname=obj_type + ".ply", **kwargs)
 
     def meshes2kzip(self, dest_path: Optional[str] = None, sv_color: Optional[np.ndarray]=None,
-                    synssv_instead_sj: bool = False, object_types: Optional[List[str]]=None,
+                    synssv_instead_sj: bool = True, object_types: Optional[List[str]]=None,
                     **kwargs):
         """
         Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip.
@@ -2457,7 +2457,7 @@ class SuperSegmentationObject(SegmentationBase):
     def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = ('skeleton',),
                     rag: Optional[nx.Graph] = None,
                     sv_color: Optional[np.ndarray] = None, individual_sv_meshes: bool = True,
-                    object_meshes: Optional[tuple] = None, synssv_instead_sj: bool = False):
+                    object_meshes: Optional[tuple] = None, synssv_instead_sj: bool = True):
         """
         Writes the SSO to a KNOSSOS loadable kzip including the mergelist
         (:func:`~mergelist2kzip`), its meshes (:func:`~meshes2kzip`), data set

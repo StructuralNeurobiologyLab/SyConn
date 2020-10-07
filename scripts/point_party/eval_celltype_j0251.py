@@ -72,7 +72,7 @@ if __name__ == '__main__':
     int2str_label = {k: int2str_converter(k, 'ctgt_j0251') for k in range(n_classes)}
     target_names = [int2str_label[kk] for kk in range(n_classes)]
     str2int_label = {v: k for k, v in int2str_label.items()}
-    csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v0.csv"
+    csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v0.csv"
     df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
     ssv_ids = df[:, 0].astype(np.uint)
     if len(np.unique(ssv_ids)) != len(ssv_ids):
