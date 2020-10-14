@@ -19,8 +19,6 @@ def get_speed_plots():
               'speed[mm3]': [], 'speed[GVx]': []}
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
-        if wd in ['/mnt/example_runs/j0251_off7415_7531_4675_size12288_12288_6144_24nodes']:  # not done
-            continue
         ft = FileTimer(wd, add_detail_vols=True)
         print(ft.working_dir, ft.prepare_report())
         print(ft.dataset_mm3, ft.dataset_nvoxels)
@@ -90,8 +88,6 @@ def get_timing_plots():
     # probably reasonably outcome; PS 23Sep2020
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
-        if wd in ['/mnt/example_runs/j0251_off7415_7531_4675_size12288_12288_6144_24nodes']:  # not done
-            continue
         ft = FileTimer(wd, add_detail_vols=False)
         print(ft.working_dir, ft.prepare_report())
         dt_tot = np.sum([ft.timings[k] for k in ft.timings if not ('multiv-view' in k) and not ('multi-view' in k)])
@@ -131,7 +127,6 @@ def get_timing_plots():
 
     # Time bar plot
     plt.figure()
-
     axes = sns.barplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette_ident)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
