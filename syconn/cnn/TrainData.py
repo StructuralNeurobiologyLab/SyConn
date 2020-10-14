@@ -31,7 +31,7 @@ try:
 except ImportError as e:
     log_cnn.error(str(e))
 import threading
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 try:
     from torch.utils.data import Dataset
     import torch
@@ -94,7 +94,7 @@ if elektronn3_avail:
             self.sso_ids = None
             gt_dir = ssd.path
             self.map_myelin = map_myelin
-
+            self.cv_val = cv_val
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
             if os.path.isfile(split_dc_path):
@@ -275,12 +275,13 @@ if elektronn3_avail:
         """
         Uses the same data for train and valid set.
         """
-        def __init__(self, **kwargs):
+        def __init__(self, cv_val=None, **kwargs):
             ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
 
-            super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
+            super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v2.csv"
+            assert self.train, "Other mode than 'train' is not implemented."
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v2.csv"
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
@@ -288,9 +289,15 @@ if elektronn3_avail:
                 raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
             ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
-            self.sso_ids = ssv_ids
+            if self.cv_val is not None and self.cv_val != -1:
+                assert self.cv_val < 10
+                kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
+                for ii, (train_ixs, test_ixs) in enumerate(kfold.split(ssv_ids, y=ssv_labels)):
+                    if ii == self.cv_val:
+                        self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid:': ssv_ids[test_ixs]}
+            else:
+                self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}  # use all data
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
-            self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}
             self.sso_ids = self.splitting_dict['train']
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
