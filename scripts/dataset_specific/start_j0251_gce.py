@@ -33,7 +33,7 @@ if __name__ == '__main__':
     ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
     number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = (np.array([2048, 2048, 1024]) * 3).astype(np.int)
+    cube_size = (np.array([2048, 2048, 1024]) * 4.5).astype(np.int)
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
     # cube_of_interest_bb = None  # process the entire cube!
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
     filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
     rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    log.info('{} SVs were added to the RAG after application of the size '
+    log.info('{} SVs were added to the RAG after applying the size '
              'filter.'.format(len(filtered_ids)))
     nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
 
@@ -304,10 +304,6 @@ if __name__ == '__main__':
 
     time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
-             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 
     # remove unimportant stuff for timings
     import glob, tqdm

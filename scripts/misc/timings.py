@@ -1,4 +1,5 @@
 from syconn.proc.stats import FileTimer
+from syconn.handler.config import initialize_logging
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -14,14 +15,15 @@ def get_speed_plots():
     sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     wds = glob.glob('/mnt/example_runs/j0251_*')
     base_dir = '/mnt/example_runs/timings/'
+    log = initialize_logging(f'speed_plots', log_dir=base_dir)
     os.makedirs(base_dir, exist_ok=True)
     res_dc = {'time': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': [],
               'speed[mm3]': [], 'speed[GVx]': []}
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
         ft = FileTimer(wd, add_detail_vols=True)
-        print(ft.working_dir, ft.prepare_report())
-        print(ft.dataset_mm3, ft.dataset_nvoxels)
+        log.info(ft.working_dir, ft.prepare_report())
+        log.info(ft.dataset_mm3, ft.dataset_nvoxels)
         # no reasonable volume information for these steps:
         for name in ['Preparation', 'Matrix export', 'Spine head calculation', 'Glia splitting']:
             del ft.timings[name]
@@ -74,13 +76,14 @@ def get_speed_plots():
     plt.savefig(base_dir + '/speed_pointplot.png')
     plt.close()
 
-    print('\n-----------------------------------------------------------\n')
+    log.info('\n-----------------------------------------------------------\n')
 
 
 def get_timing_plots():
     sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     wds = glob.glob('/mnt/example_runs/j0251_*')
     base_dir = '/mnt/example_runs/timings/'
+    log = initialize_logging(f'timing_plots', log_dir=base_dir)
     os.makedirs(base_dir, exist_ok=True)
     res_dc = {'time': [], 'time_rel': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': []}
     high_level_res_dc = defaultdict(list)
@@ -89,7 +92,7 @@ def get_timing_plots():
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
         ft = FileTimer(wd, add_detail_vols=False)
-        print(ft.working_dir, ft.prepare_report())
+        log.info(ft.working_dir, ft.prepare_report())
         dt_tot = np.sum([ft.timings[k] for k in ft.timings if not ('multiv-view' in k) and not ('multi-view' in k)])
         dt_views = np.sum([ft.timings[k] for k in ft.timings if ('multiv-view' in k) or ('multi-view' in k) or
                            (k == 'Glia splitting')])
@@ -99,9 +102,9 @@ def get_timing_plots():
         dt_syns = np.sum([ft.timings[k] for k in ['Synapse detection']])
         dt_syn_enrich = np.sum([ft.timings[k] for k in ['Spine head calculation', 'Matrix export']])
         assert np.isclose(dt_tot, dt_points + dt_database + dt_syns + dt_syn_enrich)
-        print(ft.dataset_mm3, ft.dataset_nvoxels)
-        print(f'Time points to views: {dt_points / dt_views}')
-        print(f'Total time (using points): {dt_points + dt_database + dt_syns}')
+        log.info(ft.dataset_mm3, ft.dataset_nvoxels)
+        log.info(f'Time points to views: {dt_points / dt_views}')
+        log.info(f'Total time (using points): {dt_points + dt_database + dt_syns}')
         # gigavoxels per h; excluding views
         high_level_res_dc['speed_total_nvox[h/GVx]'].append(ft.dataset_nvoxels / dt_tot * 3600)
         high_level_res_dc['datasize [GVx]'].append(ft.dataset_nvoxels)  # in giga voxels
@@ -176,7 +179,7 @@ def get_timing_plots():
     y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == 'total']
     mod = sm.OLS(y, sm.add_constant(x))
     res = mod.fit()
-    print(res.summary())
+    log.info(res.summary())
     x_fit = np.linspace(np.min(x), np.max(x), 1000)
     y_fit = res.params[1] * x_fit + res.params[0]
     plt.figure()
@@ -212,7 +215,7 @@ def get_timing_plots():
     plt.savefig(base_dir + '/time_stackedbarplot.png')
     plt.close()
 
-    print('\n-----------------------------------------------------------\n')
+    log.info('\n-----------------------------------------------------------\n')
 
 
 if __name__ == '__main__':

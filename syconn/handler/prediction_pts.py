@@ -478,7 +478,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.close()
     if len(dict_out) != len(ssv_ids):
         raise ValueError(f'Missing {len(ssv_ids) - len(dict_out)} cell predictions: '
-                         f'{set(list(dict_out.keys())).difference(set(ssv_ids.tolist()))}')
+                         f'{np.setdiff1d(ssv_ids, list(dict_out.keys()))}')
     m.shutdown()
     return dict_out
 
@@ -2027,7 +2027,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
             pcd, idcs = pcd.voxel_down_sample_and_trace(
-                base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
+                    base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
             bs = min(len(source_nodes), batchsize[ctx])
             n_batches = int(np.ceil(len(source_nodes) / bs))
