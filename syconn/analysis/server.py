@@ -235,12 +235,14 @@ class SyConnBackend(object):
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
-                                        global_params.config['compartments']['dist_axoness_averaging'])
+        pred_key_ax = "{}_avg{}".format(ssv.config['compartments']['view_properties_semsegax']['semseg_key'],
+                                        ssv.config['compartments']['dist_axoness_averaging'])
+        pred_key_sp = ssv.config['spines']['semseg2mesh_spines']['semseg_key']
         keys = [
                 global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                 pred_key_ax,
                 pred_key_ax + '_comp_maj',
+                pred_key_sp,
                 'myelin_avg10000',  # TODO: use global_params.py value !
                 'myelin']  # TODO: use global_params.py value !
         for k in keys:

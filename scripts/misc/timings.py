@@ -1,4 +1,5 @@
 from syconn.proc.stats import FileTimer
+from syconn.handler.config import initialize_logging
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -6,6 +7,9 @@ import numpy as np
 from collections import defaultdict
 import os
 import glob
+# https://www.statsmodels.org/stable/generated/statsmodels.regression.linear_model.OLS.html
+import statsmodels.api as sm
+
 
 palette_ident = 'colorblind'
 
@@ -14,16 +18,15 @@ def get_speed_plots():
     sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     wds = glob.glob('/mnt/example_runs/j0251_*')
     base_dir = '/mnt/example_runs/timings/'
+    log = initialize_logging(f'speed_plots', log_dir=base_dir)
     os.makedirs(base_dir, exist_ok=True)
     res_dc = {'time': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': [],
               'speed[mm3]': [], 'speed[GVx]': []}
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
-        if wd in ['/mnt/example_runs/j0251_off7415_7531_4675_size12288_12288_6144_24nodes']:  # not done
-            continue
         ft = FileTimer(wd, add_detail_vols=True)
-        print(ft.working_dir, ft.prepare_report())
-        print(ft.dataset_mm3, ft.dataset_nvoxels)
+        log.info(f'\n-----------------------------------\nLoading time data of "{ft.working_dir}"')
+        log.info(f'{ft.prepare_report()}')
         # no reasonable volume information for these steps:
         for name in ['Preparation', 'Matrix export', 'Spine head calculation', 'Glia splitting']:
             del ft.timings[name]
@@ -46,12 +49,14 @@ def get_speed_plots():
             res_dc['speed[mm3]'].append(vol_mm3 / dt)
             res_dc['speed[GVx]'].append(vol_nvox / dt)
     assert len(wds) > 0
+    palette = sns.color_palette(n_colors=len(np.unique(res_dc['step'])), palette=palette_ident)
+    palette = {k: v for k, v in zip(np.unique(res_dc['step']), palette)}
     df = pd.DataFrame(data=res_dc)
-    df.to_csv(f'{base_dir}/data_speed.csv')
+    df.to_csv(f'{base_dir}/speed_data.csv')
     fmt = '{:0.2f}'
     # Speed bar plot
     plt.figure()
-    axes = sns.barplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette_ident)
+    axes = sns.barplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('speed [GVx / h]')
@@ -65,9 +70,39 @@ def get_speed_plots():
     plt.savefig(base_dir + '/speed_barplot.png')
     plt.close()
 
+    # Speed scatter plot regression
+    log_reg = initialize_logging(f'speed_pointplot_reg', log_dir=base_dir)
+    plt.figure()
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette)
+    for ii, step in enumerate(np.unique(res_dc['step'])):
+        x = np.array([df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
+        y = [df['speed[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step]
+
+        # mod = sm.OLS(np.log(y), sm.add_constant(x), weights=np.sqrt(y))  # weight large y s.t. they are equally
+        # # weighted to small values. discrepancy due to log() transform.
+        # res = mod.fit()
+        # log.info(res.summary())
+        # x_fit = np.linspace(np.min(x), np.max(x), 1000)
+        # y_fit = np.exp(res.params[1] * x_fit + res.params[0])
+
+        mod = sm.OLS(y, sm.add_constant(x))
+        res = mod.fit()
+        log_reg.info(f'Fit summary for step "{step}"')
+        log_reg.info(res.summary())
+        x_fit = np.linspace(np.min(x), np.max(x), 1000)
+        y_fit = res.params[1] * x_fit + res.params[0]
+        plt.plot(x_fit, y_fit, color=palette[step])
+    axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
+                loc='upper left', borderaxespad=0.)
+    axes.set_ylabel('speed [GVx / h]')
+    axes.set_xlabel('size [GVx]')
+    plt.subplots_adjust(right=0.5)
+    plt.savefig(base_dir + '/speed_pointplot_reg.png')
+    plt.close()
+
     # Speed scatter plot
     plt.figure()
-    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette_ident)
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('speed [GVx / h]')
@@ -76,13 +111,12 @@ def get_speed_plots():
     plt.savefig(base_dir + '/speed_pointplot.png')
     plt.close()
 
-    print('\n-----------------------------------------------------------\n')
-
 
 def get_timing_plots():
     sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     wds = glob.glob('/mnt/example_runs/j0251_*')
     base_dir = '/mnt/example_runs/timings/'
+    log = initialize_logging(f'time_plots', log_dir=base_dir)
     os.makedirs(base_dir, exist_ok=True)
     res_dc = {'time': [], 'time_rel': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': []}
     high_level_res_dc = defaultdict(list)
@@ -90,10 +124,9 @@ def get_timing_plots():
     # probably reasonably outcome; PS 23Sep2020
 
     for wd in sorted(wds, key=lambda x: FileTimer(x).dataset_mm3):
-        if wd in ['/mnt/example_runs/j0251_off7415_7531_4675_size12288_12288_6144_24nodes']:  # not done
-            continue
         ft = FileTimer(wd, add_detail_vols=False)
-        print(ft.working_dir, ft.prepare_report())
+        log.info(f'\n-----------------------------------\nLoading time data of "{ft.working_dir}"')
+        log.info(f'{ft.prepare_report()}')
         dt_tot = np.sum([ft.timings[k] for k in ft.timings if not ('multiv-view' in k) and not ('multi-view' in k)])
         dt_views = np.sum([ft.timings[k] for k in ft.timings if ('multiv-view' in k) or ('multi-view' in k) or
                            (k == 'Glia splitting')])
@@ -103,9 +136,6 @@ def get_timing_plots():
         dt_syns = np.sum([ft.timings[k] for k in ['Synapse detection']])
         dt_syn_enrich = np.sum([ft.timings[k] for k in ['Spine head calculation', 'Matrix export']])
         assert np.isclose(dt_tot, dt_points + dt_database + dt_syns + dt_syn_enrich)
-        print(ft.dataset_mm3, ft.dataset_nvoxels)
-        print(f'Time points to views: {dt_points / dt_views}')
-        print(f'Total time (using points): {dt_points + dt_database + dt_syns}')
         # gigavoxels per h; excluding views
         high_level_res_dc['speed_total_nvox[h/GVx]'].append(ft.dataset_nvoxels / dt_tot * 3600)
         high_level_res_dc['datasize [GVx]'].append(ft.dataset_nvoxels)  # in giga voxels
@@ -123,16 +153,17 @@ def get_timing_plots():
             res_dc['datasize[mm3]'].append(ft.dataset_mm3)
             res_dc['datasize[GVx]'].append(ft.dataset_nvoxels)
     assert len(wds) > 0
+    palette = sns.color_palette(n_colors=len(np.unique(res_dc['step'])), palette=palette_ident)
+    palette = {k: v for k, v in zip(np.unique(res_dc['step']), palette)}
     df_highlevel = pd.DataFrame(data=high_level_res_dc)
     df_highlevel.to_csv(f'{base_dir}/data_timings_highlevel.csv')
     df = pd.DataFrame(data=res_dc)
-    df.to_csv(f'{base_dir}/data_timings.csv')
+    df.to_csv(f'{base_dir}/time_data.csv')
     fmt = '{:0.2f}'
 
     # Time bar plot
     plt.figure()
-
-    axes = sns.barplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette_ident)
+    axes = sns.barplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('Time [h]')
@@ -148,7 +179,7 @@ def get_timing_plots():
 
     # Time scatter plot
     plt.figure()
-    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette_ident)
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('time [h]')
@@ -159,45 +190,64 @@ def get_timing_plots():
     plt.savefig(base_dir + '/time_pointplot.png')
     plt.close()
 
+    # # Total time regression plot
+    # x = [df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == 'total']
+    # y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == 'total']
+    # mod = sm.OLS(y, sm.add_constant(x))
+    # res = mod.fit()
+    # log.info(res.summary())
+    # x_fit = np.linspace(np.min(x), np.max(x), 1000)
+    # y_fit = res.params[1] * x_fit + res.params[0]
+    # plt.figure()
+    # axes = sns.scatterplot(x=x, y=y, palette=palette)
+    # axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
+    #             loc='upper left', borderaxespad=0.)
+    # plt.plot(x_fit, y_fit)
+    # axes.set_ylabel('time [h]')
+    # axes.set_xlabel('size [GVx]')
+    # plt.subplots_adjust(right=0.75)
+    # plt.savefig(base_dir + '/totaltime_regplot.png')
+    # plt.close()
+
     # Time reg plot
-    # https://seaborn.pydata.org/generated/seaborn.regplot.html
+    # # https://seaborn.pydata.org/generated/seaborn.regplot.html
+    # regplot does not return the parameter values after fitting and the "Guete" of the fit.
+    # plt.figure()
+    # g = sns.FacetGrid(df, hue='step', palette=palette_ident, size=5)
+    # g.map(sns.regplot, "datasize[GVx]", "time", ci=None, robust=1)
+    # g.map(plt.scatter, "datasize[GVx]", "time", s=40, alpha=.7, linewidth=.5, edgecolor=None)
+    # g.add_legend()
+    # g.set_ylabels('time [h]')
+    # g.set_xlabels('size [GVx]')
+    # g.set(ylim=ylim)
+    # g.set(xlim=xlim)
+    # plt.savefig(base_dir + '/time_regplot.png')
+    # plt.close()
 
+    # All steps time regression plot
+    log_reg = initialize_logging(f'time_allsteps_regplot', log_dir=base_dir)
     plt.figure()
-    g = sns.FacetGrid(df, hue='step', palette=palette_ident, size=5)
-    g.map(sns.regplot, "datasize[GVx]", "time", ci=None, robust=1)
-    g.map(plt.scatter, "datasize[GVx]", "time", s=40, alpha=.7, linewidth=.5, edgecolor=None)
-    g.add_legend()
-    g.set_ylabels('time [h]')
-    g.set_xlabels('size [GVx]')
-    g.set(ylim=ylim)
-    g.set(xlim=xlim)
-    plt.savefig(base_dir + '/time_regplot.png')
-    plt.close()
-
-    # Total time regression plot
-    # https://www.statsmodels.org/stable/generated/statsmodels.regression.linear_model.OLS.html
-    import statsmodels.api as sm
-    x = [df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == 'total']
-    y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == 'total']
-    mod = sm.OLS(y, sm.add_constant(x))
-    res = mod.fit()
-    print(res.summary())
-    x_fit = np.linspace(np.min(x), np.max(x), 1000)
-    y_fit = res.params[1] * x_fit + res.params[0]
-    plt.figure()
-    axes = sns.scatterplot(x=x, y=y, palette=palette_ident)
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
+    for ii, step in enumerate(np.unique(res_dc['step'])):
+        x = np.array([df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
+        y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step]
+        mod = sm.OLS(y, sm.add_constant(x))
+        res = mod.fit()
+        log_reg.info(f'Fit summary for step "{step}"')
+        log_reg.info(f'\n{res.summary()}\n\n')
+        x_fit = np.linspace(np.min(x), np.max(x), 1000)
+        y_fit = res.params[1] * x_fit + res.params[0]
+        plt.plot(x_fit, y_fit, color=palette[step])
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
-    plt.plot(x_fit, y_fit)
     axes.set_ylabel('time [h]')
     axes.set_xlabel('size [GVx]')
     plt.subplots_adjust(right=0.75)
-    plt.savefig(base_dir + '/totaltime_regplot.png')
+    plt.savefig(base_dir + '/timing_allsteps_regplot.png')
     plt.close()
 
     # stacked bar plot
     steps = ['points', 'data structure', 'synapses', 'synapse enrichment']  # ['views']
-    palette = sns.color_palette(n_colors=len(steps), palette=palette_ident)
     f, ax = plt.subplots()
     bar_plts = []
     x = [df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == 'total']
@@ -206,7 +256,7 @@ def get_timing_plots():
     cumulated_bar_vals = np.zeros((len(x)))
     for ii, step in enumerate(steps):
         y = np.array([df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
-        p = plt.bar(ind, y, width, bottom=cumulated_bar_vals, color=palette[ii], linewidth=0)  # yerr=None
+        p = plt.bar(ind, y, width, bottom=cumulated_bar_vals, color=palette[step], linewidth=0)  # yerr=None
         cumulated_bar_vals += y
         bar_plts.append(p[0])
     plt.legend(bar_plts, steps)
@@ -216,8 +266,6 @@ def get_timing_plots():
     plt.subplots_adjust(right=0.75)
     plt.savefig(base_dir + '/time_stackedbarplot.png')
     plt.close()
-
-    print('\n-----------------------------------------------------------\n')
 
 
 if __name__ == '__main__':

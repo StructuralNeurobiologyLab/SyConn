@@ -33,7 +33,8 @@ if __name__ == '__main__':
     ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
     number_of_nodes = 24
     shape_j0251 = np.array([27119, 27350, 15494])
-    cube_size = (np.array([2048, 2048, 1024]) * 3).astype(np.int)
+    cube_size = (np.array([2048, 2048, 1024]) * 7).astype(np.int)   # do *9 afterwards for ~3 TVx, *11 for 5.7 and
+    # all for 10 TVx
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
     # cube_of_interest_bb = None  # process the entire cube!
@@ -139,40 +140,40 @@ if __name__ == '__main__':
                              'working directory "{}".'.format(mpath, working_dir))
     ftimer.stop()
 
-    # Start SyConn
-    # --------------------------------------------------------------------------
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(cube_size))
-    log.info('Example data will be processed in "{}".'.format(working_dir))
+    # # Start SyConn
+    # # --------------------------------------------------------------------------
+    # log.info('Finished example cube initialization (shape: {}). Starting'
+    #          ' SyConn pipeline.'.format(cube_size))
+    # log.info('Example data will be processed in "{}".'.format(working_dir))
+    # #
+    # # log.info('Step 1/10 - Predicting sub-cellular structures')
+    # # ftimer.start('Myelin prediction')
+    # # # myelin is not needed before `run_create_neuron_ssd`
+    # # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
+    # # ftimer.stop()
     #
-    # log.info('Step 1/10 - Predicting sub-cellular structures')
-    # ftimer.start('Myelin prediction')
-    # # myelin is not needed before `run_create_neuron_ssd`
-    # exec_dense_prediction.predict_myelin(raw_kd_path, cube_of_interest=cube_of_interest_bb)
+    # log.info('Step 2/10 - Creating SegmentationDatasets (incl. SV meshes)')
+    # ftimer.start('SD generation')
+    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+    #                                 n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
+    #                                 load_cellorganelles_from_kd_overlaycubes=True,
+    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs)
+    #
+    # # generate flattened RAG
+    # from syconn.reps.segmentation import SegmentationDataset
+    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    # rag_sub_g = nx.Graph()
+    # # add SV IDs to graph via self-edges
+    # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    # log.info('{} SVs were added to the RAG after applying the size '
+    #          'filter.'.format(len(filtered_ids)))
+    # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+    #
+    # exec_init.run_create_rag()
     # ftimer.stop()
-
-    log.info('Step 2/10 - Creating SegmentationDatasets (incl. SV meshes)')
-    ftimer.start('SD generation')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-                                    n_folders_fs=n_folders_fs, cube_of_interest_bb=cube_of_interest_bb,
-                                    load_cellorganelles_from_kd_overlaycubes=True,
-                                    transf_func_kd_overlay=cellorganelle_transf_funcs)
-
-    # generate flattened RAG
-    from syconn.reps.segmentation import SegmentationDataset
-    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    rag_sub_g = nx.Graph()
-    # add SV IDs to graph via self-edges
-    mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
-    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
-    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    log.info('{} SVs were added to the RAG after application of the size '
-             'filter.'.format(len(filtered_ids)))
-    nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
-
-    exec_init.run_create_rag()
-    ftimer.stop()
 
     log.info('Step 3/10 - Glia separation')
     if global_params.config.prior_glia_removal:
@@ -304,10 +305,6 @@ if __name__ == '__main__':
 
     time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring can be analyzed via '
-             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={working_dir} --port=10001')
 
     # remove unimportant stuff for timings
     import glob, tqdm

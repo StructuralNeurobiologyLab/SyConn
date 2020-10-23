@@ -250,13 +250,16 @@ class FSBase(StorageBase):
         if not self.disable_locking:
             self.a_lock = fasteners.InterProcessLock(lock_path)
             nb_attempts = 1
+            start = time.time()
             while True:
-                start = time.time()
-                gotten = self.a_lock.acquire(blocking=True, delay=0.1,
-                                             max_delay=self.max_delay,
-                                             timeout=self.timeout / self._max_nb_attempts)
+                try:
+                    gotten = self.a_lock.acquire(blocking=True, delay=0.1,
+                                                 max_delay=self.max_delay,
+                                                 timeout=self.timeout / self._max_nb_attempts)
+                except ValueError:
+                    gotten = False
                 # if not gotten and maximum attempts not reached yet keep trying
-                if not gotten and nb_attempts < self._max_nb_attempts:
+                if not gotten and (nb_attempts < self._max_nb_attempts):
                     nb_attempts += 1
                 else:
                     break

@@ -35,7 +35,7 @@ from syconn.handler.basics import chunkify_successive, chunkify
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.prediction import certainty_estimate
 from syconn.reps.super_segmentation import SuperSegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation import SuperSegmentationObject, semsegaxoness2skel
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
 
 # for readthedocs build
@@ -439,7 +439,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.start()
 
     for el in params_in[nloader:] + [None] * nloader:
-        while q_load.qsize() > 10:
+        while q_load.qsize() + q_loader.qsize() >= 2 * npredictor:
             time.sleep(1)
         q_loader.put(el)
 
@@ -478,7 +478,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.close()
     if len(dict_out) != len(ssv_ids):
         raise ValueError(f'Missing {len(ssv_ids) - len(dict_out)} cell predictions: '
-                         f'{set(list(dict_out.keys())).difference(set(ssv_ids.tolist()))}')
+                         f'{np.setdiff1d(ssv_ids, list(dict_out.keys()))}')
     m.shutdown()
     return dict_out
 
@@ -2027,7 +2027,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
             pcd, idcs = pcd.voxel_down_sample_and_trace(
-                base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
+                    base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
             bs = min(len(source_nodes), batchsize[ctx])
             n_batches = int(np.ceil(len(source_nodes) / bs))
@@ -2146,7 +2146,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         sso_params: Params of sso object for which the predictions should get evaluated.
         d_in: Dict with prediction results
     """
-    curr_ix = 0
     sso = SuperSegmentationObject(**sso_params)
     preds = {}
     preds_idcs = {}
@@ -2226,6 +2225,14 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     del ld['abt']
     del ld['ads']
     ld.push()
+    sso.load_skeleton()
+    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
+    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
+    node_preds = sso.semseg_for_coords(sso.skeleton['nodes'], pred_key_sp, **sso.config['spines']['semseg2coords_spines'])
+    sso.skeleton[pred_key_sp] = node_preds  # skeleton key will be saved to file with `semsegaxoness2skel` call below
+    map_properties = sso.config['compartments']['map_properties_semsegax']
+    max_dist = sso.config['compartments']['dist_axoness_averaging']
+    semsegaxoness2skel(sso, map_properties, pred_key_ax, max_dist)
     return [sso.id], [True]
 
 
