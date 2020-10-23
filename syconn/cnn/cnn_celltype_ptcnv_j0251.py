@@ -69,9 +69,6 @@ ctx = args.ctx
 use_bias = args.use_bias
 use_syntype = args.use_syntype
 
-if cval is None:
-    cval = 0
-
 lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.99
@@ -89,7 +86,7 @@ act = 'relu'
 use_myelin = True
 
 if name is None:
-    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_RUN3'
+    name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -133,7 +130,11 @@ save_root = os.path.expanduser(save_root)
 model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
-name += f'_CV{cval}_eval{eval_nr}'
+if cval is not None:
+    name += f'_CV{cval}'
+else:
+    name += f'_AllGT'
+name += f'_eval{eval_nr}'
 model = nn.DataParallel(model)
 
 if use_cuda:
@@ -164,12 +165,12 @@ train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='norma
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
-                         cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
+                              cellshape_only=cellshape_only, use_syntype=use_syntype,
+                              onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
 valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
-                         cv_val=cval, cellshape_only=cellshape_only,
-                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-                         ctx_size=ctx, map_myelin=use_myelin)
+                              cv_val=cval, cellshape_only=cellshape_only,
+                              use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+                              ctx_size=ctx, map_myelin=use_myelin)
 
 # PREPARE AND START TRAINING #
 

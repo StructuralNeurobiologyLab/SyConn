@@ -164,7 +164,7 @@ if __name__ == '__main__':
     #     ftimer.start('Neuron rendering')
     #     exec_render.run_neuron_rendering()
     #     ftimer.stop()
-
+    #
     log.info('Step 5/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)

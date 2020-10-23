@@ -132,11 +132,11 @@ if elektronn3_avail:
                 for ix in self.sso_ids:
                     if ix not in ssd.ssv_ids:
                         raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
-                print(f'Using splitting dict at "{split_dc_path}".')
+                log_cnn.debug(f'Using splitting dict at "{split_dc_path}".')
                 for k, v in self.splitting_dict.items():
                     classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                                  self.splitting_dict[k]], return_counts=True)
-                    print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                    log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
 
         def __getitem__(self, item):
             """
@@ -302,7 +302,8 @@ if elektronn3_avail:
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
-                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
             if self.train:

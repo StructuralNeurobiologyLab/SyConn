@@ -25,7 +25,8 @@ from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
-def run_skeleton_generation(cube_of_interest_bb: Optional[tuple] = None, map_myelin: Optional[bool] = None):
+def run_skeleton_generation(cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
+                            map_myelin: Optional[bool] = None):
     """
 
     Args:
