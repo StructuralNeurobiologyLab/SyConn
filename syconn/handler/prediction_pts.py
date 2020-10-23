@@ -439,7 +439,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         c.start()
 
     for el in params_in[nloader:] + [None] * nloader:
-        while q_load.qsize() > 10:
+        while q_load.qsize() + q_loader.qsize() >= 2 * npredictor:
             time.sleep(1)
         q_loader.put(el)
 
