@@ -3559,11 +3559,12 @@ def semsegspiness_predictor(args) -> List[int]:
             ssv.load_skeleton()
             if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
                 log_reps.warning(f"Skeleton of SSV {ssv.id} has zero nodes.")
-                continue
-            # vertex predictions
-            node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
-                                               kwargs_semseg2mesh['semseg_key'],
-                                               **kwargs_semsegforcoords)
+                node_preds = np.zeros((0, ), dtype=np.int)
+            else:
+                # vertex predictions
+                node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
+                                                   kwargs_semseg2mesh['semseg_key'],
+                                                   **kwargs_semsegforcoords)
             ssv.skeleton[kwargs_semseg2mesh['semseg_key']] = node_preds
             ssv.save_skeleton()
         except RuntimeError as e:
