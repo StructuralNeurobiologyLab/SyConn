@@ -2219,15 +2219,16 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     sp_pred[cmpt_preds == 6] = 2  # neck to neck
     sp_pred[cmpt_preds == -1] = 5  # unpredicted to unpredicted
 
-    ld['axoness'] = ax_pred.astype(np.int)
-    ld['spiness'] = sp_pred.astype(np.int)
+    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
+    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
+
+    ld[pred_key_ax] = ax_pred.astype(np.int)
+    ld[pred_key_sp] = sp_pred.astype(np.int)
     del ld['dnh']
     del ld['abt']
     del ld['ads']
     ld.push()
     sso.load_skeleton()
-    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
-    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
     node_preds = sso.semseg_for_coords(sso.skeleton['nodes'], pred_key_sp, **sso.config['spines']['semseg2coords_spines'])
     sso.skeleton[pred_key_sp] = node_preds  # skeleton key will be saved to file with `semsegaxoness2skel` call below
     map_properties = sso.config['compartments']['map_properties_semsegax']

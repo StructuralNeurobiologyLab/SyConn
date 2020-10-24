@@ -55,8 +55,9 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     else:
         # split all cells into upper half and lower half (sorted by size)
         half_ix = len(multi_params) // 2
-        multi_params = chunkify(multi_params[:half_ix], max_n_jobs // 2) + \
-                       chunkify(multi_params[half_ix:], max_n_jobs // 2)
+        njobs_per_half = max(max_n_jobs // 2, 1)
+        multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
+                       chunkify(multi_params[half_ix:], njobs_per_half)
         # add ssd parameters
         multi_params = [(ssv_ids, pred_key_appendix, global_params.config.use_point_models) for ssv_ids in multi_params]
         qu.batchjob_script(multi_params, "generate_morphology_embedding",
@@ -98,8 +99,9 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
     else:
         # split all cells into upper half and lower half (sorted by size)
         half_ix = len(multi_params) // 2
-        multi_params = chunkify(multi_params[:half_ix], max_n_jobs // 2) + \
-                       chunkify(multi_params[half_ix:], max_n_jobs // 2)
+        njobs_per_half = max(max_n_jobs // 2, 1)
+        multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
+                       chunkify(multi_params[half_ix:], njobs_per_half)
         # add ssd parameters
         multi_params = [(ssv_ids, pred_key_appendix) for ssv_ids in multi_params]
         qu.batchjob_script(multi_params, "generate_cell_embedding",
@@ -119,7 +121,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
         Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd` and :func:`~run_neuron_rendering`.
     """
     if max_n_jobs_gpu is None:
-        max_n_jobs_gpu = global_params.config.ngpu_total * 4 if qu.batchjob_enabled() else 1
+        max_n_jobs_gpu = global_params.config.ngpu_total * 4 if qu.batchjob_enabled() else 2
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -130,8 +132,9 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
     else:
         # split all cells into upper half and lower half (sorted by size)
         half_ix = len(multi_params) // 2
-        multi_params = chunkify(multi_params[:half_ix], max_n_jobs_gpu // 2) + \
-                       chunkify(multi_params[half_ix:], max_n_jobs_gpu // 2)
+        njobs_per_half = max(max_n_jobs_gpu // 2, 1)
+        multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
+                       chunkify(multi_params[half_ix:], njobs_per_half)
         # job parameter will be read sequentially, i.e. in order to provide only
         # one list as parameter one needs an additonal axis
         multi_params = [(ixs, global_params.config.use_point_models) for ixs in multi_params]
@@ -179,8 +182,8 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
         path_to_out = qu.batchjob_script(multi_params, 'predict_axoness_semseg', log=log,
                                          suffix="", additional_flags="--gres=gpu:1",
                                          n_cores=n_cores, remove_jobfolder=False)
-        log.info(f'Finished compartment prediction of {len(ssd.ssv_ids)} SSVs.')
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
+    log.info(f'Finished compartment prediction of {len(ssd.ssv_ids)} SSVs.')
 
 
 def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
@@ -198,8 +201,9 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
     # split all cells into upper half and lower half (sorted by size)
     half_ix = len(multi_params) // 2
-    multi_params = chunkify(multi_params[:half_ix], max_n_jobs_gpu // 2) + \
-                   chunkify(multi_params[half_ix:], max_n_jobs_gpu // 2)
+    njobs_per_half = max(max_n_jobs_gpu // 2, 1)
+    multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
+                   chunkify(multi_params[half_ix:], njobs_per_half)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additional axis
     multi_params = [(ixs,) for ixs in multi_params]
