@@ -226,3 +226,7 @@ def test_full_run():
 
     if os.environ.get('syconn_wd') is not None:
         del os.environ['syconn_wd']
+
+
+if __name__ == '__main__':
+    test_full_run()
