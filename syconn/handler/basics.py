@@ -12,13 +12,12 @@ import glob
 import os
 import pickle as pkl
 import re
-import time
 import shutil
 import signal
 import tempfile
 import zipfile
 from collections import defaultdict
-from typing import List, Union, Optional
+from typing import List, Union
 
 import networkx as nx
 import numpy as np
@@ -339,6 +338,8 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
     Returns:
 
     """
+    if not kzip_path.endswith('.k.zip'):
+        kzip_path += '.k.zip'
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -381,7 +382,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
     data2kzip(kzip_path, [fpath], [fname_in_zip], force_overwrite)
 
 
-def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
+def data2kzip(kzip_path: str, fpaths, fnames_in_zip=None, force_overwrite=True,
               verbose=False):
     """
     Write files to k.zip. Finally removes files at `fpaths`.
@@ -397,6 +398,8 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     Returns:
 
     """
+    if not kzip_path.endswith('.k.zip'):
+        kzip_path += '.k.zip'
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
@@ -493,13 +496,15 @@ def write_obj2pkl(path, objects):
     """
     gc.disable()
     if isinstance(path, str):
-        with open(path, 'wb') as output:
+        with open(path + ".tmp", 'wb') as output:
             pkl.dump(objects, output, -1)
+        shutil.move(path + ".tmp", path)
     else:
         log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
                          "'objects' (python object).")
-        with open(objects, 'wb') as output:
+        with open(objects + ".tmp", 'wb') as output:
             pkl.dump(path, output, -1)
+        shutil.move(objects + ".tmp", objects)
     gc.enable()
 
 
@@ -800,80 +805,3 @@ def str_delta_sec(seconds: int) -> str:
     return str_rep
 
 
-class FileTimer:
-    """
-    ContextDecorator for timing. Stores the results as dict in a pkl file.
-
-    Examples:
-        The script SyConn/examples/start.py uses `FileTimer` to track the execution time of several
-        major steps of the analysis. The results are written as ``dict`` to the file '.timing.pkl'
-        in the working directory. The timing data can be accessed after the run to by initializing
-        `FileTimer` with the output file:
-
-            ft = FileTimer(path_to_timings_pkl)
-            # this is a dict with the step names as keys and the timings in seconds as values
-            print(ft.timings)
-
-    """
-    def __init__(self, fname: str, overwrite: bool = False):
-        self.fname = fname
-        self.step_name = None
-        self.overwrite = overwrite
-        os.makedirs(os.path.dirname(fname), exist_ok=True)
-        self.timings = {}
-        self.t0, self.t1, self.interval = None, None, None
-        self._load_prev()
-
-    def _load_prev(self):
-        if os.path.isfile(self.fname):
-            if self.overwrite:
-                os.remove(self.fname)
-            else:
-                prev = load_pkl2obj(self.fname)
-                if not type(prev) is dict:
-                    raise TypeError(f'Incompatible FileTimer type "{type(prev)}".')
-                self.timings = prev
-
-    def start(self, step_name: str):
-        if self.step_name is not None:
-            raise ValueError(f'Previous timing was not stopped.')
-        self.t0 = time.perf_counter()
-        self.step_name = step_name
-
-    def stop(self):
-        self.t1 = time.perf_counter()
-        self.interval = self.t1 - self.t0
-        if self.step_name is None:
-            raise ValueError(f'No step name set. Please call the FileTimer instance and pass the '
-                             f'step name as string.')
-        self._load_prev()
-        self.timings[self.step_name] = self.interval
-        write_obj2pkl(self.fname, self.timings)
-        self.step_name = None
-
-    def __enter__(self):
-        # do not start counting here to enable manual (with start and stop methods) interface and
-        # context decorators. Timing difference between __enter__ and __call__ is not relevant for
-        # our applications
-        return self
-
-    def __call__(self, step_name: str):
-        self.start(step_name)
-
-    def __exit__(self, *args):
-        self.stop()
-
-    def prepare_report(self, experiment_name: str) -> str:
-        # python dicts are insertion sensitive
-        dt_tot = np.sum(np.array(list(self.timings.values())))
-        dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-        time_summary_str = f"\nEM data analysis of experiment '{experiment_name}' finished " \
-                           f"after {dt_tot_str}.\n"
-        n_steps = len(self.timings)
-        for i, (step_name, step_dt) in enumerate(self.timings.items()):
-            step_dt_per = int(step_dt / dt_tot * 100)
-            step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(step_dt))
-            step_str = '{:<10}{:<25}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
-                                                           step_dt, f'{step_dt_per}%')
-            time_summary_str += step_str
-        return time_summary_str

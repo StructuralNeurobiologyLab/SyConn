@@ -59,10 +59,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     Todo:
         Replace sj_0 Segmentation dataset by the overlapping CS<->
         sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
-        syn_0 -> use syns as new sjs during rendering!
-        -> Run CS generation in parallel with mapping to at least get the syn objects before
-        rendering the neuron views (which need subcellular structures, there one can then use mi,
-        vc and syn (instead of sj)).
+        syn_0. Do not extract sj objects in general.
 
     Notes:
         * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
@@ -120,6 +117,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
 
     all_times = []
     step_names = []
+    dict_paths_tmp = []
     dir_props = f"{global_params.config.temp_path}/tmp_props_cssyn/"
 
     # remove previous temporary results.
@@ -156,7 +154,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     # reduce step
     start = time.time()
     cs_worker_dc_fname = f'{global_params.config.temp_path}/cs_worker_dict.pkl'
-    dict_paths_tmp = [cs_worker_dc_fname, dir_props, cset.path_head_folder]
+    dict_paths_tmp += [cs_worker_dc_fname, dir_props, cset.path_head_folder]
     syn_ids = []
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
@@ -221,19 +219,19 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
 
     # convert Chunkdataset to syn and cs KD
     def _convert_cd_to_kd(ot):
-        path = "{}/knossosdatasets/{}_seg/".format(
+        path_kd = "{}/knossosdatasets/{}_seg/".format(
             global_params.config.working_dir, ot)
-        if os.path.isdir(path):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path))
-            shutil.rmtree(path)
+        if os.path.isdir(path_kd):
+            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+            shutil.rmtree(path_kd)
         target_kd = knossosdataset.KnossosDataset()
         target_kd._cube_shape = cube_shape
         scale = np.array(global_params.config['scaling'])
         target_kd.scales = [scale, ]
-        target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ])
-        target_kd = basics.kd_factory(path)
-        export_cset_to_kd_batchjob({ot: path}, cset, ot, [ot],  offset=offset, size=size,
+        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+        target_kd = basics.kd_factory(path_kd)  # test if init is possible
+        export_cset_to_kd_batchjob({ot: path_kd}, cset, ot, [ot],  offset=offset, size=size,
                                    stride=chunk_size, as_raw=False,
                                    orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
@@ -277,12 +275,12 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
                            n_cores=1, remove_jobfolder=True)
-    # Mesh props are not computed as this is done for the agglomerated versions (currently only syn_ssv exist)
+    # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
-    da_kwargs = dict(recompute=True, compute_meshprops=False)
+    da_kwargs = dict(recompute=False, compute_meshprops=False)
     procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
              Process(target=dataset_analysis, args=(sd_cs,), kwargs=da_kwargs)]
     for p in procs:
@@ -302,7 +300,11 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
             shutil.rmtree(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
     if qu.batchjob_enabled():
-        shutil.rmtree(path_to_out + '/../', ignore_errors=True)
+        jobfolder = os.path.abspath(f'{path_to_out}/../')
+        try:
+            shutil.rmtree(jobfolder, ignore_errors=False)
+        except Exception as e:
+            log.error(f'Could not delete job folder at "{jobfolder}". {str(e)}')
 
 
 def _contact_site_extraction_thread(args: Union[tuple, list]) \
