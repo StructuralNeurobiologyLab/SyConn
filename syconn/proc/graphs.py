@@ -47,7 +47,7 @@ def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
         curr_labels = vertex_labels[bfs_nn[ii]]
         labels, counts = np.unique(curr_labels, return_counts=True)
         majority_label = labels[np.argmax(counts)]
-        new_vertex_labels[ii] = majority_label
+        new_vertex_labels[ii] = majority_labels
     return new_vertex_labels
 
 
@@ -689,10 +689,10 @@ def stitch_skel_nx(skel_nx: nx.Graph) -> nx.Graph:
     Returns:
         Single connected component graph.
     """
+    raise ValueError
     no_of_seg = nx.number_connected_components(skel_nx)
     if no_of_seg == 1:
         return skel_nx
-
     skel_nx_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.int)
     new_nodes = skel_nx_nodes.copy()
     while no_of_seg != 1:
