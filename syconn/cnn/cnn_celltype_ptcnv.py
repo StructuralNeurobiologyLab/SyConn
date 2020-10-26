@@ -153,6 +153,7 @@ train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='norma
                                   clouds.Center(),
                                   clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
+                                  clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 

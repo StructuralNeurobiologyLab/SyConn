@@ -11,7 +11,6 @@ import time
 from . import log_reps
 from . import segmentation
 from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
-from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views, \
     find_missing_sv_attributes, find_missing_sv_skeletons, load_so_attr_bulk
 from .. import global_params
@@ -22,6 +21,8 @@ from ..proc.graphs import create_graph_from_coords, stitch_skel_nx
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
 from ..proc.sd_proc import predict_views
+from ..extraction.block_processing_C import relabel_vol_nonexist2zero
+
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
@@ -510,13 +511,13 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
             # This merges existing SV skeletons - SV skeletons must exist
             ssv = create_sso_skeleton_fast(ssv)
         else:
-            # TODO: add parameter to config
             verts = ssv.mesh[1].reshape(-1, 3)
             # choose random subset of surface vertices
             np.random.seed(0)
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
             ixs = ixs[:int(0.5 * len(ixs))]
+            # TODO: add parameter to config
             if use_new_renderings_locs:
                 locs = generate_rendering_locs(verts[ixs], 1000)
             else:
@@ -1503,7 +1504,7 @@ def predict_views_semseg(views, model, batch_size=10, verbose=False):
 
 
 def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
-                    nb_cpus=1, verbose=False):
+                    nb_cpus=1, verbose=False, bs: int = 10):
     """
     Predicts views of a list of SVs and saves them via SV.save_views.
     Efficient helper function for chunked predictions,
@@ -1519,6 +1520,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
         nb_cpus: int
             number CPUs for saving the SV views
         verbose: bool
+        bs: Batch size during inference.
 
     Returns: list[np.array]
         if 'return_pred=True' it returns the label views of input
@@ -1531,7 +1533,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
     assert len(part_views) == len(views) + 1
     views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
     # views have shape: M, 4, 2, 128, 256
-    label_views = predict_views_semseg(views, model, verbose=verbose)
+    label_views = predict_views_semseg(views, model, verbose=verbose, batch_size=bs)
     svs_labelviews = []
     for ii in range(len(part_views[:-1])):
         sv_label_views = label_views[part_views[ii]:part_views[ii + 1]]
@@ -1755,7 +1757,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ld[semseg_key] = maj_vote
         ld.push()
     else:
-        maj_vote = ld[semseg_key]
+        maj_vote = ld[semseg_key].astype(np.int)
     if colors is not None:
         col = colors[maj_vote].astype(np.uint8)
         if np.sum(col) == 0:
@@ -1922,7 +1924,7 @@ def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
                           nb_views: int, comp_window: float, k: int = 1,
                           dest_path: Optional[str] = None, verbose: bool = False,
-                          add_cellobjects: Union[bool, Iterable] = True):
+                          add_cellobjects: Union[bool, Iterable] = True, bs: int = 10):
     """
     Renders raw and index views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -1972,6 +1974,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         verbose: Adds progress bars for view generation.
         add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
             used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
+        bs: Batch size during inference.
 
     Returns:
 
@@ -1991,7 +1994,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
     sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key,
-                       add_cellobjects=add_cellobjects, **view_kwargs)
+                       add_cellobjects=add_cellobjects, bs=bs, **view_kwargs)
     if verbose:
         log_reps.debug('Finished shape-view rendering and sem. seg. prediction.')
     # this generates the index views
@@ -2181,7 +2184,6 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
             connected component spine head skeleton nodes, i.e. the inspected volume is
             at least ``2*ctx_vol``.
     """
-    # use bigger skel context to get the correspondence to the voxel as accurate as possible
     ctx_vol = np.array(ctx_vol)
     scaling = sso.scaling
     sso.attr_dict['spinehead_vol'] = {}
@@ -2189,76 +2191,87 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         msg = f'"spiness" not available in skeleton of SSO {sso.id}.'
         log_reps.error(msg)
         raise ValueError(msg)
-    ssv_svids = set(sso.sv_ids)
+    ssv_svids = sso.sv_ids
     ssv_syncoords = np.array([syn.rep_coord for syn in sso.syn_ssv])
     if len(ssv_syncoords) == 0:
         return
     ssv_synids = np.array([syn.id for syn in sso.syn_ssv])
     verts = sso.mesh[1].reshape(-1, 3) / scaling
     sp_semseg = sso.label_dict('vertex')['spiness']
-    ignore_labels = global_params.config['spines']['semseg2coords_spines']['ignore_labels']
+    if np.ndim(sp_semseg) == 2:
+        sp_semseg = sp_semseg.squeeze(1)
+    ignore_labels = sso.config['spines']['semseg2coords_spines']['ignore_labels']
     for l in ignore_labels:
         verts = verts[sp_semseg != l]
         sp_semseg = sp_semseg[sp_semseg != l]
     curr_sp = sso.semseg_for_coords(ssv_syncoords, 'spiness',
-                                    **global_params.config['spines']['semseg2coords_spines'])
-    pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                    **sso.config['spines']['semseg2coords_spines'])
+    pred_key_ax = "{}_avg{}".format(sso.config['compartments'][
                                         'view_properties_semsegax']['semseg_key'],
-                                    global_params.config['compartments'][
+                                    sso.config['compartments'][
                                         'dist_axoness_averaging'])
     curr_ax = sso.attr_for_coords(ssv_syncoords, attr_keys=[pred_key_ax])[0]
     ssv_syncoords = ssv_syncoords[(curr_sp == 1) & (curr_ax == 0)]
     ssv_synids = ssv_synids[(curr_sp == 1) & (curr_ax == 0)]
     if len(ssv_syncoords) == 0:  # no spine head synapses
         return
+    ds = sso.scaling[2] // np.array(sso.scaling)
+    assert np.all(ds > 0)
+    kd = kd_factory(sso.config.kd_seg_path)
+
     # iterate over spine head synapses
     for c, ssv_syn_id in zip(ssv_syncoords, ssv_synids):
         bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
         offset = bb[0] - ctx_vol
-        size = (bb[1] - bb[0] + 1 + 2 * ctx_vol).astype(np.int)
+        size = (bb[1] - bb[0] + ds + 2 * ctx_vol).astype(np.int)
         # get cell segmentation mask
-        kd = kd_factory(global_params.config.kd_seg_path)
         seg = kd.load_seg(offset=offset, size=size, mag=1).swapaxes(2, 0)
-        orig_sh = seg.shape
-        seg = seg.flatten()
-        for ii, el in enumerate(seg):
-            if el not in ssv_svids:
-                seg[ii] = 0
-            else:
-                seg[ii] = 1
+        seg = ndimage.zoom(seg, 1 / ds, order=0)
+
+        if len(ssv_svids) > 1:
+            relabel_vol_nonexist2zero(seg, {k: 1 for k in ssv_svids})
+        else:
+            seg = (seg == ssv_svids[0]).astype(np.int)
+
+        seg = ndimage.binary_fill_holes(seg)
         if np.sum(seg) == 0:
             msg = (f'Could not find segmentation at {offset} and size {size} for SSVs '
                    f'{ssv_svids}. syn_ssv ID: {ssv_syn_id}.')
             log_reps.error(msg)
             raise ValueError(msg)
-        seg = seg.reshape(orig_sh)
-        seg = ndimage.binary_fill_holes(seg)
         # set watershed seeds using vertices
         vert_ixs_bb = in_bounding_box(verts, np.array([offset + size / 2, size]))
         vert_ixs_bb = np.array(vert_ixs_bb, dtype=np.bool)
         verts_bb = verts[vert_ixs_bb]
         semseg_bb = sp_semseg[vert_ixs_bb]
+        # pathological case, such as re-entering cells within a smaller test cube lead to missing
+        # meshes and skeletons if the process is very small. Synapse objects get correctly identified,
+        # but context is insufficient for mesh generation/prediction. Does not occur in real data.
+        if len(semseg_bb) == 0:
+            continue
         # relabelled spine neck as 9, actually not needed here
         semseg_bb[semseg_bb == 0] = 9
-
         distance = ndimage.distance_transform_edt(seg)
+
         local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3, 3)),
                                     labels=seg).astype(np.uint)
         maxima = np.transpose(np.nonzero(local_maxi))
-        # assign labels from nearby vertices
-        maxima_sp = colorcode_vertices(maxima, verts_bb - offset, semseg_bb,
-                                       k=global_params.config['spines']['semseg2coords_spines']['k'],
+        # assign labels from nearby vertices; convert maxima coordinates back to mag 1 via 'ds'
+        maxima_sp = colorcode_vertices(maxima * ds, verts_bb - offset, semseg_bb,
+                                       k=sso.config['spines']['semseg2coords_spines']['k'],
                                        return_color=False, nb_cpus=sso.nb_cpus)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         labels[labels != 1] = 0  # only keep spine head locations
         labels, nb_obj = ndimage.label(labels)
+
         c = c - offset
         max_id = 1
+        # if more than one spine head object get the one with the majority voxels in vicinity
         if nb_obj > 1:
             # query many voxels or use NN approach?
-            ls = labels[(c[0] - 20):(c[0] + 21), (c[1] - 20):(c[1] + 21), (c[2] - 10):(c[2] + 11)]
+            ls = labels[(c[0] - 10):(c[0] + 11), (c[1] - 10):(c[1] + 11), (c[2] - 10):(c[2] + 11)]
             ids, cnts = np.unique(ls, return_counts=True)
             cnts = cnts[ids != 0]
             ids = ids[ids != 0]
@@ -2277,7 +2290,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
                 max_id = ids[np.argmax(cnts)]
 
         n_voxels_spinehead = np.sum(labels == max_id)
-        vol_sh = n_voxels_spinehead * np.prod(scaling) / 1e9  # in um^3
+        vol_sh = n_voxels_spinehead * np.prod(scaling * ds) / 1e9  # in um^3
         sso.attr_dict['spinehead_vol'][ssv_syn_id] = vol_sh
 
 

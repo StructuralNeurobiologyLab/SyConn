@@ -47,7 +47,7 @@ def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
         curr_labels = vertex_labels[bfs_nn[ii]]
         labels, counts = np.unique(curr_labels, return_counts=True)
         majority_label = labels[np.argmax(counts)]
-        new_vertex_labels[ii] = majority_labels
+        new_vertex_labels[ii] = majority_label
     return new_vertex_labels
 
 
@@ -679,37 +679,42 @@ def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
     pbar.close()
 
 
-def stitch_skel_nx(skel_nx: nx.Graph) -> nx.Graph:
+def stitch_skel_nx(skel_nx: nx.Graph, n_jobs: int = 1) -> nx.Graph:
     """
     Stitch connected components within a graph by recursively adding edges between the closest components.
 
     Args:
         skel_nx: Networkx graph. Nodes require 'position' attribute.
+        n_jobs: Number of jobs used for query of cKDTree.
 
     Returns:
         Single connected component graph.
     """
-    raise ValueError
+    if skel_nx.number_of_nodes() == 0:
+        return skel_nx
     no_of_seg = nx.number_connected_components(skel_nx)
     if no_of_seg == 1:
         return skel_nx
+
     skel_nx_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.int)
-    new_nodes = skel_nx_nodes.copy()
+
     while no_of_seg != 1:
         rest_nodes = []
-        current_set_of_nodes = []
+        rest_nodes_ixs = []
         list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_nx), key=len, reverse=True)])
         for single_rest_graph in list_of_comp[1:]:
-            rest_nodes = rest_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
-        for single_rest_graph in list_of_comp[:1]:
-            current_set_of_nodes = current_set_of_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+            rest_nodes += [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+            rest_nodes_ixs += list(single_rest_graph)
+        current_set_of_nodes = [skel_nx_nodes[int(ix)] for ix in list_of_comp[0]]
+        current_set_of_nodes_ixs = list(list_of_comp[0])
         tree = spatial.cKDTree(rest_nodes, 1)
-        thread_lengths, indices = tree.query(current_set_of_nodes)
+
+        thread_lengths, indices = tree.query(current_set_of_nodes, n_jobs=n_jobs)
+
         start_thread_index = np.argmin(thread_lengths)
         stop_thread_index = indices[start_thread_index]
-        start_thread_node = \
-            np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
-        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
-        skel_nx.add_edge(start_thread_node, stop_thread_node)
+        e1 = current_set_of_nodes_ixs[start_thread_index]
+        e2 = rest_nodes_ixs[stop_thread_index]
+        skel_nx.add_edge(e1, e2)
         no_of_seg -= 1
     return skel_nx

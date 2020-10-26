@@ -13,7 +13,7 @@ import numpy as np
 
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 
 from knossos_utils import knossosdataset
 
@@ -28,7 +28,7 @@ def test_full_run():
     experiment_name = 'j0126_example'
     scale = np.array([10, 10, 20])
     prior_glia_removal = True
-    use_myelin = False
+    use_myelin = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
@@ -37,13 +37,8 @@ def test_full_run():
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),
         ('log_level', 'INFO'),
-        # these will be created during synapse type prediction (
-        # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
-        # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
-        #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
         ('cell_objects', {
-          # 'sym_label': 1, 'asym_label': 2,
-          })
+          }),
     ]
     if example_cube_id == 1:
         chunk_size = (256, 256, 128)
@@ -69,7 +64,6 @@ def test_full_run():
         log.critical('Python version <3.6. This is untested!')
 
     generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf, force_overwrite=False)
-
     if global_params.config.working_dir is not None and \
             os.path.normpath(global_params.config.working_dir) != os.path.normpath(example_wd):
         os.environ['syconn_wd'] = example_wd
@@ -158,13 +152,8 @@ def test_full_run():
     # START SyConn
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
-    # TODO: launch all predictions in parallel
     if use_myelin:
         exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
-    # exec_dense_prediction.predict_cellorganelles()
-    # exec_dense_prediction.predict_synapsetype()
     ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
@@ -231,8 +220,12 @@ def test_full_run():
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
 
     if os.environ.get('syconn_wd') is not None:
         del os.environ['syconn_wd']
+
+
+if __name__ == '__main__':
+    test_full_run()

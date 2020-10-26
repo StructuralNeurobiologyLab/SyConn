@@ -63,12 +63,8 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
             'mininterval': 1
         }
         # Print out the progress as tasks complete
-        if show_progress:
-            for f in tqdm.tqdm(as_completed(futures), **kwargs):
-                pass
-        else:
-            for f in as_completed(futures):
-                pass
+        for f in tqdm.tqdm(as_completed(futures), disable=not show_progress, **kwargs):
+            pass
     finally:
         pool.shutdown()
     out = []

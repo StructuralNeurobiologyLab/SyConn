@@ -6,11 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import numpy as np
+import pickle as pkl
 from syconn.reps.super_segmentation_dataset import exctract_ssv_morphology_embedding, SuperSegmentationDataset
 from syconn.handler.prediction_pts import infere_cell_morphology_ssd
 from syconn import global_params
@@ -30,9 +27,10 @@ with open(path_storage_file, 'rb') as f:
 
 ssv_ids = args[0]
 pred_key_appendix = args[1]
-
+use_point_models = args[2]
+assert ssv_ids.size == np.unique(ssv_ids).size
 ssd = SuperSegmentationDataset()
-if global_params.config.use_point_models:
+if use_point_models:
     ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
     ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in ssv_ids]
     infere_cell_morphology_ssd(ssv_params)
@@ -42,7 +40,7 @@ else:
     params = basics.chunkify(ssv_ids, n_worker * 4)
     res = start_multiprocess_imap(exctract_ssv_morphology_embedding,
                                   [(p, ncpus, pred_key_appendix) for p in params],
-                                  nb_cpus=n_worker)
+                                  nb_cpus=n_worker, show_progress=False)
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)
