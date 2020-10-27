@@ -4,7 +4,7 @@ import pickle as pkl
 import sklearn.metrics as sm
 from syconn import global_params
 from scipy.spatial import cKDTree
-from neuronx.utils.syconn_eval import *
+from .syconn_eval import replace_preds
 from morphx.classes.pointcloud import PointCloud
 from syconn.reps.super_segmentation import SuperSegmentationObject
 
@@ -14,7 +14,7 @@ if __name__ == "__main__":
     global_params.wd = "/wholebrain/scratch/areaxfs3/"
     with open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v3.pkl'), 'rb') as f:
         data = pkl.load(f)
-    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/2020_09_18_4000_4000/borders_1000/')
+    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/2020_10_14_8000_8192_cp_cp_q/dh_syns/')
     save_path_examples = save_path + 'examples/'
     if not os.path.exists(save_path_examples):
         os.makedirs(save_path_examples)
@@ -29,7 +29,7 @@ if __name__ == "__main__":
             # 0: dendrite, 1: axon, 2: soma
             pc_ads = replace_preds(sso, 'ads', [])
             # 0: dendrite, 1: neck, 2: head
-            pc_dnh = replace_preds(sso, 'dnh_borders', [])
+            pc_dnh = replace_preds(sso, 'dnh_20_10_14_cp_cp_q', [])
 
             tree_ads = cKDTree(pc_ads.vertices)
             tree_dnh = cKDTree(pc_dnh.vertices)
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             gt = data[str(sso_id)+'_l']
 
             pc_ads.save2pkl(os.path.expanduser(save_path + f'{sso_id}_ads.pkl'))
-            pc_dnh.save2pkl(os.path.expanduser(save_path + f'{sso_id}_donh.pkl'))
+            pc_dnh.save2pkl(os.path.expanduser(save_path + f'{sso_id}_dnh.pkl'))
 
             mask = np.ones((len(coords), 1), dtype=bool)
 

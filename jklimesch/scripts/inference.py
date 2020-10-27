@@ -15,6 +15,7 @@ from sklearn.preprocessing import label_binarize
 from elektronn3.models.convpoint import SegBig, SegAdapt
 from neuronx.classes.argscontainer import ArgsContainer
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
+from lightconvpoint.utils import get_network
 
 
 def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str, model_args_p: str, pred_key: str,
@@ -30,7 +31,17 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
         device = torch.device('cpu')
 
     # load model
-    if argscont.use_big:
+    lcp_flag = False
+    # load model
+    if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
+        kwargs = {}
+        if argscont.model == 'ConvAdaptSeg':
+            kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act,
+                          norm=argscont.norm_type)
+        conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
+        model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
+        lcp_flag = True
+    elif argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
                        use_bias=argscont.use_bias, norm_type=argscont.norm_type, use_norm=argscont.use_norm,
                        kernel_size=argscont.kernel_size, neighbor_nums=argscont.neighbor_nums,
@@ -125,7 +136,14 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
             for batch in batches:
                 pts = batch[0].to(device, non_blocking=True)
                 features = batch[1].to(device, non_blocking=True)
+                if lcp_flag:
+                    pts = pts.transpose(1, 2)
+                    features = features.transpose(1, 2)
                 outputs = model(features, pts)
+                if lcp_flag:
+                    pts = pts.transpose(1, 2)
+                    features = features.transpose(1, 2)
+                    outputs = outputs.transpose(1, 2)
                 outputs = outputs.cpu().detach().numpy()
                 for ix in range(argscont.batch_size):
                     preds.append(np.argmax(outputs[ix], axis=1))
@@ -183,10 +201,10 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 
 if __name__ == '__main__':
-    base_path = '~/thesis/current_work/paper/dnh/2020_09_18_4000_4000/'
-    m_path = base_path + 'models/state_dict_e250.pth'
+    base_path = '~/thesis/current_work/paper/dnh/2020_10_14_8000_8192_cp_cp_q/'
+    m_path = base_path + 'models/state_dict_e570.pth'
     argscont_path = base_path + 'argscont.pkl'
     predict_sso([141995, 11833344, 28410880, 28479489],
                 SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/"),
-                m_path, argscont_path, pred_key='dnh_borders', redundancy=5, border_exclusion=1000)
+                m_path, argscont_path, pred_key='dnh_20_10_14_cp_cp_q', redundancy=5, border_exclusion=0)
 
