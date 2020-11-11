@@ -1385,7 +1385,7 @@ class SegmentationDataset(SegmentationBase):
 
         After successfully executing
         :class:`~syconn.exec.exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
-        can be loaded from cache via the following keys:
+        can be loaded from numpy arrays via the following keys:
             * 'id': ID array, identical to :py:attr:`~ids`.
             * 'bounding_box': Bounding box of every SV.
             * 'size': Number voxels of each SV.
@@ -1398,7 +1398,7 @@ class SegmentationDataset(SegmentationBase):
             * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SVs.
             * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
 
-        If a glia separation is performed, the following attributes will be cached as well:
+        If a glia separation is performed, the following attributes will be stored as numpy array as well:
             * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
               locations, 2: 0-index=neuron, 1-index=glia).
 
@@ -1408,7 +1408,7 @@ class SegmentationDataset(SegmentationBase):
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
-        properties are cached:
+        properties are stored as numpy arrays:
             * 'id': ID array, identical to
               :py:attr:`~ids`.
             * 'bounding_box': Bounding box of every SV.
@@ -1462,7 +1462,7 @@ class SegmentationDataset(SegmentationBase):
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
                 setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
             n_folders_fs: Number of folders within the dataset's folder structure.
-            cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
+            cache_properties: Use numpy arrays to populate the specified object properties when initializing
                 :py:class:`~syconn.reps.segmentation.SegmentationObject` via :py:func:`~get_segmentation_object`.
         """
 
@@ -1767,7 +1767,7 @@ class SegmentationDataset(SegmentationBase):
             yield self.get_segmentation_object(self.ids[ix])
             ix += 1
 
-    def load_cached_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
+    def load_numpy_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
         """
         Load cached array. The ordering of the returned array will correspond
         to :py:attr:`~ids`.
@@ -1879,7 +1879,7 @@ class SegmentationDataset(SegmentationBase):
             return
         if self._soid2ix is None:
             self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
-        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
+        self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
 
     def get_volume(self, source: str = 'total') -> float:
         """

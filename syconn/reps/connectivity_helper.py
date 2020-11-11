@@ -91,37 +91,37 @@ def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)
     cd_dict = dict()
-    cd_dict['ids'] = csd.load_cached_data('id')
+    cd_dict['ids'] = csd.load_numpy_data('id')
     # in um2, overlap of cs and sj
     cd_dict['syn_size'] = \
-        csd.load_cached_data('mesh_area') / 2  # as used in export_matrix
+        csd.load_numpy_data('mesh_area') / 2  # as used in export_matrix
     cd_dict['synaptivity_proba'] = \
-        csd.load_cached_data('syn_prob')
+        csd.load_numpy_data('syn_prob')
     # -1 for inhibitory, +1 for excitatory
     cd_dict['syn_sign'] = \
-        csd.load_cached_data('syn_sign').astype(np.int)
+        csd.load_numpy_data('syn_sign').astype(np.int)
     cd_dict['coord_x'] = \
-        csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
-        csd.load_cached_data('rep_coord')[:, 1].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 1].astype(np.int)
     cd_dict['coord_z'] = \
-        csd.load_cached_data('rep_coord')[:, 2].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 2].astype(np.int)
     cd_dict['ssv_partner_0'] = \
-        csd.load_cached_data('neuron_partners')[:, 0].astype(np.int)
+        csd.load_numpy_data('neuron_partners')[:, 0].astype(np.int)
     cd_dict['ssv_partner_1'] = \
-        csd.load_cached_data('neuron_partners')[:, 1].astype(np.int)
+        csd.load_numpy_data('neuron_partners')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ax_0'] = \
-        csd.load_cached_data('partner_axoness')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_axoness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ax_1'] = \
-        csd.load_cached_data('partner_axoness')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_axoness')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ct_0'] = \
-        csd.load_cached_data('partner_celltypes')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_celltypes')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ct_1'] = \
-        csd.load_cached_data('partner_celltypes')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_celltypes')[:, 1].astype(np.int)
     cd_dict['neuron_partner_sp_0'] = \
-        csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_spiness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_sp_1'] = \
-        csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_spiness')[:, 1].astype(np.int)
 
     log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
                                                           len(csd.ids)))
@@ -455,19 +455,19 @@ def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltyp
     sd_syn_ssv = SegmentationDataset('syn_ssv')
     if proba_thresh_celltype is not None:
         ssd = SuperSegmentationDataset()
-        ct_probas = [certainty_estimate(proba) for proba in tqdm.tqdm(ssd.load_cached_data('celltype_cnn_e3_probas'),
+        ct_probas = [certainty_estimate(proba) for proba in tqdm.tqdm(ssd.load_numpy_data('celltype_cnn_e3_probas'),
                                                                       desc='Cells')]
         ct_proba_lookup = {cellid: ct_probas[k] for k, cellid in enumerate(ssd.ssv_ids)}
         del ct_probas
-    ax = sd_syn_ssv.load_cached_data('partner_axoness')
-    ct = sd_syn_ssv.load_cached_data('partner_celltypes')
-    area = sd_syn_ssv.load_cached_data('mesh_area')
-    # size = sd_syn_ssv.load_cached_data('size')
-    # syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    ax = sd_syn_ssv.load_numpy_data('partner_axoness')
+    ct = sd_syn_ssv.load_numpy_data('partner_celltypes')
+    area = sd_syn_ssv.load_numpy_data('mesh_area')
+    # size = sd_syn_ssv.load_numpy_data('size')
+    # syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     # area *= syn_sign
-    partners = sd_syn_ssv.load_cached_data('neuron_partners')
+    partners = sd_syn_ssv.load_numpy_data('neuron_partners')
 
-    proba = sd_syn_ssv.load_cached_data('syn_prob')
+    proba = sd_syn_ssv.load_numpy_data('syn_prob')
     m = (proba >= proba_thresh_syn) & (area >= r[0]) & (area <= r[1])
     print(f'Found {np.sum(m)} synapses after filtering with probaility threshold {proba_thresh_syn} and '
           f'size filter (min/max [um^2]: {r}).')

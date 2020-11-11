@@ -47,7 +47,7 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     pred_key_appendix = ""
     log.info(f'Starting local morphology generation with {"points" if global_params.config.use_point_models else "views"}.')
     # sort ssv ids according to their number of SVs (descending)
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
         ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
@@ -90,7 +90,7 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
              f' {"points" if global_params.config.use_point_models else "views"}.')
 
     # sort ssv ids according to their number of SVs (descending)
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
         ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
@@ -123,7 +123,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     log.info(f'Starting cell type prediction with {"points" if global_params.config.use_point_models else "views"}.')
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         predict_celltype_ssd(ssd_kwargs=dict(working_dir=global_params.config.working_dir), ssv_ids=multi_params)
@@ -166,7 +166,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
 
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=global_params.config.working_dir)
@@ -195,7 +195,7 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     log = initialize_logging('compartment_prediction', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     # split all cells into upper half and lower half (sorted by size)
     half_ix = len(multi_params) // 2
     multi_params = chunkify(multi_params[:half_ix], max_n_jobs_gpu // 2) + \
@@ -232,7 +232,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     # generate parameter for view rendering of individual SSV
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
-    bbs = sds.load_cached_data('bounding_box') * sds.scaling
+    bbs = sds.load_numpy_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(cc_gs, sv_size_dict, is_connected_components=True)

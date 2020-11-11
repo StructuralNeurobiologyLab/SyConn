@@ -170,7 +170,7 @@ def batchjob_script(params: list, name: str,
     if '--mem' in additional_flags:
         raise ValueError('"--mem" must not be set via the "additional_flags"'
                          ' kwarg.')
-    additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+    # additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
 
     # Start SLURM job
     if len(job_name) > 8:
@@ -297,8 +297,11 @@ def batchjob_script(params: list, name: str,
             if time.time() - last_failed > 5:
                 # if a job failed within the last 5 seconds, do not print the error
                 # message (assume same error)
-                with open(f"{path_to_err}/job_{j}.log") as f:
-                    err_msg = f.read()
+                try:
+                    with open(f"{path_to_err}/job_{j}.log") as f:
+                        err_msg = f.read()
+                except FileNotFoundError as e:
+                    err_msg = f'FileNotFoundError: {e}'
                 last_failed = time.time()
                 if 'exceeded memory limit' in err_msg:
                     err_msg = None  # do not report message of OOM errors

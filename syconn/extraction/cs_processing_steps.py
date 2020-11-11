@@ -65,7 +65,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                       version=ssd_version)
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]],
+    for ids_small_chunk in chunkify(ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]],
                                     global_params.config.ncore_total * 2):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
@@ -119,7 +119,7 @@ def _collect_properties_from_ssv_partners_thread(args):
                                                   version=obj_version)
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd, version=ssd_version)
 
-    syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
+    syn_neuronpartners = sd_syn_ssv.load_numpy_data("neuron_partners")
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
                                         'view_properties_semsegax']['semseg_key'],
                                     global_params.config['compartments'][
@@ -1205,7 +1205,7 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
     sd_vc = segmentation.SegmentationDataset(obj_type="vc", working_dir=wd)
     sd_mi = segmentation.SegmentationDataset(obj_type="mi", working_dir=wd)
 
-    syn_neuronpartners = sd_syn_ssv.load_cached_data("neuron_partners")
+    syn_neuronpartners = sd_syn_ssv.load_numpy_data("neuron_partners")
     # dts = dict(id_mask=0, kds=0, map_verts=0, directio=0, meshcache=0)
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
@@ -1716,21 +1716,21 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 
-    syn_prob = sd_syn_ssv.load_cached_data("syn_prob")
+    syn_prob = sd_syn_ssv.load_numpy_data("syn_prob")
 
     m = syn_prob > threshold_syn
-    m_axs = sd_syn_ssv.load_cached_data("partner_axoness")[m]
-    m_cts = sd_syn_ssv.load_cached_data("partner_celltypes")[m]
-    m_sp = sd_syn_ssv.load_cached_data("partner_spiness")[m]
+    m_axs = sd_syn_ssv.load_numpy_data("partner_axoness")[m]
+    m_cts = sd_syn_ssv.load_numpy_data("partner_celltypes")[m]
+    m_sp = sd_syn_ssv.load_numpy_data("partner_spiness")[m]
     m_coords = sd_syn_ssv.rep_coords[m]
     # m_sizes = sd_syn_ssv.sizes[m]
-    m_sizes = sd_syn_ssv.load_cached_data("mesh_area")[m] / 2
-    m_ssv_partners = sd_syn_ssv.load_cached_data("neuron_partners")[m]
+    m_sizes = sd_syn_ssv.load_numpy_data("mesh_area")[m] / 2
+    m_ssv_partners = sd_syn_ssv.load_numpy_data("neuron_partners")[m]
     m_syn_prob = syn_prob[m]
-    m_syn_sign = sd_syn_ssv.load_cached_data("syn_sign")[m]
-    m_syn_asym_ratio = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
-    m_spineheadvol = sd_syn_ssv.load_cached_data("partner_spineheadvol")[m]
-    m_latent_morph = sd_syn_ssv.load_cached_data("latent_morph")[m]  # N, 2, m
+    m_syn_sign = sd_syn_ssv.load_numpy_data("syn_sign")[m]
+    m_syn_asym_ratio = sd_syn_ssv.load_numpy_data("syn_type_sym_ratio")[m]
+    m_spineheadvol = sd_syn_ssv.load_numpy_data("partner_spineheadvol")[m]
+    m_latent_morph = sd_syn_ssv.load_numpy_data("latent_morph")[m]  # N, 2, m
     m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
     # (loop of skeleton node generation)

@@ -127,7 +127,7 @@ if __name__ == '__main__':
     # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
     # rag_sub_g = nx.Graph()
     # # add SV IDs to graph via self-edges
-    # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
     # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
     # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
     # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])

@@ -113,7 +113,7 @@ def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str =
     log.info("Finished neuron and glia RAG, now preparing CC size dict.")
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir, cache_properties=['size'])
     sv_size_dict = {}
-    bbs = sds.load_cached_data('bounding_box') * sds.scaling
+    bbs = sds.load_numpy_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(g, sv_size_dict)

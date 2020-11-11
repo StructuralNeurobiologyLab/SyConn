@@ -40,7 +40,7 @@ def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
 
-    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
@@ -107,7 +107,7 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
         assert obj_type in ssd.version_dict
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
-    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
@@ -257,9 +257,9 @@ def map_synssv_objects_thread(args):
                                                   working_dir=working_dir,
                                                   version=synssv_version)
 
-    ssv_partners = syn_ssv_sd.load_cached_data("neuron_partners")
-    syn_prob = syn_ssv_sd.load_cached_data("syn_prob")
-    synssv_ids = syn_ssv_sd.load_cached_data("id")
+    ssv_partners = syn_ssv_sd.load_numpy_data("neuron_partners")
+    syn_prob = syn_ssv_sd.load_numpy_data("syn_prob")
+    synssv_ids = syn_ssv_sd.load_numpy_data("id")
 
     synssv_ids = synssv_ids[syn_prob > syn_threshold]
     ssv_partners = ssv_partners[syn_prob > syn_threshold]

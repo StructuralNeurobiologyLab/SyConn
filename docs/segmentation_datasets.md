@@ -46,7 +46,7 @@ If `sd_proc.dataset_analysis(...)` was applied, the `SegmentationDataset` can ac
 as an array. For instance, the attribute `size` can be accesses via
 
 ```
-sizes = sj_sd.load_cached_data("size")
+sizes = sj_sd.load_numpy_data("size")
 ```
 
 Some attributes, such as `size` and `id`, are also available as property (eg. `sj_sd.sizes`). Values in different attribute arrays

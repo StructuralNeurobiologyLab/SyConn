@@ -54,6 +54,7 @@ def get_speed_plots():
     df = pd.DataFrame(data=res_dc)
     df.to_csv(f'{base_dir}/speed_data.csv')
     fmt = '{:0.2f}'
+
     # Speed bar plot
     plt.figure()
     axes = sns.barplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette)
@@ -68,6 +69,18 @@ def get_speed_plots():
     axes.set_xticklabels(xticklabels)
     plt.subplots_adjust(right=0.5)
     plt.savefig(base_dir + '/speed_barplot.png')
+    plt.close()
+
+    # Speed bar plot - only biggest data set
+    plt.figure()
+    df_biggest = df.loc[lambda df: df['datasize[GVx]'] == df['datasize[GVx]'].max(), :]
+    axes = sns.barplot(data=df_biggest, x="step", y="speed[GVx]", palette=palette)
+    axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
+                loc='upper left', borderaxespad=0.)
+    axes.set_ylabel('speed [GVx / h]')
+    axes.set_xlabel('step')
+    plt.subplots_adjust(right=0.5)
+    plt.savefig(base_dir + '/speed_barplot_biggest_only.png')
     plt.close()
 
     # Speed scatter plot regression
@@ -137,7 +150,8 @@ def get_timing_plots():
         dt_syn_enrich = np.sum([ft.timings[k] for k in ['Spine head calculation', 'Matrix export']])
         assert np.isclose(dt_tot, dt_points + dt_database + dt_syns + dt_syn_enrich)
         # gigavoxels per h; excluding views
-        high_level_res_dc['speed_total_nvox[h/GVx]'].append(ft.dataset_nvoxels / dt_tot * 3600)
+        high_level_res_dc['speed_total_nvox[GVx/h]'].append(ft.dataset_nvoxels / dt_tot * 3600)
+        high_level_res_dc['speed_total_nvox[h/GVx]'].append(1/high_level_res_dc['speed_total_nvox[GVx/h]'][-1])
         high_level_res_dc['datasize [GVx]'].append(ft.dataset_nvoxels)  # in giga voxels
         high_level_res_dc['datasize [mm3]'].append(ft.dataset_mm3)
         high_level_res_dc['total_time [h]'].append(dt_tot / 3600)  # excluding views
@@ -184,8 +198,6 @@ def get_timing_plots():
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('time [h]')
     axes.set_xlabel('size [GVx]')
-    xlim = axes.get_xlim()
-    ylim = axes.get_ylim()
     plt.subplots_adjust(right=0.75)
     plt.savefig(base_dir + '/time_pointplot.png')
     plt.close()
@@ -267,8 +279,40 @@ def get_timing_plots():
     plt.savefig(base_dir + '/time_stackedbarplot.png')
     plt.close()
 
+    # All steps time regression plot without views
+    log_reg = initialize_logging(f'time_allsteps_regplot_views', log_dir=base_dir)
+    plt.figure()
+    to_be_removed = []
+    for ii in range(len(res_dc['step'])):
+        if res_dc['step'][ii] == 'views':
+            to_be_removed.append(ii)
+    for ii in np.sort(to_be_removed)[::-1]:
+        res_dc['time'].pop(ii)
+        res_dc['time_rel'].pop(ii)
+        res_dc['step'].pop(ii)
+        res_dc['datasize[mm3]'].pop(ii)
+        res_dc['datasize[GVx]'].pop(ii)
+    df = pd.DataFrame(data=res_dc)
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
+    for ii, step in enumerate(np.unique(res_dc['step'])):
+        x = np.array([df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
+        y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step]
+        mod = sm.OLS(y, sm.add_constant(x))
+        res = mod.fit()
+        log_reg.info(f'Fit summary for step "{step}"')
+        log_reg.info(f'\n{res.summary()}\n\n')
+        x_fit = np.linspace(np.min(x), np.max(x), 1000)
+        y_fit = res.params[1] * x_fit + res.params[0]
+        plt.plot(x_fit, y_fit, color=palette[step])
+    axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
+                loc='upper left', borderaxespad=0.)
+    axes.set_ylabel('time [h]')
+    axes.set_xlabel('size [GVx]')
+    plt.subplots_adjust(right=0.75)
+    plt.savefig(base_dir + '/timing_allsteps_regplot_wo_views.png')
+    plt.close()
+
 
 if __name__ == '__main__':
     get_timing_plots()
     get_speed_plots()
-

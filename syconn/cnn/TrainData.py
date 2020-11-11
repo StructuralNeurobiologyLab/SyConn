@@ -221,7 +221,7 @@ if elektronn3_avail:
             """
             super().__init__(**kwargs)
             if self.sso_ids is None:
-                bb = self.ssd.load_cached_data('bounding_box') * self.ssd.scaling  # N, 2, 3
+                bb = self.ssd.load_numpy_data('bounding_box') * self.ssd.scaling  # N, 2, 3
                 bb = np.linalg.norm(bb[:, 1] - bb[:, 0], axis=1)
                 self.sso_ids = self.ssd.ssv_ids[bb > 2 * self.ctx_size]
                 print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
@@ -1740,7 +1740,7 @@ class TripletData_N(Data):
             for el in v:
                 rev_dc[el] = k
         self.s_ids = np.concatenate(ssds.mapping_dict.values())
-        bb = ssds.load_cached_data("bounding_box")
+        bb = ssds.load_numpy_data("bounding_box")
         # sizes as diagonal of bounding box in um (SV size will be size of corresponding SSV)
         bb_size = np.linalg.norm((bb[:, 1] - bb[: ,0])*self.sds.scaling, axis=1) / 1e3
         ssds_sizes = {}
@@ -1813,7 +1813,7 @@ class TripletData_SSV(Data):
         self.valid_l = np.zeros((len(self.valid_d), 1))
 
         self.sso_ids = self.ssds.ssv_ids
-        bb = self.ssds.load_cached_data("bounding_box")
+        bb = self.ssds.load_numpy_data("bounding_box")
         for sso_ix in self.valid_d:
             bb[self.sso_ids == sso_ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
         for sso_ix in self.test_d:
@@ -1919,7 +1919,7 @@ class TripletData_SSV_nviews(Data):
         self.test_d = self.test_d[:, None]
 
         self.sso_ids = self.ssds.ssv_ids
-        bb = self.ssds.load_cached_data("bounding_box")
+        bb = self.ssds.load_numpy_data("bounding_box")
         for sso_ix in self.valid_d:
             ix = self.sso_ids.index(sso_ix)
             bb[ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
@@ -2317,9 +2317,9 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     """
     syn_objs_total, syn_type_total = [], []
     sd_syn_ssv = SegmentationDataset('syn_ssv', working_dir=global_params.config.working_dir)
-    syn_cts = sd_syn_ssv.load_cached_data('partner_celltypes')
-    syn_axs = sd_syn_ssv.load_cached_data('partner_axoness')
-    syn_prob = sd_syn_ssv.load_cached_data('syn_prob')
+    syn_cts = sd_syn_ssv.load_numpy_data('partner_celltypes')
+    syn_axs = sd_syn_ssv.load_numpy_data('partner_axoness')
+    syn_prob = sd_syn_ssv.load_numpy_data('syn_prob')
     m_prob = syn_prob >= synprob_thresh
     # set bouton predictions to axon label
     syn_axs[syn_axs == 3] = 1

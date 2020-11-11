@@ -61,7 +61,7 @@ def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myeli
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
-    multi_params = multi_params[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = multi_params[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
@@ -100,7 +100,7 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
-    multi_params = multi_params[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = multi_params[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
@@ -194,7 +194,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     write_obj2pkl(pathdict_filepath, path_dc)
     del path_dc
 
-    multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs * 2, ssd.load_cached_data('size'))
+    multi_params = chunkify_weighted(ssd.ssv_ids, max_n_jobs * 2, ssd.load_numpy_data('size'))
 
     multi_params = [(pathdict_filepath, ssv_ids) for ssv_ids in multi_params]
     # create SSV skeletons, requires SV skeletons!

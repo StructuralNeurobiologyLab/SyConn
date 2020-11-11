@@ -463,31 +463,31 @@ class main_class(QtGui.QDialog):
         """
         `all_syns` contains the following keys:
     cd_dict['syn_size'] =\
-        csd.load_cached_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
+        csd.load_numpy_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
     cd_dict['synaptivity_proba'] = \
-        csd.load_cached_data('syn_prob')
+        csd.load_numpy_data('syn_prob')
     cd_dict['coord_x'] = \
-        csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
-        csd.load_cached_data('rep_coord')[:, 1].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 1].astype(np.int)
     cd_dict['coord_z'] = \
-        csd.load_cached_data('rep_coord')[:, 2].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 2].astype(np.int)
     cd_dict['ssv_partner_0'] = \
-        csd.load_cached_data('neuron_partners')[:, 0].astype(np.int)
+        csd.load_numpy_data('neuron_partners')[:, 0].astype(np.int)
     cd_dict['ssv_partner_1'] = \
-        csd.load_cached_data('neuron_partners')[:, 1].astype(np.int)
+        csd.load_numpy_data('neuron_partners')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ax_0'] = \
-        csd.load_cached_data('partner_axoness')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_axoness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ax_1'] = \
-        csd.load_cached_data('partner_axoness')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_axoness')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ct_0'] = \
-        csd.load_cached_data('partner_celltypes')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_celltypes')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ct_1'] = \
-        csd.load_cached_data('partner_celltypes')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_celltypes')[:, 1].astype(np.int)
     cd_dict['neuron_partner_sp_0'] = \
-        csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_spiness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_sp_1'] = \
-        csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_spiness')[:, 1].astype(np.int)
 
         Parameters
         ----------

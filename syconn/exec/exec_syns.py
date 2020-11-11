@@ -110,12 +110,13 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
-    syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
     del syn_sign
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
-             f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
+             f'objects, {n_sym} symmetric, {n_asym} asymmetric and '
+             f'{(len(sd_syn_ssv.ids) / np.prod(kd.boundary * kd.scale) * 1e9):0.4f} synapses / µm^3.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
     cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
@@ -143,7 +144,7 @@ def run_spinehead_volume_calc():
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     log.info('Starting spine head volume calculation.')
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
     multi_params = [(ixs,) for ixs in multi_params]
 

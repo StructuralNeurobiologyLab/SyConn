@@ -59,7 +59,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
         sv_size_dict = {}
-        bbs = sd.load_cached_data('bounding_box') * sd.scaling
+        bbs = sd.load_numpy_data('bounding_box') * sd.scaling
         for ii in range(len(sd.ids)):
             sv_size_dict[sd.ids[ii]] = bbs[ii]
         ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
@@ -94,7 +94,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
 
     max_n_jobs = global_params.config['ncores_per_node'] * 2
     # Write SSV RAGs
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     # split all cells into chunks within upper half and lower half (sorted by size)
     # -> process a balanced load of large cells with the first jobs, and then the other, smaller half
     half_ix = len(multi_params) // 2
@@ -326,7 +326,7 @@ def run_create_rag():
 
     # remove small connected components
     sv_size_dict = {}
-    bbs = sd.load_cached_data('bounding_box') * sd.scaling
+    bbs = sd.load_numpy_data('bounding_box') * sd.scaling
     for ii in range(len(sd.ids)):
         sv_size_dict[sd.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(G, sv_size_dict)

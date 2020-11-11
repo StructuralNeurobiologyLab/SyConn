@@ -19,7 +19,7 @@ if __name__ == '__main__':
     np.random.seed(0)
     # ixs = np.random.choice(len(ssd.ssv_ids), 2, replace=False)
     # ssv_ids = ssd.ssv_ids[ixs]
-    # sizes = ssd.load_cached_data('size')[ixs]
+    # sizes = ssd.load_numpy_data('size')[ixs]
     # ssv_ids = ssv_ids[np.argsort(sizes)[::-1]]
 
     ssv_ids = []

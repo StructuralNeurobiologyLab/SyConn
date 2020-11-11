@@ -95,8 +95,8 @@ class SuperSegmentationDataset(SegmentationBase):
         We can make use of the cached arrays to obtain the total number of synapses per
         cell type as follows::
 
-            celltypes = ssd.load_cached_data('celltype_cnn_e3')
-            n_synapses = np.array([len(el) for el in ssd.load_cached_data('syn_ssv')])
+            celltypes = ssd.load_numpy_data('celltype_cnn_e3')
+            n_synapses = np.array([len(el) for el in ssd.load_numpy_data('syn_ssv')])
             n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(9)}
             print(n_synapes_per_type)
 
@@ -404,7 +404,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.load_id_changer()
         return self._id_changer
 
-    def load_cached_data(self, prop_name: str, allow_nonexisting: bool = True):
+    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True):
         """
         Todo:
             * remove 's' appendix in file names.
@@ -628,7 +628,7 @@ class SuperSegmentationDataset(SegmentationBase):
             return
         if self._ssoid2ix is None:
             self._ssoid2ix = {k: ix for ix, k in enumerate(self.ssv_ids)}
-        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
+        self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
 
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,

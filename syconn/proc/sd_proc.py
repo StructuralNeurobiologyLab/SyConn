@@ -1491,7 +1491,7 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
     for i_dim in range(3):
         grid_c.append(np.arange(0, kd.boundary[i_dim], block_size[i_dim]))
 
-    bbs_block_range = sd.load_cached_data("bounding_box") / np.array(block_size)
+    bbs_block_range = sd.load_numpy_data("bounding_box") / np.array(block_size)
     bbs_block_range = bbs_block_range.astype(np.int)
 
     kd_block_range = np.array(kd.boundary / block_size + 1, dtype=np.int)
