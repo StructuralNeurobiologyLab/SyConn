@@ -740,11 +740,11 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
-                cnt = 0
+                cnt_ctx = 0
                 while True:
-                    if cnt > 2*len(source_nodes):
+                    if cnt_ctx > 2*len(source_nodes):
                         raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
-                    cnt += 1
+                    cnt_ctx += 1
                     if use_ctx_sampling:
                         node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     else:

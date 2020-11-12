@@ -15,14 +15,8 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, \
-    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig, ModelNet40xConv
+from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3d, Backup, metrics
-try:
-    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-except ModuleNotFoundError as e:
-    print(e)
-    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -186,17 +180,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
 # extra weight for HVC and LMAN
 # STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
 criterion = torch.nn.CrossEntropyLoss()  # weight=torch.Tensor([1]*num_classes))
