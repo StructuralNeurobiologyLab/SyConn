@@ -31,6 +31,7 @@ def run_matrix_export():
           en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
         * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
           1: spine head, 2: spine neck, 3: other) of both neurons.
+        * 'partner_spineheadvol': Spinehead volume in µm^3 of pre- and post-synaptic partners.
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
           synaptic partners.
@@ -139,6 +140,13 @@ def run_spinehead_volume_calc():
     """
     Calculate spine head volumes based on a watershed segmentation which is run on 3D spine label masks propagated
     from cell surface predictions.
+    Spine head volumes are stored in  the SSV attribute dictionary with the key ``partner_spineheadvol`` in µm^3.
+
+    Subsequent call to :func:`~syconn.extraction.cs_processing_steps.collect_properties_from_ssv_partners` will
+    add this property to the attribute dict of all `syn_ssv`. Calling :func:`syconn.proc.sd_proc.dataset_analysis`
+    accordingly collects all `syn_ssv` properties and makes them available as numpy arrays. These two steps are
+    performed in :func:`~run_matrix_export`.
+
     """
     log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)

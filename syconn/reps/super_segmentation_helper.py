@@ -2175,6 +2175,7 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     the key ``spinehead_vol``.
 
     Notes:
+        * 'spine_headvol' in µm^3.
         * Requires a predicted cell mesh, i.e. 'spiness' must be present in ``label_dict('vertex')['spiness']``.
         * If the results have to be stored, call ``sso.save_attr_dict()``
 

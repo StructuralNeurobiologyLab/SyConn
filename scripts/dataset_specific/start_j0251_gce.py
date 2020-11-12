@@ -27,11 +27,18 @@ if __name__ == '__main__':
     assert test_point_models or test_view_models
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
-    node_state = next(iter(nodestates_slurm().values()))
+    number_of_nodes = 16
+    node_states = nodestates_slurm()
+    node_state = next(iter(node_states.values()))
+    exclude_nodes = []
+    for nk in list(node_states.keys())[number_of_nodes:]:
+        exclude_nodes.append(nk)
+        del node_states[nk]
+    # check cluster state
+    assert number_of_nodes == np.sum([v['state'] == 'idle' for v in node_states.values()])
     ncores_per_node = node_state['cpus']
     mem_per_node = node_state['memory']
     ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
-    number_of_nodes = 20
     shape_j0251 = np.array([27119, 27350, 15494])
     # *9 for ~3 TVx, *11 for 5.7, *7 for 1.4, *5.5 for 0.7, *4.5 for 0.4
     cube_size = (np.array([2048, 2048, 1024]) * 4.5).astype(np.int)
@@ -39,8 +46,6 @@ if __name__ == '__main__':
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
     # cube_of_interest_bb = None  # process the entire cube!
-    # check that cluster is configured accordingly
-    assert number_of_nodes == np.sum([v['state'] == 'idle' for v in nodestates_slurm().values()])
     prior_glia_removal = True
     use_point_models = True
     key_val_pairs_conf = [
@@ -67,7 +72,8 @@ if __name__ == '__main__':
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          ),
-        ('cube_of_interest_bb', cube_of_interest_bb.tolist())
+        ('cube_of_interest_bb', cube_of_interest_bb.tolist()),
+        ('slurm', {'exclude_nodes': exclude_nodes})
     ]
     chunk_size = (512, 512, 256)
     if cube_size[0] <= 2048:
@@ -125,7 +131,6 @@ if __name__ == '__main__':
 
     global_params.wd = working_dir
     os.makedirs(global_params.config.temp_path, exist_ok=True)
-
     # create symlink to myelin predictions
     if not os.path.exists(f'{working_dir}/knossosdatasets/myelin'):
         assert os.path.exists('/mnt/j0251_data/myelin')

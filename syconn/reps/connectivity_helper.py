@@ -426,14 +426,15 @@ def diverge_map(high=(239 / 255., 65 / 255., 50 / 255.),
 
 
 def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltype: float = None,
-                             r=(0.05, 2)):
+                             r=(0.05, 2), use_spinehead_vol: bool = False):
     """
+    Experimental.
+
     Args:
         proba_thresh_syn: Synapse probability. Filters synapses below threshold.
         proba_thresh_celltype: Cell type probability. Filters cells below threshold.
         r: Range of synapse mesh area (um^2).
-
-    Returns:
+        use_spinehead_vol: Use spinehead volume instead of ``mesh_area / 2``.
 
     """
     from syconn.handler.prediction import int2str_converter, certainty_estimate
@@ -462,6 +463,8 @@ def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltyp
     ax = sd_syn_ssv.load_numpy_data('partner_axoness')
     ct = sd_syn_ssv.load_numpy_data('partner_celltypes')
     area = sd_syn_ssv.load_numpy_data('mesh_area')
+    sh_vol = sd_syn_ssv.load_numpy_data('partner_spineheadvol')
+
     # size = sd_syn_ssv.load_numpy_data('size')
     # syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     # area *= syn_sign
@@ -479,9 +482,11 @@ def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltyp
     ax = ax[m]
     area = area[m]
     # size = size[m]
+    sh_vol = sh_vol[m]
     partners = partners[m]
     if log_scale:
         area = np.log10(area)
+        sh_vol = np.log10(sh_vol)
         r = np.log(r)
     ct_receiving = {ctclass_converter(k): {ctclass_converter(kk): [] for kk in range(nclass)} for k in range(nclass)}
     ct_targets = {ctclass_converter(k): {ctclass_converter(kk): [] for kk in range(nclass)} for k in range(nclass)}
@@ -495,29 +500,35 @@ def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltyp
         syn_ct = ct[ix]
         pre_ct = ctclass_converter(syn_ct[pre_ix])
         post_ct = ctclass_converter(syn_ct[post_ix])
-        ct_receiving[post_ct][pre_ct].append(area[ix])
-        ct_targets[pre_ct][post_ct].append(area[ix])
+        if use_spinehead_vol:
+            size_quantity = sh_vol[ix][post_ix]
+        else:
+            size_quantity = area[ix]
+        ct_receiving[post_ct][pre_ct].append(size_quantity)
+        ct_targets[pre_ct][post_ct].append(size_quantity)
+    size_quantity_label = 'spinehead_vol' if use_spinehead_vol else 'mesh_area'
+    print('Area/volume is in µm^2 or µm^3 respectively.')
     for ct_label in tqdm.tqdm(map(ctclass_converter, range(nclass)), total=nclass):
         data_rec = ct_receiving[ct_label]
         sizes = np.argsort([len(v) for v in data_rec.values()])[::-1]
         highest_cts = np.array(list(data_rec.keys()))[sizes][:plot_n_celltypes]
-        df = pd.DataFrame(data={'mesh_area': np.concatenate([data_rec[k] for k in highest_cts]),
+        df = pd.DataFrame(data={size_quantity_label: np.concatenate([data_rec[k] for k in highest_cts]),
                                 'cell_type': np.concatenate([[k]*len(data_rec[k]) for k in highest_cts])})
-        create_kde(f'{target_dir}/incoming{ct_label}.png', df, palette=palette, r=r)
-        df = pd.DataFrame(data={'mesh_area[um^2]': [np.sum(10**np.array(data_rec[k])) for k in data_rec],
+        create_kde(f'{target_dir}/incoming{ct_label}_{size_quantity_label}.png', df, palette=palette, r=r)
+        df = pd.DataFrame(data={size_quantity_label: [np.sum(10**np.array(data_rec[k])) for k in data_rec],
                                 'n_synapses': [len(data_rec[k]) for k in data_rec],
                                 'cell_type': [k for k in data_rec]})
-        df.to_csv(f'{target_dir}/incoming{ct_label}_sum.csv')
+        df.to_csv(f'{target_dir}/incoming{ct_label}_{size_quantity_label}_sum.csv')
         data_out = ct_targets[ct_label]
         sizes = np.argsort([len(v) for v in data_out.values()])[::-1]
         highest_cts = np.array(list(data_out.keys()))[sizes][:plot_n_celltypes]
-        df = pd.DataFrame(data={'mesh_area': np.concatenate([data_out[k] for k in highest_cts]),
+        df = pd.DataFrame(data={size_quantity_label: np.concatenate([data_out[k] for k in highest_cts]),
                                 'cell_type': np.concatenate([[k]*len(data_out[k]) for k in highest_cts])})
-        create_kde(f'{target_dir}/outgoing{ct_label}.png', df, palette=palette, r=r)
-        df = pd.DataFrame(data={'mesh_area[um^2]': [np.sum(10**np.array(data_out[k])) for k in data_out],
+        create_kde(f'{target_dir}/outgoing{ct_label}_{size_quantity_label}.png', df, palette=palette, r=r)
+        df = pd.DataFrame(data={size_quantity_label: [np.sum(10**np.array(data_out[k])) for k in data_out],
                                 'n_synapses': [len(data_out[k]) for k in data_out],
                                 'cell_type': [k for k in data_out]})
-        df.to_csv(f'{target_dir}/outgoing{ct_label}_sum.csv')
+        df.to_csv(f'{target_dir}/outgoing{ct_label}_{size_quantity_label}_sum.csv')
 
 
 def create_kde(dest_p, qs, ls=20, legend=False, r=None, **kwargs):

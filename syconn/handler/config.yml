@@ -14,17 +14,17 @@ version:
 existing_cell_organelles: ['mi', 'sj', 'vc']
 syntype_avail: False
 
-# Compute backend: 'QSUB', 'SLURM', None
+# Compute backend: 'SLURM', None
 batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 
-# the here defined parameters
-batch_pe: 'default'
-batch_queue: 'all.q'
-
+# generic parameters for distributed processing
 mem_per_node: 249500  # in MB
 ncores_per_node: 20
 ngpus_per_node: 2
 nnodes_total: 17
+# slurm specific
+slurm:
+  exclude_nodes:
 
 # --------- LOGGING
 # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.

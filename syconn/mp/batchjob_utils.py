@@ -76,8 +76,8 @@ def batchjob_script(params: list, name: str,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: Optional[int] = None,
-                    show_progress=True,
-                    overwrite=False):
+                    show_progress: bool = True, overwrite: bool = False,
+                    exclude_nodes: Optional[list] = None):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -115,6 +115,7 @@ def batchjob_script(params: list, name: str,
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
         overwrite:
+        exclude_nodes: Nodes to exclude during job submission.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -162,15 +163,21 @@ def batchjob_script(params: list, name: str,
     if global_params.config['batch_proc_system'] != 'SLURM':
         msg = ('"batchjob_script" currently does not support any other batch processing '
                'system than SLURM.')
-        log_mp.error(msg)
+        log_batchjob.error(msg)
         raise NotImplementedError(msg)
     cpus_per_node = global_params.config['ncores_per_node']
-    mem_lim = int(global_params.config['mem_per_node'] /
-                  cpus_per_node)
-    if '--mem' in additional_flags:
-        raise ValueError('"--mem" must not be set via the "additional_flags"'
-                         ' kwarg.')
+    # mem_lim = int(global_params.config['mem_per_node'] /
+    #               cpus_per_node)
+    # if '--mem' in additional_flags:
+    #     raise ValueError('"--mem" must not be set via the "additional_flags"'
+    #                      ' kwarg.')
     # additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+
+    if exclude_nodes is None:
+        exclude_nodes = global_params.config['slurm']['exclude_nodes']
+    if exclude_nodes is not None:
+        additional_flags += f' --exclude={",".join(exclude_nodes)}'
+        log_batchjob.debug(f'Excluding slurm nodes: {",".join(exclude_nodes)}')
 
     # Start SLURM job
     if len(job_name) > 8:
@@ -284,7 +291,7 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            if requeue_dc[j] == 20:  # TODO: use global_params NCORES_PER_NODE
+            if requeue_dc[j] == cpus_per_node:
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
@@ -359,13 +366,11 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
 
     def _delete_folder(dn, lg, to=60):
         start = time.time()
-        e = ''
         while to > time.time() - start:
             try:
                 shutil.rmtree(dn)
                 break
             except OSError as e:
-                e = str(e)
                 time.sleep(5)
         if time.time() - start > to:
             shutil.rmtree(dn, ignore_errors=True)

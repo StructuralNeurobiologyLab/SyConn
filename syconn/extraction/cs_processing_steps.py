@@ -44,10 +44,12 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
     The following keys will be available in the ``attr_dict`` of ``syn_ssv``
     typed :class:`~syconn.reps.segmentation.SegmentationObject`:
+
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
           en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
         * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
           1: spine head, 2: spine neck, 3: other) of both neurons.
+        * 'partner_spineheadvol': Spinehead volume in µm^3.
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
           synaptic partners.
