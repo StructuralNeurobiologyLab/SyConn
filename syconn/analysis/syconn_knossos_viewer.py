@@ -7,7 +7,6 @@
 
 from PythonQt import QtGui, Qt, QtCore
 from PythonQt.QtGui import QTableWidget, QTableWidgetItem
-import traceback
 try:
     import KnossosModule
 except ImportError:
@@ -18,18 +17,9 @@ import re
 import json
 sys.dont_write_bytecode = True
 import time
-from multiprocessing.pool import ThreadPool
 from Queue import Queue
 from threading import Thread
 import numpy as np
-try:
-    try:
-        from lz4.block import compress, decompress
-    except ImportError:
-        from lz4 import compress, decompress
-except ImportError:
-    print("lz4 could not be imported. Locking will be disabled by default."
-          "Please install lz4 to enable locking (pip install lz4).")
 
 
 class SyConnGateInteraction(object):
@@ -65,9 +55,9 @@ class SyConnGateInteraction(object):
         r1 = self.session.get(self.server + '/ssv_ind/{0}'.format(ssv_id))
         r2 = self.session.get(self.server + '/ssv_vert/{0}'.format(ssv_id))
         r3 = self.session.get(self.server + '/ssv_norm/{0}'.format(ssv_id))
-        ind = lz4stringtoarr(r1.content, dtype=np.uint32)
-        vert = lz4stringtoarr(r2.content, dtype=np.float32)
-        norm = lz4stringtoarr(r3.content, dtype=np.float32)
+        ind = np.array(json.loads(r1.content)['ind'], dtype=np.uint32)
+        vert = np.array(json.loads(r2.content)['vert'], dtype=np.float32)
+        norm = np.array(json.loads(r3.content)['norm'], dtype=np.float32)
         if len(norm) == 0:
             norm = []
         return ind, vert, norm
@@ -123,7 +113,6 @@ class SyConnGateInteraction(object):
             self.get_download_results_store[get_request] = r
             self.get_download_queue.task_done() # not sure whether this is needed
             _ = self.get_download_done.get() # signal download done by removal
-
         return
 
     def add_ssv_obj_mesh_to_down_queue(self, ssv_id, obj_type):
@@ -141,11 +130,9 @@ class SyConnGateInteraction(object):
         vert_hash = '/ssv_obj_vert/{0}/{1}'.format(ssv_id, obj_type)
         norm_hash = '/ssv_obj_norm/{0}/{1}'.format(ssv_id, obj_type)
 
-        #start = time.time()
-        ind = lz4stringtoarr(self.get_download_results_store[ind_hash].content, dtype=np.uint32)
-        vert = lz4stringtoarr(self.get_download_results_store[vert_hash].content, dtype=np.float32)
-        norm = lz4stringtoarr(self.get_download_results_store[norm_hash].content, dtype=np.float32)
-        #print('lz4 decompress took {}'.format(time.time()-start))
+        ind = np.array(json.loads(self.get_download_results_store[ind_hash].content)['ind'], dtype=np.uint32)
+        vert = np.array(json.loads(self.get_download_results_store[vert_hash].content)['vert'], dtype=np.float32)
+        norm = np.array(json.loads(self.get_download_results_store[norm_hash].content)['norm'], dtype=np.float32)
         # clean up - could also be extended into some more permanent results cache
         self.get_download_results_store.pop(ind_hash, None)
         self.get_download_results_store.pop(vert_hash, None)
@@ -157,6 +144,7 @@ class SyConnGateInteraction(object):
         """
         Returns a mesh for a given ssv_id and a specified obj_type.
         obj_type can be sj, vc, mi ATM.
+
         Parameters
         ----------
         ssv_id
@@ -166,23 +154,12 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        #thread_pool = ThreadPool(processes=3)
-
-        #result = thread_pool.map(self.get_mesh_fragment,
-        #                         [(sv_id, frag_key) for frag_key in
-        #                          fragment_keys])
-
-        #thread_pool.close()
-        #thread_pool.join()
-        r1 = self.session.get(self.server + '/ssv_obj_ind/{0}/{1}'.format(ssv_id,
-                                                                          obj_type))
-        r2 = self.session.get(self.server + '/ssv_obj_vert/{0}/{1}'.format(ssv_id,
-                                                                          obj_type))
-        r3 = self.session.get(self.server + '/ssv_obj_norm/{0}/{1}'.format(ssv_id,
-                                                                          obj_type))
-        ind = lz4stringtoarr(r1.content, dtype=np.uint32)
-        vert = lz4stringtoarr(r2.content, dtype=np.float32)
-        norm = lz4stringtoarr(r3.content, dtype=np.float32)
+        r1 = self.session.get(self.server + '/ssv_obj_ind/{0}/{1}'.format(ssv_id, obj_type))
+        r2 = self.session.get(self.server + '/ssv_obj_vert/{0}/{1}'.format(ssv_id, obj_type))
+        r3 = self.session.get(self.server + '/ssv_obj_norm/{0}/{1}'.format(ssv_id, obj_type))
+        ind = np.array(json.loads(r1.content)['ind'], dtype=np.uint32)
+        vert = np.array(json.loads(r2.content)['vert'], dtype=np.float32)
+        norm = np.array(json.loads(r3.content)['norm'], dtype=np.float32)
         return ind, vert, -norm  # invert normals
 
     def get_list_of_all_ssv_ids(self):
@@ -993,34 +970,6 @@ def mesh_to_K(gate_obj, ssv_id, tree_id, obj_type, color):
                                              [], 4, False)
         KnossosModule.skeleton.set_tree_color(tree_id,
                                               QtGui.QColor(*color))
-
-
-def lz4stringtoarr(string, dtype=np.float32, shape=None):
-    """
-    Converts lz4 compressed string to 1d array. Moved here to circumvent
-    a syconn dependency.
-
-    Parameters
-    ----------
-    string : str
-    dtype : np.dtype
-    shape : tuple
-
-    Returns
-    -------
-    np.array
-        1d array
-    """
-    if string == "":
-        return np.zeros((0, ), dtype=dtype)
-    try:
-        arr_1d = np.frombuffer(decompress(string), dtype=dtype)
-    except Exception as e:
-        print(str(e) + "\nString length:" + str(len(string)))
-        return np.zeros((0,), dtype=dtype)
-    if shape is not None:
-        arr_1d = arr_1d.reshape(shape)
-    return arr_1d
 
 
 def int2str_label_converter(label, gt_type):

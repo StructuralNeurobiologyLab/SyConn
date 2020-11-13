@@ -132,11 +132,11 @@ if elektronn3_avail:
                 for ix in self.sso_ids:
                     if ix not in ssd.ssv_ids:
                         raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
-                print(f'Using splitting dict at "{split_dc_path}".')
+                log_cnn.debug(f'Using splitting dict at "{split_dc_path}".')
                 for k, v in self.splitting_dict.items():
                     classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                                  self.splitting_dict[k]], return_counts=True)
-                    print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                    log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
 
         def __getitem__(self, item):
             """
@@ -276,12 +276,12 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
             assert self.train, "Other mode than 'train' is not implemented."
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v2.csv"
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v3.csv"
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
@@ -302,7 +302,8 @@ if elektronn3_avail:
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
-                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
             if self.train:

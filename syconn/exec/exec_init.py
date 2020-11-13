@@ -98,8 +98,9 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     # split all cells into chunks within upper half and lower half (sorted by size)
     # -> process a balanced load of large cells with the first jobs, and then the other, smaller half
     half_ix = len(multi_params) // 2
-    multi_params = chunkify(multi_params[:half_ix], max_n_jobs // 2) + \
-                   chunkify(multi_params[half_ix:], max_n_jobs // 2)
+    njobs_per_half = max(max_n_jobs // 2, 1)
+    multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
+                   chunkify(multi_params[half_ix:], njobs_per_half)
 
     multi_params = [(g_p, ssv_ids) for ssv_ids in multi_params]
     start_multiprocess_imap(_ssv_rag_writer, multi_params,

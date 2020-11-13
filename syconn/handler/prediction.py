@@ -696,11 +696,14 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         target_kd._cube_shape = cube_shape_kd
         scale = np.array(global_params.config['scaling'])
         target_kd.scales = [scale, ]
+        # TODO: use pyk conf!
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
                                           kd.experiment_name, [2 ** x for x in range(6)],
-                                          create_pyk_conf=True, create_knossos_conf=False)
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)  # make sure init works
+                                          create_pyk_conf=False, create_knossos_conf=True)
+        try:  # make sure init works
+            basics.kd_factory(path)
+        except ValueError as e:
+            log.error(f'Could not initialize KnossosDataset at "{path}". {e}')
     # init batchjob parameters
     multi_params = chunk_ids
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
@@ -760,7 +763,7 @@ def dense_predictor(args):
     target_kd_dict = {}
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
+        target_kd = basics.kd_factory(path)
         target_kd_dict[path] = target_kd
 
     # init Predictor

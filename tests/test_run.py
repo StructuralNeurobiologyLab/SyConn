@@ -38,7 +38,7 @@ def test_full_run():
         ('nnodes_total', 1),
         ('log_level', 'INFO'),
         ('cell_objects', {
-          })
+          }),
     ]
     if example_cube_id == 1:
         chunk_size = (256, 256, 128)
@@ -64,7 +64,6 @@ def test_full_run():
         log.critical('Python version <3.6. This is untested!')
 
     generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf, force_overwrite=False)
-
     if global_params.config.working_dir is not None and \
             os.path.normpath(global_params.config.working_dir) != os.path.normpath(example_wd):
         os.environ['syconn_wd'] = example_wd
@@ -226,3 +225,7 @@ def test_full_run():
 
     if os.environ.get('syconn_wd') is not None:
         del os.environ['syconn_wd']
+
+
+if __name__ == '__main__':
+    test_full_run()

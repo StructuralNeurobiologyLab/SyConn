@@ -117,6 +117,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
 
     all_times = []
     step_names = []
+    dict_paths_tmp = []
     dir_props = f"{global_params.config.temp_path}/tmp_props_cssyn/"
 
     # remove previous temporary results.
@@ -153,7 +154,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     # reduce step
     start = time.time()
     cs_worker_dc_fname = f'{global_params.config.temp_path}/cs_worker_dict.pkl'
-    dict_paths_tmp = [cs_worker_dc_fname, dir_props, cset.path_head_folder]
+    dict_paths_tmp += [cs_worker_dc_fname, dir_props, cset.path_head_folder]
     syn_ids = []
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns

@@ -740,11 +740,11 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
-                cnt = 0
+                cnt_ctx = 0
                 while True:
-                    if cnt > 2*len(source_nodes):
+                    if cnt_ctx > 2*len(source_nodes):
                         raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
-                    cnt += 1
+                    cnt_ctx += 1
                     if use_ctx_sampling:
                         node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                     else:
@@ -2219,15 +2219,16 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     sp_pred[cmpt_preds == 6] = 2  # neck to neck
     sp_pred[cmpt_preds == -1] = 5  # unpredicted to unpredicted
 
-    ld['axoness'] = ax_pred.astype(np.int)
-    ld['spiness'] = sp_pred.astype(np.int)
+    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
+    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
+
+    ld[pred_key_ax] = ax_pred.astype(np.int)
+    ld[pred_key_sp] = sp_pred.astype(np.int)
     del ld['dnh']
     del ld['abt']
     del ld['ads']
     ld.push()
     sso.load_skeleton()
-    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
-    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
     node_preds = sso.semseg_for_coords(sso.skeleton['nodes'], pred_key_sp, **sso.config['spines']['semseg2coords_spines'])
     sso.skeleton[pred_key_sp] = node_preds  # skeleton key will be saved to file with `semsegaxoness2skel` call below
     map_properties = sso.config['compartments']['map_properties_semsegax']
