@@ -27,7 +27,7 @@ if __name__ == '__main__':
     assert test_point_models or test_view_models
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
-    number_of_nodes = 16
+    number_of_nodes = 8
     node_states = nodestates_slurm()
     node_state = next(iter(node_states.values()))
     exclude_nodes = []
@@ -313,11 +313,12 @@ if __name__ == '__main__':
     log.info(time_summary_str)
 
     # remove unimportant stuff for timings
+    print('Deleting data that is not required anymore.')
     import glob, tqdm
     if test_view_models:
         for fname in tqdm.tqdm(glob.glob(working_dir + '/sv_0/so_storage*/*'), desc='SVs'):
             shutil.rmtree(fname)
-    tmp_del_dir = f'{working_dir}/DEL_{cube_size[0]}_cube/'
+    tmp_del_dir = f'{working_dir}/DEL_cube_size{"_".join(map(str, cube_size))}_{number_of_nodes}nodes/'
     os.makedirs(tmp_del_dir)
     for d in tqdm.tqdm(['models', 'vc_0', 'sj_0', 'syn_ssv_0', 'syn_0', 'ssv_0', 'mi_0', 'cs_0',
                         'knossosdatasets', 'SLURM', 'tmp', 'chunkdatasets', 'ssv_gliaremoval'], desc='Folders'):
