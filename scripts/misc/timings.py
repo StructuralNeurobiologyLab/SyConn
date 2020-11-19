@@ -195,10 +195,14 @@ def get_timing_plots(base_dir):
             log_reg.info(f'\n{res.summary()}\n\n')
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
-            plt.plot(x_fit, y_fit, color=palette[step])
+            # plt.plot(x_fit, y_fit, color=palette[step])
+        plt.yscale('log')
+        plt.xticks(np.arange(8, 28, step=4))
+        axes.spines['right'].set_visible(False)
+        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h]')
+        axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('no. compute nodes [1]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot_diff_nodes.png')
@@ -229,10 +233,14 @@ def get_timing_plots(base_dir):
             log_reg.info(f'\n{res.summary()}\n\n')
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
-            plt.plot(x_fit, y_fit, color=palette[step])
+            # plt.plot(x_fit, y_fit, color=palette[step])
+        plt.yscale('log')
+        plt.xticks(np.arange(8, 28, step=4))
+        axes.spines['right'].set_visible(False)
+        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h]')
+        axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('no. compute nodes [1]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/time_allsteps_regplot_diff_nodes_wo_views.png')
@@ -314,9 +322,12 @@ def get_timing_plots(base_dir):
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
             plt.plot(x_fit, y_fit, color=palette[step])
+        plt.yscale('log')
+        axes.spines['right'].set_visible(False)
+        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h]')
+        axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot.png')
@@ -369,9 +380,12 @@ def get_timing_plots(base_dir):
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
             plt.plot(x_fit, y_fit, color=palette[step])
+        plt.yscale('log')
+        axes.spines['right'].set_visible(False)
+        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h]')
+        axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot_wo_views.png')
@@ -379,7 +393,6 @@ def get_timing_plots(base_dir):
 
 
 if __name__ == '__main__':
-    # get_timing_plots('/mnt/example_runs/')
-    # get_speed_plots('/mnt/example_runs/')
-
     get_timing_plots('/mnt/example_runs/nodes_vs_time/')
+    # get_timing_plots('/mnt/example_runs/vol_vs_time/')
+    # get_speed_plots('/mnt/example_runs/vol_vs_time')
