@@ -31,6 +31,7 @@ import time
 import numpy as np
 from multiprocessing import cpu_count
 from logging import Logger
+import logging
 
 
 def batchjob_enabled() -> bool:
@@ -54,8 +55,8 @@ def batchjob_enabled() -> bool:
             subprocess.check_call(cmd_check, shell=True,
                                   stdout=devnull, stderr=devnull)
     except subprocess.CalledProcessError as e:
-        print("BatchJobSystem '{}' specified but failed with error '{}' not found,"
-              " switching to single node multiprocessing.".format(batch_proc_system, e))
+        logging.warning("BatchJobSystem '{}' specified but failed with error '{}' not found,"
+                        " switching to single node multiprocessing.".format(batch_proc_system, e))
         return False
     return True
 
