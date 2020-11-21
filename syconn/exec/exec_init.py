@@ -89,7 +89,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
-    # also executes 'ssd.save_dataset_shallow()'
+    # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
     ssd.save_dataset_deep()
 
     max_n_jobs = global_params.config['ncores_per_node'] * 2

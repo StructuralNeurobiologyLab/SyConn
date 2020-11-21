@@ -1154,8 +1154,8 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
                 log_handler.error(msg)
                 raise ValueError(msg)
             skel_probas[ii] = np.mean(probas, axis=0)
-        # every node has at least one prediction
-        # get mean proba for this super voxel
+        # every node has at least one prediction; get mean proba for this super voxel
+        sv.enable_locking = True
         sv.save_attributes([pred_key], [skel_probas])
     return [sso.id], [True]
 
@@ -1733,6 +1733,8 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
     Every point set is constructed by collecting the vertices associated with skeleton within a
     breadth-first search up to a maximum of ``npoints``.
 
+    Notes:
+        * :py:func:`~pts_postproc_glia` currently requires locking.
 
     Args:
         ssv_params: List of kwargs to initialize SSVs.

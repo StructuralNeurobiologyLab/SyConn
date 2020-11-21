@@ -218,6 +218,10 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     """
     Predict glia and neuron supervoxels with point cloud based convolutional networks.
 
+    Notes:
+        * post-processing currently requires locking. In order to prevent locking, an additional map-reduce step
+          is required to write the final probas of all SVs in a "per-storage" (per chunk attribute dict) fashion.
+
     Args:
         max_n_jobs_gpu:
 
@@ -239,6 +243,8 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     bbs = sds.load_numpy_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
+
+    # TODO: can be removed
     ccsize_dict = create_ccsize_dict(cc_gs, sv_size_dict, is_connected_components=True)
 
     log.info("Preparing cells for glia prediction.")
@@ -251,11 +257,11 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
             # partition large SSVs into small chunks with overlap
             parts = split_subcc_join(g, max_nb_sv, lo_first_n=lo_first_n)
             multi_params.extend([(p, g.subgraph(p), True) for p in parts])
+        # TODO: can be removed
         elif ccsize_dict[list(g.nodes())[0]] < global_params.config['glia']['min_cc_size_ssv']:
-            pass  # ignore this CC
+            raise ValueError(f'Pruned rag did contain SSVs below minimum bounding box size!')
         else:
             multi_params.append((list(g.nodes()), g, False))
-
     # only append to this key if needed (e.g. different versions)
     # TODO: sort by size!
     np.random.seed(0)

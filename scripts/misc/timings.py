@@ -15,6 +15,9 @@ import statsmodels.api as sm
 palette_ident = 'colorblind'
 
 
+# TODO: use the same thickness for the lines, see cell type eval code
+
+
 def get_speed_plots(base_dir):
     sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     wds = glob.glob('/mnt/example_runs/j0251_*')
@@ -70,7 +73,7 @@ def get_speed_plots(base_dir):
         xticklabels += [item]
     axes.set_xticklabels(xticklabels)
     plt.subplots_adjust(right=0.5)
-    plt.savefig(base_dir + '/speed_barplot.png')
+    plt.savefig(base_dir + '/speed_barplot.png', dpi=600)
     plt.close()
 
     # Speed bar plot - only biggest data set
@@ -82,7 +85,7 @@ def get_speed_plots(base_dir):
     axes.set_ylabel('speed [GVx / h]')
     axes.set_xlabel('step')
     plt.subplots_adjust(right=0.5)
-    plt.savefig(base_dir + '/speed_barplot_biggest_only.png')
+    plt.savefig(base_dir + '/speed_barplot_biggest_only.png', dpi=600)
     plt.close()
 
     # Speed scatter plot regression
@@ -112,7 +115,7 @@ def get_speed_plots(base_dir):
     axes.set_ylabel('speed [GVx / h]')
     axes.set_xlabel('size [GVx]')
     plt.subplots_adjust(right=0.5)
-    plt.savefig(base_dir + '/speed_pointplot_reg.png')
+    plt.savefig(base_dir + '/speed_pointplot_reg.png', dpi=600)
     plt.close()
 
     # Speed scatter plot
@@ -123,7 +126,7 @@ def get_speed_plots(base_dir):
     axes.set_ylabel('speed [GVx / h]')
     axes.set_xlabel('size [GVx]')
     plt.subplots_adjust(right=0.5)
-    plt.savefig(base_dir + '/speed_pointplot.png')
+    plt.savefig(base_dir + '/speed_pointplot.png', dpi=600)
     plt.close()
 
 
@@ -205,7 +208,7 @@ def get_timing_plots(base_dir):
         axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('no. compute nodes [1]')
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/timing_allsteps_regplot_diff_nodes.png')
+        plt.savefig(base_dir + '/timing_allsteps_regplot_diff_nodes.png', dpi=600)
         plt.close()
 
         # All steps time regression plot without views
@@ -243,7 +246,7 @@ def get_timing_plots(base_dir):
         axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('no. compute nodes [1]')
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/time_allsteps_regplot_diff_nodes_wo_views.png')
+        plt.savefig(base_dir + '/time_allsteps_regplot_diff_nodes_wo_views.png', dpi=600)
         plt.close()
 
     else:
@@ -260,7 +263,7 @@ def get_timing_plots(base_dir):
             xticklabels += [item]
         axes.set_xticklabels(xticklabels)
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/time_barplot.png')
+        plt.savefig(base_dir + '/time_barplot.png', dpi=600)
         plt.close()
 
         # Time scatter plot
@@ -271,7 +274,7 @@ def get_timing_plots(base_dir):
         axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/time_pointplot.png')
+        plt.savefig(base_dir + '/time_pointplot.png', dpi=600)
         plt.close()
 
         # # Total time regression plot
@@ -290,7 +293,7 @@ def get_timing_plots(base_dir):
         # axes.set_ylabel('time [h]')
         # axes.set_xlabel('size [GVx]')
         # plt.subplots_adjust(right=0.75)
-        # plt.savefig(base_dir + '/totaltime_regplot.png')
+        # plt.savefig(base_dir + '/totaltime_regplot.png', dpi=600)
         # plt.close()
 
         # Time reg plot
@@ -305,7 +308,7 @@ def get_timing_plots(base_dir):
         # g.set_xlabels('size [GVx]')
         # g.set(ylim=ylim)
         # g.set(xlim=xlim)
-        # plt.savefig(base_dir + '/time_regplot.png')
+        # plt.savefig(base_dir + '/time_regplot.png', dpi=600)
         # plt.close()
 
         # All steps time regression plot
@@ -330,7 +333,7 @@ def get_timing_plots(base_dir):
         axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/timing_allsteps_regplot.png')
+        plt.savefig(base_dir + '/timing_allsteps_regplot.png', dpi=600)
         plt.close()
 
         # stacked bar plot
@@ -351,7 +354,7 @@ def get_timing_plots(base_dir):
         ax.set_ylabel('Time [h]')
         ax.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/time_stackedbarplot.png')
+        plt.savefig(base_dir + '/time_stackedbarplot.png', dpi=600)
         plt.close()
 
         # All steps time regression plot without views
@@ -388,7 +391,7 @@ def get_timing_plots(base_dir):
         axes.set_ylabel('time [h] (log scale)')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
-        plt.savefig(base_dir + '/timing_allsteps_regplot_wo_views.png')
+        plt.savefig(base_dir + '/timing_allsteps_regplot_wo_views.png', dpi=600)
         plt.close()
 
 

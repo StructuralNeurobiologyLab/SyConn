@@ -41,7 +41,7 @@ def run_matrix_export():
     """
     # cache cell attributes
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    ssd.save_dataset_deep()
+    ssd.save_dataset_deep(new_mapping=False)
     log = initialize_logging('matrix_export', global_params.config.working_dir + '/logs/', overwrite=True)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir, obj_type='syn_ssv')

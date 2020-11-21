@@ -90,21 +90,11 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                     attr_dict[attribute] += value
 
         for attribute in attr_dict:
-            try:
+            if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
+                             'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
+                np.save(sd.path + "/%ss.npy" % attribute, np.array(attr_dict[attribute], dtype=object))
+            else:
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
-            except ValueError as e:
-                if attribute not in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                                     'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
-                    log_proc.warn('ValueError {} encountered when writing numpy'
-                                  ' array caches in "dataset_analysis", this is '
-                                  'currently caught by using `dtype=object`'
-                                  'which is not advised.'.format(e))
-                if 'setting an array element with a sequence' in str(e):
-                    np.save(sd.path + "/%ss.npy" % attribute,
-                            np.array(attr_dict[attribute], dtype=np.object))
-                else:
-                    raise ValueError(e)
-
     else:
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
                                          suffix=sd.type)
@@ -137,8 +127,7 @@ def _dataset_analysis_check(out_file):
         res_dc = pkl.load(f)
         n_el = len(res_dc['id'])
         if n_el > 0:
-            if len(res_keys) == 0:
-                res_keys = list(res_dc.keys())
+            res_keys = list(res_dc.keys())
     return res_keys, n_el
 
 
@@ -150,21 +139,14 @@ def _dataset_analysis_collect(args):
                                   global_params.config['ncores_per_node'] * 2))
     tmp_res = sm.start_multiprocess_imap(
         _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'], debug=False)
-    try:
+    if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
+                     'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
+        tmp_res = [el for lst in tmp_res for el in lst]  # flatten lists
+        tmp_res = np.array(tmp_res, dtype=object)
+    else:
         tmp_res = np.concatenate(tmp_res)
-        assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
-        np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
-    except ValueError as e:
-        # allow dtype=object only for the following attributes with ragged shape:
-        if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                         'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
-            tmp_res = np.array(tmp_res, dtype=np.object)
-            np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
-        else:
-            log_proc.error(
-                f'ValueError {e} encountered when writing numpy array '
-                f'cache of attribute "{attribute}" in "dataset_analysis",')
-            raise ValueError(e)
+    assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
+    np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
 
 
 def _load_attr_helper(args):
@@ -189,9 +171,6 @@ def _load_attr_helper(args):
                 res = np.concatenate([res, value])
             else:
                 res += value
-    if attr in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
-        res = np.array(res, dtype=np.object).squeeze()
     return res
 
 
@@ -976,7 +955,7 @@ def _write_props_to_sc_thread(args):
                     continue
                 if sc_id in mapping_dict:
                     # TODO: remove the properties mapping_ratios and mapping_ids as
-                    #  they are not required anymore (make sure to delete
+                    #  they not need to be stored with the sub-cellular objects anymore (make sure to delete
                     #  `correct_for_background` in _apply_mapping_decisions_thread
                     this_attr_dc[sc_id]["mapping_ids"] = \
                         list(mapping_dict[sc_id].keys())

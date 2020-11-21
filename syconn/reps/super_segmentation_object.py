@@ -1038,8 +1038,7 @@ class SuperSegmentationObject(SegmentationBase):
                 log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to {e}.")
             orig_dc = {}
         orig_dc.update(self.attr_dict)
-        write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
-        shutil.move(self.attr_dict_path + '.tmp', self.attr_dict_path)
+        write_obj2pkl(self.attr_dict_path, orig_dc)
 
     def save_attributes(self, attr_keys: List[str], attr_values: List[Any]):
         """
@@ -3418,7 +3417,7 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     sso._objects["sv"] = [so]
     coords = sso.sample_locations(cache=False)[0]
     if add_cellobjects:
-        sso._map_cellobjects()
+        sso._map_cellobjects(save=False)
     views = render_sso_coords(sso, coords, ws=ws, add_cellobjects=add_cellobjects,
                               verbose=verbose)
     return views

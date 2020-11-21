@@ -48,7 +48,7 @@ if __name__ == '__main__':
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 17),
+        ('nnodes_total', 4),
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -175,7 +175,7 @@ if __name__ == '__main__':
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
     # TODO: launch all predictions in parallel
-    exec_dense_prediction.predict_myelin()
+    # exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
