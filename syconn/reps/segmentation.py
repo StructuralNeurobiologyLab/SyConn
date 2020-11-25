@@ -1845,7 +1845,7 @@ class SegmentationDataset(SegmentationBase):
 
         so = SegmentationObject(**kwargs_def)
         for k, v in self._property_cache.items():
-            so.attr_dict[k] = v[self._soid2ix[obj_id]]
+            so.attr_dict[k] = v[self.soid2ix[obj_id]]
         return so
 
     def save_version_dict(self):
@@ -1863,6 +1863,12 @@ class SegmentationDataset(SegmentationBase):
         except Exception as e:
             raise FileNotFoundError('Version dictionary of SegmentationDataset not found. {}'.format(str(e)))
 
+    @property
+    def soid2ix(self):
+        if self._soid2ix is None:
+            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
+        return self._soid2ix
+
     def enable_property_cache(self, property_keys: Iterable[str]):
         """
         Add properties to cache.
@@ -1877,8 +1883,8 @@ class SegmentationDataset(SegmentationBase):
                 property_keys.remove(k)
         if len(property_keys) == 0:
             return
-        if self._soid2ix is None:
-            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
+        # init index array
+        _ = self.soid2ix
         self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
 
     def get_volume(self, source: str = 'total') -> float:

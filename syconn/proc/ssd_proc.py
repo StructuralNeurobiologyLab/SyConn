@@ -11,6 +11,7 @@ from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..proc.meshes import mesh_creator_sso
 from ..reps import segmentation, super_segmentation
+from ..reps.segmentation_helper import prepare_so_attr_cache
 from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 
 from typing import Iterable, Tuple
@@ -43,14 +44,11 @@ def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset, obj_ty
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
     if not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(
-            _aggregate_segmentation_object_mappings_thread,
-            multi_params, debug=False, nb_cpus=nb_cpus)
-
+        _ = sm.start_multiprocess_imap(_aggregate_segmentation_object_mappings_thread, multi_params,
+                                       debug=False, nb_cpus=nb_cpus)
     else:
-        _ = qu.batchjob_script(
-            multi_params, "aggregate_segmentation_object_mappings",
-            n_cores=nb_cpus, remove_jobfolder=True)
+        _ = qu.batchjob_script(multi_params, "aggregate_segmentation_object_mappings", n_cores=nb_cpus,
+                               remove_jobfolder=True)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -63,23 +61,28 @@ def _aggregate_segmentation_object_mappings_thread(args):
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, ssd_type=ssd_type,
                                                       version_dict=version_dict)
+    svids = np.concatenate([ssd.mapping_dict[ssvid] for ssvid in ssv_obj_ids])
+    ssd._mapping_dict = None
     so_attr_of_interest = []
     # create cache for object attributes
     for obj_type in obj_types:
         so_attr_of_interest.extend([f"mapping_{obj_type}_ids", f"mapping_{obj_type}_ratios"])
-    sd_cell = segmentation.SegmentationDataset('sv', config=ssd.config, cache_properties=so_attr_of_interest)
+    attr_cache = prepare_so_attr_cache(segmentation.SegmentationDataset('sv', config=ssd.config), svids,
+                                       so_attr_of_interest)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_attr_dict()
         mappings = dict((obj_type, Counter()) for obj_type in obj_types)
         for svid in ssv.sv_ids:
-            sv = sd_cell.get_segmentation_object(svid)
             for obj_type in obj_types:
-                if f"mapping_{obj_type}_ids" in sv.attr_dict:
-                    keys = sv.attr_dict[f"mapping_{obj_type}_ids"]
-                    values = sv.attr_dict[f"mapping_{obj_type}_ratios"]
+                try:
+                    keys = attr_cache[f"mapping_{obj_type}_ids"][svid]
+                    values = attr_cache[f"mapping_{obj_type}_ratios"][svid]
                     mappings[obj_type] += Counter(dict(zip(keys, values)))
-        ssv.load_attr_dict()
+                except KeyError:
+                    raise KeyError(f'Could not find attribute "{f"mapping_{obj_type}_ids"}" for '
+                                   f'cell supervoxel {svid} during "_aggregate_segmentation_object_mappings_thread".')
         for obj_type in obj_types:
             if obj_type in mappings:
                 ssv.attr_dict[f"mapping_{obj_type}_ids"] = list(mappings[obj_type].keys())

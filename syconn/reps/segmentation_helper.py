@@ -23,7 +23,7 @@ from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.graphs import create_graph_from_coords
 
 if TYPE_CHECKING:
-    from ..reps.segmentation import SegmentationObject
+    from ..reps.segmentation import SegmentationObject, SegmentationDataset
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
 
@@ -405,11 +405,11 @@ def sv_attr_exists(args):
     return missing_ids
 
 
-def find_missing_sv_attributes(sd, attr_key, n_cores=20):
+def find_missing_sv_attributes(sd: 'SegmentationDataset', attr_key: str, n_cores: int = 20):
     """
 
     Args:
-        sd: SegmentationDataset
+        sd:
         attr_key: str
         n_cores: int
 
@@ -519,6 +519,30 @@ def load_so_attr_bulk(sos: List['SegmentationObject'],
     if len(attr_keys) == 1:
         out = out[attr_keys[0]]
     return out
+
+
+def prepare_so_attr_cache(sd: 'SegmentationDataset', so_ids: np.ndarray, attr_keys: List[str]) -> Dict[str, dict]:
+    """
+
+    Args:
+        sd: SegmentationDataset.
+        so_ids: SegmentationObject IDs for which to collect the attributes.
+        attr_keys: Attribute keys to collect. Corresponding numyp arrays must exist.
+
+    Returns:
+        Dictionary with `attr_keys` as keys and an attribute dictionary as values for the IDs `so_ids`, e.g.
+        ``attr_cache[attr_keys[0]][so_ids[0]]`` will return the attribute value of type ``attr_keys[0]`` for the first
+        SegmentatonObect in `so_ids`.
+    """
+    attr_cache = {k: dict() for k in attr_keys}
+    soid2ix = {so_id: sd.soid2ix[so_id] for so_id in so_ids}
+    sd._soid2ix = None  # free memory
+    for attr in attr_keys:
+        np_cache = sd.load_numpy_data(attr, allow_nonexisting=False)
+        for so_id in so_ids:
+            attr_cache[attr][so_id] = np_cache[soid2ix[so_id]]
+        del np_cache
+    return attr_cache
 
 
 def load_so_voxels_bulk(sos: List['SegmentationObject'],

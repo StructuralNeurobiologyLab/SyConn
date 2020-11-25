@@ -20,10 +20,11 @@ palette_ident = 'colorblind'
 
 def get_speed_plots(base_dir):
     sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
-    wds = glob.glob('/mnt/example_runs/j0251_*')
+    wds = glob.glob(f'{base_dir}/j0251_*')
+    assert len(wds) > 0
     base_dir = base_dir + '/timings/'
     log = initialize_logging(f'speed_plots', log_dir=base_dir)
-    log.info(f'Creating timing plots in base directory "{base_dir}".')
+    log.info(f'Creating speed plots in base directory "{base_dir}".')
     os.makedirs(base_dir, exist_ok=True)
     res_dc = {'time': [], 'step': [], 'datasize[mm3]': [], 'datasize[GVx]': [],
               'speed[mm3]': [], 'speed[GVx]': []}
@@ -53,7 +54,6 @@ def get_speed_plots(base_dir):
                 vol_nvox = ft.dataset_nvoxels['neuron']
             res_dc['speed[mm3]'].append(vol_mm3 / dt)
             res_dc['speed[GVx]'].append(vol_nvox / dt)
-    assert len(wds) > 0
     palette = sns.color_palette(n_colors=len(np.unique(res_dc['step'])), palette=palette_ident)
     palette = {k: v for k, v in zip(np.unique(res_dc['step']), palette)}
     df = pd.DataFrame(data=res_dc)
@@ -199,13 +199,13 @@ def get_timing_plots(base_dir):
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
             # plt.plot(x_fit, y_fit, color=palette[step])
-        plt.yscale('log')
+        # plt.yscale('log')
         plt.xticks(np.arange(8, 28, step=4))
         axes.spines['right'].set_visible(False)
         axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h] (log scale)')
+        axes.set_ylabel('time [h]')
         axes.set_xlabel('no. compute nodes [1]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot_diff_nodes.png', dpi=600)
@@ -237,13 +237,13 @@ def get_timing_plots(base_dir):
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
             # plt.plot(x_fit, y_fit, color=palette[step])
-        plt.yscale('log')
+        # plt.yscale('log')
         plt.xticks(np.arange(8, 28, step=4))
         axes.spines['right'].set_visible(False)
         axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h] (log scale)')
+        axes.set_ylabel('time [h]')
         axes.set_xlabel('no. compute nodes [1]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/time_allsteps_regplot_diff_nodes_wo_views.png', dpi=600)
@@ -325,12 +325,12 @@ def get_timing_plots(base_dir):
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
             plt.plot(x_fit, y_fit, color=palette[step])
-        plt.yscale('log')
+        # plt.yscale('log')
         axes.spines['right'].set_visible(False)
         axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h] (log scale)')
+        axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot.png', dpi=600)
@@ -383,12 +383,12 @@ def get_timing_plots(base_dir):
             x_fit = np.linspace(np.min(x), np.max(x), 1000)
             y_fit = res.params[1] * x_fit + res.params[0]
             plt.plot(x_fit, y_fit, color=palette[step])
-        plt.yscale('log')
+        # plt.yscale('log')
         axes.spines['right'].set_visible(False)
         axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        axes.set_ylabel('time [h] (log scale)')
+        axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot_wo_views.png', dpi=600)
@@ -397,5 +397,5 @@ def get_timing_plots(base_dir):
 
 if __name__ == '__main__':
     get_timing_plots('/mnt/example_runs/nodes_vs_time/')
-    # get_timing_plots('/mnt/example_runs/vol_vs_time/')
-    # get_speed_plots('/mnt/example_runs/vol_vs_time')
+    get_timing_plots('/mnt/example_runs/vol_vs_time/')
+    get_speed_plots('/mnt/example_runs/vol_vs_time/')
