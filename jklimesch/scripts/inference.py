@@ -4,6 +4,7 @@ import open3d as o3d
 import torch
 import math
 import time
+import pickle as pkl
 from tqdm import tqdm
 from typing import List, Tuple
 from collections import defaultdict
@@ -19,7 +20,7 @@ from lightconvpoint.utils import get_network
 
 
 def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str, model_args_p: str, pred_key: str,
-                redundancy: int, border_exclusion: int = 0):
+                redundancy: int, border_exclusion: int = 0, v3: bool = True):
     model_p = os.path.expanduser(model_p)
     model_args_p = os.path.expanduser(model_args_p)
 
@@ -30,16 +31,16 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
     else:
         device = torch.device('cpu')
 
-    # load model
+    # load model (lcp = LightConvPoint)
     lcp_flag = False
-    # load model
     if argscont.architecture == 'lcp' or argscont.model == 'ConvAdaptSeg':
         kwargs = {}
         if argscont.model == 'ConvAdaptSeg':
             kwargs = dict(f_map_num=argscont.pl, architecture=argscont.architecture, act=argscont.act,
                           norm=argscont.norm_type)
         conv = dict(layer=argscont.conv[0], kernel_separation=argscont.conv[1])
-        model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search, **kwargs)
+        model = get_network(argscont.model, argscont.input_channels, argscont.class_num, conv, argscont.search,
+                            **kwargs)
         lcp_flag = True
     elif argscont.use_big:
         model = SegBig(argscont.input_channels, argscont.class_num, trs=argscont.track_running_stats, dropout=0,
@@ -62,15 +63,19 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
     model.to(device)
     model.eval()
 
-    voxel_dc = {'sv': 80, 'mi': 100, 'vc': 100, 'sy': 100}
+    voxel_dc = {'sv': 80, 'mi': 100, 'vc': 100, 'sy': 100, 'sj': 100}
     feats = argscont.features
     if 'hc' in feats:
         feats['sv'] = feats['hc']
         feats.pop('hc')
+    if v3 and 'sy' in feats:
+        feats['sj'] = feats['sy']
+        feats.pop('sy')
     parts = {}
     for key in feats:
         parts[key] = (voxel_dc[key], feats[key])
 
+    start_total = time.time()
     for sso_id in tqdm(sso_ids):
         sso = ssd.get_super_segmentation_object(sso_id)
         vert_dc = {}
@@ -115,11 +120,11 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
             # random subsampling of the corresponding vertices
             sample, idcs_sample = clouds.sample_cloud(sample, argscont.sample_num, padding=argscont.padding)
             if border_exclusion > 0:
-                sample.mark_borders(-1, argscont.chunk_size-border_exclusion, centroid=hc.nodes[source_nodes[ix]])
+                sample.mark_borders(-1, argscont.chunk_size - border_exclusion, centroid=hc.nodes[source_nodes[ix]])
                 marked_idcs = idcs_sample[(sample.labels == -1).reshape(-1)]
                 # exclude borders from majority votes
                 idcs_sub[marked_idcs] = -1
-            # indices with respect to the total cell
+            # indices with respect to the total HybridCloud
             idcs_global = idcs_sub[idcs_sample.astype(int)]
             bounds = hc.obj_bounds['sv']
             sv_mask = np.logical_and(idcs_global < bounds[1], idcs_global >= bounds[0])
@@ -136,13 +141,12 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
             for batch in batches:
                 pts = batch[0].to(device, non_blocking=True)
                 features = batch[1].to(device, non_blocking=True)
+                # lcp and convpoint use different axis order
                 if lcp_flag:
                     pts = pts.transpose(1, 2)
                     features = features.transpose(1, 2)
                 outputs = model(features, pts)
                 if lcp_flag:
-                    pts = pts.transpose(1, 2)
-                    features = features.transpose(1, 2)
                     outputs = outputs.transpose(1, 2)
                 outputs = outputs.cpu().detach().numpy()
                 for ix in range(argscont.batch_size):
@@ -151,20 +155,21 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
 
         preds = np.concatenate(preds)
         idcs_preds = np.concatenate(idcs_preds)
-        # filter possible organelles
+        # filter possible organelles and borders
         preds = preds[idcs_preds != -1]
-        idcs_preds = idcs_preds[idcs_preds != -1].astype(int)
-        pred_labels = np.ones((len(voxel_idcs['sv']), 1))*-1
+        idcs_preds = idcs_preds[idcs_preds != -1].astype(int) - hc.obj_bounds['sv'][0]
+        pred_labels = np.ones((len(voxel_idcs['sv']), 1)) * -1
         print("Evaluating predictions...")
         start = time.time()
         evaluate_preds(idcs_preds, preds, pred_labels)
-        print(f"Finished evaluation in {time.time()-start} seconds.")
+        print(f"Finished evaluation in {time.time() - start} seconds.")
         sso_vertices = sso.mesh[1].reshape((-1, 3))
         sso_preds = np.ones((len(sso_vertices), 1)) * -1
         sso_preds[voxel_idcs['sv']] = pred_labels
         ld = sso.label_dict('vertex')
         ld[pred_key] = sso_preds
         ld.push()
+    return time.time() - start_total
 
 
 def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.ndarray):
@@ -182,7 +187,7 @@ def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.nd
 
 def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int, input_channels: int):
     point_num = len(samples[0][0].vertices)
-    batch_num = math.ceil(len(samples)/batch_size)
+    batch_num = math.ceil(len(samples) / batch_size)
     batches = []
     ix = -1
     for batch_ix in range(batch_num):
@@ -201,10 +206,50 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 
 if __name__ == '__main__':
-    base_path = '~/thesis/current_work/paper/dnh/2020_10_14_8000_8192_cp_cp_q/'
-    m_path = base_path + 'models/state_dict_e570.pth'
-    argscont_path = base_path + 'argscont.pkl'
-    predict_sso([141995, 11833344, 28410880, 28479489],
-                SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/"),
-                m_path, argscont_path, pred_key='dnh_20_10_14_cp_cp_q', redundancy=5, border_exclusion=0)
+    base = os.path.expanduser('~/working_dir/paper/dnh_model_comparison/')
+    path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
+                 ('2020_11_08_2000_2048_cp_cp_q', 90),
+                 ('2020_11_08_2000_2048_cp_cp_q_2', 90),
+                 ('2020_11_08_8000_2048_cp_cp_q', 480),
+                 ('2020_11_08_8000_2048_cp_cp_q_2', 480),
+                 ('2020_11_08_8000_8192_cp_cp_q', 300),
+                 ('2020_11_08_8000_8192_cp_cp_q_co', 510),
+                 ('2020_11_08_8000_8192_cp_cp_q_co_2', 510),
+                 ('2020_11_08_8000_8192_cp_cp_q_nn', 450),
+                 ('2020_11_08_8000_8192_cp_cp_q_nn_2', 420),
+                 ('2020_11_08_8000_32768_cp_cp_q', 120),
+                 ('2020_11_08_8000_32768_cp_cp_q_2', 270),
+                 ('2020_11_08_24000_32768_cp_cp_q', 570),
+                 ('2020_11_08_24000_32768_cp_cp_q_2', 540),
+                 ('2020_11_09_2000_2048_cp_cp_q_3', 120),
+                 ('2020_11_09_8000_1024_cp_cp_q', 600),
+                 ('2020_11_09_8000_1024_cp_cp_q_2', 600),
+                 ('2020_11_09_8000_8192_cp_cp_q_2', 360),
+                 ('2020_11_09_8000_8192_cp_cp_q_bn', 540),
+                 ('2020_11_09_8000_8192_cp_cp_q_bn_2', 570),
+                 ('2020_11_11_2000_2048_cp_cp_q_3', 360),
+                 ('2020_11_11_8000_1024_cp_cp_q_3', 450),
+                 ('2020_11_11_8000_2048_cp_cp_q_3', 450),
+                 ('2020_11_11_8000_8192_cp_cp_q_bn_3', 480),
+                 ('2020_11_11_8000_8192_cp_cp_q_co_3', 450),
+                 ('2020_11_11_8000_32768_cp_cp_q_3', 390),
+                 ('2020_11_11_24000_32768_cp_cp_q_3', 480),
+                 ('2020_11_16_8000_8192_cp_cp_q_nn_3', 690),
+                 ('2020_11_16_8000_8192_cp_cp_q_nn_4', 690)]
 
+    durations = {}
+    for red in range(1, 2):
+        for path in path_list:
+            print(f'Processing: {path} with redundancy {red}')
+            base_path = base + path[0] + '/'
+            m_path = base_path + f'models/state_dict_e{path[1]}.pth'
+            argscont_path = base_path + 'argscont.pkl'
+            duration = predict_sso([141995, 11833344, 28410880, 28479489],
+                                   SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/"),
+                                   m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=1000)
+            if path[0] in durations:
+                durations[path[0]].append(duration)
+            else:
+                durations[path[0]] = [duration]
+    with open(base + 'timing_border.pkl', 'wb') as f:
+        pkl.dump(durations, f)
