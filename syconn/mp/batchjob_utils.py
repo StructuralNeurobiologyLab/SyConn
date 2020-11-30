@@ -31,9 +31,10 @@ import time
 import numpy as np
 from multiprocessing import cpu_count
 from logging import Logger
+import logging
 
 
-def batchjob_enabled():
+def batchjob_enabled() -> bool:
     """
     Checks if active batch processing system is actually working.
 
@@ -54,8 +55,8 @@ def batchjob_enabled():
             subprocess.check_call(cmd_check, shell=True,
                                   stdout=devnull, stderr=devnull)
     except subprocess.CalledProcessError as e:
-        print("BatchJobSystem '{}' specified but failed with error '{}' not found,"
-              " switching to single node multiprocessing.".format(batch_proc_system, e))
+        logging.warning("BatchJobSystem '{}' specified but failed with error '{}' not found,"
+                        " switching to single node multiprocessing.".format(batch_proc_system, e))
         return False
     return True
 
@@ -76,8 +77,8 @@ def batchjob_script(params: list, name: str,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: Optional[int] = None,
-                    show_progress=True,
-                    overwrite=False):
+                    show_progress: bool = True, overwrite: bool = False,
+                    exclude_nodes: Optional[list] = None):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -115,6 +116,7 @@ def batchjob_script(params: list, name: str,
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
         overwrite:
+        exclude_nodes: Nodes to exclude during job submission.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -162,15 +164,21 @@ def batchjob_script(params: list, name: str,
     if global_params.config['batch_proc_system'] != 'SLURM':
         msg = ('"batchjob_script" currently does not support any other batch processing '
                'system than SLURM.')
-        log_mp.error(msg)
+        log_batchjob.error(msg)
         raise NotImplementedError(msg)
     cpus_per_node = global_params.config['ncores_per_node']
-    mem_lim = int(global_params.config['mem_per_node'] /
-                  cpus_per_node)
-    if '--mem' in additional_flags:
-        raise ValueError('"--mem" must not be set via the "additional_flags"'
-                         ' kwarg.')
-    additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+    # mem_lim = int(global_params.config['mem_per_node'] /
+    #               cpus_per_node)
+    # if '--mem' in additional_flags:
+    #     raise ValueError('"--mem" must not be set via the "additional_flags"'
+    #                      ' kwarg.')
+    # additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+
+    if exclude_nodes is None:
+        exclude_nodes = global_params.config['slurm']['exclude_nodes']
+    if exclude_nodes is not None:
+        additional_flags += f' --exclude={",".join(exclude_nodes)}'
+        log_batchjob.debug(f'Excluding slurm nodes: {",".join(exclude_nodes)}')
 
     # Start SLURM job
     if len(job_name) > 8:
@@ -262,6 +270,7 @@ def batchjob_script(params: list, name: str,
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
     nb_completed_compare = 0
+    last_failed = 0
     while True:
         nb_failed = 0
         # get internal job ids from current job dict
@@ -283,7 +292,7 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            if requeue_dc[j] == 20:
+            if requeue_dc[j] == cpus_per_node:
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
@@ -292,6 +301,18 @@ def batchjob_script(params: list, name: str,
             # increment number of cores by one.
             job_cmd = f'sbatch --cpus-per-task={new_core_init + n_cores} {job_exec_dc[j]}'
             max_relaunch_cnt = 0
+            err_msg = None
+            if time.time() - last_failed > 5:
+                # if a job failed within the last 5 seconds, do not print the error
+                # message (assume same error)
+                try:
+                    with open(f"{path_to_err}/job_{j}.log") as f:
+                        err_msg = f.read()
+                except FileNotFoundError as e:
+                    err_msg = f'FileNotFoundError: {e}'
+                last_failed = time.time()
+                if 'exceeded memory limit' in err_msg:
+                    err_msg = None  # do not report message of OOM errors
             while True:
                 process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
                 out_str, err = process.communicate()
@@ -313,6 +334,8 @@ def batchjob_script(params: list, name: str,
             slurm2job_dc[slurm_id] = j
             log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
                               f'{slurm_id_orig} (old).')
+            if err_msg is not None:
+                log_batchjob.warning(f'Job {j} failed with: {err_msg}')
         nb_completed = np.sum(job_states == 'COMPLETED')
         pbar.update(nb_completed - nb_completed_compare)
         nb_completed_compare = nb_completed
@@ -329,7 +352,7 @@ def batchjob_script(params: list, name: str,
     log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
                       f"{dtime_all} ({dtime_sub:.1f}s submission): "
                       f"{nb_completed} completed, {nb_failed} failed.")
-    out_files = glob.glob(path_to_out + "job_*.pkl")
+    out_files = [fn for fn in glob.glob(path_to_out + "job_*.pkl") if re.search(r'job_(\d+).pkl', fn)]
     if len(out_files) < len(params):
         msg = f'Batch processing error during execution of {name} in job ' \
               f'\"{job_name}\": Found {len(out_files)}, expected {len(params)}.'
@@ -344,16 +367,13 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
 
     def _delete_folder(dn, lg, to=60):
         start = time.time()
-        e = ''
-        while timeout > time.time() - start:
+        while to > time.time() - start:
             try:
                 shutil.rmtree(dn)
                 break
             except OSError as e:
-                e = str(e)
                 time.sleep(5)
-        if time.time() - start > timeout:
-            lg.warning(f'Deletion of job folder "{dn}" timed out after {to}s. OSError: {e}')
+        if time.time() - start > to:
             shutil.rmtree(dn, ignore_errors=True)
             if os.path.exists(dn):
                 dn_del = f"{os.path.dirname(dn)}/DEL/{os.path.basename(dn)}_DEL"
@@ -361,54 +381,12 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
                     shutil.rmtree(os.path.dirname(dn_del), ignore_errors=True)
                 os.makedirs(os.path.dirname(dn_del), exist_ok=True)
                 shutil.move(dn, dn_del)
+                lg.warning(f'Deletion of job folder "{dn}" timed out after {to}s.')
 
     t = threading.Thread(name=f'jobfold_delete_{job_name}', target=_delete_folder,
-                         args=(dirname, log))
+                         args=(dirname, log, timeout))
     t.setDaemon(True)
     t.start()
-
-
-def jobstates_slurm(job_name: str, start_time: str,
-                    max_retry: int = 10) -> Dict[int, str]:
-    """
-    Generates a dictionary which stores the state of every job belonging to
-    `job_name`.
-
-    Args:
-        job_name:
-        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
-            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
-        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
-            sleep in-between).
-
-    Returns:
-        Dictionary with the job states. (key: job ID, value: state)
-    """
-    # TODO: test!
-    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
-    job_states = dict()
-    cnt_retry = 0
-    while True:
-        process = subprocess.Popen(cmd_stat, shell=True,
-                                   stdout=subprocess.PIPE)
-        out, err = process.communicate()
-        if process.returncode != 0:
-            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
-                           f'Attempting again in 5s. {err}')
-            time.sleep(5)
-            cnt_retry += 1
-            if cnt_retry == max_retry:
-                log_mp.error(f'Could not query job states from SLURM: {err}\n'
-                             f'Aborting due to maximum number of retries.')
-                break
-            continue
-        for line in out.decode().split('\n'):
-            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
-            if len(str_parsed) == 1:
-                str_parsed = str_parsed[0]
-                job_states[int(str_parsed[0])] = str_parsed[1]
-        break
-    return job_states
 
 
 def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, python_path=None, remove_jobfolder=False,
@@ -562,9 +540,97 @@ def fallback_exec(cmd_exec):
     return out_str
 
 
+def jobstates_slurm(job_name: str, start_time: str,
+                    max_retry: int = 10) -> Dict[int, str]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+        job_name:
+        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
+            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
+        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
+            sleep in-between).
+
+    Returns:
+        Dictionary with the job states. (key: job ID, value: state)
+    """
+    cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
+    job_states = dict()
+    cnt_retry = 0
+    while True:
+        process = subprocess.Popen(cmd_stat, shell=True,
+                                   stdout=subprocess.PIPE)
+        out, err = process.communicate()
+        if process.returncode != 0:
+            log_mp.warning(f'Delaying SLURM job state queries due to an error. '
+                           f'Attempting again in 5s. {err}')
+            time.sleep(5)
+            cnt_retry += 1
+            if cnt_retry == max_retry:
+                log_mp.error(f'Could not query job states from SLURM: {err}\n'
+                             f'Aborting due to maximum number of retries.')
+                break
+            continue
+        for line in out.decode().split('\n'):
+            str_parsed = re.findall(r"(\d+)[\s,\t]+([A-Z]+)", line)
+            if len(str_parsed) == 1:
+                str_parsed = str_parsed[0]
+                job_states[int(str_parsed[0])] = str_parsed[1]
+        break
+    return job_states
+
+
+def nodestates_slurm() -> Dict[int, dict]:
+    """
+    Generates a dictionary which stores the state of every job belonging to
+    `job_name`.
+
+    Args:
+
+
+    Returns:
+        Dictionary with the node states. (key: job ID, value: state dict)
+    """
+    cmd_stat = f'sinfo -N  -o "%20N %10t %10c %10m %10G"'
+    # yields e.g.
+    """
+    NODELIST             STATE      CPUS       MEMORY     GRES      
+    compute001           idle       32         208990     gpu:GP100G
+    compute002           mix        32         208990     gpu:GP100G
+    compute003           idle       32         208990     gpu:GP100G
+    compute004           idle       32         208990     gpu:GP100G
+    compute005           idle       32         208990     gpu:GP100G
+    compute006           mix        32         208990     gpu:GP100G
+    compute007           idle       32         208990     gpu:GP100G
+    compute008           idle       32         208990     gpu:GP100G
+    compute009           alloc      32         208990     gpu:GP100G
+    compute010           idle       32         208990     gpu:GP100G
+    compute011           idle       32         208990     gpu:GP100G
+    compute012           dead       32         208990     gpu:GP100G
+    """
+    node_states = dict()
+    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', str)]  # TOOD: gres should be number of gpus
+    process = subprocess.Popen(cmd_stat, shell=True, stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    if process.returncode != 0:
+        log_mp.error(f'Error when getting node states with sinfo: {err}')
+        return node_states
+    for line in out.decode().split('\n')[1:]:
+        if len(line) == 0:
+            continue
+        node_uri, *str_parsed = re.findall(r"(\S+)", line)
+        ndc = dict()
+        for k, v in zip(attr_keys, str_parsed):
+            ndc[k[0]] = k[1](v)
+        node_states[node_uri] = ndc
+    return node_states
+
+
 def number_of_running_processes(job_name):
     """
-    Calculates the number of running jobs using qstat
+    Calculates the number of running jobs using qstat/squeue
 
     Parameters
     ----------

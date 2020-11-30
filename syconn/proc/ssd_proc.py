@@ -11,13 +11,9 @@ from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..proc.meshes import mesh_creator_sso
 from ..reps import segmentation, super_segmentation
-from ..reps.super_segmentation import SuperSegmentationObject, \
-    SuperSegmentationDataset
+from ..reps.segmentation_helper import prepare_so_attr_cache
+from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 from typing import Iterable, Tuple
 import numpy as np
 from collections import Counter
@@ -25,19 +21,17 @@ from typing import Optional, List
 from logging import Logger
 
 
-def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
-                                           obj_types: List[str],
-                                           n_jobs: Optional[int] = None,
-                                           nb_cpus: Optional[int] = None):
+def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset, obj_types: List[str],
+                                           n_jobs: Optional[int] = None, nb_cpus: Optional[int] = None):
     """
+    Populates SSV attributes ``mapping_{obj_type}_ids`` and ``mapping_{obj_type}_ratios`` for each element in
+    `obj_types`; every element must exist in ``ssd.version_dict``.
 
     Args:
         ssd: SuperSegmentationDataset
-        obj_types: List[str]
-        n_jobs: int
-        nb_cpus: int
-            cpus per job when using BatchJob or the total number
-            of jobs used if single node multiprocessing.
+        obj_types: List of object identifiers which are mapped to the cells, e.g. ['mi', 'sj', 'vc'].
+        n_jobs: Number of jobs.
+        nb_cpus: Cores per job when using BatchJob or the total number of jobs used if single node multiprocessing.
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -45,19 +39,16 @@ def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset,
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
 
-    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
     if not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(
-            _aggregate_segmentation_object_mappings_thread,
-            multi_params, debug=False, nb_cpus=nb_cpus)
-
+        _ = sm.start_multiprocess_imap(_aggregate_segmentation_object_mappings_thread, multi_params,
+                                       debug=False, nb_cpus=nb_cpus)
     else:
-        _ = qu.batchjob_script(
-            multi_params, "aggregate_segmentation_object_mappings",
-            n_cores=nb_cpus, remove_jobfolder=True)
+        _ = qu.batchjob_script(multi_params, "aggregate_segmentation_object_mappings", n_cores=nb_cpus,
+                               remove_jobfolder=True)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -68,30 +59,34 @@ def _aggregate_segmentation_object_mappings_thread(args):
     obj_types = args[4]
     ssd_type = args[5]
 
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      ssd_type=ssd_type,
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, ssd_type=ssd_type,
                                                       version_dict=version_dict)
-    ssd.load_mapping_dict()
+    svids = np.concatenate([ssd.mapping_dict[ssvid] for ssvid in ssv_obj_ids])
+    ssd._mapping_dict = None
+    so_attr_of_interest = []
+    # create cache for object attributes
+    for obj_type in obj_types:
+        so_attr_of_interest.extend([f"mapping_{obj_type}_ids", f"mapping_{obj_type}_ratios"])
+    attr_cache = prepare_so_attr_cache(segmentation.SegmentationDataset('sv', config=ssd.config), svids,
+                                       so_attr_of_interest)
 
     for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        mappings = dict((obj_type, Counter()) for obj_type in obj_types)
-
-        for sv in ssv.svs:
-            sv.load_attr_dict()
-            for obj_type in obj_types:
-                if "mapping_%s_ids" % obj_type in sv.attr_dict:
-                    keys = sv.attr_dict["mapping_%s_ids" % obj_type]
-                    values = sv.attr_dict["mapping_%s_ratios" % obj_type]
-                    mappings[obj_type] += Counter(dict(zip(keys, values)))
+        ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_attr_dict()
+        mappings = dict((obj_type, Counter()) for obj_type in obj_types)
+        for svid in ssv.sv_ids:
+            for obj_type in obj_types:
+                try:
+                    keys = attr_cache[f"mapping_{obj_type}_ids"][svid]
+                    values = attr_cache[f"mapping_{obj_type}_ratios"][svid]
+                    mappings[obj_type] += Counter(dict(zip(keys, values)))
+                except KeyError:
+                    raise KeyError(f'Could not find attribute "{f"mapping_{obj_type}_ids"}" for '
+                                   f'cell supervoxel {svid} during "_aggregate_segmentation_object_mappings_thread".')
         for obj_type in obj_types:
             if obj_type in mappings:
-                ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-                    list(mappings[obj_type].keys())
-                ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    list(mappings[obj_type].values())
-
+                ssv.attr_dict[f"mapping_{obj_type}_ids"] = list(mappings[obj_type].keys())
+                ssv.attr_dict[f"mapping_{obj_type}_ratios"] = list(mappings[obj_type].values())
         ssv.save_attr_dict()
 
 
@@ -99,11 +94,15 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
                             obj_types: List[str], n_jobs: Optional[int] = None,
                             nb_cpus: Optional[int] = None):
     """
-    Requires prior execution of `aggregate_segmentation_object_mappings`.
+    Populates SSV attributes ``{obj_type}`` for each element in`obj_types`, every element must exist in
+    ``ssd.version_dict`` and in ``ssd.config['cell_objects']`` (see also config.yml in the working directory and/or
+    in syconn/handler/config.yml).
+
+    Requires prior execution of :py:func:`~aggregate_segmentation_object_mappings`.
 
     Args:
         ssd: SuperSegmentationDataset.
-        obj_types:
+        obj_types: List of object identifiers which are mapped to the cells, e.g. ['mi', 'sj', 'vc'].
         n_jobs:
         nb_cpus: cpus per job when using BatchJob or the total number
             of jobs used if single node multiprocessing.
@@ -112,7 +111,7 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
         assert obj_type in ssd.version_dict
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 2
-    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]], n_jobs)
+    multi_params = basics.chunkify(ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]], n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
@@ -124,7 +123,6 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
 
 
 def _apply_mapping_decisions_thread(args):
-    # TODO: correct_for_background is not required anymore with the new mapping procedure
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -132,107 +130,86 @@ def _apply_mapping_decisions_thread(args):
     obj_types = args[4]
     ssd_type = args[5]
 
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      ssd_type=ssd_type,
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, ssd_type=ssd_type,
                                                       version_dict=version_dict)
-    ssd.load_mapping_dict()
+    cell_objects_dc = ssd.config['cell_objects']
+
+    lower_ratio = None
+    upper_ratio = None
+    sizethreshold = None
+
+    # cache size property of objects
+    upper_ratios = {}
+    sizethresholds = {}
+    lower_ratios = {}
+    sd_dc = {}
+    for obj_t in obj_types:
+        assert obj_t in ssd.version_dict
+        sd_dc[obj_t] = segmentation.SegmentationDataset(obj_t, config=ssd.config, version=ssd.version_dict[obj_t],
+                                                        cache_properties=['size'])
+        if lower_ratio is None:
+            try:
+                lower_ratio = cell_objects_dc["lower_mapping_ratios"][obj_t]
+            except KeyError:
+                msg = "Lower ratio undefined."
+                log_proc.critical(msg)
+                raise ValueError(msg)
+
+        if upper_ratio is None:
+            try:
+                upper_ratio = cell_objects_dc["upper_mapping_ratios"][obj_t]
+            except KeyError:
+                log_proc.error(f"Upper ratio undefined - 1. assumed.")
+                upper_ratio = 1.
+
+        if sizethreshold is None:
+            try:
+                sizethreshold = cell_objects_dc["sizethresholds"][obj_t]
+            except KeyError:
+                msg = "Size threshold undefined."
+                log_proc.critical(msg)
+                raise ValueError(msg)
+        upper_ratios[obj_t] = upper_ratio
+        lower_ratios[obj_t] = lower_ratio
+        sizethresholds[obj_t] = sizethreshold
 
     for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        version_dc = ssv.config["versions"]
-        cell_objects_dc = ssv.config['cell_objects']
+        ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_attr_dict()
 
         for obj_type in obj_types:
-
-            lower_ratio = None
-            upper_ratio = None
-            sizethreshold = None
-
-            if obj_type == "sj":
-                correct_for_background = True
-            else:
-                correct_for_background = False
-
-            assert obj_type in ssv.version_dict
+            upper_ratio = upper_ratios[obj_type]
+            lower_ratio = lower_ratios[obj_type]
+            sizethreshold = sizethresholds[obj_type]
 
             if not "mapping_%s_ratios" % obj_type in ssv.attr_dict:
-                log_proc.error("No mapping ratios found in SSV {}."
-                               "".format(ssv_id))
-                continue
+                msg = f"No mapping ratios found in SSV {ssv}."
+                log_proc.error(msg)
+                raise ValueError(msg)
 
             if not "mapping_%s_ids" % obj_type in ssv.attr_dict:
-                log_proc.error("No mapping ids found in SSV {}."
-                               "".format(ssv_id))
-                continue
+                msg = f"No mapping ids found in SSV {ssv}."
+                log_proc.error(msg)
+                raise ValueError(msg)
 
-            if lower_ratio is None:
-                try:
-                    lower_ratio = cell_objects_dc["lower_mapping_ratios"][
-                        obj_type]
-                except:
-                    msg = "Lower ratio undefined. SSV {}.".format(ssv_id)
-                    log_proc.critical(msg)
-                    raise ValueError(msg)
-
-            if upper_ratio is None:
-                try:
-                    upper_ratio = cell_objects_dc["upper_mapping_ratios"][
-                        obj_type]
-                except:
-                    log_proc.error("Upper ratio undefined - 1. assumed. "
-                                   "SSV {}".format(ssv_id))
-                    upper_ratio = 1.
-
-            if sizethreshold is None:
-                try:
-                    sizethreshold = cell_objects_dc["sizethresholds"][
-                        obj_type]
-                except:
-                    msg = "Size threshold undefined. SSV {}.".format(ssv_id)
-                    log_proc.critical(msg)
-                    raise ValueError(msg)
-
-            obj_ratios = np.array(ssv.attr_dict["mapping_%s_ratios" % obj_type])
-
-            if correct_for_background:
-                for i_so_id in range(
-                        len(ssv.attr_dict["mapping_%s_ids" % obj_type])):
-                    so_id = ssv.attr_dict["mapping_%s_ids" % obj_type][i_so_id]
-                    obj_version = version_dc[obj_type]
-                    this_so = segmentation.SegmentationObject(
-                        so_id, obj_type,
-                        version=obj_version,
-                        scaling=ssv.scaling,
-                        working_dir=ssv.working_dir)
-                    this_so.load_attr_dict()
-                    if 0 in this_so.attr_dict["mapping_ids"]:
-                        ratio_0 = this_so.attr_dict["mapping_ratios"][
-                            this_so.attr_dict["mapping_ids"] == 0][0]
-
-                        obj_ratios[i_so_id] /= (1 - ratio_0)
+            obj_ratios = np.array(ssv.attr_dict[f"mapping_{obj_type}_ratios"])
 
             id_mask = obj_ratios > lower_ratio
             if upper_ratio < 1.:
                 id_mask[obj_ratios > upper_ratio] = False
 
-            candidate_ids = \
-                np.array(ssv.attr_dict["mapping_%s_ids" % obj_type])[id_mask]
+            candidate_ids = np.array(ssv.attr_dict[f"mapping_{obj_type}_ids"])[id_mask]
 
             ssv.attr_dict[obj_type] = []
             for candidate_id in candidate_ids:
-                obj = segmentation.SegmentationObject(
-                    candidate_id, obj_type=obj_type, version=ssv.version_dict[obj_type],
-                    working_dir=ssv.working_dir, config=ssv.config)
+                obj = sd_dc[obj_type].get_segmentation_object(candidate_id)
                 if obj.size > sizethreshold:
                     ssv.attr_dict[obj_type].append(candidate_id)
-            ssv.save_attr_dict()
+        ssv.save_attr_dict()
 
 
-def map_synssv_objects(synssv_version: Optional[str] = None,
-                       log: Optional[Logger] = None,
-                       nb_cpus=None, n_jobs=None,
-                       syn_threshold=None):
+def map_synssv_objects(synssv_version: Optional[str] = None, log: Optional[Logger] = None,
+                       nb_cpus=None, n_jobs=None, syn_threshold=None):
     """
     Map syn_ssv objects and merge their meshes for all SSO objects contained in SSV SuperSegmentationDataset.
 
@@ -254,14 +231,11 @@ def map_synssv_objects(synssv_version: Optional[str] = None,
     ssd = SuperSegmentationDataset(global_params.config.working_dir)
     multi_params = []
     for ssv_id_block in basics.chunkify(ssd.ssv_ids, n_jobs):
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, ssd.type, synssv_version,
+        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir, ssd.type, synssv_version,
                              syn_threshold])
 
     if not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(
-            map_synssv_objects_thread,
-            multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess_imap(map_synssv_objects_thread, multi_params, nb_cpus=nb_cpus)
 
     else:
         _ = qu.batchjob_script(multi_params, "map_synssv_objects",
@@ -272,17 +246,15 @@ def map_synssv_objects_thread(args):
     ssv_obj_ids, version, version_dict, working_dir, \
     ssd_type, synssv_version, syn_threshold = args
 
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      ssd_type=ssd_type,
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, ssd_type=ssd_type,
                                                       version_dict=version_dict)
 
-    syn_ssv_sd = segmentation.SegmentationDataset(obj_type="syn_ssv",
-                                                  working_dir=working_dir,
+    syn_ssv_sd = segmentation.SegmentationDataset(obj_type="syn_ssv", working_dir=working_dir,
                                                   version=synssv_version)
 
-    ssv_partners = syn_ssv_sd.load_cached_data("neuron_partners")
-    syn_prob = syn_ssv_sd.load_cached_data("syn_prob")
-    synssv_ids = syn_ssv_sd.load_cached_data("id")
+    ssv_partners = syn_ssv_sd.load_numpy_data("neuron_partners")
+    syn_prob = syn_ssv_sd.load_numpy_data("syn_prob")
+    synssv_ids = syn_ssv_sd.load_numpy_data("id")
 
     synssv_ids = synssv_ids[syn_prob > syn_threshold]
     ssv_partners = ssv_partners[syn_prob > syn_threshold]

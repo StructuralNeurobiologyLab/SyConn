@@ -436,9 +436,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
             Number of voxels.
         """
+        if self._size is None and 'size' in self.attr_dict:
+            self._size = self.attr_dict['size']
         if self._size is None and self.attr_dict_exists:
             self._size = self.lookup_in_attribute_dict("size")
-
         if self._size is None:
             self.calculate_size()
 
@@ -456,9 +457,10 @@ class SegmentationObject(SegmentationBase):
 
     @property
     def bounding_box(self) -> np.ndarray:
+        if self._bounding_box is None and 'bounding_box' in self.attr_dict:
+            self._bounding_box = self.attr_dict['bounding_box']
         if self._bounding_box is None and self.attr_dict_exists:
-            self._bounding_box = self.lookup_in_attribute_dict("bounding_box")
-
+            self._bounding_box = self.lookup_in_attribute_dict('bounding_box')
         if self._bounding_box is None:
             self.calculate_bounding_box()
 
@@ -473,9 +475,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
             1D array of the coordinate (XYZ).
         """
+        if self._rep_coord is None and 'rep_coord' in self.attr_dict:
+            self._rep_coord = self.attr_dict['rep_coord']
         if self._rep_coord is None and self.attr_dict_exists:
             self._rep_coord = self.lookup_in_attribute_dict("rep_coord")
-
         if self._rep_coord is None:
             self.calculate_rep_coord()
 
@@ -1382,7 +1385,7 @@ class SegmentationDataset(SegmentationBase):
 
         After successfully executing
         :class:`~syconn.exec.exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
-        can be loaded from cache via the following keys:
+        can be loaded from numpy arrays via the following keys:
             * 'id': ID array, identical to :py:attr:`~ids`.
             * 'bounding_box': Bounding box of every SV.
             * 'size': Number voxels of each SV.
@@ -1395,7 +1398,7 @@ class SegmentationDataset(SegmentationBase):
             * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SVs.
             * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
 
-        If a glia separation is performed, the following attributes will be cached as well:
+        If a glia separation is performed, the following attributes will be stored as numpy array as well:
             * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
               locations, 2: 0-index=neuron, 1-index=glia).
 
@@ -1405,7 +1408,7 @@ class SegmentationDataset(SegmentationBase):
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
-        properties are cached:
+        properties are stored as numpy arrays:
             * 'id': ID array, identical to
               :py:attr:`~ids`.
             * 'bounding_box': Bounding box of every SV.
@@ -1459,7 +1462,7 @@ class SegmentationDataset(SegmentationBase):
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
                 setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
             n_folders_fs: Number of folders within the dataset's folder structure.
-            cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
+            cache_properties: Use numpy arrays to populate the specified object properties when initializing
                 :py:class:`~syconn.reps.segmentation.SegmentationObject` via :py:func:`~get_segmentation_object`.
         """
 
@@ -1764,7 +1767,7 @@ class SegmentationDataset(SegmentationBase):
             yield self.get_segmentation_object(self.ids[ix])
             ix += 1
 
-    def load_cached_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
+    def load_numpy_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
         """
         Load cached array. The ordering of the returned array will correspond
         to :py:attr:`~ids`.
@@ -1782,11 +1785,11 @@ class SegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
+            msg = f'Requested data cache "{prop_name}" did not exist.'
             if not allow_nonexisting:
-                msg = f''
                 log_reps.error(msg)
                 raise FileNotFoundError(msg)
-            log_reps.warning(f'Requested data cache "{prop_name}" did not exist.')
+            log_reps.warning(msg)
 
     def get_segmentationdataset(self, obj_type: str) -> 'SegmentationDataset':
         """
@@ -1842,7 +1845,7 @@ class SegmentationDataset(SegmentationBase):
 
         so = SegmentationObject(**kwargs_def)
         for k, v in self._property_cache.items():
-            so.attr_dict[k] = v[self._soid2ix[obj_id]]
+            so.attr_dict[k] = v[self.soid2ix[obj_id]]
         return so
 
     def save_version_dict(self):
@@ -1860,6 +1863,12 @@ class SegmentationDataset(SegmentationBase):
         except Exception as e:
             raise FileNotFoundError('Version dictionary of SegmentationDataset not found. {}'.format(str(e)))
 
+    @property
+    def soid2ix(self):
+        if self._soid2ix is None:
+            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
+        return self._soid2ix
+
     def enable_property_cache(self, property_keys: Iterable[str]):
         """
         Add properties to cache.
@@ -1868,8 +1877,40 @@ class SegmentationDataset(SegmentationBase):
             property_keys: Property keys. Numpy cache arrays must exist.
         """
         # look-up for so IDs to index in cache arrays
+        property_keys = list(property_keys)  # copy
+        for k in self._property_cache:
+            if k in property_keys:
+                property_keys.remove(k)
         if len(property_keys) == 0:
             return
-        if self._soid2ix is None:
-            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
-        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
+        # init index array
+        _ = self.soid2ix
+        self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
+
+    def get_volume(self, source: str = 'total') -> float:
+        """
+        Calculate the RAG volume.
+
+        Args:
+            source: Allowed sources: 'total' (all SVs contained in SegmentationDataset('sv')),
+                'neuron' (use glia-free RAG), 'glia' (use glia RAG).
+
+        Returns:
+            Volume in mm^3.
+        """
+        self.enable_property_cache(['size'])
+        if source == 'neuron':
+            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+            svids = g.nodes()
+        elif source == 'glia':
+            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint)
+            svids = g.nodes()
+        elif source == 'total':
+            svids = self.ids
+        else:
+            raise ValueError(f'Unknown source type "{source}".')
+        total_size = 0
+        for svid in svids:
+            total_size += self.get_segmentation_object(svid).size
+        total_size_cmm = np.prod(self.scaling) * total_size / 1e18
+        return total_size_cmm

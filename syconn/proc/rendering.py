@@ -432,8 +432,7 @@ def render_sso_coords_label_views(sso: 'SuperSegmentationObject', vertex_labels:
         nb_views = view_props_default['nb_views']
     ind, vert, _ = sso.mesh
     if len(vertex_labels) != len(vert) // 3:
-        raise ValueError("Length of vertex labels and vertices "
-                         "have to be equal.")
+        raise ValueError("Length of vertex labels and vertices have to be equal.")
     palette = generate_palette(len(np.unique(vertex_labels)))
     color_array = palette[vertex_labels].astype(np.float32) / 255
     mo = MeshObject("neuron", ind, vert, color=color_array)
@@ -613,7 +612,8 @@ def write_sv_views_chunked(svs: List['SegmentationObject'], views: np.ndarray, p
         views: View array.
         part_views: Cumulated number of views -> indices of start and end of SV views in `views` array.
         view_kwargs:
-        disable_locking:
+        disable_locking: Usually required as SVs are stored in chunks and rendered distributed on many
+            processes.
 
     Returns:
 

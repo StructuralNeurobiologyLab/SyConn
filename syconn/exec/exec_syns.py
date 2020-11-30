@@ -31,6 +31,7 @@ def run_matrix_export():
           en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
         * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
           1: spine head, 2: spine neck, 3: other) of both neurons.
+        * 'partner_spineheadvol': Spinehead volume in µm^3 of pre- and post-synaptic partners.
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
           synaptic partners.
@@ -40,7 +41,7 @@ def run_matrix_export():
     """
     # cache cell attributes
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    ssd.save_dataset_deep()
+    ssd.save_dataset_deep(new_mapping=False)
     log = initialize_logging('matrix_export', global_params.config.working_dir + '/logs/', overwrite=True)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir, obj_type='syn_ssv')
@@ -82,10 +83,9 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
             By default this is set to (np.zoers(3); kd.boundary).
     """
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 4
+        max_n_jobs = global_params.config.ncore_total * 2
 
-    log = initialize_logging('synapse_detection',
-                             global_params.config.working_dir + '/logs/',
+    log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
 
     kd_seg_path = global_params.config.kd_seg_path
@@ -94,7 +94,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    # # create KDs and SDs for syn and cs
+    # create KDs and SDs for syn and cs
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs)
@@ -111,12 +111,13 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
-    syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
     del syn_sign
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
-             f'objects, {n_sym} symmetric and {n_asym} asymmetric.')
+             f'objects, {n_sym} symmetric, {n_asym} asymmetric and '
+             f'{(len(sd_syn_ssv.ids) / np.prod(kd.boundary * kd.scale) * 1e9):0.4f} synapses / µm^3.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
     cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
@@ -139,21 +140,21 @@ def run_spinehead_volume_calc():
     """
     Calculate spine head volumes based on a watershed segmentation which is run on 3D spine label masks propagated
     from cell surface predictions.
+    Spine head volumes are stored in  the SSV attribute dictionary with the key ``partner_spineheadvol`` in µm^3.
+
+    Subsequent call to :func:`~syconn.extraction.cs_processing_steps.collect_properties_from_ssv_partners` will
+    add this property to the attribute dict of all `syn_ssv`. Calling :func:`syconn.proc.sd_proc.dataset_analysis`
+    accordingly collects all `syn_ssv` properties and makes them available as numpy arrays. These two steps are
+    performed in :func:`~run_matrix_export`.
+
     """
     log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    # shuffle SV IDs
-    np.random.seed(0)
-
     log.info('Starting spine head volume calculation.')
-    multi_params = ssd.ssv_ids
-    ordering = np.argsort(ssd.load_cached_data('size'))
-    multi_params = multi_params[ordering[::-1]]
-    multi_params = chunkify(multi_params, min(global_params.config.ncore_total * 10, 1000))
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
+    multi_params = chunkify(multi_params, global_params.config.ncore_total * 4)
     multi_params = [(ixs,) for ixs in multi_params]
 
-    batchjob_script(multi_params, "calculate_spinehead_volume", log=log,
-                    remove_jobfolder=True)
-    log.info('Finished processing of {} SSVs.'
-             ''.format(len(ordering)))
+    batchjob_script(multi_params, "calculate_spinehead_volume", log=log, remove_jobfolder=True)
+    log.info(f'Finished processing of {len(ssd.ssv_ids)} SSVs.')

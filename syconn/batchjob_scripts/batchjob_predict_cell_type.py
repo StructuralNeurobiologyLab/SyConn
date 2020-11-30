@@ -30,17 +30,15 @@ with open(path_storage_file, 'rb') as f:
             break
 
 # SSV IDs
-ch = args[0]
+ch, use_point_models = args
 
-# multi view model properties
-model_props = global_params.config['celltypes']
-ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-
-
-if global_params.config.use_point_models:
+if use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
     predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, show_progress=False)
 else:
+    # multi view model properties
+    model_props = global_params.config['celltypes']
+    ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
     n_worker = 2
     params = basics.chunkify(ch, n_worker * 4)
     res = start_multiprocess_imap(celltype_predictor, [(p, ncpus, model_props) for p in params], nb_cpus=n_worker,

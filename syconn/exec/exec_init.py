@@ -59,7 +59,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
         sv_size_dict = {}
-        bbs = sd.load_cached_data('bounding_box') * sd.scaling
+        bbs = sd.load_numpy_data('bounding_box') * sd.scaling
         for ii in range(len(sd.ids)):
             sv_size_dict[sd.ids[ii]] = bbs[ii]
         ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
@@ -89,19 +89,27 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
-    # also executes 'ssd.save_dataset_shallow()'
+    # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
     ssd.save_dataset_deep()
 
+    max_n_jobs = global_params.config['ncores_per_node'] * 2
     # Write SSV RAGs
-    params = [(g_p, ssv_ids) for ssv_ids in chunkify(
-        ssd.ssv_ids, global_params.config['ncores_per_node'] * 2)]
-    start_multiprocess_imap(_ssv_rag_writer, params,
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
+    # split all cells into chunks within upper half and lower half (sorted by size)
+    # -> process a balanced load of large cells with the first jobs, and then the other, smaller half
+    half_ix = len(multi_params) // 2
+    njobs_per_half = max(max_n_jobs // 2, 1)
+    multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
+                   chunkify(multi_params[half_ix:], njobs_per_half)
+
+    multi_params = [(g_p, ssv_ids) for ssv_ids in multi_params]
+    start_multiprocess_imap(_ssv_rag_writer, multi_params,
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving individual SSV RAGs.')
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
-    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'], nb_cpus=2)
     ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
     log.info('Finished mapping of cellular organelles to SSVs. Writing individual SSV graphs.')
 
@@ -149,11 +157,6 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
             (co != "sv" or (co == "sv" and global_params.config.allow_mesh_gen_cells)):
         _ = qu.batchjob_script(
             multi_params, 'mesh_caching', suffix=co, remove_jobfolder=False, log=log)
-
-    # TODO: add comment as soon as glia separation supports on the fly view generation
-    if co == "sv":  # and not global_params.config.use_onthefly_views:
-        _ = qu.batchjob_script(
-            multi_params, "sample_location_caching", suffix=co, remove_jobfolder=True, log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
     if not global_params.config.use_new_meshing:
@@ -243,7 +246,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         chunk_size = [512, 512, 512]
     chunk_size_kdinit = chunk_size
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 4
+        max_n_jobs = global_params.config.ncore_total * 2
         # loading cached data or adapt number of jobs/cache size dynamically,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
@@ -301,7 +304,7 @@ def run_create_rag():
         required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
     log = initialize_logging('sd_generation', global_params.config.working_dir +
-                             '/logs/', overwrite=True)
+                             '/logs/', overwrite=False)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
     G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint)
     if 0 in G.nodes():
@@ -311,7 +314,7 @@ def run_create_rag():
     log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
-    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
+    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir, cache_properties=['size'])
     diff = np.array(list(set(sd.ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single-element connected component SVs which were missing'
              ' in initial RAG.'.format(len(diff)))
@@ -324,7 +327,7 @@ def run_create_rag():
 
     # remove small connected components
     sv_size_dict = {}
-    bbs = sd.load_cached_data('bounding_box') * sd.scaling
+    bbs = sd.load_numpy_data('bounding_box') * sd.scaling
     for ii in range(len(sd.ids)):
         sv_size_dict[sd.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(G, sv_size_dict)
@@ -332,12 +335,16 @@ def run_create_rag():
               "on bounding box diagonal of corresponding SVs.")
     before_cnt = len(G.nodes())
     for ix in list(G.nodes()):
-        if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
+        if ccsize_dict[ix] <= global_params.config['glia']['min_cc_size_ssv']:
             G.remove_node(ix)
+    total_size = 0
+    for n in G.nodes():
+        total_size += sd.get_segmentation_object(n).size
+    total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
     cc_gs = list(nx.connected_component_subgraphs(G))
-    log.info("Removed {} SVs from RAG because of size. Final RAG contains {}"
-             " SVs in {} CCs.".format(before_cnt - G.number_of_nodes(),
-                                      G.number_of_nodes(), len(cc_gs)))
+    log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
+             f"{global_params.config['glia']['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
+             f"{len(cc_gs)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
     nx.write_edgelist(G, global_params.config.pruned_rag_path)
 
     if not global_params.config.prior_glia_removal:

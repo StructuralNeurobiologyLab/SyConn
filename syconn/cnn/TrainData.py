@@ -31,7 +31,7 @@ try:
 except ImportError as e:
     log_cnn.error(str(e))
 import threading
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold
 try:
     from torch.utils.data import Dataset
     import torch
@@ -94,7 +94,7 @@ if elektronn3_avail:
             self.sso_ids = None
             gt_dir = ssd.path
             self.map_myelin = map_myelin
-
+            self.cv_val = cv_val
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
             if os.path.isfile(split_dc_path):
@@ -132,11 +132,11 @@ if elektronn3_avail:
                 for ix in self.sso_ids:
                     if ix not in ssd.ssv_ids:
                         raise ValueError(f'SSO with ID {ix} is not part of {ssd}!')
-                print(f'Using splitting dict at "{split_dc_path}".')
+                log_cnn.debug(f'Using splitting dict at "{split_dc_path}".')
                 for k, v in self.splitting_dict.items():
                     classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                                  self.splitting_dict[k]], return_counts=True)
-                    print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                    log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
 
         def __getitem__(self, item):
             """
@@ -169,11 +169,14 @@ if elektronn3_avail:
             else:
                 return max(len(self.sso_ids) // 5, 1)
 
-        def load_ssv_sample(self, item: int, draw_local: bool = False):
+        def load_ssv_sample(self, item: int, draw_local: bool = False, draw_local_dist: float = 1000):
             """
             Args:
                 item: Cell ID.
                 draw_local: Sample two similar samples from the same location.
+                draw_local_dist: Maximum distance to the location used for generation the "similar" sample.
+                    Note that the location is drawn randomly from all skeleton nodes within the traversed
+                    path (within `draw_local_dist`).
 
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
@@ -189,7 +192,8 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin)][0]
+                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin,
+                    draw_local_dist=draw_local_dist)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
@@ -207,7 +211,7 @@ if elektronn3_avail:
         Loader for triplets of cell vertices
         """
 
-        def __init__(self, draw_local: bool = True, **kwargs):
+        def __init__(self, draw_local: bool = True, draw_local_dist: float = 1000, **kwargs):
             """
 
             Args:
@@ -217,41 +221,50 @@ if elektronn3_avail:
             """
             super().__init__(**kwargs)
             if self.sso_ids is None:
-                bb = self.ssd.load_cached_data('bounding_box') * self.ssd.scaling  # N, 2, 3
+                bb = self.ssd.load_numpy_data('bounding_box') * self.ssd.scaling  # N, 2, 3
                 bb = np.linalg.norm(bb[:, 1] - bb[:, 0], axis=1)
                 self.sso_ids = self.ssd.ssv_ids[bb > 2 * self.ctx_size]
                 print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
             self._curr_ssv_id_altern = None
             self.draw_local = draw_local
+            self.draw_local_dist = draw_local_dist
 
         def __getitem__(self, item):
-            item = np.random.randint(0, len(self.sso_ids))
-            self._curr_ssv_id_altern = self.sso_ids[item]
-            pts_altern, feats_altern = self.load_ssv_sample(item)
-
-            pts_altern = torch.from_numpy(pts_altern).float()
-            feats_altern = torch.from_numpy(feats_altern).float()
-
-            # draw base and similar sample from a different cell
             while True:
-                ix = np.random.randint(0, len(self.sso_ids))
-                if self.sso_ids[ix] != self._curr_ssv_id_altern:
-                    self._curr_ssv_id = self.sso_ids[ix]
+                try:
+                    item = np.random.randint(0, len(self.sso_ids))
+                    self._curr_ssv_id_altern = self.sso_ids[item]
+                    pts_altern, feats_altern = self.load_ssv_sample(item)
+                    pts_altern = torch.from_numpy(pts_altern).float()
+                    feats_altern = torch.from_numpy(feats_altern).float()
                     break
-            if self.draw_local:
-                # consecutive samples belong together
-                pts, feats = self.load_ssv_sample(ix, draw_local=True)
-                pts0, pts1 = pts[0::2], pts[1::2]
-                feats0, feats1 = feats[0::2], feats[1::2]
-            else:
-                pts0, feats0 = self.load_ssv_sample(ix)  # base sample
-                pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
+                except ValueError as e:
+                    print(f'Exception occurred during CellCloudDataTriplet._getitem__ with SSV ID {self.sso_ids[item]}: {str(e)}')
+            while True:
+                try:
+                    # draw base and similar sample from a different cell
+                    while True:
+                        ix = np.random.randint(0, len(self.sso_ids))
+                        if self.sso_ids[ix] != self._curr_ssv_id_altern:
+                            self._curr_ssv_id = self.sso_ids[ix]
+                            break
+                    if self.draw_local:
+                        # consecutive samples belong together
+                        pts, feats = self.load_ssv_sample(ix, draw_local=True, draw_local_dist=self.draw_local_dist)
+                        pts0, pts1 = pts[0::2], pts[1::2]
+                        feats0, feats1 = feats[0::2], feats[1::2]
+                    else:
+                        pts0, feats0 = self.load_ssv_sample(ix)  # base sample
+                        pts1, feats1 = self.load_ssv_sample(ix)  # similar sample to base
 
-            x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
-                  torch.from_numpy(feats0).float()}
-            x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
-                  torch.from_numpy(feats1).float()}
-            x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+                    x0 = {'pts': torch.from_numpy(pts0).float(), 'features':
+                          torch.from_numpy(feats0).float()}
+                    x1 = {'pts': torch.from_numpy(pts1).float(), 'features':
+                          torch.from_numpy(feats1).float()}
+                    x2 = {'pts': pts_altern, 'features': feats_altern}  # alternative sample
+                    break
+                except ValueError as e:
+                    print(f'Exception occurred during CellCloudDataTriplet._getitem__ with SSV ID {self.sso_ids[item]}: {str(e)}')
             return x0, x1, x2
 
         def __len__(self):
@@ -262,12 +275,13 @@ if elektronn3_avail:
         """
         Uses the same data for train and valid set.
         """
-        def __init__(self, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
+        def __init__(self, cv_val=None, **kwargs):
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
 
-            super().__init__(ssd_kwargs=ssd_kwargs, **kwargs)
+            super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/j0251_celltype_gt_v2.csv"
+            assert self.train, "Other mode than 'train' is not implemented."
+            csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v3.csv"
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
@@ -275,14 +289,21 @@ if elektronn3_avail:
                 raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
             ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
-            self.sso_ids = ssv_ids
+            if self.cv_val is not None and self.cv_val != -1:
+                assert self.cv_val < 10
+                kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
+                for ii, (train_ixs, test_ixs) in enumerate(kfold.split(ssv_ids, y=ssv_labels)):
+                    if ii == self.cv_val:
+                        self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid:': ssv_ids[test_ixs]}
+            else:
+                self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}  # use all data
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
-            self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}
             self.sso_ids = self.splitting_dict['train']
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
-                print(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
             if self.train:
@@ -316,7 +337,8 @@ if elektronn3_avail:
             nonglia_ssv_ids = np.array([
                 10919937, 16096256, 23144450, 2734465, 34811392, 491527,
                 15933443, 16113665, 24414208, 2854913, 37558272, 8339462,
-                15982592, 18571264, 26501121, 33581058, 46319619], dtype=np.uint)
+                15982592, 18571264, 26501121, 33581058, 46319619
+            ], dtype=np.uint)
             # use celltype GT
             csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
@@ -414,10 +436,11 @@ if elektronn3_avail:
             """
             self._curr_ssv_params = self.sso_params[item]
             self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
+            # Changed pts_loader_local_skel=True, 10Sep2020 PS
             sso_id, (sample_feats, sample_pts), (out_pts, out_labels) = \
                 [*pts_loader_local_skel([self.sso_params[item]], [self._curr_ssv_label], self._batch_size,
                                         self.num_pts, transform=self.transform, use_subcell=self.use_subcell,
-                                        train=True, ctx_size=self.ctx_size)][0]
+                                        train=True, ctx_size=self.ctx_size, recalc_skeletons=True)][0]
             if self._batch_size == 1:
                 return sample_pts[0], sample_feats[0], out_pts[0], out_labels[0]
             else:
@@ -426,15 +449,15 @@ if elektronn3_avail:
 
     class CloudDataSemseg(Dataset):
         def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, batch_size=1, use_subcell=True, ctx_size=20000):
+                     train=True, batch_size=1, use_subcell=True, ctx_size=20000, mask_boarders_with_id=None):
             if source_dir is None:
-                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt'
-                              '_2020/2020_05//hc_out/')
+                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/')
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')
-            ssv_ids_proof = [491527, 2734465, 2854913, 8339462, 10919937, 15933443, 15982592,
-                             16096256, 16113665, 18571264, 23144450, 24414208, 26501121, 33581058,
-                             34811392, 37558272, 46319619]  # + [1090051, 2091009, 3447296, 8003584, 12806659]  # sparse GT
+            ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
+                             16113665, 24414208, 18571264, 2734465, 23144450, 15982592, 15933443, 8339462, 18251791,
+                             17079297, 31967234, 23400450, 1090051, 3447296, 2091009, 28790786, 14637059, 19449344,
+                             12806659, 26331138, 22335491, 26169344, 12179464, 24434691, 18556928, 8003584, 27435010]
             self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
                            in ssv_ids_proof]
             print(f'Using {len(self.fnames)} cells for training.')
@@ -448,6 +471,7 @@ if elektronn3_avail:
             self.num_pts = npoints
             self._batch_size = batch_size
             self.transform = transform
+            self.mask_boarders_with_id = mask_boarders_with_id
 
         def __getitem__(self, item):
             item = np.random.randint(0, len(self.fnames))
@@ -480,7 +504,8 @@ if elektronn3_avail:
             (sample_feats, sample_pts), (out_pts, out_labels) = \
                 [*pts_loader_semseg_train([p], self._batch_size, self.num_pts,
                                           transform=self.transform, ctx_size=self.ctx_size,
-                                          use_subcell=self.use_subcell)][0]
+                                          use_subcell=self.use_subcell,
+                                          mask_boarders_with_id=self.mask_boarders_with_id)][0]
             return sample_pts, sample_feats, out_pts, out_labels
 
 
@@ -1716,7 +1741,7 @@ class TripletData_N(Data):
             for el in v:
                 rev_dc[el] = k
         self.s_ids = np.concatenate(ssds.mapping_dict.values())
-        bb = ssds.load_cached_data("bounding_box")
+        bb = ssds.load_numpy_data("bounding_box")
         # sizes as diagonal of bounding box in um (SV size will be size of corresponding SSV)
         bb_size = np.linalg.norm((bb[:, 1] - bb[: ,0])*self.sds.scaling, axis=1) / 1e3
         ssds_sizes = {}
@@ -1789,7 +1814,7 @@ class TripletData_SSV(Data):
         self.valid_l = np.zeros((len(self.valid_d), 1))
 
         self.sso_ids = self.ssds.ssv_ids
-        bb = self.ssds.load_cached_data("bounding_box")
+        bb = self.ssds.load_numpy_data("bounding_box")
         for sso_ix in self.valid_d:
             bb[self.sso_ids == sso_ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
         for sso_ix in self.test_d:
@@ -1895,7 +1920,7 @@ class TripletData_SSV_nviews(Data):
         self.test_d = self.test_d[:, None]
 
         self.sso_ids = self.ssds.ssv_ids
-        bb = self.ssds.load_cached_data("bounding_box")
+        bb = self.ssds.load_numpy_data("bounding_box")
         for sso_ix in self.valid_d:
             ix = self.sso_ids.index(sso_ix)
             bb[ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
@@ -2293,9 +2318,9 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     """
     syn_objs_total, syn_type_total = [], []
     sd_syn_ssv = SegmentationDataset('syn_ssv', working_dir=global_params.config.working_dir)
-    syn_cts = sd_syn_ssv.load_cached_data('partner_celltypes')
-    syn_axs = sd_syn_ssv.load_cached_data('partner_axoness')
-    syn_prob = sd_syn_ssv.load_cached_data('syn_prob')
+    syn_cts = sd_syn_ssv.load_numpy_data('partner_celltypes')
+    syn_axs = sd_syn_ssv.load_numpy_data('partner_axoness')
+    syn_prob = sd_syn_ssv.load_numpy_data('syn_prob')
     m_prob = syn_prob >= synprob_thresh
     # set bouton predictions to axon label
     syn_axs[syn_axs == 3] = 1

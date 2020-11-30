@@ -717,6 +717,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
     Returns:
 
     """
+    if not k_path.endswith('.k.zip'):
+        k_path += '.k.zip'
     if len(vert) == 0:
         log_proc.warn("'write_mesh2kzip' called with empty vertex array. Did not"
                       " write data to kzip. `ply_fname`. {}".format(ply_fname))
@@ -755,6 +757,8 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     Returns:
 
     """
+    if not k_path.endswith('.k.zip'):
+        k_path += '.k.zip'
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')

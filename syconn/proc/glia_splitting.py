@@ -29,15 +29,9 @@ def qsub_glia_splitting():
     glia SVs.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
-    huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) >
-                 global_params.config['glia']['rendering_max_nb_sv']]
-    if len(huge_ssvs):
-        log_proc.info("{} huge SSVs detected (#SVs > {})".format(
-            len(huge_ssvs), global_params.config['glia']['rendering_max_nb_sv']))
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
                    global_params.config.ncore_total * 2)
-    qu.batchjob_script(chs, "split_glia", n_cores=1,
-                       remove_jobfolder=True)
+    qu.batchjob_script(chs, "split_glia", n_cores=1, remove_jobfolder=True)
 
 
 def collect_glia_sv():
@@ -111,9 +105,9 @@ def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str =
 
     # create dictionary with CC sizes (BBD)
     log.info("Finished neuron and glia RAG, now preparing CC size dict.")
-    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir, cache_properties=['size'])
     sv_size_dict = {}
-    bbs = sds.load_cached_data('bounding_box') * sds.scaling
+    bbs = sds.load_numpy_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(g, sv_size_dict)
@@ -154,8 +148,13 @@ def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str =
             glia_g.remove_node(ix)
     log.info("Removed %d glia CCs because of size." % (before_cnt - len(glia_g.nodes())))
     ccs = list(nx.connected_components(glia_g))
-    log.info("Nb glia CCs: {}".format(len(ccs)))
-    log.info("Nb glia SVs: {}".format(len([n for cc in ccs for n in cc])))
+    total_size = 0
+    for n in glia_g.nodes():
+        total_size += sds.get_segmentation_object(n).size
+    total_size_cmm = np.prod(sds.scaling) * total_size / 1e18
+    log.info("Glia RAG contains {} SVs in {} CCs ({} mm^3; {} Gvx).".format(
+        glia_g.number_of_nodes(), len(ccs), total_size_cmm, total_size / 1e9))
+
     nx.write_edgelist(glia_g, global_params.config.working_dir + "/glia/glia_rag%s.bz2" % suffix)
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)

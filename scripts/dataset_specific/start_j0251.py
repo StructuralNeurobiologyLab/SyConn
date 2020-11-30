@@ -12,13 +12,13 @@ import networkx as nx
 
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
 
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/"
+    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     prior_glia_removal = True
@@ -77,9 +77,6 @@ if __name__ == '__main__':
     ftimer = FileTimer(working_dir + '/.timing.pkl')
     ftimer.start('Preparation')
 
-    bb = None
-    bd = None
-
     # Preparing config
     # currently this is were SyConn looks for the neuron rag
     if global_params.wd is not None:
@@ -104,14 +101,13 @@ if __name__ == '__main__':
             raise ValueError('Could not find model "{}". Make sure to copy the'
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, working_dir))
+    ftimer.stop()
 
     # # Start SyConn
     # # --------------------------------------------------------------------------
-    # log.info('Finished example cube initialization (shape: {}). Starting'
-    #          ' SyConn pipeline.'.format(bd))
-    # log.info('Example data will be processed in "{}".'.format(working_dir))
-    # ftimer.stop()
-    #
+    log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
+    log.critical('Working directory is set to "{}".'.format(working_dir))
+
     # log.info('Step 1/9 - Predicting sub-cellular structures')
     # ftimer.start('Dense predictions')
     # # myelin is not needed before `run_create_neuron_ssd`
@@ -126,71 +122,70 @@ if __name__ == '__main__':
     #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
     #                                 max_n_jobs=global_params.config.ncore_total * 4)
     #
-    # # generate flattened RAG
+    # generate flattened RAG
     # from syconn.reps.segmentation import SegmentationDataset
     # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
     # rag_sub_g = nx.Graph()
     # # add SV IDs to graph via self-edges
-    # mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3
+    # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
     # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
     # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
     # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # log.info('{} SVs were added to the RAG after application of the size '
-    #          'filter.'.format(len(filtered_ids)))
+    # log.info('{} SVs were added to the RAG after applying size filter with bounding box '
+    #          'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['glia']['min_cc_size_ssv']))
     # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
-    #
     # exec_init.run_create_rag()
     # ftimer.stop()
-    #
-    # log.info('Step 3/9 - Glia separation')
-    # if global_params.config.prior_glia_removal:
-    #     ftimer.start('Glia separation')
-    #     if not global_params.config.use_point_models:
-    #         exec_render.run_glia_rendering()
-    #         exec_inference.run_glia_prediction()
-    #     else:
-    #         exec_inference.run_glia_prediction_pts()
-    #     exec_inference.run_glia_splitting()
-    #     ftimer.stop()
-    # else:
-    #     log.info('Glia separation disabled. Skipping.')
-    #
-    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    # ftimer.start('SSD generation')
-    # exec_init.run_create_neuron_ssd()
-    # ftimer.stop()
-    #
-    # log.info('Step 5/10 - Creating SuperSegmentationDataset')
-    # ftimer.start('Skeleton generation')
-    # exec_skeleton.run_skeleton_generation(cube_of_interest_bb=cube_of_interest_bb)
-    # ftimer.stop()
-    #
-    #
-    # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-    #     log.info('Step 4.5/9 - Neuron rendering')
-    #     ftimer.start('Neuron rendering')
-    #     exec_render.run_neuron_rendering()
-    #     ftimer.stop()
-    #
-    # log.info('Step 5/9 - Synapse detection')
-    # ftimer.start('Synapse detection')
-    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    # ftimer.stop()
+    log.info('Step 3/9 - Glia separation')
+    if global_params.config.prior_glia_removal:
+        ftimer.start('Glia separation')
+        if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+        else:
+            exec_inference.run_glia_prediction_pts()
+        exec_inference.run_glia_splitting()
+        ftimer.stop()
+    else:
+        log.info('Glia separation disabled. Skipping.')
 
-    # TDO: remove
-    exec_skeleton.run_kimimaro_skelgen()
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    ftimer.start('SSD generation')
+    exec_init.run_create_neuron_ssd()
+    ftimer.stop()
+
+    log.info('Step 5/10 - Creating SuperSegmentationDataset')
+    ftimer.start('Skeleton generation')
+    exec_skeleton.run_skeleton_generation()
+    ftimer.stop()
+
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Step 4.5/9 - Neuron rendering')
+        ftimer.start('Neuron rendering')
+        exec_render.run_neuron_rendering()
+        ftimer.stop()
+
+    log.info('Step 5/9 - Synapse detection')
+    ftimer.start('Synapse detection')
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    ftimer.stop()
 
     log.info('Step 6/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
     exec_inference.run_semsegaxoness_prediction()
     if not global_params.config.use_point_models:
         exec_inference.run_semsegspiness_prediction()
+    ftimer.stop()
+    #
+    # TODO: this step can be launched in parallel with the morphology extraction!
+    ftimer.start('Spine head volume estimation')
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 
-    # Use multi-views until here
-    raise()
-
+    # Used multi-views until here! Now use point models
+    global_params.config['use_point_models'] = True
+    global_params.config.write_config()
+    time.sleep(10)  # wait for changes to apply
     log.info('Step 7/9 - Morphology extraction')
     ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
@@ -206,9 +201,9 @@ if __name__ == '__main__':
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-             'can be analyzed via the KNOSSOS-SyConn plugin at '
-             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+    #          'can be analyzed via the KNOSSOS-SyConn plugin at '
+    #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # os.system(f'syconn.server --working_dir={example_wd} --port=10001')

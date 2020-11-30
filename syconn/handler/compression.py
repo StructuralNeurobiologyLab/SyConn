@@ -103,19 +103,21 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     return str_lst
 
 
-def lz4string_listtoarr(str_lst: List[bytes], dtype: np.dtype = np.float32,
+def lz4string_listtoarr(str_lst: Union[List[bytes], np.ndarray], dtype: np.dtype = np.float32,
                         shape: Optional[Tuple[int]] = None) -> np.ndarray:
     """
     Converts lz4 compressed strings to array.
 
     Args:
-        str_lst: Binary string representation of the array.
+        str_lst: Binary string representation of the array. If numpy array, do nothing.
         dtype: Data type of the serialized array.
         shape: Shape of the serialized array.
 
     Returns:
         1d numpy array.
     """
+    if type(str_lst) is np.ndarray:
+        return str_lst
     if len(str_lst) == 0:
         return np.zeros((0,), dtype=dtype)
     arr_lst = []

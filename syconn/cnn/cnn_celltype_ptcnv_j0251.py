@@ -15,14 +15,8 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, \
-    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig, ModelNet40xConv
+from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3d, Backup, metrics
-try:
-    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-except ModuleNotFoundError as e:
-    print(e)
-    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -69,13 +63,10 @@ ctx = args.ctx
 use_bias = args.use_bias
 use_syntype = args.use_syntype
 
-if cval is None:
-    cval = 0
-
 lr = 5e-4
 lr_stepsize = 100
-lr_dec = 0.992
-max_steps = 150000
+lr_dec = 0.99
+max_steps = 500000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -85,11 +76,11 @@ track_running_stats = False
 use_norm = 'gn'
 num_classes = 11
 onehot = True
-act = 'swish'
+act = 'relu'
 use_myelin = True
 
 if name is None:
-    name = f'celltype_pts_j0251_v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if not use_syntype:
@@ -133,7 +124,11 @@ save_root = os.path.expanduser(save_root)
 model = ModelNet40(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                    track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
-name += f'_CV{cval}_eval{eval_nr}'
+if cval is not None:
+    name += f'_CV{cval}'
+else:
+    name += f'_AllGT'
+name += f'_eval{eval_nr}'
 model = nn.DataParallel(model)
 
 if use_cuda:
@@ -159,16 +154,18 @@ train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='norma
                                   clouds.Center(),
                                   clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
+                                  clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
-                         cellshape_only=cellshape_only, use_syntype=use_syntype,
-                         onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
-valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
-                         cv_val=cval, cellshape_only=cellshape_only,
-                         use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-                         ctx_size=ctx, map_myelin=use_myelin)
+                              cellshape_only=cellshape_only, use_syntype=use_syntype,
+                              onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
+# valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
+#                               cv_val=cval, cellshape_only=cellshape_only,
+#                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+#                               ctx_size=ctx, map_myelin=use_myelin)
+valid_ds = None
 
 # PREPARE AND START TRAINING #
 
@@ -184,17 +181,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
 # extra weight for HVC and LMAN
 # STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
 criterion = torch.nn.CrossEntropyLoss()  # weight=torch.Tensor([1]*num_classes))
@@ -220,7 +206,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=5,
+    num_workers=20,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

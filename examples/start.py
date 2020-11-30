@@ -13,7 +13,7 @@ import numpy as np
 
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
-from syconn.handler.basics import FileTimer
+from syconn.proc.stats import FileTimer
 
 from knossos_utils import knossosdataset
 
@@ -42,13 +42,13 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
-        ('use_point_models', False),
+        ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 17),
+        ('nnodes_total', 4),
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -69,7 +69,8 @@ if __name__ == '__main__':
     n_folders_fs_sc = 100
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
-                     os.path.expanduser('~/SyConn/')]:
+                     os.path.expanduser('~/SyConn/'),
+                     os.path.expanduser('~/SyConnData/')]:
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
         if os.path.isdir(h5_dir):
             break
@@ -174,7 +175,7 @@ if __name__ == '__main__':
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
     # TODO: launch all predictions in parallel
-    exec_dense_prediction.predict_myelin()
+    # exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
@@ -245,7 +246,7 @@ if __name__ == '__main__':
     exec_syns.run_matrix_export()
     ftimer.stop()
 
-    time_summary_str = ftimer.prepare_report(experiment_name)
+    time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
     log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
              'can be analyzed via the KNOSSOS-SyConn plugin at '

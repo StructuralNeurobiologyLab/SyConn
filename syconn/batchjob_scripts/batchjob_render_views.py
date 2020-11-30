@@ -21,7 +21,6 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-
 ch = args[0]
 sso_kwargs = args[1]
 if type(sso_kwargs) is str:  # only the working directory is given

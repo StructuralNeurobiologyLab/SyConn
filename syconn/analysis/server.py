@@ -174,7 +174,7 @@ class SyConnBackend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
-        mesh = ssv._load_obj_mesh_compr("sv")
+        mesh = ssv.load_mesh("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
                 'normals': []}
@@ -192,14 +192,11 @@ class SyConnBackend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
-        mesh = ssv._load_obj_mesh_compr("sv")
+        mesh = ssv.load_mesh("sv")
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh indices after'
                          ' {:.2f}'.format(ssv_id, dtime))
-        try:
-            return b"".join(mesh[0])
-        except TypeError:  # contains str, not byte
-            return "".join(mesh[0])
+        return {'ind': mesh[0].tolist()}
 
     def ssv_vert(self, ssv_id):
         """
@@ -212,14 +209,11 @@ class SyConnBackend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
-        mesh = ssv._load_obj_mesh_compr("sv")
+        mesh = ssv.load_mesh("sv")
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh vertices after'
                          ' {:.2f}'.format(ssv_id, dtime))
-        try:
-            return b"".join(mesh[1])
-        except TypeError:  # contains str, not byte
-            return "".join(mesh[1])
+        return {'vert': mesh[1].tolist()}
 
     def ssv_skeleton(self, ssv_id):
         """
@@ -235,12 +229,14 @@ class SyConnBackend(object):
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
-                                        global_params.config['compartments']['dist_axoness_averaging'])
+        pred_key_ax = "{}_avg{}".format(ssv.config['compartments']['view_properties_semsegax']['semseg_key'],
+                                        ssv.config['compartments']['dist_axoness_averaging'])
+        pred_key_sp = ssv.config['spines']['semseg2mesh_spines']['semseg_key']
         keys = [
                 global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                 pred_key_ax,
                 pred_key_ax + '_comp_maj',
+                pred_key_sp,
                 'myelin_avg10000',  # TODO: use global_params.py value !
                 'myelin']  # TODO: use global_params.py value !
         for k in keys:
@@ -261,22 +257,19 @@ class SyConnBackend(object):
         :return: dict
         """
         # not needed for K
-        return b""
+        return {'norm': []}
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
-        mesh = ssv._load_obj_mesh_compr("sv")
+        mesh = ssv.mesh("sv")
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh normals after'
                          ' {:.2f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
-            return b""
-        try:
-            return b"".join(mesh[2])
-        except TypeError:  # contains str, not byte
-            return "".join(mesh[2])
+            return {'norm': []}
+        return {'norm': mesh[2].tolist()}
 
     def ssv_obj_ind(self, ssv_id, obj_type):
         """
@@ -300,15 +293,11 @@ class SyConnBackend(object):
             except KeyError:
                 obj_type = "sj"
         # Now assumes all object meshes do already exist
-        _ = ssv.load_mesh(obj_type)
-        mesh = ssv._load_obj_mesh_compr(obj_type)
+        mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
-        try:
-            return b"".join(mesh[0])
-        except TypeError:  # contains str, not byte
-            return "".join(mesh[0])
+        return {'ind': mesh[0].tolist()}
 
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
@@ -332,15 +321,11 @@ class SyConnBackend(object):
             except KeyError:
                 obj_type = "sj"
         # if not existent, create mesh
-        _ = ssv.load_mesh(obj_type)
-        mesh = ssv._load_obj_mesh_compr(obj_type)
+        mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh vertices after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
-        try:
-            return b"".join(mesh[1])
-        except TypeError:  # contains str, not byte
-            return "".join(mesh[1])
+        return {'vert': mesh[1].tolist()}
 
     def ssv_obj_norm(self, ssv_id, obj_type):
         """
@@ -349,7 +334,7 @@ class SyConnBackend(object):
         :param obj_type: str
         :return: dict
         """
-        return b""
+        return {'norm': []}
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh normals'
                          ''.format(ssv_id, obj_type))
@@ -365,17 +350,13 @@ class SyConnBackend(object):
             except KeyError:
                 obj_type = "sj"
         # if not existent, create mesh
-        _ = ssv.load_mesh(obj_type)
-        mesh = ssv._load_obj_mesh_compr(obj_type)
+        mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh normals after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
-            return ""
-        try:
-            return b"".join(mesh[2])
-        except TypeError:  # contains str, not byte
-            return "".join(mesh[2])
+            return {'norm': []}
+        return {'norm': mesh[2].tolist()}
 
     def ssv_list(self):
         """
