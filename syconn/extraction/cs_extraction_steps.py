@@ -569,8 +569,7 @@ def _write_props_to_syn_thread(args):
                                    read_only=False, disable_locking=True)
         voxel_dc_store = VoxelStorage(vx_p, read_only=False, disable_locking=True)
 
-        # get dummy CS segmentation object to fetch attribute dictionary for this batch of object
-        # IDs
+        # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
         attr_p_cs = dummy_so_cs.attr_dict_path
         vx_p_cs = dummy_so_cs.voxel_path

@@ -532,7 +532,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     start = time.time()
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
-    n_jobs = int(min(2 * global_params.config.ncore_total, len(storage_location_ids)))
+    n_jobs = int(min(2 * global_params.config.ncore_total, len(storage_location_ids) / 2))
     multi_params = [(sv_id_block, n_folders_fs_sc, kd_organelle_paths)
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
@@ -566,7 +566,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     start = time.time()
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
-    n_jobs = int(max(2 * global_params.config.ncore_total, len(storage_location_ids) / 15))
+    n_jobs = int(max(2 * global_params.config.ncore_total, len(storage_location_ids) / 2))
     multi_params = [(sv_id_block, n_folders_fs, global_params.config.allow_mesh_gen_cells,
                      list(kd_organelle_paths.keys()))
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]

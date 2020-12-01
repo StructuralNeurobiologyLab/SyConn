@@ -39,10 +39,10 @@ if __name__ == '__main__':
     assert number_of_nodes == np.sum([v['state'] == 'idle' for v in node_states.values()])
     ncores_per_node = node_state['cpus']
     mem_per_node = node_state['memory']
-    ngpus_per_node = 2  # node_state currently does not contain the number of gpus for 'gres' resource
+    ngpus_per_node = node_state['gres']
     shape_j0251 = np.array([27119, 27350, 15494])
     # 10.5* for 4.9, *9 for 3.13, *7.5 for 1.81, *6 for 0.927, *4.5 for 0.391, *3 for 0.115 TVx
-    cube_size = (np.array([2048, 2048, 1024]) * 7.5).astype(np.int)
+    cube_size = (np.array([2048, 2048, 1024]) * 9).astype(np.int)
     # all for 10 TVx
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
