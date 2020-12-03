@@ -719,20 +719,33 @@ def restart_nodes_daemon():
     if process.returncode != 0:
         log_mp.error(f'Could not run gcloud compute instances stop command. Error: {err}')
         raise ValueError
+    log_mp.debug('Restart-slurm-nodes daemon running..')
     while True:
         node_states = nodestates_slurm()
         ixs = np.array(list(node_states.keys()))
         states = np.array(['down' in v['state'] for v in node_states.values()])
-        for ix in ixs[states]:
-            log_mp.debug(f'Restarting node "{cluster_name}{ix}".')
-            process = subprocess.Popen(f'gcloud compute instances stop {cluster_name}{ix} --zone {zone}', shell=True,
+        if np.sum(states) > 0:
+            node_ix_str = " ".join([f'{cluster_name}{ix}' for ix in ixs[states]])
+
+            log_mp.debug(f'Restarting {np.sum(states)} node(s): "{node_ix_str}".')
+            process = subprocess.Popen(f'gcloud compute instances stop {node_ix_str} --zone {zone}', shell=True,
                                        stdout=subprocess.PIPE)
             out, err = process.communicate()
             if process.returncode != 0:
                 log_mp.warning(f'Could not run "gcloud compute instances stop" command. Error: {err}')
-            process = subprocess.Popen(f'gcloud compute instances start {cluster_name}{ix} --zone {zone}', shell=True,
+            process = subprocess.Popen(f'gcloud compute instances start {node_ix_str} --zone {zone}', shell=True,
                                        stdout=subprocess.PIPE)
             out, err = process.communicate()
             if process.returncode != 0:
                 log_mp.warning(f'Could not run "gcloud compute instances start" command. Error: {err}')
+            time.sleep(30)  # wait additional 30 s to give slurm time to start and update status
+        states = np.array(['drain' in v['state'] for v in node_states.values()])
+        if np.sum(states) > 0:
+            nodenames = f'client[{",".join(ix.replace("client", "") for ix in ixs)}]'
+            process = subprocess.Popen(f'sudo scontrol update nodename={nodenames} state=RESUME', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "scontrol update" command. Error: {err}')
+            time.sleep(30)  # wait additional 30 s to give slurm time to start and update status
         time.sleep(30)

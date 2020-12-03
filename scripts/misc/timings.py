@@ -16,7 +16,7 @@ palette_ident = 'colorblind'
 scatter_size = None
 
 
-def adapt_ax_params(ax, ls=5):
+def adapt_ax_params(ax, ls=6):
     ax.tick_params(axis='x', which='both', labelsize=ls, direction='out',
                    length=4, width=3, right=False, top=False, pad=10, rotation=45)
     ax.tick_params(axis='y', which='both', labelsize=ls, direction='out',
@@ -286,8 +286,8 @@ def get_timing_plots(base_dir):
                                size=scatter_size)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
-        plt.xlim(0, plt.xlim()[1])
-        # plt.ylim(0, plt.ylim()[1])
+        # plt.xlim(0, plt.xlim()[1])
+        plt.ylim(0, plt.ylim()[1])
         axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
         adapt_ax_params(axes)
