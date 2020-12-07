@@ -74,13 +74,11 @@ if __name__ == '__main__':
               [False, False, False, True, True, True, True, True, True, True],
               [False, False, False, False, True, True, True, True, True, True],
               [False, False, False, False, False, False, False, True, True, True]]
-    stop_epochs = [500, 500, 1000, 2000, 2000, 2000, 2000, 2000, 2000, 2000]
+    stop_epochs = [1500, 1500, 2000, 3000, 3000, 3000, 3000, 3000, 3000, 3000]
 
-    for point_ix in [4]:
-        for context_ix in [4]:
+    for point_ix in range(len(points)):
+        for context_ix in range(len(contexts)):
             if not matrix[point_ix][context_ix]:
-                continue
-            if point_ix == 1 and context_ix < 3:
                 continue
 
             sample_num = points[point_ix]
@@ -106,8 +104,8 @@ if __name__ == '__main__':
             argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/dnh_matrix/',
                                      train_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/',
                                      sample_num=sample_num,
-                                     name=name + f'_1',
-                                     random_seed=1,
+                                     name=name + f'_3',
+                                     random_seed=3,
                                      class_num=3,
                                      train_transforms=[clouds.RandomVariation((-40, 40)),
                                                        clouds.RandomRotate(apply_flip=True),
@@ -122,7 +120,7 @@ if __name__ == '__main__':
                                      val_freq=30,
                                      features={'hc': np.array([1])},
                                      chunk_size=chunk_size,
-                                     stop_epoch=3,
+                                     stop_epoch=stop_epochs[context_ix],
                                      max_step_size=100000000,
                                      hybrid_mode=True,
                                      splitting_redundancy=5,
@@ -138,5 +136,5 @@ if __name__ == '__main__':
     batchjob_script(params, 'launch_neuronx_training', n_cores=10,
                     additional_flags='--mem=125000 --gres=gpu:1',
                     disable_batchjob=False, max_iterations=0,
-                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/dnh_trainings/',
-                    remove_jobfolder=False, overwrite=True)
+                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/dnh_trainings_2/',
+                    remove_jobfolder=False, overwrite=True, exclude_nodes=['wb02', 'wb03', 'wb04', 'wb05'])
