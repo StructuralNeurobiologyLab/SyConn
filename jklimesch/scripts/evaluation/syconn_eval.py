@@ -5,7 +5,8 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Jonathan Klimesch
 
-from typing import List, Tuple
+import numpy as np
+from typing import List, Tuple, Union
 from morphx.classes.pointcloud import PointCloud
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 
@@ -19,12 +20,15 @@ def get_preds(sso: SuperSegmentationObject, key: str):
     return PointCloud(vertices=verts, labels=preds)
 
 
-def replace_preds(sso: SuperSegmentationObject, base: str, replace: List[Tuple[int, str, List[Tuple[int, int]]]]):
+def replace_preds(sso: SuperSegmentationObject, base: Union[str, np.ndarray], replace: List[Tuple[int, str, List[Tuple[int, int]]]]):
     """
     Args:
         replace: (int, str, mappings) - In base, replace labels with int by labels from str, mapped by mappings.
     """
-    labels = sso.label_dict()[base]
+    if type(base) == str:
+        labels = sso.label_dict()[base]
+    else:
+        labels = base
     for item in replace:
         replace_labels = sso.label_dict()[item[1]]
         for mapping in item[2]:

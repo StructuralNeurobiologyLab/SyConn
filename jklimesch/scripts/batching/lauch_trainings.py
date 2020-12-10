@@ -67,6 +67,13 @@ if __name__ == '__main__':
 
     contexts = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]
     points = [512, 1024, 2048, 4096, 8192, 16384, 32768]
+    # matrix = [[True, True, True, True, True, True, True, True, True, True],
+    #           [True, True, True, True, True, True, True, True, True, True],
+    #           [False, True, True, True, True, True, True, True, True, True],
+    #           [False, False, True, True, True, True, True, True, True, True],
+    #           [False, False, False, True, True, True, True, True, True, True],
+    #           [False, False, False, False, True, True, True, True, True, True],
+    #           [False, False, False, False, False, False, False, True, True, True]]
     matrix = [[True, True, True, True, True, True, True, True, True, True],
               [True, True, True, True, True, True, True, True, True, True],
               [False, True, True, True, True, True, True, True, True, True],
@@ -76,65 +83,61 @@ if __name__ == '__main__':
               [False, False, False, False, False, False, False, True, True, True]]
     stop_epochs = [1500, 1500, 2000, 3000, 3000, 3000, 3000, 3000, 3000, 3000]
 
-    for point_ix in range(len(points)):
-        for context_ix in range(len(contexts)):
-            if not matrix[point_ix][context_ix]:
-                continue
+    for i in [1, 2]:
+        for sample_num in [512, 1024]:
+            for chunk_size in [1000]:
 
-            sample_num = points[point_ix]
-            chunk_size = contexts[context_ix] * 1000
+                architecture = architecture_large
+                if sample_num < 1024:
+                    architecture = architecture_512
+                if sample_num < 2048:
+                    architecture = architecture_1024
+                if sample_num == 2048:
+                    architecture = architecture_2048
 
-            architecture = architecture_large
-            if sample_num < 1024:
-                architecture = architecture_512
-            if sample_num < 2048:
-                architecture = architecture_1024
-            if sample_num == 2048:
-                architecture = architecture_2048
+                batch_size = 4
+                if sample_num <= 16384:
+                    batch_size = 8
+                if sample_num <= 8192:
+                    batch_size = 16
+                if sample_num < 2048:
+                    batch_size = 32
 
-            batch_size = 4
-            if sample_num <= 16384:
-                batch_size = 8
-            if sample_num <= 8192:
-                batch_size = 16
-            if sample_num < 2048:
-                batch_size = 32
-
-            name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
-            argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/paper/dnh_matrix/',
-                                     train_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/',
-                                     sample_num=sample_num,
-                                     name=name + f'_3',
-                                     random_seed=3,
-                                     class_num=3,
-                                     train_transforms=[clouds.RandomVariation((-40, 40)),
-                                                       clouds.RandomRotate(apply_flip=True),
-                                                       clouds.Center(),
-                                                       clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
-                                                       clouds.RandomScale(distr_scale=0.1, distr='uniform'),
-                                                       clouds.Center()],
-                                     batch_size=batch_size,
-                                     input_channels=1,
-                                     use_val=True,
-                                     val_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/evaluation/',
-                                     val_freq=30,
-                                     features={'hc': np.array([1])},
-                                     chunk_size=chunk_size,
-                                     stop_epoch=stop_epochs[context_ix],
-                                     max_step_size=100000000,
-                                     hybrid_mode=True,
-                                     splitting_redundancy=5,
-                                     norm_type='gn',
-                                     label_remove=[2],
-                                     label_mappings=[(2, 0), (5, 1), (6, 2)],
-                                     val_label_mappings=[(5, 1), (6, 2)],
-                                     val_label_remove=[-2, 1, 2, 3, 4],
-                                     architecture=architecture,
-                                     target_names=['dendrite', 'neck', 'head'])
-            params.append([argscont])
+                name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
+                argscont = ArgsContainer(save_root='/u/jklimesch/working_dir/batchjobs/',
+                                         train_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/',
+                                         sample_num=sample_num,
+                                         name=name + f'_{i}',
+                                         random_seed=i,
+                                         class_num=3,
+                                         train_transforms=[clouds.RandomVariation((-40, 40)),
+                                                           clouds.RandomRotate(apply_flip=True),
+                                                           clouds.Center(),
+                                                           clouds.ElasticTransform(res=(40, 40, 40), sigma=(6, 6)),
+                                                           clouds.RandomScale(distr_scale=0.1, distr='uniform'),
+                                                           clouds.Center()],
+                                         batch_size=batch_size,
+                                         input_channels=1,
+                                         use_val=True,
+                                         val_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/evaluation/',
+                                         val_freq=30,
+                                         features={'hc': np.array([1])},
+                                         chunk_size=chunk_size,
+                                         stop_epoch=1500,
+                                         max_step_size=100000000,
+                                         hybrid_mode=True,
+                                         splitting_redundancy=5,
+                                         norm_type='gn',
+                                         label_remove=[2],
+                                         label_mappings=[(2, 0), (5, 1), (6, 2)],
+                                         val_label_mappings=[(5, 1), (6, 2)],
+                                         val_label_remove=[-2, 1, 2, 3, 4],
+                                         architecture=architecture,
+                                         target_names=['dendrite', 'neck', 'head'])
+                params.append([argscont])
 
     batchjob_script(params, 'launch_neuronx_training', n_cores=10,
                     additional_flags='--mem=125000 --gres=gpu:1',
                     disable_batchjob=False, max_iterations=0,
-                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/dnh_trainings_2/',
+                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/dnh_trainings_8/',
                     remove_jobfolder=False, overwrite=True, exclude_nodes=['wb02', 'wb03', 'wb04', 'wb05'])

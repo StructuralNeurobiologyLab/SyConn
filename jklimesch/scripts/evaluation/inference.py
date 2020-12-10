@@ -5,7 +5,6 @@ import torch
 import math
 import time
 import pickle as pkl
-from tqdm import tqdm
 from typing import List, Tuple
 from collections import defaultdict
 from morphx.preprocessing import splitting
@@ -19,11 +18,16 @@ from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from lightconvpoint.utils import get_network
 
 
-def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str, model_args_p: str, pred_key: str,
-                redundancy: int, border_exclusion: int = 0, v3: bool = True):
+def predict_sso_thread(kwargs):
+    predict_sso(**kwargs)
+
+
+def predict_sso(sso_ids: List[int], wd: str, model_p: str, model_args_p: str, pred_key: str,
+                redundancy: int, border_exclusion: int = 0, v3: bool = True, out_p: str = None):
     model_p = os.path.expanduser(model_p)
     model_args_p = os.path.expanduser(model_args_p)
 
+    ssd = SuperSegmentationDataset(working_dir=wd)
     argscont = ArgsContainer().load_from_pkl(model_args_p)
 
     if argscont.use_cuda:
@@ -76,7 +80,7 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
         parts[key] = (voxel_dc[key], feats[key])
 
     start_total = time.time()
-    for sso_id in tqdm(sso_ids):
+    for sso_id in sso_ids:
         sso = ssd.get_super_segmentation_object(sso_id)
         vert_dc = {}
         voxel_idcs = {}
@@ -114,7 +118,7 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
 
         transform = clouds.Compose(argscont.val_transforms)
         samples = []
-        for ix, node_arr in enumerate(tqdm(node_arrs)):
+        for ix, node_arr in enumerate(node_arrs):
             # vertices which correspond to nodes in node_arr
             sample, idcs_sub = objects.extract_cloud_subset(hc, node_arr)
             # random subsampling of the corresponding vertices
@@ -166,9 +170,16 @@ def predict_sso(sso_ids: List[int], ssd: SuperSegmentationDataset, model_p: str,
         sso_vertices = sso.mesh[1].reshape((-1, 3))
         sso_preds = np.ones((len(sso_vertices), 1)) * -1
         sso_preds[voxel_idcs['sv']] = pred_labels
-        ld = sso.label_dict('vertex')
-        ld[pred_key] = sso_preds
-        ld.push()
+
+        if out_p is None:
+            ld = sso.label_dict('vertex')
+            ld[pred_key] = sso_preds
+            ld.push()
+        else:
+            if not os.path.exists(out_p):
+                os.makedirs(out_p)
+            with open(os.path.join(out_p, str(sso_id) + '.pkl'), 'wb') as f:
+                pkl.dump(sso_preds, f)
     return time.time() - start_total
 
 
@@ -207,6 +218,7 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 if __name__ == '__main__':
     base = os.path.expanduser('~/working_dir/paper/dnh_model_comparison/')
+
     path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
                  ('2020_11_08_2000_2048_cp_cp_q', 90),
                  ('2020_11_08_2000_2048_cp_cp_q_2', 90),
@@ -244,8 +256,7 @@ if __name__ == '__main__':
             base_path = base + path[0] + '/'
             m_path = base_path + f'models/state_dict_e{path[1]}.pth'
             argscont_path = base_path + 'argscont.pkl'
-            duration = predict_sso([141995, 11833344, 28410880, 28479489],
-                                   SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/"),
+            duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
                                    m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=1000)
             if path[0] in durations:
                 durations[path[0]].append(duration)
