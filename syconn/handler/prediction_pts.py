@@ -553,6 +553,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                             batchsize: int, npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None, seeded: bool = False,
                             use_ctx_sampling: bool = True, redundancy: int = 20, map_myelin: bool = False,
+                            use_syntype: bool = True, cellshape_only: bool = False,
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -572,6 +573,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             until `npoints` have been collected.
         redundancy: Number of samples generated from each SSV.
         map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
+        use_syntype:
+        cellshape_only:
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -579,10 +582,18 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     feat_dc = dict(pts_feat_dict)
-    if 'syn_ssv' in feat_dc:
-        del feat_dc['syn_ssv']
-    if not map_myelin:
-        del feat_dc['sv_myelin']
+    if cellshape_only:
+        feat_dc = dict(sv=feat_dc['sv'])
+    else:
+        if use_syntype:
+            if 'syn_ssv' in feat_dc:
+                del feat_dc['syn_ssv']
+        else:
+            del feat_dc['syn_ssv_sym']
+            del feat_dc['syn_ssv_asym']
+            assert 'syn_ssv' in feat_dc
+        if not map_myelin:
+            del feat_dc['sv_myelin']
     for ssv_id in ssv_ids:
         redundancy_ssv = int(redundancy)
         n_batches = int(np.ceil(redundancy_ssv / batchsize))
@@ -660,7 +671,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None, train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, use_ctx_sampling: bool = True, cache: Optional[bool] = True,
-                      map_myelin: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+                      map_myelin: bool = False, use_syntype: bool = True, cellshape_only: bool = False
+                      ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     per-cell point-to-scalar tasks, e.g. cell type prediction.
@@ -682,20 +694,27 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             until `npoints` have been collected.
         cache: Cache loaded SSVs.
         map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
+        use_syntype:
+        cellshape_only:
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
     """
-    # TODO: refactor s.t. redundancy is passed together with the SSV ID; ensure that this call produces all batches of
-    # one cell!
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
-    # TODO: add `use_syntype kwarg and cellshape only
     feat_dc = dict(pts_feat_dict)
-    if 'syn_ssv' in feat_dc:
-        del feat_dc['syn_ssv']
-    if not map_myelin:
-        del feat_dc['sv_myelin']
+    if cellshape_only:
+        feat_dc = dict(sv=feat_dc['sv'])
+    else:
+        if use_syntype:
+            if 'syn_ssv' in feat_dc:
+                del feat_dc['syn_ssv']
+        else:
+            del feat_dc['syn_ssv_sym']
+            del feat_dc['syn_ssv_asym']
+            assert 'syn_ssv' in feat_dc
+        if not map_myelin:
+            del feat_dc['sv_myelin']
     if cache is None:
         cache = train
     if not train:
@@ -1695,6 +1714,10 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         n_classes = 11
     if 'myelin' in mpath:
         n_inputs += 1
+    if '_noSyntype' in mdir:
+        n_inputs -= 1
+    if '_cellshapeOnly' in mdir:
+        n_inputs = 1
     try:
         m = ModelNet40(n_inputs, n_classes, **mkwargs).to(device)
     except RuntimeError as e:
@@ -1817,8 +1840,8 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         ssd_kwargs:
         mpath:
         ssv_ids:
-        da_equals_tan:
-        pred_key:
+        da_equals_tan: Only relevant for j0126.
+        pred_key: Key used to store predictions in `attr_dict` of cell SSOs.
         show_progress: Show progress bar.
 
     Returns:
@@ -1829,12 +1852,19 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
+    cellshape_only = False
+    use_syntype = True
     if 'myelin' in mpath:
         map_myelin = True
     else:
         map_myelin = False
+    if '_noSyntype' in mdir:
+        use_syntype = False
+    if '_cellshapeOnly' in mdir:
+        cellshape_only = True
     default_kwargs = dict(nloader=8, npredictor=4, bs=10, npostproc=2,
-                          loader_kwargs=dict(redundancy=20, map_myelin=map_myelin),
+                          loader_kwargs=dict(redundancy=20, map_myelin=map_myelin, use_syntype=use_syntype,
+                                             cellshape_only=cellshape_only),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)

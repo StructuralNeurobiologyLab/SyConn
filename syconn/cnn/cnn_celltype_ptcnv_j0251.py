@@ -31,6 +31,7 @@ parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
 parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--use_syntype', default=True, help='Use synapse type', type=bool)
+parser.add_argument('--cellshape_only', default=False, help='Use only cell surface points', type=bool)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -62,6 +63,7 @@ cval = args.cval
 ctx = args.ctx
 use_bias = args.use_bias
 use_syntype = args.use_syntype
+cellshape_only = args.cellshape_only
 
 lr = 5e-4
 lr_stepsize = 100
@@ -70,7 +72,6 @@ max_steps = 500000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = False
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
@@ -83,10 +84,11 @@ if name is None:
     name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
-    if not use_syntype:
-        name += '_noSyntype'
-    if use_myelin:
-        name += '_myelin'
+    else:
+        if not use_syntype:
+            name += '_noSyntype'
+        if use_myelin:
+            name += '_myelin'
 if onehot:
     input_channels = 4
     if use_syntype:
@@ -96,6 +98,8 @@ if onehot:
 else:
     input_channels = 1
     name += '_flatinp'
+if cellshape_only:
+    input_channels = 1
 if use_norm is False:
     name += '_noBN'
     if track_running_stats:

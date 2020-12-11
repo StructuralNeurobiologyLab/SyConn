@@ -74,10 +74,7 @@ if elektronn3_avail:
                 use_syntype: If True, uses different features for symmetric and asymmetric
                     synapses,
             """
-            # TODO: built in cellshape_only, use_syntype, onehot again
-            if not use_syntype or cellshape_only or not onehot:
-                raise NotImplementedError
-            if not (onehot and use_syntype and not cellshape_only):
+            if not onehot:
                 raise NotImplementedError
             super().__init__()
             if ssd_kwargs is not None:
@@ -193,11 +190,13 @@ if elektronn3_avail:
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
                     train=True, draw_local=True, cache=False, map_myelin=self.map_myelin,
+                    use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
                     draw_local_dist=draw_local_dist)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
+                    use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
                     train=True, cache=False, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
@@ -281,8 +280,8 @@ if elektronn3_avail:
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
             assert self.train, "Other mode than 'train' is not implemented."
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v3.csv"
-            df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
+            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
+            df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
                 ixs, cnt = np.unique(ssv_ids, return_counts=True)
@@ -294,9 +293,9 @@ if elektronn3_avail:
                 kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
                 for ii, (train_ixs, test_ixs) in enumerate(kfold.split(ssv_ids, y=ssv_labels)):
                     if ii == self.cv_val:
-                        self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid:': ssv_ids[test_ixs]}
+                        self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid': ssv_ids[test_ixs]}
             else:
-                self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}  # use all data
+                self.splitting_dict = {'train': ssv_ids, 'valid': ssv_ids}  # use all data
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.sso_ids = self.splitting_dict['train']
             for k, v in self.splitting_dict.items():

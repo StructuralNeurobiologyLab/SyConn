@@ -2176,6 +2176,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
     Notes:
         * 'spine_headvol' in µm^3.
+        * Segmentation mask is downsampled to z voxel size. i.e. a volume of shape (50, 50, 25) with (10, 10, 20) nm^3
+          voxels will be reduced to (25, 25, 25) voxels.
         * Requires a predicted cell mesh, i.e. 'spiness' must be present in ``label_dict('vertex')['spiness']``.
         * If the results have to be stored, call ``sso.save_attr_dict()``
 
