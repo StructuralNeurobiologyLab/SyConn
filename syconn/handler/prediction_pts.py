@@ -1714,9 +1714,9 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         n_classes = 11
     if 'myelin' in mpath:
         n_inputs += 1
-    if '_noSyntype' in mdir:
+    if '_noSyntype' in mpath:
         n_inputs -= 1
-    if '_cellshapeOnly' in mdir:
+    if '_cellshapeOnly' in mpath:
         n_inputs = 1
     try:
         m = ModelNet40(n_inputs, n_classes, **mkwargs).to(device)

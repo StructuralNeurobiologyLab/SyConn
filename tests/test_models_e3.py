@@ -13,6 +13,7 @@ pytest.mark.filterwarnings("ignore:Initialized working directory without existin
 def _setup_working_dir():
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
+                     os.path.expanduser('~/SyConnData/'),
                      os.path.expanduser('~/SyConn/')]:
         m_dir = curr_dir + '/models/'
         if os.path.isdir(m_dir):

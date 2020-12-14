@@ -296,6 +296,7 @@ if elektronn3_avail:
                         self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid': ssv_ids[test_ixs]}
             else:
                 self.splitting_dict = {'train': ssv_ids, 'valid': ssv_ids}  # use all data
+                log_cnn.critical(f'Using all GT data for training!')
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.sso_ids = self.splitting_dict['train']
             for k, v in self.splitting_dict.items():

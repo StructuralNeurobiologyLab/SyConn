@@ -132,126 +132,131 @@ if __name__ == '__main__':
     int2str_label = {ii: int2str_converter(ii, 'ctgt_j0251_v2') for ii in range(nclasses)}
     str2int_label = {int2str_converter(ii, 'ctgt_j0251_v2'): ii for ii in range(nclasses)}
     overwrite = False
-    n_runs = 1
+    n_runs = 3
+
     state_dict_fname = 'state_dict.pth'
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
-    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/'
-    base_dir = f'{bbase_dir}//celltype_pts25000_ctx20000/'
-    mfold = base_dir + '/celltype_CV{}/celltype_pts_j0251v2_scale2000_nb25000_ctx20000_relu_myelin_gn_CV{}_eval{}/'
-    for run in range(n_runs):
-        for CV in range(ncv_min, n_cv):
-            mpath = f'{mfold.format(CV, CV, run)}/{state_dict_fname}'
-            assert os.path.isfile(mpath), f"'{mpath}' not found."
+    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/OLD_4Dev2020/'
 
-    # prepare GT
-    check_train_ids = set()
-    check_valid_ids = []
-    for CV in range(ncv_min, n_cv):
-        ccd = CellCloudDataJ0251(cv_val=CV)
-        check_train_ids.update(set(ccd.splitting_dict['train']))
-        check_valid_ids.extend(list(ccd.splitting_dict['valid']))
-    assert len(check_train_ids) == len(check_valid_ids)
-    assert np.max(np.unique(check_valid_ids, return_counts=True)[1]) == 1
-    target_names = [int2str_label[kk] for kk in range(nclasses)]
-    csv_p = ccd.csv_p
-    df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
-    ssv_ids = df[:, 0].astype(np.uint)
-    if len(np.unique(ssv_ids)) != len(ssv_ids):
-        raise ValueError('Multi-usage of IDs!')
-    str_labels = df[:, 1]
-    ssv_labels = np.array([str2int_label[el] for el in str_labels], dtype=np.uint16)
-    ssd_kwargs = dict(working_dir=wd)
-    ssd = SuperSegmentationDataset(**ssd_kwargs)
-    mkwargs, loader_kwargs = get_pt_kwargs(mfold)
-    npoints = loader_kwargs['npoints']
-    for redundancy in [50, 1, 20, 10, 100]:
-        perf_res_dc = collections.defaultdict(list)  # collect for each run
+    for ctx, npts in [[20000, 25000], [20000, 50000], [20000, 75000], [20000, 5000], [4000, 25000]]:
+        scale = ctx // 10
+        base_dir = f'{bbase_dir}//celltype_pts{npts}_ctx{ctx}/'
+        mfold = base_dir + '/celltype_CV{}/celltype_pts_j0251v2_scale{}_nb{}_ctx{}_relu_myelin_gn_CV{}_eval{}/'
         for run in range(n_runs):
-            log = config.initialize_logging(f'log_eval{run}_sp{npoints}k_redun{redundancy}', base_dir)
-            log.info(f'\nStarting evaluation of model with npoints={npoints}, eval. run={run}, '
-                     f'model_kwargs={mkwargs}.\n'
-                     f'GT data at wd={wd}\n')
             for CV in range(ncv_min, n_cv):
-                ccd = CellCloudDataJ0251(cv_val=CV)
-                split_dc = ccd.splitting_dict
-                mpath = f'{mfold.format(CV, CV, run)}/{state_dict_fname}'
-                assert os.path.isfile(mpath)
-                cellshape_only = False
-                use_syntype = True
-                if 'myelin' in mpath:
-                    map_myelin = True
-                else:
-                    map_myelin = False
-                if '_noSyntype' in mdir:
-                    use_syntype = False
-                if '_cellshapeOnly' in mdir:
-                    cellshape_only = True
-                mkwargs['mpath'] = mpath
-                log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
-                fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl'
-                if overwrite or not os.path.isfile(fname_pred):
-                    res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, bs=10,
-                                                 nloader=10, device='cuda', seeded=True, ssv_ids=split_dc['valid'],
-                                                 npredictor=4, use_test_aug=False,
-                                                 loader_kwargs={'redundancy': redundancy, 'map_myelin': map_myelin,
-                                                                'use_syntype': use_syntype,
-                                                                'cellshape_only': cellshape_only},
-                                                 **loader_kwargs)
-                    basics.write_obj2pkl(fname_pred, res_dc)
-            valid_ids, valid_ls, valid_preds, valid_certainty = [], [], [], []
+                mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
+                assert os.path.isfile(mpath), f"'{mpath}' not found."
 
-            for CV in range(ncv_min, n_cv):
-                ccd = CellCloudDataJ0251(cv_val=CV)
-                split_dc = ccd.splitting_dict
-                mpath = f'{mfold.format(CV, CV, run)}/{state_dict_fname}'
-                res_dc = basics.load_pkl2obj(f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl')
-                valid_ids_local, valid_ls_local, valid_preds_local = [], [], []
-                for ix, curr_id in enumerate(ssv_ids):
-                    if curr_id not in split_dc['valid']:
-                        continue
-                    curr_l = ssv_labels[ix]
-                    valid_ls.append(curr_l)
-                    curr_pred, curr_cert = res_dc[curr_id]
-                    valid_preds.append(curr_pred)
-                    valid_certainty.append(curr_cert)
-                    valid_ids.append(curr_id)
-            valid_preds = np.array(valid_preds)
-            valid_certainty = np.array(valid_certainty)
-            valid_ls = np.array(valid_ls)
-            valid_ids = np.array(valid_ids)
-            log.info(f'Final prediction result for run {run} with {loader_kwargs} and {mkwargs}.')
-            class_rep = classification_report(valid_ls, valid_preds, labels=np.arange(nclasses), target_names=target_names,
-                                              output_dict=True)
-            for ii, k in enumerate(target_names):
-                perf_res_dc[f'fscore_class_{ii}'].append(class_rep[k]['f1-score'])
-            perf_res_dc['fscore_macro'].append(f1_score(valid_ls, valid_preds, average='macro'))
-            perf_res_dc['accuracy'].append(accuracy_score(valid_ls, valid_preds))
-            perf_res_dc['cert_correct'].append(valid_certainty[valid_preds == valid_ls])
-            perf_res_dc['cert_incorrect'].append(valid_certainty[valid_preds != valid_ls])
-            log.info(classification_report(valid_ls, valid_preds, labels=np.arange(nclasses), target_names=target_names))
-            log.info(confusion_matrix(valid_ls, valid_preds, labels=np.arange(nclasses)))
-            log.info(f'Mean certainty correct:\t{np.mean(valid_certainty[valid_preds == valid_ls])}\n'
-                     f'Mean certainty incorrect:\t{np.mean(valid_certainty[valid_preds != valid_ls])}')
-            log.info(f'Incorrectly predicted IDs (ID, label, prediction): '
-                     f'{[(ix, int2str_label[label], int2str_label[pred]) for ix, label, pred in zip(valid_ids[valid_preds != valid_ls], valid_ls[valid_preds != valid_ls], valid_preds[valid_preds != valid_ls])]}')
-        # plot everything
-        perf_res_dc = dict(perf_res_dc)
-        perf_res_dc['model_tag'] = f'ctx{loader_kwargs["ctx_size"]}_nb{npoints}_red{redundancy}'
-        basics.write_obj2pkl(f"{base_dir}/redun{redundancy}_prediction_results.pkl", perf_res_dc)
-        fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
-                                 [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
-        labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
-                                 np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
+        # prepare GT
+        check_train_ids = set()
+        check_valid_ids = []
+        for CV in range(ncv_min, n_cv):
+            ccd = CellCloudDataJ0251(cv_val=CV)
+            check_train_ids.update(set(ccd.splitting_dict['train']))
+            check_valid_ids.extend(list(ccd.splitting_dict['valid']))
+        assert len(check_train_ids) == len(check_valid_ids)
+        assert np.max(np.unique(check_valid_ids, return_counts=True)[1]) == 1
+        target_names = [int2str_label[kk] for kk in range(nclasses)]
+        csv_p = ccd.csv_p
+        df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
+        ssv_ids = df[:, 0].astype(np.uint)
+        if len(np.unique(ssv_ids)) != len(ssv_ids):
+            raise ValueError('Multi-usage of IDs!')
+        str_labels = df[:, 1]
+        ssv_labels = np.array([str2int_label[el] for el in str_labels], dtype=np.uint16)
+        ssd_kwargs = dict(working_dir=wd)
+        ssd = SuperSegmentationDataset(**ssd_kwargs)
+        for redundancy in [1, 10, 20, 50]:
+            perf_res_dc = collections.defaultdict(list)  # collect for each run
+            for run in range(n_runs):
+                log = config.initialize_logging(f'log_eval{run}_sp{npts}k_redun{redundancy}', base_dir)
+                log.info(f'\nStarting evaluation of model with npoints={npts}, eval. run={run}.\n'
+                         f'GT data at wd={wd}\n')
+                for CV in range(ncv_min, n_cv):
+                    mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
+                    assert os.path.isfile(mpath)
+                    mkwargs, loader_kwargs = get_pt_kwargs(mpath)
+                    assert loader_kwargs['npoints'] == npts
+                    log.info(f'model_kwargs={mkwargs}')
+                    ccd = CellCloudDataJ0251(cv_val=CV)
+                    split_dc = ccd.splitting_dict
+                    cellshape_only = False
+                    use_syntype = True
+                    if 'myelin' in mpath:
+                        map_myelin = True
+                    else:
+                        map_myelin = False
+                    if '_noSyntype' in mpath:
+                        use_syntype = False
+                    if '_cellshapeOnly' in mpath:
+                        cellshape_only = True
+                    mkwargs['mpath'] = mpath
+                    log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
+                    fname_pred = f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_{run}_10fold_PRED.pkl'
+                    if overwrite or not os.path.isfile(fname_pred):
+                        res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, bs=10,
+                                                     nloader=10, device='cuda', seeded=True, ssv_ids=split_dc['valid'],
+                                                     npredictor=4, use_test_aug=False,
+                                                     loader_kwargs={'redundancy': redundancy, 'map_myelin': map_myelin,
+                                                                    'use_syntype': use_syntype,
+                                                                    'cellshape_only': cellshape_only},
+                                                     **loader_kwargs)
+                        basics.write_obj2pkl(fname_pred, res_dc)
+                valid_ids, valid_ls, valid_preds, valid_certainty = [], [], [], []
 
-        df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
-        create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
-                       size=10)
+                for CV in range(ncv_min, n_cv):
+                    ccd = CellCloudDataJ0251(cv_val=CV)
+                    split_dc = ccd.splitting_dict
+                    mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
+                    res_dc = basics.load_pkl2obj(f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl')
+                    res_dc = dict(res_dc)  # convert to standard dict
+                    valid_ids_local, valid_ls_local, valid_preds_local = [], [], []
+                    for ix, curr_id in enumerate(ssv_ids):
+                        if curr_id not in split_dc['valid']:
+                            continue
+                        curr_l = ssv_labels[ix]
+                        valid_ls.append(curr_l)
+                        curr_pred, curr_cert = res_dc[curr_id]
+                        valid_preds.append(curr_pred)
+                        valid_certainty.append(curr_cert)
+                        valid_ids.append(curr_id)
+                valid_preds = np.array(valid_preds)
+                valid_certainty = np.array(valid_certainty)
+                valid_ls = np.array(valid_ls)
+                valid_ids = np.array(valid_ids)
+                log.info(f'Final prediction result for run {run} with {loader_kwargs} and {mkwargs}.')
+                class_rep = classification_report(valid_ls, valid_preds, labels=np.arange(nclasses), target_names=target_names,
+                                                  output_dict=True)
+                for ii, k in enumerate(target_names):
+                    perf_res_dc[f'fscore_class_{ii}'].append(class_rep[k]['f1-score'])
+                perf_res_dc['fscore_macro'].append(f1_score(valid_ls, valid_preds, average='macro'))
+                perf_res_dc['accuracy'].append(accuracy_score(valid_ls, valid_preds))
+                perf_res_dc['cert_correct'].append(valid_certainty[valid_preds == valid_ls])
+                perf_res_dc['cert_incorrect'].append(valid_certainty[valid_preds != valid_ls])
+                log.info(classification_report(valid_ls, valid_preds, labels=np.arange(nclasses), target_names=target_names))
+                log.info(confusion_matrix(valid_ls, valid_preds, labels=np.arange(nclasses)))
+                log.info(f'Mean certainty correct:\t{np.mean(valid_certainty[valid_preds == valid_ls])}\n'
+                         f'Mean certainty incorrect:\t{np.mean(valid_certainty[valid_preds != valid_ls])}')
+                log.info(f'Incorrectly predicted IDs (ID, label, prediction): '
+                         f'{[(ix, int2str_label[label], int2str_label[pred]) for ix, label, pred in zip(valid_ids[valid_preds != valid_ls], valid_ls[valid_preds != valid_ls], valid_preds[valid_preds != valid_ls])]}')
+            # plot everything
+            perf_res_dc = dict(perf_res_dc)
+            perf_res_dc['model_tag'] = f'ctx{loader_kwargs["ctx_size"]}_nb{npoints}_red{redundancy}'
+            basics.write_obj2pkl(f"{base_dir}/redun{redundancy}_prediction_results.pkl", perf_res_dc)
+            fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
+                                     [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
+            labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
+                                     np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
 
-        cert_correct = np.concatenate(perf_res_dc['cert_correct'])
-        cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
-        df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
-                                    'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
-        create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
-                       add_boxplot=True, size=4)
-    plot_performance_summary_redun(base_dir)
-    plot_performance_summary_models(bbase_dir)
+            df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
+            create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
+                           size=10)
+
+            cert_correct = np.concatenate(perf_res_dc['cert_correct'])
+            cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
+            df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
+                                        'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
+            create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
+                           add_boxplot=True, size=4)
+        plot_performance_summary_redun(base_dir)
+        plot_performance_summary_models(bbase_dir)
