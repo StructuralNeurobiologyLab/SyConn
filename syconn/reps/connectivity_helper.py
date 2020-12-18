@@ -6,7 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import time
 from logging import Logger
-from typing import Optional
+from typing import Optional, Union
 
 import matplotlib
 import networkx as nx
@@ -29,6 +29,21 @@ def cs_id_to_partner_ids_vec(cs_ids):
     sv_ids = np.concatenate((sv_ids[:, None], (cs_ids - np.left_shift(sv_ids, 32))[:, None]),
                             axis=1)
     return sv_ids
+
+
+def cs_id_to_partner_inverse(partner_ids: Union[np.ndarray, list]) -> int:
+    """
+    Input permutation invariant transformation to bit-shift-based ID, which is used for `syn` and `cs`
+    :class:`~syconn.reps.segmentation.SegmentationObject`.
+
+    Args:
+        partner_ids: :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` IDs.
+
+    Returns:
+        Contact site or synapse fragment ID.
+    """
+    partner_ids = np.sort(partner_ids).astype(np.uint32)
+    return (partner_ids[0] << 32) + partner_ids[1]
 
 
 def connectivity_to_nx_graph(cd_dict):

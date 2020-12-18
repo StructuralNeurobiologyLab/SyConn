@@ -28,7 +28,7 @@ class AttributeDict(StorageClass):
     """
 
     def __init__(self, inp_p, **kwargs):
-        super(AttributeDict, self).__init__(inp_p, **kwargs)
+        super().__init__(inp_p, **kwargs)
 
     def __getitem__(self, item):
         try:
@@ -56,7 +56,7 @@ class CompressedStorage(StorageClass):
     """
 
     def __init__(self, inp: str, **kwargs):
-        super(CompressedStorage, self).__init__(inp, **kwargs)
+        super().__init__(inp, **kwargs)
 
     def __getitem__(self, item: Union[int, str]):
         try:
@@ -99,7 +99,7 @@ class VoxelStorageL(StorageClass):
     """
 
     def __init__(self, inp: str, **kwargs):
-        super(VoxelStorageL, self).__init__(inp, **kwargs)
+        super().__init__(inp, **kwargs)
 
     def __getitem__(self, item: Union[int, str]):
         """
@@ -255,15 +255,13 @@ class VoxelStorageDyn(CompressedStorage):
             old_p = self._dc_intern['meta']['voxeldata_path']
             new_p = voxeldata_path
             if old_p != new_p:
-                log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorag'
-                                 'eDyn` object (stored at "{}") '
+                log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorageDyn` object (stored at "{}") '
                                  'from `{}` to `{}`.'.format(inp, old_p, new_p))
                 self._dc_intern['meta']['voxeldata_path'] = voxeldata_path
         voxeldata_path = self._dc_intern['meta']['voxeldata_path']
         if voxel_mode:
             if voxeldata_path is None:
-                msg = '`voxel_mode` is True but no path to' \
-                      ' voxeldata given / found.'
+                msg = '`voxel_mode` is True but no path to voxeldata given / found.'
                 log_backend.error(msg)
                 raise ValueError(msg)
             kd = kd_factory(voxeldata_path)
@@ -271,8 +269,7 @@ class VoxelStorageDyn(CompressedStorage):
 
     def __setitem__(self, key: int, value: Any):
         if self.voxel_mode:
-            raise RuntimeError('`VoxelStorageDyn.__setitem__` may only '
-                               'be used when `voxel_mode=False`.')
+            raise RuntimeError('`VoxelStorageDyn.__setitem__` may only be used when `voxel_mode=False`.')
         else:
             return super().__setitem__(key, value)
 
@@ -283,10 +280,9 @@ class VoxelStorageDyn(CompressedStorage):
             for bb in bbs:  # iterate over all bounding boxes
                 size = bb[1] - bb[0]
                 off = bb[0]
-                curr_mask = self.voxeldata.load_seg(
-                    size=size, offset=off, mag=1) == item
+                curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
                 res.append(curr_mask.swapaxes(0, 2))
-            return res, bbs[:, 0]  # (N, 3 --> all offset
+            return res, bbs[:, 0]  # (N, 3) --> all offset
         else:
             return super().__getitem__(item)
 
@@ -350,11 +346,14 @@ class VoxelStorageDyn(CompressedStorage):
         """
         bin_arrs, block_offsets = self[item]
         min_off = np.min(block_offsets, axis=0)
-        size = np.max(block_offsets, axis=0) - min_off
+        block_extents = np.array([off + np.array(bin_arr.shape) for bin_arr, off in zip(bin_arrs, block_offsets)],
+                                 dtype=np.int)
+        max_extent = np.max(block_extents, axis=0)
+        size = max_extent - min_off
         block_offsets -= min_off
-        voxel_arr = np.zeros(size, dtype=np.uint8)
+        voxel_arr = np.zeros(size, dtype=np.bool)
         for bin_arr, off in zip(bin_arrs, block_offsets):
-            sh = bin_arr.shape
+            sh = off + np.array(bin_arr.shape, dtype=np.int)
             voxel_arr[off[0]:sh[0], off[1]:sh[1], off[2]:sh[2]] = bin_arr
         return voxel_arr, min_off
 
@@ -392,7 +391,7 @@ class MeshStorage(StorageClass):
     def __init__(self, inp, load_colarr=False, compress=False, **kwargs):
         self.load_colarr = load_colarr
         self.compress = compress
-        super(MeshStorage, self).__init__(inp, **kwargs)
+        super().__init__(inp, **kwargs)
 
     def __getitem__(self, item: Union[int, str]) -> List[np.ndarray]:
         """
@@ -465,7 +464,7 @@ class SkeletonStorage(StorageClass):
     """
 
     def __init__(self, inp, **kwargs):
-        super(SkeletonStorage, self).__init__(inp, **kwargs)
+        super().__init__(inp, **kwargs)
 
     def __getitem__(self, item):
         """

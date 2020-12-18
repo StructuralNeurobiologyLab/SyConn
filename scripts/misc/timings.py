@@ -132,7 +132,7 @@ def get_speed_plots(base_dir):
     # Speed scatter plot
     plt.figure()
     axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette,
-                               size=scatter_size)
+                           size=scatter_size)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('speed [GVx / h]')

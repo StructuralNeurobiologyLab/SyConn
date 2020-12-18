@@ -16,6 +16,8 @@ from syconn.handler.prediction_pts import predict_pts_plain, pts_loader_scalar_i
     pts_loader_scalar, pts_pred_scalar_nopostproc, get_celltype_model_pts, get_pt_kwargs
 import os
 
+palette_ident = 'colorblind'
+
 
 def predict_celltype_gt(ssd_kwargs, **kwargs):
     """
@@ -94,35 +96,121 @@ def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False
     plt.close()
 
 
-def plot_performance_summary_redun(bd):
-    res_dc_pths = np.array(glob.glob(bd + 'redun*_prediction_results.pkl', recursive=True))
-    fscores = []
-    labels = []
-    redundancies = [int(re.findall('redun(\d+)_', fp)[0]) for fp in res_dc_pths]
-    for fp in res_dc_pths[np.argsort(redundancies)]:
-        dc = basics.load_pkl2obj(fp)
-        res = list(dc[f'fscore_macro'])
-        fscores.extend(res)
-        labels.extend([dc['model_tag']] * len(res))
-    df = pandas.DataFrame(data={'fscores': fscores, 'labels': labels})
-    create_catplot(f"{bd}/performance_summary_redun.png", qs=df, x='labels', y='fscores',
-                   add_boxplot=False)
+def create_lineplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
+    """
+    https://matplotlib.org/api/_as_gen/matplotlib.pyplot.boxplot.html
+     The box extends from the lower to upper quartile values of the data, with
+      a line at the median. The whiskers extend from the box to show the range
+       of the data (1.5* interquartile range (Q3-Q1). Flier points are those past the end of the whiskers.
+
+    https://towardsdatascience.com/understanding-boxplots-5e2df7bcbd51
+
+    https://seaborn.pydata.org/generated/seaborn.boxplot.html#seaborn.boxplot
 
 
-def plot_performance_summary_models(bd, redundancy: int = 20):
+    Parameters
+    ----------
+    dest_p :
+    r :
+    legend :
+    ls :
+
+    Returns
+    -------
+
+    """
+    fig = plt.figure()
+    size = 10
+    if 'size' in kwargs:
+        size = kwargs['size']
+        del kwargs['size']
+    ax = sns.lineplot(data=df, **kwargs)
+    if not legend:
+        plt.gca().legend().set_visible(False)
+    ax.tick_params(axis='x', which='both', labelsize=ls, direction='out',
+                   length=4, width=3, right=False, top=False, pad=10, rotation=45)
+    ax.tick_params(axis='y', which='both', labelsize=ls, direction='out',
+                   length=4, width=3, right=False, top=False, pad=10)
+    ax.spines['left'].set_linewidth(3)
+    ax.spines['bottom'].set_linewidth(3)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    plt.ylim(r)
+    plt.tight_layout()
+    fig.savefig(dest_p, dpi=400)
+    df.to_excel(dest_p[:-4] + ".xlsx")
+    plt.close()
+
+
+def create_pointplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
+    """
+    https://matplotlib.org/api/_as_gen/matplotlib.pyplot.boxplot.html
+     The box extends from the lower to upper quartile values of the data, with
+      a line at the median. The whiskers extend from the box to show the range
+       of the data (1.5* interquartile range (Q3-Q1). Flier points are those past the end of the whiskers.
+
+    https://towardsdatascience.com/understanding-boxplots-5e2df7bcbd51
+
+    https://seaborn.pydata.org/generated/seaborn.boxplot.html#seaborn.boxplot
+
+
+    Parameters
+    ----------
+    dest_p :
+    r :
+    legend :
+    ls :
+
+    Returns
+    -------
+
+    """
+    fig = plt.figure()
+    size = 8
+    if 'size' in kwargs:
+        size = kwargs['size']
+        del kwargs['size']
+    ax = sns.pointplot(data=df, size=size, **kwargs)
+    if not legend:
+        plt.gca().legend().set_visible(False)
+    ax.tick_params(axis='x', which='both', labelsize=ls, direction='out',
+                   length=4, width=3, right=False, top=False, pad=10, rotation=45)
+    ax.tick_params(axis='y', which='both', labelsize=ls, direction='out',
+                   length=4, width=3, right=False, top=False, pad=10)
+    ax.spines['left'].set_linewidth(3)
+    ax.spines['bottom'].set_linewidth(3)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    plt.ylim(r)
+    plt.tight_layout()
+    fig.savefig(dest_p, dpi=400)
+    df.to_excel(dest_p[:-4] + ".xlsx")
+    plt.close()
+
+
+def plot_performance_summary(bd):
     res_dc_pths = glob.glob(bd + '*/redun*_prediction_results.pkl', recursive=True)
     fscores = []
     labels = []
-    res_dc_pths = [fp for fp in res_dc_pths if int(re.findall('redun(\d+)_', fp)[0]) == redundancy]
-    assert len(res_dc_pths) > 0, f"Did not find any model with redundancy {redundancy}."
+    redundancies = []
+    ctx = []
+    npts = []
     for fp in res_dc_pths:
         dc = basics.load_pkl2obj(fp)
         res = list(dc[f'fscore_macro'])
         fscores.extend(res)
         labels.extend([dc['model_tag']] * len(res))
-    df = pandas.DataFrame(data={'fscores': fscores, 'labels': labels})
-    create_catplot(f"{bd}/performance_summary.png", qs=df, x='labels', y='fscores',
-                   add_boxplot=False)
+        redundancies.extend([dc['redundancy']] * len(res))
+        npts.extend([dc['npts']] * len(res))
+        ctx.extend([dc['ctx']] * len(res))
+    index = pandas.MultiIndex.from_arrays([labels, redundancies, npts, ctx], names=('labels', 'redundancy', 'npts', 'ctx'))
+    df = pandas.DataFrame(fscores, index=index, columns=['fscore'])
+    df = df.sort_values(by=['npts', 'ctx', 'redundancy'], ascending=True)
+    create_pointplot(f"{bd}/performance_summary_allRedundancies_pointplot.png", df.reset_index(), ci='sd',
+                     x='labels', y='fscore', hue='redundancy', dodge=True, r=(0.5, 1), palette=palette_ident,
+                     capsize=.1, scale=0.75, errwidth=1)
+    create_lineplot(f"{bd}/performance_summary_allRedundancies.png", df.reset_index(), ci='sd', err_style='band',
+                     x='labels', y='fscore', hue='redundancy', r=(0.5, 1), palette=palette_ident)
 
 
 if __name__ == '__main__':
@@ -140,13 +228,17 @@ if __name__ == '__main__':
 
     for ctx, npts in [[20000, 25000], [20000, 50000], [20000, 75000], [20000, 5000], [4000, 25000]]:
         scale = ctx // 10
+        skip_model = False
         base_dir = f'{bbase_dir}//celltype_pts{npts}_ctx{ctx}/'
         mfold = base_dir + '/celltype_CV{}/celltype_pts_j0251v2_scale{}_nb{}_ctx{}_relu_myelin_gn_CV{}_eval{}/'
         for run in range(n_runs):
             for CV in range(ncv_min, n_cv):
                 mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
-                assert os.path.isfile(mpath), f"'{mpath}' not found."
-
+                if not os.path.isfile(mpath):
+                    msg = f"'{mpath}' not found. Skipping entire eval run for {base_dir}."
+                    skip_model = True
+        if skip_model:
+            continue
         # prepare GT
         check_train_ids = set()
         check_valid_ids = []
@@ -208,7 +300,8 @@ if __name__ == '__main__':
                     ccd = CellCloudDataJ0251(cv_val=CV)
                     split_dc = ccd.splitting_dict
                     mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
-                    res_dc = basics.load_pkl2obj(f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl')
+                    fname_pred = f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_{run}_10fold_PRED.pkl'
+                    res_dc = basics.load_pkl2obj(fname_pred)
                     res_dc = dict(res_dc)  # convert to standard dict
                     valid_ids_local, valid_ls_local, valid_preds_local = [], [], []
                     for ix, curr_id in enumerate(ssv_ids):
@@ -241,22 +334,24 @@ if __name__ == '__main__':
                          f'{[(ix, int2str_label[label], int2str_label[pred]) for ix, label, pred in zip(valid_ids[valid_preds != valid_ls], valid_ls[valid_preds != valid_ls], valid_preds[valid_preds != valid_ls])]}')
             # plot everything
             perf_res_dc = dict(perf_res_dc)
-            perf_res_dc['model_tag'] = f'ctx{loader_kwargs["ctx_size"]}_nb{npoints}_red{redundancy}'
+            perf_res_dc['model_tag'] = f'ctx{loader_kwargs["ctx_size"]}_nb{npts}'
+            perf_res_dc['ctx'] = ctx
+            perf_res_dc['redundancy'] = redundancy
+            perf_res_dc['npts'] = npts
             basics.write_obj2pkl(f"{base_dir}/redun{redundancy}_prediction_results.pkl", perf_res_dc)
-            fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
-                                     [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
-            labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
-                                     np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
-
-            df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
-            create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
-                           size=10)
-
-            cert_correct = np.concatenate(perf_res_dc['cert_correct'])
-            cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
-            df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
-                                        'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
-            create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
-                           add_boxplot=True, size=4)
-        plot_performance_summary_redun(base_dir)
-        plot_performance_summary_models(bbase_dir)
+            # fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
+            #                          [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
+            # labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
+            #                          np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
+            #
+            # df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
+            # create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
+            #                size=10)
+            #
+            # cert_correct = np.concatenate(perf_res_dc['cert_correct'])
+            # cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
+            # df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
+            #                             'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
+            # create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
+            #                add_boxplot=True, size=4)
+        plot_performance_summary(bbase_dir)
