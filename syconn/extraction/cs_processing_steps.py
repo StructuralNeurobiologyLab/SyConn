@@ -229,7 +229,7 @@ def _delete_all_cache_dc(args):
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
 def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
-                        ssd: super_segmentation.SuperSegmentationDataset) -> Dict[list]:
+                        ssd: super_segmentation.SuperSegmentationDataset) -> Dict[int, list]:
     """
     This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs) that do not need to be agglomerated.
 
