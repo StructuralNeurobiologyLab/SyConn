@@ -1858,9 +1858,9 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         map_myelin = True
     else:
         map_myelin = False
-    if '_noSyntype' in mdir:
+    if '_noSyntype' in mpath:
         use_syntype = False
-    if '_cellshapeOnly' in mdir:
+    if '_cellshapeOnly' in mpath:
         cellshape_only = True
     default_kwargs = dict(nloader=8, npredictor=4, bs=10, npostproc=2,
                           loader_kwargs=dict(redundancy=20, map_myelin=map_myelin, use_syntype=use_syntype,
