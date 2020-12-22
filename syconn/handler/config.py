@@ -556,6 +556,16 @@ class DynConfig(Config):
         return self.model_dir + '/syntype/model.pts'
 
     @property
+    def mpath_er(self) -> str:
+        # modify description
+        """
+        Returns:
+            Path to model trained on identifying cell parts occupied
+            by ER within 3D EM raw data.
+        """
+        return self.model_dir + '/er/model.pts'
+
+    @property
     def mpath_syn_rfc(self) -> str:
         return self.model_dir + '/conn_syn_rfc//rfc'
 
