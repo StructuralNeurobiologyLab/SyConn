@@ -224,6 +224,7 @@ if __name__ == '__main__':
 
     state_dict_fname = 'state_dict.pth'
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
+    # TODO: update!
     bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/OLD_4Dev2020/'
 
     for ctx, npts in [[20000, 25000], [20000, 50000], [20000, 75000], [20000, 5000], [4000, 25000]]:

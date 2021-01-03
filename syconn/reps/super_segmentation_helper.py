@@ -2088,7 +2088,8 @@ def compartments_graph(ssv: 'super_segmentation.SuperSegmentationObject',
 
 
 def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', weighted: bool = True,
-                            recompute: bool = True, comp_types: Optional[List[int]] = None) -> float:
+                            recompute: bool = False, comp_types: Optional[List[int]] = None,
+                            save: bool = False) -> float:
     """
     Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects)
     on specified functional compartments (`comp_types`) of the cell
@@ -2121,13 +2122,20 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         comp_types: All synapses that are formed between any of the functional compartment types given in
             `comp_types` on the cell reconstruction are used for computing the ratio (0: dendrite, 1: axon, 2:
              soma). Default: [1, ].
+        save: Save ratio to attribute dict. The key 'syn_sign_ratio_celltype' or 'syn_sign_ratio_celltype_weighted' if
+            weighted is True, is combined with the compartment types `comp_types` via
+            ``ratio_key += '_' + "_".join([str(el) for el in comp_types])``
 
     Returns:
         (Area-weighted) ratio of symmetric synapses or -1 if no synapses.
     """
     if comp_types is None:
         comp_types = [1, ]
-    ratio = ssv.lookup_in_attribute_dict("syn_sign_ratio")
+    ratio_key = 'syn_sign_ratio_celltype'
+    if weighted:
+        ratio_key += '_weighted'
+    ratio_key += '_' + "_".join([str(el) for el in comp_types])
+    ratio = ssv.lookup_in_attribute_dict(ratio_key)
     if not recompute and ratio is not None:
         return ratio
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
@@ -2152,6 +2160,8 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         syn_signs.append(syn_sign)
         syn_sizes.append(syn_size)
     if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
+        if save:
+            ssv.save_attributes([ratio_key], [-1])
         return -1
     syn_signs = np.array(syn_signs)
     syn_sizes = np.array(syn_sizes)
@@ -2159,6 +2169,8 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
     else:
         ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+    if save:
+        ssv.save_attributes([ratio_key], [ratio])
     return ratio
 
 
