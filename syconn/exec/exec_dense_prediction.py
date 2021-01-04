@@ -119,6 +119,6 @@ def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
                         global_params.config.mpath_syntype,
-                        mag=1, n_channel=1, target_names=['golgi'],
-                        target_channels=[(1,)],
+                        mag=1, n_channel=4, target_names=['golgi'],
+                        target_channels=[(0,)],
                         cube_of_interest=cube_of_interest)
