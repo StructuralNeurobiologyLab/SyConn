@@ -103,7 +103,7 @@ def predict_cellorganelles(cube_of_interest: Optional[Tuple[np.ndarray]] = None)
 
 def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Generates synapse type predictions at every dataset voxel stored in
+    Generates golgi probability-map at every dataset voxel stored in
     ``global_params.config.working_dir + '/knossosdatasets/synapsetype/'`` as
     overlay.
 
@@ -119,6 +119,6 @@ def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
                         global_params.config.mpath_syntype,
-                        mag=1, n_channel=1, target_names=['golgi'],
-                        target_channels=[0],
+                        mag=1, n_channel=2, target_names=['golgi'],
+                        target_channels=[(1,)],
                         cube_of_interest=cube_of_interest)
