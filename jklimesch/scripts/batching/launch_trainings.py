@@ -83,9 +83,9 @@ if __name__ == '__main__':
               [False, False, False, False, False, False, False, True, True, True]]
     stop_epochs = [1500, 1500, 2000, 3000, 3000, 3000, 3000, 3000, 3000, 3000]
 
-    for i in [1, 2]:
-        for sample_num in [512, 1024]:
-            for chunk_size in [1000]:
+    for i in [1, 2, 3]:
+        for sample_num in [8192]:
+            for chunk_size in [4000]:
 
                 architecture = architecture_large
                 if sample_num < 1024:
@@ -123,7 +123,7 @@ if __name__ == '__main__':
                                          val_freq=30,
                                          features={'hc': np.array([1])},
                                          chunk_size=chunk_size,
-                                         stop_epoch=1500,
+                                         stop_epoch=3000,
                                          max_step_size=100000000,
                                          hybrid_mode=True,
                                          splitting_redundancy=5,
@@ -139,5 +139,5 @@ if __name__ == '__main__':
     batchjob_script(params, 'launch_neuronx_training', n_cores=10,
                     additional_flags='--mem=125000 --gres=gpu:1',
                     disable_batchjob=False, max_iterations=0,
-                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/dnh_trainings_8/',
-                    remove_jobfolder=False, overwrite=True, exclude_nodes=['wb02', 'wb03', 'wb04', 'wb05'])
+                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/dnh_trainings_new/',
+                    remove_jobfolder=False, overwrite=True, exclude_nodes=[])

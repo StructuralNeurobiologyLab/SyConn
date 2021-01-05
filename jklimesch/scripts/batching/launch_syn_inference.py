@@ -7,7 +7,7 @@ if __name__ == '__main__':
     params = []
     red = 5
 
-    training_dir = os.path.expanduser('~/working_dir/paper/dnh_matrix/')
+    training_dir = os.path.expanduser('~/working_dir/paper/dasbtnh/')
     trainings = os.listdir(training_dir)
     durations = []
     for training in trainings:
@@ -29,8 +29,8 @@ if __name__ == '__main__':
 
     for duration in durations:
         print(str(duration) + '\n')
-    batchjob_script(params, 'launch_syn_eval', n_cores=10,
+    batchjob_script(params, 'launch_syn_inference', n_cores=10,
                     additional_flags='--mem=125000 --gres=gpu:1',
                     disable_batchjob=False, max_iterations=0,
-                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/syn_eval/',
-                    remove_jobfolder=False, overwrite=True, exclude_nodes=['wb02', 'wb03', 'wb04'])
+                    batchjob_folder='/wholebrain/u/jklimesch/working_dir/batchjobs/syn_inference/',
+                    remove_jobfolder=False, overwrite=True, exclude_nodes=[])

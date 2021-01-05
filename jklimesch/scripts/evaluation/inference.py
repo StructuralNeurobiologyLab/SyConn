@@ -217,50 +217,57 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 
 if __name__ == '__main__':
-    base = os.path.expanduser('~/working_dir/paper/dnh_model_comparison/')
+    base = os.path.expanduser('~/working_dir/paper/hierarchy/')
 
-    path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
-                 ('2020_11_08_2000_2048_cp_cp_q', 90),
-                 ('2020_11_08_2000_2048_cp_cp_q_2', 90),
-                 ('2020_11_08_8000_2048_cp_cp_q', 480),
-                 ('2020_11_08_8000_2048_cp_cp_q_2', 480),
-                 ('2020_11_08_8000_8192_cp_cp_q', 300),
-                 ('2020_11_08_8000_8192_cp_cp_q_co', 510),
-                 ('2020_11_08_8000_8192_cp_cp_q_co_2', 510),
-                 ('2020_11_08_8000_8192_cp_cp_q_nn', 450),
-                 ('2020_11_08_8000_8192_cp_cp_q_nn_2', 420),
-                 ('2020_11_08_8000_32768_cp_cp_q', 120),
-                 ('2020_11_08_8000_32768_cp_cp_q_2', 270),
-                 ('2020_11_08_24000_32768_cp_cp_q', 570),
-                 ('2020_11_08_24000_32768_cp_cp_q_2', 540),
-                 ('2020_11_09_2000_2048_cp_cp_q_3', 120),
-                 ('2020_11_09_8000_1024_cp_cp_q', 600),
-                 ('2020_11_09_8000_1024_cp_cp_q_2', 600),
-                 ('2020_11_09_8000_8192_cp_cp_q_2', 360),
-                 ('2020_11_09_8000_8192_cp_cp_q_bn', 540),
-                 ('2020_11_09_8000_8192_cp_cp_q_bn_2', 570),
-                 ('2020_11_11_2000_2048_cp_cp_q_3', 360),
-                 ('2020_11_11_8000_1024_cp_cp_q_3', 450),
-                 ('2020_11_11_8000_2048_cp_cp_q_3', 450),
-                 ('2020_11_11_8000_8192_cp_cp_q_bn_3', 480),
-                 ('2020_11_11_8000_8192_cp_cp_q_co_3', 450),
-                 ('2020_11_11_8000_32768_cp_cp_q_3', 390),
-                 ('2020_11_11_24000_32768_cp_cp_q_3', 480),
-                 ('2020_11_16_8000_8192_cp_cp_q_nn_3', 690),
-                 ('2020_11_16_8000_8192_cp_cp_q_nn_4', 690)]
+    path_list = [('abt', 180), ('dnh', 390), ('ads', 760)]
+
+    # path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
+    #              ('2020_11_08_2000_2048_cp_cp_q', 90),
+    #              ('2020_11_08_2000_2048_cp_cp_q_2', 90),
+    #              ('2020_11_08_8000_2048_cp_cp_q', 480),
+    #              ('2020_11_08_8000_2048_cp_cp_q_2', 480),
+    #              ('2020_11_08_8000_8192_cp_cp_q', 300),
+    #              ('2020_11_08_8000_8192_cp_cp_q_co', 510),
+    #              ('2020_11_08_8000_8192_cp_cp_q_co_2', 510),
+    #              ('2020_11_08_8000_8192_cp_cp_q_nn', 450),
+    #              ('2020_11_08_8000_8192_cp_cp_q_nn_2', 420),
+    #              ('2020_11_08_8000_32768_cp_cp_q', 120),
+    #              ('2020_11_08_8000_32768_cp_cp_q_2', 270),
+    #              ('2020_11_08_24000_32768_cp_cp_q', 570),
+    #              ('2020_11_08_24000_32768_cp_cp_q_2', 540),
+    #              ('2020_11_09_2000_2048_cp_cp_q_3', 120),
+    #              ('2020_11_09_8000_1024_cp_cp_q', 600),
+    #              ('2020_11_09_8000_1024_cp_cp_q_2', 600),
+    #              ('2020_11_09_8000_8192_cp_cp_q_2', 360),
+    #              ('2020_11_09_8000_8192_cp_cp_q_bn', 540),
+    #              ('2020_11_09_8000_8192_cp_cp_q_bn_2', 570),
+    #              ('2020_11_11_2000_2048_cp_cp_q_3', 360),
+    #              ('2020_11_11_8000_1024_cp_cp_q_3', 450),
+    #              ('2020_11_11_8000_2048_cp_cp_q_3', 450),
+    #              ('2020_11_11_8000_8192_cp_cp_q_bn_3', 480),
+    #              ('2020_11_11_8000_8192_cp_cp_q_co_3', 450),
+    #              ('2020_11_11_8000_32768_cp_cp_q_3', 390),
+    #              ('2020_11_11_24000_32768_cp_cp_q_3', 480),
+    #              ('2020_11_16_8000_8192_cp_cp_q_nn_3', 690),
+    #              ('2020_11_16_8000_8192_cp_cp_q_nn_4', 690)]
 
     durations = {}
-    for red in range(1, 2):
-        for path in path_list:
-            print(f'Processing: {path} with redundancy {red}')
-            base_path = base + path[0] + '/'
-            m_path = base_path + f'models/state_dict_e{path[1]}.pth'
-            argscont_path = base_path + 'argscont.pkl'
-            duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
-                                   m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=1000)
-            if path[0] in durations:
-                durations[path[0]].append(duration)
-            else:
-                durations[path[0]] = [duration]
-    with open(base + 'timing_border.pkl', 'wb') as f:
-        pkl.dump(durations, f)
+    red = 5
+    for path in path_list:
+        print(f'Processing: {path} with redundancy {red}')
+        base_path = base + path[0] + '/'
+        m_path = base_path + f'models/state_dict_e{path[1]}.pth'
+        argscont_path = base_path + 'argscont.pkl'
+        # duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
+        #                        m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=0,
+        #                        out_p=base_path + f'syn_eval_red{red}/')
+        duration = predict_sso([491527, 12179464, 14141444, 18251791, 22335491, 23044610, 46319619], "/wholebrain/songbird/j0126/areaxfs_v6/",
+                               m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=0,
+                               out_p=base_path + f'20_09_27_test_eval/')
+
+        if path[0] in durations:
+            durations[path[0]].append(duration)
+        else:
+            durations[path[0]] = [duration]
+    # with open(base + 'timing_border.pkl', 'wb') as f:
+    #     pkl.dump(durations, f)

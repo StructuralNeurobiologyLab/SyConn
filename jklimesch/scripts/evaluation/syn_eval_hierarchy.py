@@ -4,7 +4,7 @@ import pickle as pkl
 import sklearn.metrics as sm
 from syconn import global_params
 from scipy.spatial import cKDTree
-from syconn_eval import replace_preds
+from syconn_eval import merge
 from morphx.classes.pointcloud import PointCloud
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
@@ -25,12 +25,13 @@ def write_confusion_matrix(cm: np.array, names: list) -> str:
 # synapse GT labels: 0: dendrite, 1: axon, 2: head, 3: soma
 mapping = {0: 0, 1: 1, 2: 6, 3: 2}
 exclude = []
+red = 1
 
 if __name__ == "__main__":
-    with open(os.path.expanduser('~/thesis/current_work/paper/data/syn_gt/converted_v3.pkl'), 'rb') as f:
+    with open(os.path.expanduser('~/working_dir/gt/syn_gt/converted_v3.pkl'), 'rb') as f:
         data = pkl.load(f)
     ssd = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
-    save_path = os.path.expanduser(f'~/thesis/current_work/paper/syn_tests/2020_10_19_8000_8192_7class_cp_cp_fps/dhas/')
+    save_path = os.path.expanduser(f'~/working_dir/paper/hierarchy/')
     save_path_examples = save_path + 'examples/'
     if not os.path.exists(save_path_examples):
         os.makedirs(save_path_examples)
@@ -43,9 +44,18 @@ if __name__ == "__main__":
             sso_id = int(key[:-2])
             sso = ssd.get_super_segmentation_object(sso_id)
 
-            # 0: dendrite, 1: axon, 2: soma, 3: bouton, 4: terminal, 5: neck, 6: head
-            pc = replace_preds(sso, 'dasbtnh', [])
-            pc.save2pkl(os.path.expanduser(save_path + f'{sso_id}.pkl'))
+            # 0: axon, 1: bouton, 2: terminal
+            with open(save_path + f'abt/syn_eval_red{red}/' + str(sso_id) + '.pkl', 'rb') as f:
+                abt = pkl.load(f)
+            # 0: dendrite, 1: neck, 2: head
+            with open(save_path + f'dnh/syn_eval_red{red}/' + str(sso_id) + '.pkl', 'rb') as f:
+                dnh = pkl.load(f)
+            # 0: dendrite, 1: axon, 2: soma,
+            with open(save_path + f'ads/syn_eval_red{red}/' + str(sso_id) + '.pkl', 'rb') as f:
+                ads = pkl.load(f)
+
+            pc = merge(sso, ads, {1: (abt, [(1, 3), (2, 4), (0, 1)]), 0: (dnh, [(1, 5), (2, 6)])})
+            pc.save2pkl(save_path + str(sso_id) + '.pkl')
 
             # query synapse coordinates in KDTree of vertices
             tree = cKDTree(pc.vertices)
@@ -78,7 +88,6 @@ if __name__ == "__main__":
 
     labels = ['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head']
     targets = ['dendrite', 'axon', 'soma', 'neck', 'head']
-    # targets = ['dendrite', 'neck', 'head']
     exclude = [labels[i] for i in exclude]
     report = f'Excluded synapse labels: {exclude}\n\n'
     report += sm.classification_report(total_gt, total_preds, target_names=targets)
