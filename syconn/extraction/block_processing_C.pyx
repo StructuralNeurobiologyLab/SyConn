@@ -75,21 +75,28 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
 
 
 def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
-    cdef int stencil[3]
+    # Preallocation of C variables
     cdef int x, y, z
-    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
-    assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
-
-    cdef uint64_t[:, :, :] out = cvarray(shape = (1 + arr.shape[0] - stencil[0],
-                                                arr.shape[1] - stencil[1] + 1, arr.shape[2] - stencil[2] + 1),
-                                                itemsize = sizeof(uint64_t), format = 'Q')
-    out[:, :, :] = 0
     cdef int center_id
+
+    # Memoryview defintion of stencil and offset
+    cdef int stencil[3]
     cdef int offset[3]
+    assert (stencil1[0]%2 + stencil1[1]%2 + stencil1[2]%2 ) == 3    # All entries of stencil must be odd
+    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     offset [:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2]
+
+    # Memoryview definition of output and chunk arrays
+    cdef uint64_t[:, :, :] out = cvarray(shape = (1 + arr.shape[0] - stencil[0],
+                                                  1 + arr.shape[1] - stencil[1],
+                                                  1 + arr.shape[2] - stencil[2]),
+                                         itemsize = sizeof(uint64_t), format = 'Q')
+    out[:, :, :] = 0    # Assign all elements of output to zero
+
     cdef uint32_t[:, :, :] chunk = cvarray(shape=(stencil[0]+1, stencil[1]+1, stencil[2]+1),
                                            itemsize=sizeof(uint32_t), format='I')
 
+    # Process information in arr within edges (shifted by offset)
     for x in range(0, edges.shape[0]-2*offset[0]):
         for y in range(0, edges.shape[1]-2*offset[1]):
             for z in range(0, edges.shape[2]-2*offset[2]):
@@ -97,6 +104,7 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
                     continue
                 center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
                 chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
+                # Assign ID to coordinate
                 out[x, y, z] =  kernel(chunk, center_id)
     return out
 
