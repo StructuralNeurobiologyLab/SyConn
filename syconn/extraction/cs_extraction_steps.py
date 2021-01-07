@@ -491,7 +491,7 @@ def _write_props_to_syn_thread(args):
         target_dir_func = rep_helper.subfold_from_ix_OLD
 
     # get cached worker lookup
-    with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
+    with open(f'{tmp_path}/cs_worker_dict.pkl', "rb") as f:
         cs_workers_tmp = pkl.load(f)
 
     for obj_id_mod in cs_ids_ch:
@@ -510,18 +510,40 @@ def _write_props_to_syn_thread(args):
         sd_cs = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='cs',
                                                  working_dir=global_params.config.working_dir,
                                                  version=0)
+
+        # Allocate props structs and count dictionaries
         cs_props = [{}, defaultdict(list), {}]
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
         cs_asym_cnt = {}
+
+        # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
+        dummy_so = sd.get_segmentation_object(obj_id_mod)
+        attr_p = dummy_so.attr_dict_path
+        vx_p = dummy_so.voxel_path
+        this_attr_dc = AttributeDict(attr_p, read_only=False, disable_locking=True)
+        # this class is only used to query the voxel data
+        voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
+                                   read_only=False, disable_locking=True)
+        voxel_dc_store = VoxelStorage(vx_p, read_only=False, disable_locking=True)
+
+        # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
+        dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
+        attr_p_cs = dummy_so_cs.attr_dict_path
+        vx_p_cs = dummy_so_cs.voxel_path
+        this_attr_dc_cs = AttributeDict(attr_p_cs, read_only=False, disable_locking=True)
+        voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, voxeldata_path=knossos_path_cs,
+                                      read_only=False, disable_locking=True)
+
+        # To keep track of visited obj_keys
+        dummy_tally = dict.fromkeys(obj_keys)
+
         for worker_id, obj_ids in cs_workers_tmp.items():
             intersec = set(obj_ids).intersection(obj_keys)
-            load_worker = len(intersec) > 0
-            if load_worker:
+            if len(intersec) > 0:
                 worker_dir_props = f"{dir_props}/{worker_id}/"
                 # cs
                 fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
-                start = time.time()
                 dc = basics.load_pkl2obj(fname)
                 tmp_dcs = [dict(), defaultdict(list), dict()]
                 for k in intersec:
@@ -559,73 +581,60 @@ def _write_props_to_syn_thread(args):
                 del tmp_asym_dc
                 merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
                 del tmp_sym_dc
-        # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
-        dummy_so = sd.get_segmentation_object(obj_id_mod)
-        attr_p = dummy_so.attr_dict_path
-        vx_p = dummy_so.voxel_path
-        this_attr_dc = AttributeDict(attr_p, read_only=False, disable_locking=True)
-        # this class is only used to query the voxel data
-        voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
-                                   read_only=False, disable_locking=True)
-        voxel_dc_store = VoxelStorage(vx_p, read_only=False, disable_locking=True)
 
-        # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
-        dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
-        attr_p_cs = dummy_so_cs.attr_dict_path
-        vx_p_cs = dummy_so_cs.voxel_path
-        this_attr_dc_cs = AttributeDict(attr_p_cs, read_only=False, disable_locking=True)
-        voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, voxeldata_path=knossos_path_cs,
-                                      read_only=False, disable_locking=True)
+                # write cs/syn to dict
+                for cs_id in intersec:
+                    if dummy_tally[cs_id] is None:
+                        dummy_tally[cs_id] = True
+                        # write cs to dict
+                        if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
+                            continue
+                        rp_cs = cs_props[0][cs_id]
+                        bbs_cs = np.concatenate(cs_props[1][cs_id])
+                        size_cs = cs_props[2][cs_id]
+                        this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
+                        this_attr_dc_cs[cs_id]["bounding_box"] = np.array(
+                            [bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
+                        this_attr_dc_cs[cs_id]["size"] = size_cs
+                        voxel_dc_cs[cs_id] = bbs_cs
+                        voxel_dc_cs.increase_object_size(cs_id, size_cs)
+                        voxel_dc_cs.set_object_repcoord(cs_id, rp_cs)
 
-        for cs_id in obj_keys:
-            # write cs to dict
-            if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
-                continue
-            rp_cs = cs_props[0][cs_id]
-            bbs_cs = np.concatenate(cs_props[1][cs_id])
-            size_cs = cs_props[2][cs_id]
-            this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
-            this_attr_dc_cs[cs_id]["bounding_box"] = np.array(
-                [bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
-            this_attr_dc_cs[cs_id]["size"] = size_cs
-            voxel_dc_cs[cs_id] = bbs_cs
-            voxel_dc_cs.increase_object_size(cs_id, size_cs)
-            voxel_dc_cs.set_object_repcoord(cs_id, rp_cs)
+                        # write syn to dict
+                        if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
+                            continue
+                        rp = syn_props[0][cs_id]
+                        bbs = np.concatenate(syn_props[1][cs_id])
+                        size = syn_props[2][cs_id]
+                        this_attr_dc[cs_id]["rep_coord"] = rp
+                        bb = np.array(
+                            [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+                        this_attr_dc[cs_id]["bounding_box"] = bb
+                        this_attr_dc[cs_id]["size"] = size
+                        try:
+                            sym_prop = cs_sym_cnt[cs_id] / size
+                        except KeyError:
+                            sym_prop = 0
+                        try:
+                            asym_prop = cs_asym_cnt[cs_id] / size
+                        except KeyError:
+                            asym_prop = 0
+                        this_attr_dc[cs_id]["sym_prop"] = sym_prop
+                        this_attr_dc[cs_id]["asym_prop"] = asym_prop
 
-            # write syn to dict
-            if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
-                continue
-            rp = syn_props[0][cs_id]
-            bbs = np.concatenate(syn_props[1][cs_id])
-            size = syn_props[2][cs_id]
-            this_attr_dc[cs_id]["rep_coord"] = rp
-            bb = np.array(
-                [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
-            this_attr_dc[cs_id]["bounding_box"] = bb
-            this_attr_dc[cs_id]["size"] = size
-            try:
-                sym_prop = cs_sym_cnt[cs_id] / size
-            except KeyError:
-                sym_prop = 0
-            try:
-                asym_prop = cs_asym_cnt[cs_id] / size
-            except KeyError:
-                asym_prop = 0
-            this_attr_dc[cs_id]["sym_prop"] = sym_prop
-            this_attr_dc[cs_id]["asym_prop"] = asym_prop
+                        cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
+                        # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
+                        # cs_id is the same as the syn_id, not necessary to store this
+                        add_feat_dict = {'cs_id': cs_id,
+                                         'id_cs_ratio': cs_ratio_vx,
+                                         'cs_size': size_cs}
+                        this_attr_dc[cs_id].update(add_feat_dict)
+                        voxel_dc[cs_id] = bbs
+                        voxel_dc.increase_object_size(cs_id, size)
+                        voxel_dc.set_object_repcoord(cs_id, rp)
+                        # write voxels explicitly - this assumes reasonably sized synapses
+                        voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
 
-            cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
-            # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
-            # cs_id is the same as the syn_id, not necessary to store this
-            add_feat_dict = {'cs_id': cs_id,
-                             'id_cs_ratio': cs_ratio_vx,
-                             'cs_size': size_cs}
-            this_attr_dc[cs_id].update(add_feat_dict)
-            voxel_dc[cs_id] = bbs
-            voxel_dc.increase_object_size(cs_id, size)
-            voxel_dc.set_object_repcoord(cs_id, rp)
-            # write voxels explicitly - this assumes reasonably sized synapses
-            voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
         voxel_dc_store.push()
         voxel_dc_cs.push()
         this_attr_dc.push()
@@ -771,6 +780,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     Returns:
         3D contact site segmentation array (np.uint64).
     """
+    # Definition of 3D edge detection convolution weights
     jac = np.zeros([3, 3, 3], dtype=np.int)
     jac[1, 1, 1] = -6
     jac[1, 1, 0] = 1
@@ -779,11 +789,16 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     jac[1, 2, 1] = 1
     jac[2, 1, 1] = 1
     jac[0, 1, 1] = 1
+
+    # Edge detection through convolution of arr with jac
     edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
+
+    # Conversion of edges and arr to uint32
     edges = edges.astype(np.uint32, copy=False)
     arr = arr.astype(np.uint32, copy=False)
-    cs_seg = process_block_nonzero(
-        edges, arr, global_params.config['cell_objects']['cs_filtersize'])
+
+    # Processing of contact sites
+    cs_seg = process_block_nonzero(edges, arr, global_params.config['cell_objects']['cs_filtersize'])
     return cs_seg
 
 
