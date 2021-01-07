@@ -48,16 +48,21 @@ def kernel(n_type[:, :, :] chunk, n_type center_id):
 
 
 def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
-    cdef int stencil[3]
+    # Preallocation of C variables
     cdef int x, y, z
-    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
-    assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
-    cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1],
-                                                  arr.shape[2]), itemsize = sizeof(uint64_t), format = 'Q')
-    out [:, :, :] = 0
-    cdef int offset[3]
-    offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2] ### check what type do you need
     cdef int center_id
+
+    # Memoryview definition of stencil and offset
+    cdef int stencil[3]
+    cdef int offset[3]
+    assert (stencil1[0]%2 + stencil1[1]%2 + stencil1[2]%2 ) == 3
+    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
+    offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2] ### check what type do you need
+
+    # Memoryview definition of output and chunk arrays
+    cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2]),
+                                                    itemsize = sizeof(uint64_t), format = 'Q')
+    out [:, :, :] = 0
     cdef uint32_t[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2),
                                            itemsize=sizeof(uint32_t), format='i')
 
@@ -66,11 +71,9 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
             for z in range(offset[2], arr.shape[2] - offset[2]):
                 if edges[x, y, z] == 0:
                     continue
-
                 center_id = arr[x, y, z] #be sure that it's 32 or 64 bit intiger
                 chunk = arr[x - offset[0]: x + offset[0] + 1, y - offset[1]: y + offset[1], z - offset[2]: z + offset[2]]
                 out[x, y, z] = kernel(chunk, center_id)
-
     return out
 
 
@@ -79,7 +82,7 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
     cdef int x, y, z
     cdef int center_id
 
-    # Memoryview defintion of stencil and offset
+    # Memoryview definition of stencil and offset
     cdef int stencil[3]
     cdef int offset[3]
     assert (stencil1[0]%2 + stencil1[1]%2 + stencil1[2]%2 ) == 3    # All entries of stencil must be odd
