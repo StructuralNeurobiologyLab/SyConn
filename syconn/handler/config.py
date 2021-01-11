@@ -557,7 +557,6 @@ class DynConfig(Config):
 
     @property
     def mpath_er(self) -> str:
-        # modify description
         """
         Returns:
             Path to model trained on identifying cell parts occupied

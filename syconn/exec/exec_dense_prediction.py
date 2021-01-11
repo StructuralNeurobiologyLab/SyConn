@@ -103,7 +103,6 @@ def predict_cellorganelles(cube_of_interest: Optional[Tuple[np.ndarray]] = None)
 
 
 def predict_er(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
-#   Adapt description
     """
     Generates ER predictions at every dataset voxel stored in
     ``global_params.config.working_dir + '/knossosdatasets/er/'`` as
@@ -112,9 +111,7 @@ def predict_er(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     Notes:
         Labels:
             * 0: Background.
-            * 1: Mitochondria.
-            * 2: Vesicle clouds.
-            * 3: Synaptic junction.
+            * 1: ER
 
     Args:
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
