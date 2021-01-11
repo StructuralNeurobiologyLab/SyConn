@@ -560,6 +560,10 @@ class DynConfig(Config):
         return self.model_dir + '/conn_syn_rfc//rfc'
 
     @property
+    def mpath_syn_rfc(self) -> str:
+        return self.model_dir + '/golgi/model.pts'
+
+    @property
     def allow_mesh_gen_cells(self) -> bool:
         """
         If ``True``, meshes are not provided for cell supervoxels and will be

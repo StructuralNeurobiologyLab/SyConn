@@ -109,7 +109,8 @@ def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
 
     Notes:
         Labels:
-            * 0: golgi map
+            * 0: background
+            * 1: golgi map
 
     Args:
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
@@ -118,7 +119,7 @@ def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
-                        global_params.config.mpath_syntype,
-                        mag=1, n_channel=4, target_names=['golgi'],
-                        target_channels=[(0,)],
+                        global_params.config.mpath_golgi,
+                        mag=1, n_channel=2, target_names=['golgi'],
+                        target_channels=[(1,)],
                         cube_of_interest=cube_of_interest)
