@@ -177,8 +177,9 @@ if __name__ == '__main__':
     # TODO: launch all predictions in parallel
     exec_dense_prediction.predict_myelin()
 
-    # ER-prediction-method, to be implemented:
+    # ER- and Golgi-prediction:
     exec_dense_prediction.predict_er()
+    exec_dense_prediction.predict_golgi()
 
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds

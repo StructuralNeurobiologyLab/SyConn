@@ -124,3 +124,26 @@ def predict_er(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
                         mag=1, n_channel=2, target_names=['er'],
                         target_channels=[(1,)],
                         cube_of_interest=cube_of_interest)
+
+def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
+    """
+    Generates golgi predictions at every dataset voxel stored in
+    ``global_params.config.working_dir + '/knossosdatasets/golgi/'`` as
+    overlay.
+
+    Notes:
+        Labels:
+            * 0: Background.
+            * 1: Golgi Apparatus
+
+    Args:
+        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
+            coordinate in voxels in the respective magnification (see kwarg `mag`).
+
+    """
+    predict_dense_to_kd(global_params.config.kd_seg_path,
+                        global_params.config.working_dir + '/knossosdatasets/',
+                        global_params.config.mpath_golgi,
+                        mag=1, n_channel=2, target_names=['golgi'],
+                        target_channels=[(1,)],
+                        cube_of_interest=cube_of_interest)

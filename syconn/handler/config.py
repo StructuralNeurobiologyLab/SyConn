@@ -565,6 +565,15 @@ class DynConfig(Config):
         return self.model_dir + '/er/model.pts'
 
     @property
+    def mpath_golgi(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying cell parts occupied
+            by Golgi Apparatus within 3D EM raw data.
+        """
+        return self.model_dir + '/golgi/model.pts'
+
+    @property
     def mpath_syn_rfc(self) -> str:
         return self.model_dir + '/conn_syn_rfc//rfc'
 
