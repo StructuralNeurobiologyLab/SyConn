@@ -582,58 +582,63 @@ def _write_props_to_syn_thread(args):
                 merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
                 del tmp_sym_dc
 
-                # write cs/syn to dict
-                for cs_id in intersec:
-                    if dummy_tally[cs_id] is None:
-                        dummy_tally[cs_id] = True
-                        # write cs to dict
-                        if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
-                            continue
-                        rp_cs = cs_props[0][cs_id]
-                        bbs_cs = np.concatenate(cs_props[1][cs_id])
-                        size_cs = cs_props[2][cs_id]
-                        this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
-                        this_attr_dc_cs[cs_id]["bounding_box"] = np.array(
-                            [bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
-                        this_attr_dc_cs[cs_id]["size"] = size_cs
-                        voxel_dc_cs[cs_id] = bbs_cs
-                        voxel_dc_cs.increase_object_size(cs_id, size_cs)
-                        voxel_dc_cs.set_object_repcoord(cs_id, rp_cs)
+        # write cs/syn to dict
+        for cs_id in obj_keys:
+            if cs_id not in dummy_tally:
+                raise ValueError(f"Multiple occurrence of cs_id: {cs_id}")
+            else:
+                del dummy_tally[cs_id]
 
-                        # write syn to dict
-                        if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
-                            continue
-                        rp = syn_props[0][cs_id]
-                        bbs = np.concatenate(syn_props[1][cs_id])
-                        size = syn_props[2][cs_id]
-                        this_attr_dc[cs_id]["rep_coord"] = rp
-                        bb = np.array(
-                            [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
-                        this_attr_dc[cs_id]["bounding_box"] = bb
-                        this_attr_dc[cs_id]["size"] = size
-                        try:
-                            sym_prop = cs_sym_cnt[cs_id] / size
-                        except KeyError:
-                            sym_prop = 0
-                        try:
-                            asym_prop = cs_asym_cnt[cs_id] / size
-                        except KeyError:
-                            asym_prop = 0
-                        this_attr_dc[cs_id]["sym_prop"] = sym_prop
-                        this_attr_dc[cs_id]["asym_prop"] = asym_prop
+                # write cs to dict
+                if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
+                    continue
+                rp_cs = cs_props[0][cs_id]
+                bbs_cs = np.concatenate(cs_props[1][cs_id])
+                size_cs = cs_props[2][cs_id]
+                this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
+                this_attr_dc_cs[cs_id]["bounding_box"] = np.array(
+                    [bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
+                this_attr_dc_cs[cs_id]["size"] = size_cs
+                voxel_dc_cs[cs_id] = bbs_cs
+                voxel_dc_cs.increase_object_size(cs_id, size_cs)
+                voxel_dc_cs.set_object_repcoord(cs_id, rp_cs)
 
-                        cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
-                        # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
-                        # cs_id is the same as the syn_id, not necessary to store this
-                        add_feat_dict = {'cs_id': cs_id,
-                                         'id_cs_ratio': cs_ratio_vx,
-                                         'cs_size': size_cs}
-                        this_attr_dc[cs_id].update(add_feat_dict)
-                        voxel_dc[cs_id] = bbs
-                        voxel_dc.increase_object_size(cs_id, size)
-                        voxel_dc.set_object_repcoord(cs_id, rp)
-                        # write voxels explicitly - this assumes reasonably sized synapses
-                        voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
+                # write syn to dict
+                if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
+                    continue
+                rp = syn_props[0][cs_id]
+                bbs = np.concatenate(syn_props[1][cs_id])
+                size = syn_props[2][cs_id]
+                this_attr_dc[cs_id]["rep_coord"] = rp
+                bb = np.array(
+                    [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+                this_attr_dc[cs_id]["bounding_box"] = bb
+                this_attr_dc[cs_id]["size"] = size
+                try:
+                    sym_prop = cs_sym_cnt[cs_id] / size
+                except KeyError:
+                    sym_prop = 0
+                try:
+                    asym_prop = cs_asym_cnt[cs_id] / size
+                except KeyError:
+                    asym_prop = 0
+                this_attr_dc[cs_id]["sym_prop"] = sym_prop
+                this_attr_dc[cs_id]["asym_prop"] = asym_prop
+                cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
+                # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
+                # cs_id is the same as the syn_id, not necessary to store this
+                add_feat_dict = {'cs_id': cs_id,
+                                 'id_cs_ratio': cs_ratio_vx,
+                                 'cs_size': size_cs}
+                this_attr_dc[cs_id].update(add_feat_dict)
+                voxel_dc[cs_id] = bbs
+                voxel_dc.increase_object_size(cs_id, size)
+                voxel_dc.set_object_repcoord(cs_id, rp)
+                # write voxels explicitly - this assumes reasonably sized synapses
+                voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
+
+        if len(dummy_tally) > 0:
+            raise ValueError(f"Did not process cs_ids:{dummy_tally.keys()}.")
 
         voxel_dc_store.push()
         voxel_dc_cs.push()
