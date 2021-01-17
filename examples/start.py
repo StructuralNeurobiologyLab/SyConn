@@ -175,12 +175,7 @@ if __name__ == '__main__':
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
     # TODO: launch all predictions in parallel
-    exec_dense_prediction.predict_myelin()
-
-    # ER- and Golgi-prediction:
-    exec_dense_prediction.predict_er()
-    exec_dense_prediction.predict_golgi()
-
+    # exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
