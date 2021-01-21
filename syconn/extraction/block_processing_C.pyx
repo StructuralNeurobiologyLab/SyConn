@@ -19,52 +19,74 @@ ctypedef fused n_type:
 
 
 def kernel(n_type[:, :, :] chunk, n_type center_id):
+    '''
+    Kernel function that returns a 2-tuple ID
+
+    Args:
+        chunk: 3D array of either uint32_t or uint64_t
+        center_id: uint32_t or uint64_t
+    Returns:
+        Unique, ordered 2-tuple ID for given chunk and center_id. If no edge is found, returns (0, 0)
+    '''
     cdef map[uint64_t, int] unique_ids
 
     for i in range(chunk.shape[0]):
         for j in range(chunk.shape[1]):
             for k in range(chunk.shape[2]):
-                unique_ids[chunk[i][j][k]] = unique_ids[chunk[i][j][k]] + 1
+                unique_ids[chunk[i][j][k]] += 1
     unique_ids[0] = 0
     unique_ids[center_id] = 0
-    cdef int theBiggest  = 0
-    cdef uint64_t key = 0
 
-    cdef map[uint64_t,int].iterator it = unique_ids.begin()
+    # Variables for largest value and corresponding key
+    cdef int theBiggest  = 0
+    cdef n_type key = 0
+
+    # Finding largest value and corresponding key
+    cdef map[uint64_t, int].iterator it = unique_ids.begin()
     while it != unique_ids.end():
         if dereference(it).second > theBiggest:
             theBiggest =  dereference(it).second
             key = dereference(it).first
         postincrement(it)
 
+    # At least one edge is found
     if theBiggest > 0:
-        if center_id > key:
-            return (key << 32 ) + center_id
-        else:
-            return (center_id << 32) + key
+        # Return sorted 2-tuple
+        return (key, center_id) if center_id > key else (center_id, key)
 
+    # No edge is found (key = 0)
     else:
-        return key
+        return (key, key)
 
 
-def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
+def process_block(n_type[:, :, :] edges, n_type[:, :, :] arr, stencil1=(7,7,3)):
     # Preallocation of C variables
     cdef int x, y, z
-    cdef int center_id
+    cdef n_type center_id
 
     # Memoryview definition of stencil and offset
     cdef int stencil[3]
     cdef int offset[3]
     assert (stencil1[0]%2 + stencil1[1]%2 + stencil1[2]%2 ) == 3
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
-    offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2] ### check what type do you need
+    offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2]
+
+    # Supported data formats, coded as one-char-long strings i.e. uint32_t (I) and uint64_t (Q)
+    fm = "Q"
+    cdef n_type control = 2**32-1
+
+    # Type checking delivers 'int' for both 'uint32_t' and 'uint64_t' -> Test to distinguish them
+    try:
+        control <<= 32  # Deliberately generate an OverflowError for case uint32_t
+    except OverflowError:
+        fm = "I"
 
     # Memoryview definition of output and chunk arrays
-    cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2]),
-                                                    itemsize = sizeof(uint64_t), format = 'Q')
+    cdef n_type[:, :, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2], 2),    # 3D array of 2-tuples
+                                                    itemsize = sizeof(n_type), format = fm)
+    cdef n_type[:, :, :] chunk = cvarray(shape = (2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2),
+                                           itemsize = sizeof(n_type), format = fm)
     out [:, :, :] = 0
-    cdef uint32_t[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2),
-                                           itemsize=sizeof(uint32_t), format='i')
 
     for x in range(offset[0], arr.shape[0] - offset[0]):
         for y in range(offset[1], arr.shape[1] - offset[1]):
@@ -73,14 +95,17 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
                     continue
                 center_id = arr[x, y, z] #be sure that it's 32 or 64 bit intiger
                 chunk = arr[x - offset[0]: x + offset[0] + 1, y - offset[1]: y + offset[1], z - offset[2]: z + offset[2]]
-                out[x, y, z] = kernel(chunk, center_id)
+                result = kernel(chunk, center_id)
+                # Assign ID to coordinate
+                for w in range(len(result)):
+                    out[x, y, z, w] = result[w]
     return out
 
 
-def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
+def process_block_nonzero(n_type[:, :, :] edges, n_type[:, :, :] arr, stencil1=(7,7,3)):
     # Preallocation of C variables
     cdef int x, y, z
-    cdef int center_id
+    cdef n_type center_id
 
     # Memoryview definition of stencil and offset
     cdef int stencil[3]
@@ -89,15 +114,26 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     offset [:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2]
 
-    # Memoryview definition of output and chunk arrays
-    cdef uint64_t[:, :, :] out = cvarray(shape = (1 + arr.shape[0] - stencil[0],
-                                                  1 + arr.shape[1] - stencil[1],
-                                                  1 + arr.shape[2] - stencil[2]),
-                                         itemsize = sizeof(uint64_t), format = 'Q')
-    out[:, :, :] = 0    # Assign all elements of output to zero
+    # Supported data formats, coded as one-char-long strings i.e. uint32_t (I) and uint64_t (Q)
+    fm = "Q"
+    cdef n_type control = 2**32-1
 
-    cdef uint32_t[:, :, :] chunk = cvarray(shape=(stencil[0]+1, stencil[1]+1, stencil[2]+1),
-                                           itemsize=sizeof(uint32_t), format='I')
+    # Type checking delivers 'int' for both 'uint32_t' and 'uint64_t' -> Test to distinguish them
+    try:
+        control <<= 32  # Deliberately generate an OverflowError for case uint32_t
+    except OverflowError:
+        fm = "I"
+
+    # Memoryview definition of output and chunk arrays
+    cdef n_type[:, :, :, :] out = cvarray(shape = (1 + arr.shape[0] - stencil[0],
+                                                     1 + arr.shape[1] - stencil[1],
+                                                     1 + arr.shape[2] - stencil[2],
+                                                     2),    # 3D array of 2-tuples
+                                            itemsize = sizeof(n_type), format = fm)
+    cdef n_type[:, :, :] chunk = cvarray(shape = (stencil[0]+1, stencil[1]+1, stencil[2]+1),
+                                           itemsize = sizeof(n_type), format = fm)
+
+    out[:, :, :, :] = 0    # Assign all elements of output to zero
 
     # Process information in arr within edges (shifted by offset)
     for x in range(0, edges.shape[0]-2*offset[0]):
@@ -108,7 +144,9 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
                 center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
                 chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
                 # Assign ID to coordinate
-                out[x, y, z] =  kernel(chunk, center_id)
+                result = kernel(chunk, center_id)
+                for w in range(len(result)):
+                    out[x, y, z, w] = result[w]
     return out
 
 
