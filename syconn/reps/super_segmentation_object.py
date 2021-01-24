@@ -1490,7 +1490,7 @@ class SuperSegmentationObject(SegmentationBase):
                 continue
             syn_signs.append(props['syn_sign'][syn.id])
             syn_sizes.append(props['mesh_area'][syn.id] / 2)
-        log_reps.debug(f'Used {len(syn_signs)} with a total size of {np.sum(syn_sizes)} um^2 between {comp_types} '
+        log_reps.debug(f'Used {len(syn_signs)} synapses with a total size of {np.sum(syn_sizes)} um^2 between {comp_types} '
                        f'(this cell) and {comp_types_partner} (other cells).')
         if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
             return -1
