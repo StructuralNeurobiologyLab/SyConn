@@ -11,7 +11,7 @@ pyopengl_platform: 'egl'
 # This will be set during initialization
 version:
 
-existing_cell_organelles: ['mi', 'sj', 'vc']
+existing_cell_organelles: ['mi', 'sj', 'vc', 'er', 'golgi']
 syntype_avail: False
 
 # Compute backend: 'SLURM', None
@@ -48,6 +48,8 @@ paths:
   kd_sj:
   kd_vc:
   kd_mi:
+  kd_er:
+  kd_golgi:
   init_rag:
   use_new_subfold:
 
@@ -70,6 +72,8 @@ cell_objects:
     mi: 500
     sj: 100
     vc: 100
+    er: 100 # arbitrary placeholder
+    golgi: 100 # arbitrary placeholder
     sv: 1  # all cell supervoxels are extracted
     cs: 10  # contact sites tend to be small
     syn: 10  # these are overlayed with contact sites and therefore tend to be small
@@ -95,6 +99,8 @@ cell_objects:
     mi: 0.428571429
     sj: 0.19047619
     vc: 0.285714286
+    er: 0.5 # arbitrary placeholder, to be adjusted
+    golgi: 0.5 # arbitrary placeholder, to be adjusted
 
   # if object segmentation is generated from probability map or a binary mask and extract_morph_op (see below) contains
   # binary_erosion, then the segmentation is computed via watershed. The seeds are computed via connected compontents
@@ -116,6 +122,10 @@ cell_objects:
     mi: ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion', 'binary_erosion', 'binary_erosion']
     sj: ['binary_opening', 'binary_closing', 'binary_erosion']
     vc: ['binary_opening', 'binary_closing', 'binary_erosion']
+
+    # arbitrary placeholders, need to be adjusted:
+    er: ['binary_dilation', 'binary_dilation', 'binary_dilation', 'binary_erosion', 'binary_erosion', 'binary_erosion']
+    golgi: ['binary_dilation', 'binary_dilation', 'binary_dilation', 'binary_erosion', 'binary_erosion', 'binary_erosion']
 
   # bounding box criteria for mapping mitochondria objects
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM

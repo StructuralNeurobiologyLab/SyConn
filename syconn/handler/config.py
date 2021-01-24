@@ -340,6 +340,24 @@ class DynConfig(Config):
         return self.entries['paths']['kd_mi']
 
     @property
+    def kd_er_path(self) -> str:
+        """
+        Returns:
+            Path to ER probability map or binary predictions stored as
+            ``KnossosDataset``.
+        """
+        return self.entries['paths']['kd_er']
+
+    @property
+    def kd_golgi_path(self) -> str:
+        """
+        Returns:
+            Path to Golgi probability map or binary predictions stored as
+            ``KnossosDataset``.
+        """
+        return self.entries['paths']['kd_golgi']
+
+    @property
     def kd_organells_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle probability maps
@@ -726,7 +744,8 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
                           kd_sj: Optional[str] = None, kd_mi: Optional[str] = None,
-                          kd_vc: Optional[str] = None, init_rag_p: str = "",
+                          kd_vc: Optional[str] = None, kd_er: Optional[str] = None,
+                          kd_golgi: Optional[str] = None, init_rag_p: str = "",
                           prior_glia_removal: bool = True,
                           use_new_meshing: bool = True,
                           allow_mesh_gen_cells: bool = True,
@@ -766,6 +785,8 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         kd_sj: Path to the synaptic junction predictions.
         kd_mi: Path to the mitochondria predictions.
         kd_vc: Path to the vesicle cloud predictions.
+        kd_er: Path to the ER predictions.
+        kd_golgi: Path to the Golgi-Apparatus predictions.
         init_rag_p: Path to the initial supervoxel graph.
         prior_glia_removal: If True, applies glia separation before analysing
             cell reconstructions.
@@ -790,6 +811,10 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         kd_mi = working_dir + 'knossosdatasets/mi/'
     if kd_vc is None:
         kd_vc = working_dir + 'knossosdatasets/vc/'
+    if kd_er is None:
+        kd_er = working_dir + 'knossosdatasets/er/'
+    if kd_golgi is None:
+        kd_golgi = working_dir + 'knossosdatasets/golgi/'
 
     default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
     entries = default_conf.entries
@@ -799,6 +824,8 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     entries['paths']['kd_sj'] = kd_sj
     entries['paths']['kd_vc'] = kd_vc
     entries['paths']['kd_mi'] = kd_mi
+    entries['paths']['kd_er'] = kd_er
+    entries['paths']['kd_golgi'] = kd_golgi
     entries['paths']['init_rag'] = init_rag_p
     entries['paths']['use_new_subfold'] = use_new_subfold
     if type(scaling) is np.ndarray:
