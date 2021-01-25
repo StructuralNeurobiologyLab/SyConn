@@ -110,6 +110,9 @@ cell_objects:
     mi: 50
     sj: 10
     vc: 10
+    er: 30 # arbitrary placeholder, to be adjusted
+    golgi: 30 # arbitrary placeholder, to be adjusted
+
 
   # Hook for morphological operations from scipy.ndimage applied during object extraction.
   # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
@@ -159,6 +162,8 @@ meshes:
     sj: [2, 2, 1]
     vc: [4, 4, 2]
     mi: [4, 4, 2]
+    er: [4, 4, 2] # arbitrary placeholder, to be adapted
+    golgi: [4, 4, 2] # arbitrary placeholder, to be adapted
     cs: [2, 2, 1]
     syn_ssv: [2, 2, 1]
 
