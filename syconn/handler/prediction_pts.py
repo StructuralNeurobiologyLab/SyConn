@@ -2347,6 +2347,10 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
     ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
     feat_dim = int(re.findall(r'_fdim(\d+)_', mdir)[0])
     class_num = int(re.findall(r'_cnum(\d+)_', mdir)[0])
+
+    # possibly here use only the filename instead of mdir, e.g. ntpath.split(mdir)[1] (import ntpath for this),
+    # because e.g. ..._test_... in working directory name would cause an erroneous identification as 'est', here.
+    # Alternatively (maybe even better) use ...[-1] instead of ...[0] here.
     pred_type = re.findall(r'_t([^_]+)_', mdir)[0]
     batchsize = int(re.findall(r'_bs(\d+)_', mdir)[0])
     # TODO: Fix neighbor_nums or create extra model

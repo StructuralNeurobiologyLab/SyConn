@@ -61,6 +61,8 @@ versions:
   syn: 0
   syn_ssv: 0
   mi: 0
+  er: 0 # chosen as placeholder analogous to others, might have to be adapted later
+  golgi: 0 # chosen as placeholder analogous to others, might have to be adapted later
   ssv: 0
   ax_gt: 0
   cs: 0
