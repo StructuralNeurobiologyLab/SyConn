@@ -139,7 +139,7 @@ def process_block_nonzero(n_type[:, :, :] edges, n_type[:, :, :] arr, stencil1=(
     for x in range(0, edges.shape[0]-2*offset[0]):
         for y in range(0, edges.shape[1]-2*offset[1]):
             for z in range(0, edges.shape[2]-2*offset[2]):
-                if edges[x+offset[0], y+offset[1], z+offset[2]] == 0:
+                if edges[x+offset[0], y+offset[1], z+offset[2]] == 0:   # edges are non-zero wherever arr is non-zero
                     continue
                 center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
                 chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
