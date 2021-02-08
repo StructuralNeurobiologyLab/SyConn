@@ -219,10 +219,9 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
 
     # convert Chunkdataset to syn and cs KD
     def _convert_cd_to_kd(ot):
-        path_kd = "{}/knossosdatasets/{}_seg/".format(
-            global_params.config.working_dir, ot)
+        path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_seg/"
         if os.path.isdir(path_kd):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+            log.debug(f'Found existing KD at {path_kd}. Removing it now.')
             shutil.rmtree(path_kd)
         target_kd = knossosdataset.KnossosDataset()
         target_kd._cube_shape = cube_shape
@@ -234,10 +233,13 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
         export_cset_to_kd_batchjob({ot: path_kd}, cset, ot, [ot],  offset=offset, size=size,
                                    stride=chunk_size, as_raw=False,
                                    orig_dtype=np.uint64, unified_labels=False, log=log)
-        log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
-                  ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
+        log.debug(f'Finished conversion of ChunkDataset ({cset.path_head_folder}) into '
+                  f'KnossosDataset({target_kd.knossos_path})')
 
-    procs = [Process(target=_convert_cd_to_kd, args=('cs',)),
+    print(size, chunk_size)
+
+    procs = [Process(target=_convert_cd_to_kd, args=('cs0',)),
+             Process(target=_convert_cd_to_kd, args=('cs1',)),
              Process(target=_convert_cd_to_kd, args=('syn',))]
     for p in procs:
         p.start()
@@ -254,7 +256,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
             working_dir=global_params.config.working_dir, obj_type=struct,
             version=0, n_folders_fs=n_folders_fs)
         if os.path.isdir(sc_sd.path):
-            log.debug('Found existing SD at {}. Removing it now.'.format(sc_sd.path))
+            log.debug(f'Found existing SD at {sc_sd.path}. Removing it now.')
             shutil.rmtree(sc_sd.path)
         ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
         for ix in tqdm.tqdm(ids, leave=False):
@@ -263,8 +265,8 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
             os.makedirs(curr_dir, exist_ok=True)
 
     # Write SD
-    path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
-    path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
+    path = f"{global_params.config.working_dir}/knossosdatasets/syn_seg/"
+    path_cs = f"{global_params.config.working_dir}/knossosdatasets/cs_seg/"
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props)
@@ -432,14 +434,16 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
-            binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
+            ixx = (int(ix[:len(ix)//2]), int(ix[len(ix)//2:]))
+            binary_mask = (sub_vol == ixx).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
             # TODO: add to parameters to config
             res = scipy.ndimage.binary_dilation(res, iterations=2)
             # only update background or the objects itself
             proc_mask = (binary_mask == 1) | (sub_vol == 0)
-            contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
+            contacts[new_obj_slices][proc_mask][0] = res[proc_mask][0] * ixx[0]
+            contacts[new_obj_slices][proc_mask][1] = res[proc_mask][1] * ixx[1]
         cum_dt_proc2 += time.time() - start
 
         start = time.time()
@@ -453,8 +457,11 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         cum_dt_proc += time.time() - start
         os.makedirs(chunk.folder, exist_ok=True)
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
-                                  overlap:-overlap]], chunk.folder + "cs.h5",
-                                 ['cs'], overwrite=True)
+                                  overlap:-overlap, 0]], chunk.folder + "cs0.h5",
+                                 ['cs0'], overwrite=True)
+        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
+                                  overlap:-overlap, 1]], chunk.folder + "cs1.h5",
+                                 ['cs1'], overwrite=True)
         # syn segmentation only contain the overlap voxels between SJ and CS
         contacts[sj_d == 0] = 0
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,

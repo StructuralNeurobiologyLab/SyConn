@@ -7,9 +7,11 @@ from libcpp.map cimport map
 from cython.operator import dereference, postincrement
 from libcpp.unordered_map cimport unordered_map
 from libcpp.vector cimport vector
+from libcpp.string cimport string
 import timeit
 
 ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
+ctypedef unordered_map[string, uint64_t] um_str2uint
 ctypedef vector[int] int_vec
 ctypedef vector[int_vec] int_vec_vec
 
@@ -150,7 +152,7 @@ def process_block_nonzero(n_type[:, :, :] edges, n_type[:, :, :] arr, stencil1=(
     return out
 
 
-def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
+def extract_cs_syntype(n_type[:, :, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
     uint8_t[:, :, :] asym_mask, uint8_t[:, :, :] sym_mask):
     """cs_seg, syn_mask, sym_mask and asym_mask  must all have the same shape!
     TODO: check if uint32 and uint64 works with current unordered map definition, using n_type instead of uint64 results in an error.
@@ -160,31 +162,44 @@ def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
     and asymmetric voxels. The type ratio can be computed
     by using the total syn foreground voxels assigned to the CS object.
     """
-    cdef unordered_map[uint64_t, int_vec] rep_coords
-    cdef unordered_map[uint64_t, int_vec_vec] bounding_box
-    cdef unordered_map[uint64_t, int] sizes
-    cdef unordered_map[uint64_t, int_vec] rep_coords_syn
-    cdef unordered_map[uint64_t, int_vec_vec] bounding_box_syn
-    cdef unordered_map[uint64_t, int] sizes_syn
+    cdef unordered_map[string, int] sizes
+    cdef unordered_map[string, int_vec] rep_coords
+    cdef unordered_map[string, int_vec_vec] bounding_box
+    cdef unordered_map[string, int] sizes_syn
+    cdef unordered_map[string, int_vec] rep_coords_syn
+    cdef unordered_map[string, int_vec_vec] bounding_box_syn
+
     cdef int_vec_vec *local_bb
     cdef int x, y, z
 
     sh = cs_seg.shape
 
-    cdef um_uint2uint cs_asym
-    cdef um_uint2uint cs_sym
+    cdef um_str2uint cs_asym
+    cdef um_str2uint cs_sym
     cdef int syntype_vx
     cdef n_type syn_vx
+
+    cdef n_type[:] chunk_key
+    cdef string key, key0, key1
 
     for x in range(sh[0]):
         for y in range(sh[1]):
             for z in range(sh[2]):
-                key = cs_seg[x, y, z]
+                chunk_key = cs_seg[x, y, z]
 
                 # update CS properties
                 # IMPORTANT! ONLY COUNT SYN TYPES IF FOREGROUND IS TRUE
-                if key == 0:
+                if chunk_key == (0, 0):
                     continue
+
+                # Convert each entry of tuple to C++ string (bytes obj)
+                key0 = bytes(str(chunk_key[0]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+                key1 = bytes(str(chunk_key[1]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+
+                # Form key by appending both keys
+                key = key0.append(key1)
+
+                # If key has already been processed increase size and readjust local bounding box
                 if sizes.count(key):
                     local_bb = & (bounding_box[key])
                     local_bb[0][0][0] = min(local_bb[0][0][0], x)
@@ -194,14 +209,18 @@ def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
                     local_bb[0][1][1] = max(local_bb[0][1][1], y + 1)
                     local_bb[0][1][2] = max(local_bb[0][1][2], z + 1)
                     sizes[key] += 1
+                # For first appearance of key, set definitive representative_coords, initial bounding_box and current size
+                # to 1
                 else:
                     bounding_box[key] = ((x, y, z), (x+1, y+1, z+1))
                     sizes[key] = 1
                     rep_coords[key] = [x, y, z]
-                # extract synapse properties and syntype info
+
+                # Extract synapse properties and syntype info
                 syn_vx = syn_mask[x, y, z]
                 if syn_vx == 0:
                     continue
+                # If key has already been processed increase size and readjust local bounding box
                 if sizes_syn.count(key):
                     local_bb = & (bounding_box_syn[key])
                     local_bb[0][0][0] = min(local_bb[0][0][0], x)
@@ -211,6 +230,8 @@ def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
                     local_bb[0][1][1] = max(local_bb[0][1][1], y + 1)
                     local_bb[0][1][2] = max(local_bb[0][1][2], z + 1)
                     sizes_syn[key] += 1
+                # For first appearance of key, set definitive representative_coords, initial bounding_box and current size
+                # to 1
                 else:
                     bounding_box_syn[key] = ((x, y, z), (x+1, y+1, z+1))
                     sizes_syn[key] = 1
