@@ -5,6 +5,7 @@ from libcpp cimport bool
 from libc.stdint cimport int, float
 from libc.stdint cimport uint64_t, uint32_t
 from libcpp.vector cimport vector
+from libcpp.string cimport string
 import numpy as np
 
 ctypedef fused n_type:
@@ -21,18 +22,41 @@ ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
 ctypedef vector[unordered_map[uint64_t, um_uint2uint]] umvec_map
 
 
-def find_object_propertiesC(n_type[:, :, :] chunk):
-    cdef unordered_map[uint64_t, int_vec] rep_coords
-    cdef unordered_map[uint64_t, int_vec_vec] bounding_box
-    cdef unordered_map[uint64_t, int] sizes
+def find_object_propertiesC(n_type[:, :, :, :] chunk):
+    ''' Finds representative coords, bounding boxes and sizes of cs contained in chunk
+    --- Args ---
+        chunk: 3D-array of 2-tuples of either uint32_t or uint64_t
+    --- Returns ---
+        Three dictionaries with the object properties
+        '''
+    # Declaration of the C++ unordered maps and pointer to local_bb
+    cdef unordered_map[string, int] sizes
+    cdef unordered_map[string, int_vec] rep_coords
+    cdef unordered_map[string, int_vec_vec] bounding_box
     cdef int_vec_vec *local_bb
 
+    # Declaration of key-related information
+    cdef n_type[:] chunk_key
+    cdef string key, key0, key1
+
+    # Iteration through whole chunk
     for x in range(chunk.shape[0]):
         for y in range(chunk.shape[1]):
             for z in range(chunk.shape[2]):
-                key = chunk[x, y, z]
-                if key == 0:
+                # Reads out the 2-tuple key
+                chunk_key = chunk[x, y, z]
+
+                if chunk_key == (0, 0): # Spare conversion to string
                     continue
+
+                # Convert each entry of tuple to C++ string (bytes obj)
+                key0 = bytes(str(chunk_key[0]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+                key1 = bytes(str(chunk_key[1]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+
+                # Form key by appending both keys
+                key = key0.append(key1)
+
+                # If key has already been processed increase size and readjust local bounding box
                 if sizes.count(key):
                     local_bb = & (bounding_box[key])
                     local_bb[0][0][0] = min(local_bb[0][0][0], x)
@@ -42,6 +66,9 @@ def find_object_propertiesC(n_type[:, :, :] chunk):
                     local_bb[0][1][1] = max(local_bb[0][1][1], y + 1)
                     local_bb[0][1][2] = max(local_bb[0][1][2], z + 1)
                     sizes[key] += 1
+
+                # For first appearance of key, set definitive representative_coords, initial bounding_box and current size
+                # to 1
                 else:
                     bounding_box[key] = ((x, y, z), (x+1, y+1, z+1))
                     sizes[key] = 1
