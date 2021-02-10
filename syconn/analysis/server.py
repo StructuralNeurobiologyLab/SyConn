@@ -383,6 +383,7 @@ class SyConnBackend(object):
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         label = ""
+        certainty = ""
         # TODO: generalize!
         gt_type = 'ctgt_v2'
         if 'j0251' in self.ssd.working_dir:
