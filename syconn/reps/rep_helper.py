@@ -458,6 +458,14 @@ def find_object_properties(cube: np.ndarray) -> \
         raise ImportError("Problem when importing find_object_properties.pyx")
 
 
+def find_object_properties_old(cube):
+    try:
+        from .find_object_properties_C import find_object_propertiesC_old
+        return find_object_propertiesC_old(cube)
+    except ImportError:
+        raise ImportError("Problem when importing find_object_propertiesC_old for testing")
+
+
 def _find_object_properties(cube: np.ndarray) -> \
         Tuple[Dict[int, Any], Dict[int, Any], Dict[int, Any]]:
     """

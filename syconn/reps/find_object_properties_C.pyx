@@ -21,6 +21,42 @@ ctypedef vector[unordered_map[uint64_t, int]] umvec_size
 ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
 ctypedef vector[unordered_map[uint64_t, um_uint2uint]] umvec_map
 
+def find_object_propertiesC_old(n_type[:, :, :] chunk):
+    cdef unordered_map[uint64_t, int] sizes
+    cdef unordered_map[uint64_t, int_vec] rep_coords
+    cdef unordered_map[uint64_t, int_vec_vec] bounding_box
+    cdef int_vec_vec *local_bb
+
+    cdef n_type key
+
+    # Iteration through whole chunk
+    for x in range(chunk.shape[0]):
+        for y in range(chunk.shape[1]):
+            for z in range(chunk.shape[2]):
+                key = chunk[x, y, z]
+
+                if key == 0:
+                    continue
+
+                # If key has already been processed increase size and readjust local bounding box
+                if sizes.count(key):
+                    local_bb = & (bounding_box[key])
+                    local_bb[0][0][0] = min(local_bb[0][0][0], x)
+                    local_bb[0][0][1] = min(local_bb[0][0][1], y)
+                    local_bb[0][0][2] = min(local_bb[0][0][2], z)
+                    local_bb[0][1][0] = max(local_bb[0][1][0], x + 1)
+                    local_bb[0][1][1] = max(local_bb[0][1][1], y + 1)
+                    local_bb[0][1][2] = max(local_bb[0][1][2], z + 1)
+                    sizes[key] += 1
+
+                # For first appearance of key, set definitive representative_coords, initial bounding_box and current size
+                # to 1
+                else:
+                    bounding_box[key] = ((x, y, z), (x+1, y+1, z+1))
+                    sizes[key] = 1
+                    rep_coords[key] = [x, y, z]  # TODO: could be more representative
+    return rep_coords, bounding_box, sizes
+
 
 def find_object_propertiesC(n_type[:, :, :, :] chunk):
     ''' Finds representative coords, bounding boxes and sizes of cs contained in chunk

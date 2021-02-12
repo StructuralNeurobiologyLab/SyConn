@@ -2,9 +2,10 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 
-from syconn.reps.rep_helper import find_object_properties
+from syconn.reps.rep_helper import find_object_properties, find_object_properties_old
 from syconn.extraction.cs_extraction_steps import detect_cs
 import numpy as np
+import time
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
 from syconn.reps.rep_helper import colorcode_vertices
@@ -86,6 +87,45 @@ def test_find_object_properties():
                 k += 1
 
         assert bb_dc[key] == [[ix, small, small], [ix + 1, large + 1, large + 1]]
+
+
+def test_performance_find_object_properties():
+
+    iterations = 100
+    chunk1 = (50, 50, 10)
+    chunk2 = (50, 50, 10, 2)
+
+    # Structures
+    old_version = []
+    new_version = []
+
+    for ii in range(iterations):
+        old_version.append(np.random.randint(low=0, high=2 ** 32 - 1, size=chunk1, dtype=np.uint32))
+        new_version_to_add = np.random.randint(low=0, high=2 ** 32 - 1, size=chunk2, dtype=np.uint32)
+
+        for x in range(new_version_to_add.shape[0]):
+            for y in range(new_version_to_add.shape[1]):
+                for z in range(new_version_to_add.shape[2]):
+                    if new_version_to_add[x, y, z, 0] > new_version_to_add[x, y, z, 1]:
+                        tmp = new_version_to_add[x, y, z, 0]
+                        new_version_to_add[x, y, z, 0] = new_version_to_add[x, y, z, 1]
+                        new_version_to_add[x, y, z, 1] = tmp
+
+        new_version.append(new_version_to_add)
+
+    print("Begin of actual test is now")
+
+    tic_old = time.perf_counter()
+    for ii in range(iterations):
+        _, _, _ = find_object_properties_old(old_version[ii])
+    toc_old = time.perf_counter()
+
+    tic_new = time.perf_counter()
+    for ii in range(iterations):
+        _, _, _, = find_object_properties(new_version[ii])
+    toc_new = time.perf_counter()
+
+    print(f"For {iterations} iterations, old: {toc_old - tic_old}s and new: {toc_new - tic_new}s")
 
 
 def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
@@ -186,3 +226,7 @@ if __name__ == '__main__':
     test_find_object_properties()
 
     print("All module tests passed!")
+
+    test_performance_find_object_properties()
+
+    print("Performance test finished.")
