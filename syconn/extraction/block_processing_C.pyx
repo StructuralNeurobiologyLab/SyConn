@@ -193,8 +193,8 @@ def extract_cs_syntype(n_type[:, :, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
                     continue
 
                 # Convert each entry of tuple to C++ string (bytes obj)
-                key0 = bytes(str(chunk_key[0]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
-                key1 = bytes(str(chunk_key[1]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+                key0 = bytes(str(chunk_key[0]).zfill(8), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+                key1 = bytes(str(chunk_key[1]).zfill(8), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
 
                 # Form key by appending both keys
                 key = key0.append(key1)

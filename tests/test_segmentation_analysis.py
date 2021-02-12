@@ -12,39 +12,80 @@ from scipy import spatial
 
 
 def test_find_object_properties():
-    sample_array = np.array([
-            [[0, 1],
-             [1, 1]],
-            [[5, 2],
-             [2, 1]]], np.uint64)
-    # func_output[0]=dictionary of id's of unique voxel id, voxel id as key
-    # func_output[1]=dictionary of bounding box for voxel ids, voxel id as key
-    # func_output[2]=dictionary of count of all voxel ids, voxel id as key
+    n = 20
+    sample_array = np.zeros(shape=(n, n, n, 2), dtype=np.uint32)
+    std_key = b'0000000100000001'
+    zero_key = b'0000000000000000'
+
     repcoord_dc, bb_dc, cnt_dc = find_object_properties(sample_array)
-    element, count = np.unique(sample_array, return_counts=True)
-    assert 0 not in repcoord_dc and 0 not in bb_dc and 0 not in cnt_dc, \
+
+    assert repcoord_dc == {} and bb_dc == {} and cnt_dc == {}, "Must be empty dicts"
+    assert zero_key not in repcoord_dc and zero_key not in bb_dc and zero_key not in cnt_dc, \
         "Background properties must not be extracted."
-    if 0 in element:
-        count = count[element != 0]
-        element = element[element != 0]
-    for i in range(len(element)):
+
+    for ix in range(n):
+        for iy in range(n):
+            for iz in range(n):
+                sample_array[ix, iy, iz] = (1, 1)
+
+    repcoord_dc, bb_dc, cnt_dc = find_object_properties(sample_array)
+
+    assert repcoord_dc == {std_key: [0, 0, 0]}, "Only one ID"
+    assert bb_dc == {std_key: [[0, 0, 0], [n, n, n]]}, "Whole chunk is one bounding box"
+    assert cnt_dc == {std_key: sample_array.shape[0]*sample_array.shape[1]*sample_array.shape[2]}, \
+        "Size must be shape_x*shape_y*shape_z"
+
+    keys_array = np.zeros(shape=(n, n, n), dtype=object)
+    for ix in range(n):
+        for iy in range(n):
+            for iz in range(n):
+                sample_array[ix, iy, iz] = (ix, ix + iy + iz)
+                keys_array[ix, iy, iz] = bytes(str(ix).zfill(8) + str(ix + iy + iz).zfill(8), 'utf-8)')
+
+    repcoord_dc, bb_dc, cnt_dc = find_object_properties(sample_array)
+
+    assert zero_key not in repcoord_dc and zero_key not in bb_dc and zero_key not in cnt_dc, \
+        "Background properties must not be extracted."
+
+    unique_keys, count = np.unique(keys_array[:, :, :], return_counts=True)
+
+    for i, key in enumerate(unique_keys):
+        # If key starts with a zero, discard it (runs in real conditions are subject to this anyway
+        if key[:8] == b'00000000':
+            continue
+
         # testing count of voxel ids
-        assert (cnt_dc[element[i]] == count[i].astype(np.uint64)), \
-            "Count of the voxels not working."
+        assert (cnt_dc[key] == count[i].astype(np.uint64)), "Count of the voxels not working."
         # testing unique voxel-id
-        ll = repcoord_dc[element[i]]
-        check = sample_array[ll[0], ll[1], ll[2]]
-        assert element[i].astype(np.uint64) == check.astype(np.uint64), \
-            "Object voxel dictionary dosen't match."
-    # testing bounding box
-    for e in element:
-        mask = sample_array == e
-        min_bound = np.transpose(np.where(mask)).min(axis=0)
-        assert np.all(min_bound == bb_dc[e][0]), \
-            "Bounding box dictionary mismatch."
-        max_bound = np.transpose(np.where(mask)).max(axis=0) + 1
-        assert np.all(max_bound == bb_dc[e][1]), \
-            "Bounding box dictionary mismatch."
+        rep_coord = repcoord_dc[key]
+        check = sample_array[rep_coord[0], rep_coord[1], rep_coord[2]]
+        rhs = bytes(str(check[0]).zfill(8) + str(check[1]).zfill(8), 'utf-8')
+        assert key == rhs, f"Object voxel dictionary dosen't match: {key} != {rhs}"
+
+        # testing bounding box
+        ix = int(key[:8])
+        sigma = int(key[8:]) - ix  # Sigma = iy + iz
+        k, small, large = (0, 0, 0)
+        found_k = False
+        while not found_k and k < n:
+            try_bb = [[ix, k, k], [ix + 1, sigma - k + 1, sigma - k + 1]]
+            fallback_bb = [[ix, sigma - k, sigma - k], [ix + 1, k + 1, k + 1]]
+
+            try1 = (try_bb == bb_dc[key])
+            try2 = (fallback_bb == bb_dc[key])
+
+            if try1 or try2:
+                if try1:
+                    small = k
+                    large = sigma - k
+                if try2:
+                    small = sigma - k
+                    large = k
+                found_k = True
+            else:
+                k += 1
+
+        assert bb_dc[key] == [[ix, small, small], [ix + 1, large + 1, large + 1]]
 
 
 def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
@@ -94,12 +135,9 @@ def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
 
 
 def test_detect_cs():
-    _helpertest_detect_cs(np.array([0, 6, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    _helpertest_detect_cs(np.array([6, 0, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    _helpertest_detect_cs(np.array([0, 0, 6]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    _helpertest_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    _helpertest_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    _helpertest_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
 
 
 def test_chunk_weighted():
@@ -142,8 +180,9 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
 
 
 if __name__ == '__main__':
-    test_chunk_weighted()
-    test_colorcode_vertices(5, 50)
-    _helpertest_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    _helpertest_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    _helpertest_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    # test_chunk_weighted()
+    # test_colorcode_vertices(5, 50)
+    # test_detect_cs()
+    test_find_object_properties()
+
+    print("All module tests passed!")

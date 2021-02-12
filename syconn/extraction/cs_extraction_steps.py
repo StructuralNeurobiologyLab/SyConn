@@ -434,7 +434,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
-            ixx = (int(ix[:len(ix)//2]), int(ix[len(ix)//2:]))
+            ixx = (int(ix[:8]), int(ix[8:]))
             binary_mask = (sub_vol == ixx).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)

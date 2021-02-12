@@ -46,12 +46,13 @@ def find_object_propertiesC(n_type[:, :, :, :] chunk):
                 # Reads out the 2-tuple key
                 chunk_key = chunk[x, y, z]
 
-                if chunk_key == (0, 0): # Spare conversion to string
+                # First entry equal zero implies both are zero
+                if chunk_key[0] == <n_type>(0): # Spare conversion to string
                     continue
 
                 # Convert each entry of tuple to C++ string (bytes obj)
-                key0 = bytes(str(chunk_key[0]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
-                key1 = bytes(str(chunk_key[1]), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+                key0 = bytes(str(chunk_key[0]).zfill(8), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
+                key1 = bytes(str(chunk_key[1]).zfill(8), 'utf-8')    # Formatting required, but choice of 'utf-8' arbitrary
 
                 # Form key by appending both keys
                 key = key0.append(key1)

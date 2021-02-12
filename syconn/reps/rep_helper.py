@@ -455,7 +455,7 @@ def find_object_properties(cube: np.ndarray) -> \
         from .find_object_properties_C import find_object_propertiesC
         return find_object_propertiesC(cube)
     except ImportError:
-        return _find_object_properties(cube)
+        raise ImportError("Problem when importing find_object_properties.pyx")
 
 
 def _find_object_properties(cube: np.ndarray) -> \
