@@ -9,6 +9,7 @@ import os
 import torch
 import argparse
 import random
+import logging
 import numpy as np
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
@@ -17,6 +18,7 @@ import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3d, Backup, metrics
+import distutils
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -29,9 +31,12 @@ parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor f
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
-parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
-parser.add_argument('--use_syntype', default=True, help='Use synapse type', type=bool)
-parser.add_argument('--cellshape_only', default=False, help='Use only cell surface points', type=bool)
+parser.add_argument('--use_bias', default=1, help='Use bias parameter in Convpoint layers.',
+                    type=distutils.util.strtobool)
+parser.add_argument('--use_syntype', default=1, help='Use synapse type',
+                    type=distutils.util.strtobool)
+parser.add_argument('--cellshape_only', default=0, help='Use only cell surface points',
+                    type=distutils.util.strtobool)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -64,7 +69,6 @@ ctx = args.ctx
 use_bias = args.use_bias
 use_syntype = args.use_syntype
 cellshape_only = args.cellshape_only
-
 lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.99
@@ -79,7 +83,6 @@ num_classes = 11
 onehot = True
 act = 'relu'
 use_myelin = True
-
 if name is None:
     name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:

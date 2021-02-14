@@ -476,7 +476,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
-            # TODO: add to parameters to config
+            # TODO: add to parameters to config, why is this necessary?
             res = scipy.ndimage.binary_dilation(res, iterations=2)
             # only update background or the objects itself
             proc_mask = (binary_mask == 1) | (sub_vol == 0)
@@ -754,6 +754,9 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     Returns:
         3D contact site segmentation array (np.uint64).
     """
+    # simple edge detector, only works reliably if extra-cellular space is available
+    # TODO: switch to C++ loop with 6-neighborhood checks (unequal to center ID) to achieve symmetric
+    #  contact sites in the case of zero extra-cellular space.
     jac = np.zeros([3, 3, 3], dtype=np.int)
     jac[1, 1, 1] = -6
     jac[1, 1, 0] = 1

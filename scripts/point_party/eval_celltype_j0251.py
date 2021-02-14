@@ -188,7 +188,7 @@ def create_pointplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.close()
 
 
-def plot_performance_summary(bd):
+def plot_performance_summary(bd, include_special_inputs=False):
     res_dc_pths = glob.glob(bd + '*/redun*_prediction_results.pkl', recursive=True)
     fscores = []
     labels = []
@@ -197,6 +197,8 @@ def plot_performance_summary(bd):
     npts = []
     for fp in res_dc_pths:
         dc = basics.load_pkl2obj(fp)
+        if not include_special_inputs and (not dc['use_syntype'] or dc['cellshape_only']):
+            continue
         res = list(dc[f'fscore_macro'])
         fscores.extend(res)
         labels.extend([dc['model_tag']] * len(res))
@@ -206,11 +208,11 @@ def plot_performance_summary(bd):
     index = pandas.MultiIndex.from_arrays([labels, redundancies, npts, ctx], names=('labels', 'redundancy', 'npts', 'ctx'))
     df = pandas.DataFrame(fscores, index=index, columns=['fscore'])
     df = df.sort_values(by=['npts', 'ctx', 'redundancy'], ascending=True)
-    create_pointplot(f"{bd}/performance_summary_allRedundancies_pointplot.png", df.reset_index(), ci='sd',
-                     x='labels', y='fscore', hue='redundancy', dodge=True, r=(0.5, 1), palette=palette_ident,
+    create_pointplot(f"{bd}/performance_summary_allRedundancies_pointplot{'_special' if include_special_inputs else ''}.png", df.reset_index(), ci='sd',
+                     x='labels', y='fscore', hue='redundancy', dodge=True, r=(0 if include_special_inputs else 0.4, 1), palette=palette_ident,
                      capsize=.1, scale=0.75, errwidth=1)
-    create_lineplot(f"{bd}/performance_summary_allRedundancies.png", df.reset_index(), ci='sd', err_style='band',
-                     x='labels', y='fscore', hue='redundancy', r=(0.5, 1), palette=palette_ident)
+    create_lineplot(f"{bd}/performance_summary_allRedundancies{'_special' if include_special_inputs else ''}.png", df.reset_index(), ci='sd', err_style='band',
+                     x='labels', y='fscore', hue='redundancy', r=(0 if include_special_inputs else 0.4, 1), palette=palette_ident)
 
 
 if __name__ == '__main__':
@@ -224,20 +226,27 @@ if __name__ == '__main__':
 
     state_dict_fname = 'state_dict.pth'
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
-    # TODO: update!
-    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/OLD_4Dev2020/'
-
-    for ctx, npts in [[20000, 25000], [20000, 50000], [20000, 75000], [20000, 5000], [4000, 25000]]:
+    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/'
+    for ctx, npts, use_syntype, cellshape_only in [(20000, 50000, False, False), (20000, 50000, True, False),
+                                                   (20000, 50000, True, True),
+                                                   (20000, 25000, True, False), (20000, 75000, True, False),
+                                                   (20000, 5000, True, False), (4000, 25000, True, False)]:
         scale = ctx // 10
         skip_model = False
-        base_dir = f'{bbase_dir}//celltype_pts{npts}_ctx{ctx}/'
-        mfold = base_dir + '/celltype_CV{}/celltype_pts_j0251v2_scale{}_nb{}_ctx{}_relu_myelin_gn_CV{}_eval{}/'
+        base_dir = f'{bbase_dir}//celltype_pts{npts}_ctx{ctx}'
+        if cellshape_only:
+            base_dir += '_cellshape_only'
+        if not use_syntype:  # ignore if cell shape only
+            base_dir += '_no_syntype'
+        mfold = base_dir + '/celltype_CV{}/celltype_pts_j0251v2_scale{}_nb{}_ctx{}_relu{}{}_gn_CV{}_eval{}/'
         for run in range(n_runs):
             for CV in range(ncv_min, n_cv):
-                mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
+                mfold_complete = mfold.format(CV, scale, npts, ctx, "" if use_syntype else "_noSyntype",
+                                              "_cellshapeOnly" if cellshape_only else "_myelin", CV, run)
+                mpath = f'{mfold_complete}/{state_dict_fname}'
                 if not os.path.isfile(mpath):
                     msg = f"'{mpath}' not found. Skipping entire eval run for {base_dir}."
-                    skip_model = True
+                    raise ValueError(msg)
         if skip_model:
             continue
         # prepare GT
@@ -266,23 +275,23 @@ if __name__ == '__main__':
                 log.info(f'\nStarting evaluation of model with npoints={npts}, eval. run={run}.\n'
                          f'GT data at wd={wd}\n')
                 for CV in range(ncv_min, n_cv):
-                    mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
+                    mfold_complete = mfold.format(CV, scale, npts, ctx, "" if use_syntype else "_noSyntype",
+                                                  "_cellshapeOnly" if cellshape_only else "_myelin", CV, run)
+                    mpath = f'{mfold_complete}/{state_dict_fname}'
                     assert os.path.isfile(mpath)
                     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
                     assert loader_kwargs['npoints'] == npts
                     log.info(f'model_kwargs={mkwargs}')
                     ccd = CellCloudDataJ0251(cv_val=CV)
                     split_dc = ccd.splitting_dict
-                    cellshape_only = False
-                    use_syntype = True
                     if 'myelin' in mpath:
                         map_myelin = True
                     else:
                         map_myelin = False
                     if '_noSyntype' in mpath:
-                        use_syntype = False
+                        assert not use_syntype
                     if '_cellshapeOnly' in mpath:
-                        cellshape_only = True
+                        assert cellshape_only
                     mkwargs['mpath'] = mpath
                     log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
                     fname_pred = f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_{run}_10fold_PRED.pkl'
@@ -300,7 +309,10 @@ if __name__ == '__main__':
                 for CV in range(ncv_min, n_cv):
                     ccd = CellCloudDataJ0251(cv_val=CV)
                     split_dc = ccd.splitting_dict
-                    mpath = f'{mfold.format(CV, scale, npts, ctx, CV, run)}/{state_dict_fname}'
+                    mfold_complete = mfold.format(CV, scale, npts, ctx, "" if use_syntype else "_noSyntype",
+                                                  "_cellshapeOnly" if cellshape_only else "_myelin", CV, run)
+                    mpath = f'{mfold_complete}/{state_dict_fname}'
+                    assert os.path.isfile(mpath)
                     fname_pred = f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_{run}_10fold_PRED.pkl'
                     res_dc = basics.load_pkl2obj(fname_pred)
                     res_dc = dict(res_dc)  # convert to standard dict
@@ -335,24 +347,33 @@ if __name__ == '__main__':
                          f'{[(ix, int2str_label[label], int2str_label[pred]) for ix, label, pred in zip(valid_ids[valid_preds != valid_ls], valid_ls[valid_preds != valid_ls], valid_preds[valid_preds != valid_ls])]}')
             # plot everything
             perf_res_dc = dict(perf_res_dc)
-            perf_res_dc['model_tag'] = f'ctx{loader_kwargs["ctx_size"]}_nb{npts}'
+            model_tag = f'ctx{loader_kwargs["ctx_size"]}_nb{npts}'
+            if cellshape_only:
+                model_tag += 'cellshapeOnly'
+            if not use_syntype:
+                model_tag += 'noSyntype'
+            perf_res_dc['model_tag'] = model_tag
             perf_res_dc['ctx'] = ctx
             perf_res_dc['redundancy'] = redundancy
             perf_res_dc['npts'] = npts
+            perf_res_dc['cellshape_only'] = cellshape_only
+            perf_res_dc['use_syntype'] = use_syntype
+
             basics.write_obj2pkl(f"{base_dir}/redun{redundancy}_prediction_results.pkl", perf_res_dc)
-            # fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
-            #                          [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
-            # labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
-            #                          np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
-            #
-            # df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
-            # create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
-            #                size=10)
-            #
-            # cert_correct = np.concatenate(perf_res_dc['cert_correct'])
-            # cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
-            # df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
-            #                             'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
-            # create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
-            #                add_boxplot=True, size=4)
-        plot_performance_summary(bbase_dir)
+            fscores = np.concatenate([perf_res_dc[f'fscore_class_{ii}'] for ii in range(nclasses)] +
+                                     [perf_res_dc[f'fscore_macro'], perf_res_dc['accuracy']]).squeeze()
+            labels = np.concatenate([np.concatenate([[int2str_label[ii]] * n_runs for ii in range(nclasses)]),
+                                     np.array(['f1_score_macro'] * n_runs + ['accuracy'] * n_runs)])
+
+            df = pandas.DataFrame(data={'quantity': labels, 'f1score': fscores})
+            create_catplot(f"{base_dir}/redun{redundancy}_performances.png", qs=df, x='quantity', y='f1score',
+                           size=10)
+
+            cert_correct = np.concatenate(perf_res_dc['cert_correct'])
+            cert_incorrect = np.concatenate(perf_res_dc['cert_incorrect'])
+            df = pandas.DataFrame(data={'quantity': ['correct'] * len(cert_correct) + ['incorrect'] * len(cert_incorrect),
+                                        'certainty': np.concatenate([cert_correct, cert_incorrect]).squeeze()})
+            create_catplot(f"{base_dir}/redun{redundancy}_certainty.png", qs=df, x='quantity', y='certainty',
+                           add_boxplot=True, size=4)
+    plot_performance_summary(bbase_dir)
+    plot_performance_summary(bbase_dir, include_special_inputs=True)

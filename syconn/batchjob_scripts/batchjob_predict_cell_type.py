@@ -34,10 +34,7 @@ ch, use_point_models = args
 
 if use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-    predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, show_progress=False,
-                         # TODO: remove!
-                         pred_key='celltype_cnn_e3_v2',
-                         mpath='/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/celltype_pts25000_ctx20000/celltype_CV0/celltype_pts_j0251v2_scale2000_nb25000_ctx20000_relu_myelin_gn_CV0_eval0/state_dict.pth')
+    predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, show_progress=False)
 else:
     # multi view model properties
     model_props = global_params.config['celltypes']
