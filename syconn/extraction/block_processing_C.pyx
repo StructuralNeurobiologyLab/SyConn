@@ -88,14 +88,14 @@ def process_block(n_type[:, :, :] edges, n_type[:, :, :] arr, stencil1=(7,7,3)):
                                                     itemsize = sizeof(n_type), format = fm)
     cdef n_type[:, :, :] chunk = cvarray(shape = (2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2),
                                            itemsize = sizeof(n_type), format = fm)
-    out [:, :, :] = 0
+    out [:, :, :, :] = 0
 
     for x in range(offset[0], arr.shape[0] - offset[0]):
         for y in range(offset[1], arr.shape[1] - offset[1]):
             for z in range(offset[2], arr.shape[2] - offset[2]):
                 if edges[x, y, z] == 0:
                     continue
-                center_id = arr[x, y, z] #be sure that it's 32 or 64 bit intiger
+                center_id = arr[x, y, z]
                 chunk = arr[x - offset[0]: x + offset[0] + 1, y - offset[1]: y + offset[1], z - offset[2]: z + offset[2]]
                 result = kernel(chunk, center_id)
                 # Assign ID to coordinate

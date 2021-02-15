@@ -236,8 +236,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
         log.debug(f'Finished conversion of ChunkDataset ({cset.path_head_folder}) into '
                   f'KnossosDataset({target_kd.knossos_path})')
 
-    print(size, chunk_size)
-
     procs = [Process(target=_convert_cd_to_kd, args=('cs0',)),
              Process(target=_convert_cd_to_kd, args=('cs1',)),
              Process(target=_convert_cd_to_kd, args=('syn',))]

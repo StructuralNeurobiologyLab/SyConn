@@ -21,6 +21,8 @@ ctypedef vector[unordered_map[uint64_t, int]] umvec_size
 ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
 ctypedef vector[unordered_map[uint64_t, um_uint2uint]] umvec_map
 
+
+# Old version of function. Kept for benchmarking and timing purposes
 def find_object_propertiesC_old(n_type[:, :, :] chunk):
     cdef unordered_map[uint64_t, int] sizes
     cdef unordered_map[uint64_t, int_vec] rep_coords

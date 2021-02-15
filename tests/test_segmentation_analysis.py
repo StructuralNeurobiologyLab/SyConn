@@ -91,18 +91,21 @@ def test_find_object_properties():
 
 def test_performance_find_object_properties():
 
+    # Number of iterations and chuck sizes (can be adjusted)
     iterations = 100
     chunk1 = (50, 50, 10)
     chunk2 = (50, 50, 10, 2)
 
-    # Structures
+    # Placeholders for chunks
     old_version = []
     new_version = []
 
+    # Generation of randomized chunks
     for ii in range(iterations):
         old_version.append(np.random.randint(low=0, high=2 ** 32 - 1, size=chunk1, dtype=np.uint32))
         new_version_to_add = np.random.randint(low=0, high=2 ** 32 - 1, size=chunk2, dtype=np.uint32)
 
+        # New version requires 2-tuples ids to be sorted in ascending order!
         for x in range(new_version_to_add.shape[0]):
             for y in range(new_version_to_add.shape[1]):
                 for z in range(new_version_to_add.shape[2]):
@@ -115,16 +118,19 @@ def test_performance_find_object_properties():
 
     print("Begin of actual test is now")
 
+    # Time the old version
     tic_old = time.perf_counter()
     for ii in range(iterations):
         _, _, _ = find_object_properties_old(old_version[ii])
     toc_old = time.perf_counter()
 
+    # Time the new version
     tic_new = time.perf_counter()
     for ii in range(iterations):
         _, _, _, = find_object_properties(new_version[ii])
     toc_new = time.perf_counter()
 
+    # Print out times
     print(f"For {iterations} iterations, old: {toc_old - tic_old}s and new: {toc_new - tic_new}s")
 
 
@@ -220,12 +226,17 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
 
 
 if __name__ == '__main__':
+
+    # Tests of functions of segmentation_analysis modules should go here
+
     # test_chunk_weighted()
     # test_colorcode_vertices(5, 50)
     # test_detect_cs()
     test_find_object_properties()
 
     print("All module tests passed!")
+
+    # Benchmarking and timing tests go here
 
     test_performance_find_object_properties()
 
