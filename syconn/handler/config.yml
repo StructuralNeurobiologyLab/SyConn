@@ -164,8 +164,8 @@ meshes:
     sj: [2, 2, 1]
     vc: [4, 4, 2]
     mi: [4, 4, 2]
-    er: [4, 4, 2] # arbitrary placeholder, to be adapted
-    golgi: [4, 4, 2] # arbitrary placeholder, to be adapted
+    er: [2, 2, 1] # arbitrary placeholder, to be adapted
+    golgi: [2, 2, 1] # arbitrary placeholder, to be adapted
     cs: [2, 2, 1]
     syn_ssv: [2, 2, 1]
 
