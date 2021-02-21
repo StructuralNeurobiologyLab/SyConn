@@ -1107,7 +1107,7 @@ def _write_props_to_sv_thread(args):
                 continue
             subcell_dc = md[subcell_id]
             for k, v in subcell_dc.items():
-                # normalize with respect to the number of voxels in the object
+                # normalize with respect to the number of voxels of the object
                 subcell_dc[k] = v / size_dc[subcell_id]
         del size_dc
         md = invert_mdc(md)  # invert to have cell SV IDs in highest layer
