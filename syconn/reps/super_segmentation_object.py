@@ -242,7 +242,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         # init mesh dicts
         self._meshes = {"sv": None, "vc": None, "mi": None, "sj": None, "syn_ssv": None, "syn_ssv_sym": None,
-                        "syn_ssv_asym": None}
+                        "syn_ssv_asym": None, "er": None, "golgi": None}
 
         self._views = None
         self._weighted_graph = None
@@ -2385,7 +2385,7 @@ class SuperSegmentationObject(SegmentationBase):
             # TODO: add option to rendering code which enables rendering of arbitrary cell organelles
             obj_type = 'sj'
         else:
-            mesh = self._meshes[obj_type]
+            mesh = self.load_mesh(obj_type)
         if ext_color is not None:
             if type(ext_color) is list:
                 ext_color = np.array(ext_color)
