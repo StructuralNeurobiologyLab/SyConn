@@ -2342,17 +2342,13 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
         use_norm = False
     if '_bn_' in mdir:
         norm_type = 'bn'
-    npoints = int(re.findall(r'_nb(\d+)_', mdir)[0])
-    scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
-    ctx = int(re.findall(r'_ctx(\d+)_', mdir)[0])
-    feat_dim = int(re.findall(r'_fdim(\d+)_', mdir)[0])
-    class_num = int(re.findall(r'_cnum(\d+)_', mdir)[0])
-
-    # possibly here use only the filename instead of mdir, e.g. ntpath.split(mdir)[1] (import ntpath for this),
-    # because e.g. ..._test_... in working directory name would cause an erroneous identification as 'est', here.
-    # Alternatively (maybe even better) use ...[-1] instead of ...[0] here.
-    pred_type = re.findall(r'_t([^_]+)_', mdir)[0]
-    batchsize = int(re.findall(r'_bs(\d+)_', mdir)[0])
+    npoints = int(re.findall(r'_nb(\d+)_', mdir)[-1])
+    scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[-1])
+    ctx = int(re.findall(r'_ctx(\d+)_', mdir)[-1])
+    feat_dim = int(re.findall(r'_fdim(\d+)_', mdir)[-1])
+    class_num = int(re.findall(r'_cnum(\d+)_', mdir)[-1])
+    pred_type = re.findall(r'_t([^_]+)_', mdir)[-1]
+    batchsize = int(re.findall(r'_bs(\d+)_', mdir)[-1])
     # TODO: Fix neighbor_nums or create extra model
     mkwargs = dict(input_channels=feat_dim, output_channels=class_num, use_norm=use_norm, use_bias=use_bias,
                    norm_type=norm_type)
