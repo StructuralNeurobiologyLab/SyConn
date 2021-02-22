@@ -96,7 +96,7 @@ def predict_cellorganelles(cube_of_interest: Optional[Tuple[np.ndarray]] = None)
     """
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
-                        global_params.config.mpath_syntype,
+                        global_params.config.mpath_mivcsj,
                         mag=1, n_channel=4, target_names=['mivcsj'],
                         target_channels=[(1, 2, 3)],
                         cube_of_interest=cube_of_interest)

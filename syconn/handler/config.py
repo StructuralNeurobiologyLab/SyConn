@@ -556,8 +556,18 @@ class DynConfig(Config):
         return self.model_dir + '/syntype/model.pts'
 
     @property
+    def mpath_mivcsj(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying synapse types (symmetric
+            vs. asymmetric) within 3D EM raw data.
+        """
+        return self.model_dir + '/mivcsj/model.pt'
+
+    @property
     def mpath_syn_rfc(self) -> str:
         return self.model_dir + '/conn_syn_rfc//rfc'
+
 
     @property
     def allow_mesh_gen_cells(self) -> bool:

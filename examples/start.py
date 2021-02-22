@@ -69,6 +69,8 @@ if __name__ == '__main__':
     n_folders_fs_sc = 100
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
+                     os.path.abspath(os.path.curdir) + '/SyConnData',
+                     os.path.abspath(os.path.curdir) + '/SyConn',
                      os.path.expanduser('~/SyConnData/'),
                      os.path.expanduser('~/SyConn/')]:
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
