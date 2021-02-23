@@ -8,7 +8,6 @@
 
 import argparse
 import os
-import _pickle
 import zipfile
 import re
 import torch

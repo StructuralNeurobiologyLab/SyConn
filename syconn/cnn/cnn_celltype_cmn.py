@@ -4,10 +4,8 @@
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 
-from syconn import global_params
 from syconn.cnn.TrainData import CelltypeViewsE3
 import argparse
-import _pickle
 import zipfile
 import os
 import torch
@@ -18,9 +16,6 @@ from elektronn3.models.simple import Conv3DLayer, StackedConv2Scalar#, \
 from syconn.handler.basics import load_pkl2obj
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
-from elektronn3.training.metrics import channel_metric
-from elektronn3.training import metrics
-import adabound
 
 
 class StackedConv2ScalarWithLatentAdd(nn.Module):
