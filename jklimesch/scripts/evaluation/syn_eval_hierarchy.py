@@ -25,7 +25,7 @@ def write_confusion_matrix(cm: np.array, names: list) -> str:
 # synapse GT labels: 0: dendrite, 1: axon, 2: head, 3: soma
 mapping = {0: 0, 1: 1, 2: 6, 3: 2}
 exclude = []
-red = 1
+red = 5
 
 if __name__ == "__main__":
     with open(os.path.expanduser('~/working_dir/gt/syn_gt/converted_v3.pkl'), 'rb') as f:

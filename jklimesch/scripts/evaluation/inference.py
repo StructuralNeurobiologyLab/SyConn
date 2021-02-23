@@ -219,7 +219,8 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 if __name__ == '__main__':
     base = os.path.expanduser('~/working_dir/paper/hierarchy/')
 
-    path_list = [('abt', 180), ('dnh', 390), ('ads', 760)]
+    # path_list = [('abt', 180), ('dnh', 390), ('ads', 760)]
+    path_list = [('abt', 370)]
 
     # path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
     #              ('2020_11_08_2000_2048_cp_cp_q', 90),
@@ -258,12 +259,9 @@ if __name__ == '__main__':
         base_path = base + path[0] + '/'
         m_path = base_path + f'models/state_dict_e{path[1]}.pth'
         argscont_path = base_path + 'argscont.pkl'
-        # duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
-        #                        m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=0,
-        #                        out_p=base_path + f'syn_eval_red{red}/')
-        duration = predict_sso([491527, 12179464, 14141444, 18251791, 22335491, 23044610, 46319619], "/wholebrain/songbird/j0126/areaxfs_v6/",
+        duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
                                m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=0,
-                               out_p=base_path + f'20_09_27_test_eval/')
+                               out_p=base_path + f'syn_eval_red{red}/')
 
         if path[0] in durations:
             durations[path[0]].append(duration)

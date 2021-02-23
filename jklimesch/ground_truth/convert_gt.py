@@ -10,8 +10,7 @@ import glob
 import re
 import numpy as np
 import networkx as nx
-from collections import deque
-from sklearn.neighbors import KDTree
+from .utils import label_search, comment2int
 from knossos_utils.skeleton_utils import load_skeleton
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
 
@@ -124,44 +123,6 @@ def labels2mesh(args):
     ce = CloudEnsemble(clouds, hc, no_pred=['mi', 'vc', 'sy'])
     # save generated cloud ensemble to file
     ce.save2pkl(f'{out_path}/sso_{sso.id}.pkl')
-
-
-def comment2int(comment: str):
-    """ Map comments used during annotation to respective label. """
-    if comment == "gt_dendrite" or comment == "shaft" or comment == "s":
-        return 0
-    elif comment == "gt_axon":
-        return 1
-    elif comment == "gt_soma" or comment == "other":
-        return 2
-    elif comment == "gt_bouton":
-        return 3
-    elif comment == "gt_terminal":
-        return 4
-    elif comment == "gt_neck" or comment == "neck" or comment == "p" or comment == "nr" or comment == "in":
-        return 5
-    elif comment == "gt_head" or comment == "head":
-        return 6
-    elif comment == "ignore":
-        return -2
-    else:
-        return -1
-
-
-def label_search(g: nx.Graph, source: int) -> int:
-    """ Find nearest node to source which has a label. """
-    visited = [source]
-    neighbors = g.neighbors(source)
-    de = deque([i for i in neighbors])
-    while de:
-        curr = de.pop()
-        if g.nodes[curr]['label'] != -1:
-            return curr
-        if curr not in visited:
-            visited.append(curr)
-            neighbors = g.neighbors(curr)
-            de.extendleft([i for i in neighbors if i not in visited])
-    return 0
 
 
 def gt_generation(kzip_paths, out_path, version: str = None):
