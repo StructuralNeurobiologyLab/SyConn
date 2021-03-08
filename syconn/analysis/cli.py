@@ -77,51 +77,62 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     # segment_colors = {id: None for id in backend.ssv_list().get('ssvs')}
 
     # render mitochondria if required
-    state.layers.append(
-        name='mitochondria',
-        layer=neuroglancer.SegmentationLayer(
-            source=neuroglancer.LocalVolume(
-                data=data,
-                dimensions=dimensions,
-                backend=backend,
-                precomputedMesh=True,
-                object_type='mi'
-            ),
-            segment_colors={id: '#FF0000' for id in backend.ssv_list().get('ssvs')},
-        )
-    )
+    # state.layers.append(
+    #     name='mitochondria',
+    #     layer=neuroglancer.SegmentationLayer(
+    #          source=MeshSource(dimensions, backend, 'mi'),
+    #         segment_colors={id: '#FF0000' for id in backend.ssv_list().get('ssvs')},
+    #     )
+    # )
     # state.selected_layer.layer = 'mitochondria'
-    # state.selected_layer.visible = True
+    # state.selected_layer.visible = False
+
+
+    # state.layers.append(
+    #     name='mitochondria',
+    #     layer=neuroglancer.SegmentationLayer(
+    #         source=neuroglancer.LocalVolume(
+    #             data=data,
+    #             dimensions=dimensions,
+    #             backend=backend,
+    #             precomputedMesh=True,
+    #             object_type='mi'
+    #         ),
+    #         segment_colors={id: '#FF0000' for id in backend.ssv_list().get('ssvs')},
+    #     )
+    # )
+    # state.selected_layer.layer = 'mitochondria'
+    # state.selected_layer.visible = False
 
     # render vesicle clouds if required
-    state.layers.append(
-        name='vesicle clouds',
-        layer=neuroglancer.LocalVolume(
-            data=data,
-            dimensions=dimensions,
-            backend=backend,
-            precomputedMesh=True,
-            object_type='vc'
-        ),
-        segment_colors={id: '00FF00' for id in backend.ssv_list().get('ssvs')}
-    )
+    # state.layers.append(
+    #     name='vesicle clouds',
+    #     layer=neuroglancer.LocalVolume(
+    #         data=data,
+    #         dimensions=dimensions,
+    #         backend=backend,
+    #         precomputedMesh=True,
+    #         object_type='vc'
+    #     ),
+    #     segment_colors={id: '00FF00' for id in backend.ssv_list().get('ssvs')}
+    # )
     # state.selected_layer.layer = 'vesicle clouds'
-    # state.selected_layer.visible = True
-    
-    # render synaptic junctions if required
-    state.layers.append(
-        name='synapses/synaptic junctions',
-        layer=neuroglancer.LocalVolume(
-            data=data,
-            dimensions=dimensions,
-            backend=backend,
-            precomputedMesh=True,
-            object_type='sj'
-        ),
-        segment_colors={id: 'FFFF00' for id in backend.ssv_list().get('ssvs')}
-    )
+    # state.selected_layer.visible = False
+    #
+    # # render synaptic junctions if required
+    # state.layers.append(
+    #     name='synapses/synaptic junctions',
+    #     layer=neuroglancer.LocalVolume(
+    #         data=data,
+    #         dimensions=dimensions,
+    #         backend=backend,
+    #         precomputedMesh=True,
+    #         object_type='sj'
+    #     ),
+    #     segment_colors={id: 'FFFF00' for id in backend.ssv_list().get('ssvs')}
+    # )
     # state.selected_layer.layer = 'synapse junctions'
-    # state.selected_layer.visible = True
+    # state.selected_layer.visible = False
 
     # skeleton and cell mesh combined
     # keep the skeleton source either the first or last layer to adjust rendering options
@@ -129,6 +140,7 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
         name=global_params.config.working_dir.split('/')[-1],
         layer=neuroglancer.SegmentationLayer(
             source=[
+                # MeshSource(dimensions, backend, 'mi'),
                 neuroglancer.LocalVolume(
                     data=data,
                     dimensions=dimensions,
@@ -138,7 +150,7 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
                 ),
                 SkeletonSource(dimensions, backend),
                 # TODO(hashir): independent mesh source
-                # MeshSource(dimensions, backend, 'sv')
+                # MeshSource(dimensions, backend, 'mi')
             ],
                 
             skeleton_shader=jet(),
@@ -153,10 +165,6 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     state.selected_layer.layer = global_params.config.working_dir.split('/')[-1]
     state.selected_layer.visible = True
 
-    # state.layers['mesh'] = neuroglancer.SegmentationLayer(
-    #     source='precomputed://' + 'http://127.0.0.1:8001/' + str(13955040)
-    # )
-
     # Configure skeleton layer
     if any(layer.name == global_params.config.working_dir.split('/')[-1] for layer in state.layers):
         # Adjust the skeleton rendering options
@@ -169,31 +177,32 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
 ############################################################
 # Get Syconn data and transform it to support Neuroglancer #
 ############################################################
-# TODO(hashir): independent mesh source
 class MeshSource(neuroglancer.mesh.MeshSource):
-
     def __init__(self, dimensions, backend, object_type):
         super(MeshSource, self).__init__(dimensions)
         self.backend = backend
         self.object_type = object_type
 
-    def get_mesh(self, object_id):
+    def get_object_mesh(self, object_id):
+        mesh = {}
+
         if self.object_type == 'sv':
             try:
                 mesh = self.backend.ssv_mesh(object_id)
             except:
-                raise ValueError(
-                    'Precomputed mesh not available for ssv_id: {}'.format(object_id))
+                logger.error('Precomputed mesh not available for ssv_id: {}'.format(object_id))
         else:
             try:
-                obj_vert = self.backend.ssv_obj_vert(object_id, self.obj_type)
-                obj_ind = self.backend.ssv_obj_ind(object_id, self.obj_type)
+                object_vert = self.backend.ssv_obj_vert(object_id, self.object_type)
+                object_ind = self.backend.ssv_obj_ind(object_id, self.object_type)
             except:
-                raise ValueError(
-                    'Precomputed mesh not available for ssv_id: {}'.format(object_id))
-            
-            mesh['vertices'] = obj_vert['vert']
-            mesh['indices'] = obj_ind['ind']
+                logger.error('Precomputed mesh not available for ssv_id: {}'.format(object_id))
+
+            mesh['vertices'] = object_vert['vert']
+            mesh['indices'] = object_ind['ind']
+
+        if not mesh:
+            logger.error('Mesh could not be built for given object_id: {}'.format(object_id))
 
         vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)[:, [2, 1, 0]] * 1e-9
         indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)
