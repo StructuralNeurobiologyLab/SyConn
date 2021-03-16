@@ -134,36 +134,76 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     # state.selected_layer.layer = 'synapse junctions'
     # state.selected_layer.visible = False
 
-    # skeleton and cell mesh combined
-    # keep the skeleton source either the first or last layer to adjust rendering options
+    MESH_DIRECTORY = os.path.expanduser('~/mnt/wholebrain/scratch/hashirah/SyConn/syconn/meshes')
+
+    to_precomputed(MESH_DIRECTORY)
     state.layers.append(
-        name=global_params.config.working_dir.split('/')[-1],
+        name='seg',
+        layer=neuroglancer.SegmentationLayer(
+            source=neuroglancer.LocalVolume(
+                data=data,
+                dimensions=dimensions,
+                backend=backend,
+                precomputedMesh=True,
+                object_type='mi'
+            )
+        )
+    )
+
+    state.selected_layer.layer = 'seg'
+    state.selected_layer.visible = True
+    
+    state.layers.append(
+        name='ssv_mesh',
         layer=neuroglancer.SegmentationLayer(
             source=[
-                # MeshSource(dimensions, backend, 'mi'),
-                neuroglancer.LocalVolume(
-                    data=data,
-                    dimensions=dimensions,
-                    backend=backend,
-                    precomputedMesh=True,
-                    object_type='sv'
-                ),
-                SkeletonSource(dimensions, backend),
-                # TODO(hashir): independent mesh source
-                # MeshSource(dimensions, backend, 'mi')
+                # neuroglancer.LocalVolume(
+                #     data=data,
+                #     dimensions=dimensions,
+                #     backend=backend,
+                #     precomputedMesh=True,
+                #     object_type='mi'
+                # ),
+                'precomputed://http://127.0.0.1:8001' + MESH_DIRECTORY + '#type=mesh'
             ],
-                
-            skeleton_shader=jet(),
-            selected_alpha=0,
-            not_selected_alpha=0,
-            # following segments are listed in the 'Seg' tab of side panel
-            segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs')),
-            mesh_silhouette_rendering=2
-        ),
+            segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs'))
+        )
     )
-    
-    state.selected_layer.layer = global_params.config.working_dir.split('/')[-1]
+    # skeleton and cell mesh combined
+    # keep the skeleton source either the first or last layer to adjust rendering options
+    # state.layers.append(
+    #     name='ssv_mesh',
+    #     layer=neuroglancer.LocalVolume(
+    #         data=data,
+    #         dimensions=dimensions,
+    #         backend=backend,
+    #         precomputedMesh=True,
+    #         object_type='sv'
+    #     ),
+    #     mesh_silhouette_rendering=2,
+    # )
+    state.selected_layer.layer = 'ssv_mesh'
     state.selected_layer.visible = True
+
+    # state.layers.append(
+    #     name=global_params.config.working_dir.split('/')[-1],
+    #     layer=neuroglancer.SegmentationLayer(
+    #         source=[
+    #             SkeletonSource(dimensions, backend),
+    #             # TODO(hashir): independent mesh source
+    #             # MeshSource(dimensions, backend, 'mi')
+    #         ],
+    #         skeleton_shader=jet(),
+    #         selected_alpha=0,
+    #         not_selected_alpha=0,
+    #         # following segments are listed in the 'Seg' tab of side panel
+    #         segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs')),
+    #         mesh_silhouette_rendering=2,
+    #     ),
+    # )
+    
+    # state.selected_layer.layer = global_params.config.working_dir.split('/')[-1]
+    # state.selected_layer.visible = True
 
     # Configure skeleton layer
     if any(layer.name == global_params.config.working_dir.split('/')[-1] for layer in state.layers):
@@ -171,7 +211,7 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
         state.layers[-1].skeleton_rendering.mode2d = 'lines'
         state.layers[-1].skeleton_rendering.line_width2d = 3
         state.layers[-1].skeleton_rendering.mode3d = 'lines_and_points'
-        state.layers[-1].skeleton_rendering.line_width3d = 5
+        state.layers[-1].skeleton_rendering.line_width3d = 3
 
 
 ############################################################
@@ -183,7 +223,7 @@ class MeshSource(neuroglancer.mesh.MeshSource):
         self.backend = backend
         self.object_type = object_type
 
-    def get_object_mesh(self, object_id):
+    def get_mesh(self, object_id):
         mesh = {}
 
         if self.object_type == 'sv':
@@ -245,6 +285,49 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
             edges=edges
         )
 
+def to_precomputed(path):
+    ssv_id = 13955040
+
+    import json
+
+    logger.info("Creating metadata file for object id {}".format(ssv_id))
+    
+    jsonStr = """{
+        "fragments": ["""" + str(ssv_id) + """"]
+}"""
+    dictt = {}
+    dictt["fragments"] = [""+ str(ssv_id) +""]
+
+    with open(os.path.join(path, str(ssv_id)+':0'), 'w') as f:
+        json.dump(dictt, f)
+
+    mesh = backend.ssv_mesh(ssv_id)
+
+    vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)[:, [2, 1, 0]] * 1e-9
+    indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)
+    num_vert = len(vertices)
+
+    data = [
+        np.uint32(num_vert),
+        vertices,
+        indices
+    ]
+    encoded_mesh = b''.join([array.tobytes('C') for array in data])
+
+    # dictt = {}
+    # dictt["fragments"] = encoded_mesh
+
+    # jsonStr = """{
+    #     "fragments": """ + encoded_mesh + """
+    # }
+    # """
+    # "fragments": ["121", "489"]
+    # "fragments": {"121", "489"}
+
+    logger.info("Writing mesh data for object id {}".format(ssv_id))
+
+    with open(os.path.join(path, str(ssv_id)), 'wb') as f:
+        f.write(encoded_mesh)
 
 if __name__ == '__main__':
     """
@@ -266,19 +349,23 @@ if __name__ == '__main__':
         # args.wd = '../../../../../SyConn/example_cube1'
         # Hashir path
         args.wd = '~/SyConn/example_cube1'
+        args.wd = '~/mnt/wholebrain/u/hashirah/SyConn/example_cube1'
     global_params.wd = os.path.expanduser(args.wd)
+    # print(global_params.config.working_dir)
     backend = configure_backend()
 
     # segmentation data of example_cube1
     seg_path = global_params.config.kd_seg_path
+    seg_path = os.path.join(global_params.config.working_dir, 'knossosdatasets/seg')
     dataset = KnossosDataset(seg_path)
 
-    # load entire segmentation (600, 400, 400) with magnification 1
+    # load entire segmentation with magnification 1
     seg_data = dataset.load_seg(offset=(0, 0, 0), size=dataset.boundary, mag=1)
     # seg_data = dataset.load_seg(offset=(0,0,0), size=(256, 256, 256), mag=1)
+    # seg_data = backend.get_ssd()
 
     logger.info('Segmentation data of shape {} loaded in memory'.format(seg_data.shape))
-
+    print(type(seg_data))
     # initialize viewer for Neuroglancer
     viewer = neuroglancer.Viewer()
     logger.info('Neuroglancer viewer object initialized')
