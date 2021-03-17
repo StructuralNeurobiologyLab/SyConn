@@ -1,14 +1,15 @@
 from __future__ import print_function
 from logging import log
-from neuroglancer.local_volume import LocalVolume
 
-from tensorboard.plugins.mesh.summary_v2 import mesh
+from neuroglancer.local_volume import LocalVolume
 
 from syconn.handler.logger import log_main as log_gate
 from syconn import global_params
 from syconn.analysis.backend import SyConnBackend
 from syconn.analysis.neuroShaders import rgb, jet
+from storage import MeshStorage
 
+import json
 import argparse
 import os
 import numpy as np
@@ -72,7 +73,7 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
             units='nm',
             scales=[20, 10, 10],
         )
-    
+
     # object id dict for color assignment 
     # segment_colors = {id: None for id in backend.ssv_list().get('ssvs')}
 
@@ -86,7 +87,6 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     # )
     # state.selected_layer.layer = 'mitochondria'
     # state.selected_layer.visible = False
-
 
     # state.layers.append(
     #     name='mitochondria',
@@ -133,26 +133,23 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     # )
     # state.selected_layer.layer = 'synapse junctions'
     # state.selected_layer.visible = False
+    # to_precomputed(MESH_DIRECTORY)
+    # state.layers.append(
+    #     name='mito',
+    #     layer=neuroglancer.SegmentationLayer(
+    #         source=neuroglancer.LocalVolume(
+    #             data=data,
+    #             dimensions=dimensions,
+    #             backend=backend,
+    #             precomputedMesh=True,
+    #             object_type='mi'
+    #         )
+    #     )
+    # )
+    #
+    # state.selected_layer.layer = 'mito'
+    # state.selected_layer.visible = True
 
-    MESH_DIRECTORY = os.path.expanduser('~/mnt/wholebrain/scratch/hashirah/SyConn/syconn/meshes')
-
-    to_precomputed(MESH_DIRECTORY)
-    state.layers.append(
-        name='seg',
-        layer=neuroglancer.SegmentationLayer(
-            source=neuroglancer.LocalVolume(
-                data=data,
-                dimensions=dimensions,
-                backend=backend,
-                precomputedMesh=True,
-                object_type='mi'
-            )
-        )
-    )
-
-    state.selected_layer.layer = 'seg'
-    state.selected_layer.visible = True
-    
     state.layers.append(
         name='ssv_mesh',
         layer=neuroglancer.SegmentationLayer(
@@ -166,22 +163,22 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
                 # ),
                 'precomputed://http://127.0.0.1:8001' + MESH_DIRECTORY + '#type=mesh'
             ],
-            segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs'))
+            # segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs'))
         )
     )
     # skeleton and cell mesh combined
     # keep the skeleton source either the first or last layer to adjust rendering options
-    # state.layers.append(
-    #     name='ssv_mesh',
-    #     layer=neuroglancer.LocalVolume(
-    #         data=data,
-    #         dimensions=dimensions,
-    #         backend=backend,
-    #         precomputedMesh=True,
-    #         object_type='sv'
-    #     ),
-    #     mesh_silhouette_rendering=2,
-    # )
+    state.layers.append(
+        name='ssv_mesh',
+        layer=neuroglancer.LocalVolume(
+            data=data,
+            dimensions=dimensions,
+            backend=backend,
+            precomputedMesh=True,
+            object_type='mi'
+        ),
+        mesh_silhouette_rendering=2,
+    )
     state.selected_layer.layer = 'ssv_mesh'
     state.selected_layer.visible = True
 
@@ -201,7 +198,7 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     #         mesh_silhouette_rendering=2,
     #     ),
     # )
-    
+
     # state.selected_layer.layer = global_params.config.working_dir.split('/')[-1]
     # state.selected_layer.visible = True
 
@@ -257,6 +254,7 @@ class MeshSource(neuroglancer.mesh.MeshSource):
 
         return encoded_mesh
 
+
 class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
     """
     Overloads the neuroglancer.skeleton.SkeletonSource. Implements get_skeleton()
@@ -285,49 +283,64 @@ class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
             edges=edges
         )
 
-def to_precomputed(path):
-    ssv_id = 13955040
 
-    import json
+def to_filename(bounds):
+    """converts boundaries to file names for file storage"""
+    return '_'.join('0' + '-' + str(bounds[i]) for i in range(len(bounds)))
 
-    logger.info("Creating metadata file for object id {}".format(ssv_id))
-    
-    jsonStr = """{
-        "fragments": ["""" + str(ssv_id) + """"]
-}"""
-    dictt = {}
-    dictt["fragments"] = [""+ str(ssv_id) +""]
 
-    with open(os.path.join(path, str(ssv_id)+':0'), 'w') as f:
-        json.dump(dictt, f)
+def _upload_individuals(mesh_dir, progress, mesh_binaries, generate_manifests, lod, boundaries):
+    """
+    Saves meshes for the Neuroglancer format to files
+    """
+    boundaryFilename = to_filename(boundaries)
+    storage = MeshStorage(mesh_dir, progress)
+    for segid, mesh_binary in mesh_binaries.items():
+        storage.put_files([(
+            '{}/{}:{}:{}'.format(  # file_path
+                storage.get_path(), segid, lod,
+                boundaryFilename
+            ),
+            mesh_binary)],  # content
+            content_type=None,
+            compress='precomputed',
+            compress_level=9,
+        )
 
-    mesh = backend.ssv_mesh(ssv_id)
+        if generate_manifests:
+            fragments = []
+            fragments.append('{}:{}:{}'.format(segid, lod, boundaryFilename))
+            storage.put_file(
+                file_path='{}/{}:{}'.format(
+                    storage.get_path(), segid, lod
+                ),
+                content=json.dumps({"fragments": fragments}),
+                content_type='application/json',
+                compress=None
+            )
 
-    vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)[:, [2, 1, 0]] * 1e-9
-    indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)
-    num_vert = len(vertices)
 
-    data = [
-        np.uint32(num_vert),
-        vertices,
-        indices
-    ]
-    encoded_mesh = b''.join([array.tobytes('C') for array in data])
+def create_mesh_binaries():
+    meshBinaries = {}
 
-    # dictt = {}
-    # dictt["fragments"] = encoded_mesh
+    for ssv_id in backend.ssv_list().get('ssvs'):
+        mesh = backend.ssv_mesh(ssv_id)
 
-    # jsonStr = """{
-    #     "fragments": """ + encoded_mesh + """
-    # }
-    # """
-    # "fragments": ["121", "489"]
-    # "fragments": {"121", "489"}
+        vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)[:, [2, 1, 0]] * 1e-9
+        indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)
+        num_vert = len(vertices)
 
-    logger.info("Writing mesh data for object id {}".format(ssv_id))
+        data = [
+            np.uint32(num_vert),
+            vertices,
+            indices
+        ]
+        encoded_mesh = b''.join([array.tobytes('C') for array in data])
 
-    with open(os.path.join(path, str(ssv_id)), 'wb') as f:
-        f.write(encoded_mesh)
+        meshBinaries[ssv_id] = encoded_mesh
+
+    return meshBinaries
+
 
 if __name__ == '__main__':
     """
@@ -363,6 +376,12 @@ if __name__ == '__main__':
     seg_data = dataset.load_seg(offset=(0, 0, 0), size=dataset.boundary, mag=1)
     # seg_data = dataset.load_seg(offset=(0,0,0), size=(256, 256, 256), mag=1)
     # seg_data = backend.get_ssd()
+
+    MESH_DIRECTORY = os.path.expanduser('/wholebrain/u/amancu/SyConn/example_cube2/meshes')
+
+    bounds = (dataset.boundary[2] * 20, dataset.boundary[1] * 10, dataset.boundary[0] * 10)
+    print(dataset.boundary)
+    _upload_individuals(MESH_DIRECTORY, True, create_mesh_binaries(), True, 0, bounds)
 
     logger.info('Segmentation data of shape {} loaded in memory'.format(seg_data.shape))
     print(type(seg_data))
