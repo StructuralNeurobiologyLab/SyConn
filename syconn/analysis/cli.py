@@ -7,7 +7,8 @@ from syconn.handler.logger import log_main as log_gate
 from syconn import global_params
 from syconn.analysis.backend import SyConnBackend
 from syconn.analysis.neuroShaders import rgb, jet
-from storage import MeshStorage
+from syconn.analysis.sources import SkeletonSource
+from syconn.analysis.utils import _upload_individuals, mesh_task
 
 import json
 import argparse
@@ -19,6 +20,8 @@ import neuroglancer
 import neuroglancer.cli
 import webbrowser
 
+ATTRIBUTES = ('sv', 'mi', 'sj', 'vc')
+BASE_DIRECTORY = os.path.expanduser('~/mnt/wholebrain/scratch/hashirah/SyConn/syconn/meshes')
 
 def configure_backend():
     """
@@ -77,16 +80,38 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     # object id dict for color assignment 
     # segment_colors = {id: None for id in backend.ssv_list().get('ssvs')}
 
+    sv_path = os.path.join(BASE_DIRECTORY, 'sv')
+    state.layers.append(
+        name='segmentation_mesh_skeleton',
+        layer=neuroglancer.SegmentationLayer(
+            source=[
+                # neuroglancer.LocalVolume(
+                #     data=data,
+                #     dimensions=dimensions,
+                #     backend=backend,
+                #     precomputedMesh=True,
+                #     object_type='sv'
+                # ),
+                'precomputed://http://127.0.0.1:8000' + sv_path,
+                SkeletonSource(dimensions, backend),
+            ],
+            segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs'))
+        )
+    )
+    state.selected_layer.layer = 'segmentation_mesh_skeleton'
+    state.selected_layer.visible = True
+
     # render mitochondria if required
-    # state.layers.append(
-    #     name='mitochondria',
-    #     layer=neuroglancer.SegmentationLayer(
-    #          source=MeshSource(dimensions, backend, 'mi'),
-    #         segment_colors={id: '#FF0000' for id in backend.ssv_list().get('ssvs')},
-    #     )
-    # )
-    # state.selected_layer.layer = 'mitochondria'
-    # state.selected_layer.visible = False
+    mito_path = os.path.join(BASE_DIRECTORY, 'mi')
+    state.layers.append(
+        name='mito',
+        layer=neuroglancer.SegmentationLayer(
+            source='precomputed://http://127.0.0.1:8000' + mito_path,
+            segment_colors={id: '#FF0000' for id in backend.ssv_list().get('ssvs')}
+        )
+    )
+    state.selected_layer.layer = 'mito'
+    state.selected_layer.visible = True
 
     # state.layers.append(
     #     name='mitochondria',
@@ -150,37 +175,23 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
     # state.selected_layer.layer = 'mito'
     # state.selected_layer.visible = True
 
-    state.layers.append(
-        name='ssv_mesh',
-        layer=neuroglancer.SegmentationLayer(
-            source=[
-                # neuroglancer.LocalVolume(
-                #     data=data,
-                #     dimensions=dimensions,
-                #     backend=backend,
-                #     precomputedMesh=True,
-                #     object_type='mi'
-                # ),
-                'precomputed://http://127.0.0.1:8001' + MESH_DIRECTORY + '#type=mesh'
-            ],
-            # segment_query=', '.join(str(id) for id in backend.ssv_list().get('ssvs'))
-        )
-    )
+    # state.layers.append(
+    #     name='mito',
+    #     layer=neuroglancer.LocalVolume(
+    #         data=data,
+    #         dimensions=dimensions,
+    #         backend=backend,
+    #         precomputedMesh=True,
+    #         object_type='mi'
+    #     ),
+    #     mesh_silhouette_rendering=2,
+    # )
+
+    # state.selected_layer.layer = 'mito'
+    # state.selected_layer.visible = True
+
     # skeleton and cell mesh combined
     # keep the skeleton source either the first or last layer to adjust rendering options
-    state.layers.append(
-        name='ssv_mesh',
-        layer=neuroglancer.LocalVolume(
-            data=data,
-            dimensions=dimensions,
-            backend=backend,
-            precomputedMesh=True,
-            object_type='mi'
-        ),
-        mesh_silhouette_rendering=2,
-    )
-    state.selected_layer.layer = 'ssv_mesh'
-    state.selected_layer.visible = True
 
     # state.layers.append(
     #     name=global_params.config.working_dir.split('/')[-1],
@@ -214,133 +225,6 @@ def configure_viewer(backend: SyConnBackend, state, data=None, dimensions=None):
 ############################################################
 # Get Syconn data and transform it to support Neuroglancer #
 ############################################################
-class MeshSource(neuroglancer.mesh.MeshSource):
-    def __init__(self, dimensions, backend, object_type):
-        super(MeshSource, self).__init__(dimensions)
-        self.backend = backend
-        self.object_type = object_type
-
-    def get_mesh(self, object_id):
-        mesh = {}
-
-        if self.object_type == 'sv':
-            try:
-                mesh = self.backend.ssv_mesh(object_id)
-            except:
-                logger.error('Precomputed mesh not available for ssv_id: {}'.format(object_id))
-        else:
-            try:
-                object_vert = self.backend.ssv_obj_vert(object_id, self.object_type)
-                object_ind = self.backend.ssv_obj_ind(object_id, self.object_type)
-            except:
-                logger.error('Precomputed mesh not available for ssv_id: {}'.format(object_id))
-
-            mesh['vertices'] = object_vert['vert']
-            mesh['indices'] = object_ind['ind']
-
-        if not mesh:
-            logger.error('Mesh could not be built for given object_id: {}'.format(object_id))
-
-        vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)[:, [2, 1, 0]] * 1e-9
-        indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)
-        num_vert = len(vertices)
-
-        data = [
-            np.uint32(num_vert),
-            vertices,
-            indices
-        ]
-        encoded_mesh = b''.join([array.tobytes('C') for array in data])
-
-        return encoded_mesh
-
-
-class SkeletonSource(neuroglancer.skeleton.SkeletonSource):
-    """
-    Overloads the neuroglancer.skeleton.SkeletonSource. Implements get_skeleton()
-
-    Args:
-        dimensions: neuroglancer.CoordinateSpace 
-        backend: syconn.analysis.backend.SyConnBackend 
-    """
-
-    def __init__(self, dimensions, backend):
-        super(SkeletonSource, self).__init__(dimensions)
-        self.backend = backend
-
-    def get_skeleton(self, object_id):
-        """
-        Creates a skeleton object from vertices and edges
-
-        :param object_id: int (ssv_id)
-        :return neuroglancer.skeleton.Skeleton (parsed in the SkeletonHandler)
-        """
-        skeleton = self.backend.ssv_skeleton(object_id)
-        nodes = np.array(skeleton["nodes"]).reshape(-1, 3)[:, [2, 1, 0]]  # change to (z,y,x) order
-        edges = np.array(skeleton["edges"]).reshape(-1, 2)
-        return neuroglancer.skeleton.Skeleton(
-            vertex_positions=nodes,
-            edges=edges
-        )
-
-
-def to_filename(bounds):
-    """converts boundaries to file names for file storage"""
-    return '_'.join('0' + '-' + str(bounds[i]) for i in range(len(bounds)))
-
-
-def _upload_individuals(mesh_dir, progress, mesh_binaries, generate_manifests, lod, boundaries):
-    """
-    Saves meshes for the Neuroglancer format to files
-    """
-    boundaryFilename = to_filename(boundaries)
-    storage = MeshStorage(mesh_dir, progress)
-    for segid, mesh_binary in mesh_binaries.items():
-        storage.put_files([(
-            '{}/{}:{}:{}'.format(  # file_path
-                storage.get_path(), segid, lod,
-                boundaryFilename
-            ),
-            mesh_binary)],  # content
-            content_type=None,
-            compress='precomputed',
-            compress_level=9,
-        )
-
-        if generate_manifests:
-            fragments = []
-            fragments.append('{}:{}:{}'.format(segid, lod, boundaryFilename))
-            storage.put_file(
-                file_path='{}/{}:{}'.format(
-                    storage.get_path(), segid, lod
-                ),
-                content=json.dumps({"fragments": fragments}),
-                content_type='application/json',
-                compress=None
-            )
-
-
-def create_mesh_binaries():
-    meshBinaries = {}
-
-    for ssv_id in backend.ssv_list().get('ssvs'):
-        mesh = backend.ssv_mesh(ssv_id)
-
-        vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)[:, [2, 1, 0]] * 1e-9
-        indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)
-        num_vert = len(vertices)
-
-        data = [
-            np.uint32(num_vert),
-            vertices,
-            indices
-        ]
-        encoded_mesh = b''.join([array.tobytes('C') for array in data])
-
-        meshBinaries[ssv_id] = encoded_mesh
-
-    return meshBinaries
-
 
 if __name__ == '__main__':
     """
@@ -361,14 +245,14 @@ if __name__ == '__main__':
         # Andrei path
         # args.wd = '../../../../../SyConn/example_cube1'
         # Hashir path
-        args.wd = '~/SyConn/example_cube1'
+        # args.wd = '~/SyConn/example_cube2'
         args.wd = '~/mnt/wholebrain/u/hashirah/SyConn/example_cube1'
     global_params.wd = os.path.expanduser(args.wd)
     # print(global_params.config.working_dir)
     backend = configure_backend()
 
     # segmentation data of example_cube1
-    seg_path = global_params.config.kd_seg_path
+    # seg_path = global_params.config.kd_seg_path
     seg_path = os.path.join(global_params.config.working_dir, 'knossosdatasets/seg')
     dataset = KnossosDataset(seg_path)
 
@@ -377,14 +261,17 @@ if __name__ == '__main__':
     # seg_data = dataset.load_seg(offset=(0,0,0), size=(256, 256, 256), mag=1)
     # seg_data = backend.get_ssd()
 
-    MESH_DIRECTORY = os.path.expanduser('/wholebrain/u/amancu/SyConn/example_cube2/meshes')
-
-    bounds = (dataset.boundary[2] * 20, dataset.boundary[1] * 10, dataset.boundary[0] * 10)
-    print(dataset.boundary)
-    _upload_individuals(MESH_DIRECTORY, True, create_mesh_binaries(), True, 0, bounds)
+    bounds = np.array([600 * 20, 400 * 10, 400 * 10])*1e-9
+    print(bounds)
+    # print(dataset.boundary)
+    # _upload_individuals(MESH_DIRECTORY, True, create_mesh_binaries(), True, 0, bounds)
 
     logger.info('Segmentation data of shape {} loaded in memory'.format(seg_data.shape))
-    print(type(seg_data))
+    
+    for obj_type in ATTRIBUTES:
+        mesh_dir = os.path.join(BASE_DIRECTORY, obj_type)
+        mesh_task(mesh_dir, backend, 0, bounds, obj_type, force=True)
+
     # initialize viewer for Neuroglancer
     viewer = neuroglancer.Viewer()
     logger.info('Neuroglancer viewer object initialized')
