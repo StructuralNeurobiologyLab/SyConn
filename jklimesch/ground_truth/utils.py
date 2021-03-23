@@ -73,14 +73,6 @@ def comment2int(comment: str):
         return -1
 
 
-def comment2unique(s):
-    return int.from_bytes(s.encode(), 'little')
-
-
-def unique2comment(n):
-    return n.to_bytes(math.ceil(n.bit_length() / 8), 'little').decode()
-
-
 def sso2kzip(id: int, ssd: SuperSegmentationDataset, ouput_path: str, skeleton: bool = True):
     sso = ssd.get_super_segmentation_object(id)
     sso.load_attr_dict()
@@ -97,7 +89,7 @@ def anno_skeleton2np(kzip, scaling, verbose=False):
     a_nodes = list(a_obj.getNodes())
     a_node_coords = np.array([n.getCoordinate() * scaling for n in a_nodes])
     a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
-    a_node_labels_raw = np.array([comment2unique(n.getComment()) for n in a_nodes], dtype=np.int)
+    a_node_labels_raw = np.array([n.getComment() for n in a_nodes])
     # generate graph from nodes in annotation object
     a_edges = []
     if verbose:

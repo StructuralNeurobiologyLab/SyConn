@@ -5,7 +5,7 @@ import re
 from tqdm import tqdm
 from syconn.proc.meshes import write_mesh2kzip
 from morphx.classes.hybridcloud import HybridCloud
-from utils import anno_skeleton2np, comment2unique, unique2comment, sso2kzip, nxGraph2kzip
+from utils import anno_skeleton2np, sso2kzip, nxGraph2kzip
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
@@ -17,9 +17,15 @@ col_lookup = {0: (76, 92, 158, 255), 1: (255, 125, 125, 255), 2: (125, 255, 125,
 
 def process_file(file: str, ctype: str, ssd: SuperSegmentationDataset):
     sso_id = int(max(re.findall('(\d+)', file.replace(a_path, '')), key=len))
+
+    output_path = o_path + ('DA' if ctype == 'DA_' else ctype) + f'_{sso_id}.k.zip'
+    if os.path.exists(output_path):
+        print(f"{file.replace(o_path, '')} already processed.")
+        return
+
     sso = ssd.get_super_segmentation_object(sso_id)
     scaling = sso.scaling
-    if 'DA_' in file or 'HVC_' in file or '6000389' in file or '1358090' in file or '10074977' in file:
+    if 'DA_' in file or 'HVC_' in file or '10074977' in file:
         scaling = np.array([10, 10, 20])
     if 'HVC_53854647' in file:
         scaling = sso.scaling
@@ -32,11 +38,10 @@ def process_file(file: str, ctype: str, ssd: SuperSegmentationDataset):
     hc = HybridCloud(vertices=vertices, labels=labels, nodes=a_coords, edges=a_edges, node_labels=a_labels)
     hc.nodel2vertl()
 
-    output_path = o_path + ('DA' if ctype == 'DA_' else ctype) + f'_{sso_id}.k.zip'
     sso2kzip(sso_id, ssd, output_path, skeleton=False)
     cols = np.array([col_lookup[el] for el in hc.labels.squeeze()], dtype=np.uint8)
     write_mesh2kzip(output_path, indices.astype(np.float32), hc.vertices.astype(np.float32), None, cols, f'colored.ply')
-    labels = [unique2comment(int(label)) for label in a_labels_raw]
+    labels = [str(label) for label in a_labels_raw]
     nxGraph2kzip(graph, a_coords, labels, output_path)
     # hc.save2pkl(o_path + ('DA' if ctype == 'DA_' else ctype) + f'_{sso_id}.pkl')
 
