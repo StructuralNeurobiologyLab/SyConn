@@ -1,11 +1,35 @@
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from tqdm import tqdm
-import math
+from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
 import numpy as np
 import networkx as nx
 from collections import deque
+from morphx.classes.hybridcloud import HybridCloud
 from knossos_utils.skeleton_utils import load_skeleton
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+
+
+def map_myelin(sso, hybrid_cloud):
+    """
+    Adds information about myelin to HybridCloud object. This information gets used by the ChunkHandler of the
+    NeuronX training pipeline (see _adapt_obj function) if the features are set accordingly (see train.py in neuronx
+    => pipeline).
+    """
+    sso.skeleton['myelin'] = map_myelin2coords(sso.skeleton["nodes"], mag=4)
+    # majorityvote_skeleton_property(sso, 'myelin')
+    # myelinated = sso.skeleton['myelin_avg10000']
+    myelinated = sso.skeleton['myelin']
+    hm_myelin = HybridCloud(vertices=hybrid_cloud.vertices, nodes=sso.skeleton["nodes"]*sso.scaling)
+    nodes_idcs = np.arange(len(hm_myelin.nodes))
+    myel_nodes = nodes_idcs[myelinated.astype(bool)]
+    myel_vertices = []
+    for node in myel_nodes:
+        myel_vertices.extend(hm_myelin.verts2node[node])
+    # myelinated vertices get type 1, not myelinated vertices get type 0
+    types = np.zeros(len(hybrid_cloud.vertices))
+    types[myel_vertices] = 1
+    hybrid_cloud.set_types(types)
+    return hybrid_cloud
 
 
 def label_search(g: nx.Graph, source: int) -> int:
@@ -40,13 +64,17 @@ def nxGraph2kzip(g, coords, labels, kzip_path):
     skel.to_kzip(kzip_path)
 
 
-def comment2int(comment: str):
+def comment2int(comment: str, convert_to_morphx: bool = False):
     """ Map comments used during annotation to respective label. """
     comment = comment.strip()
-    if comment in ["gt_dendrite", "shaft", "d", "d_end"]:
+    if comment in ["gt_dendrite", "shaft", "d"]:
         return 0
-    elif comment in ["gt_axon", "a", "axon", "a_end"]:
+    elif comment == "d_end":
+        return 0 if not convert_to_morphx else 13
+    elif comment in ["gt_axon", "a", "axon"]:
         return 1
+    elif comment == "a_end":
+        return 1 if not convert_to_morphx else 14
     elif comment in ["gt_soma", "other", "s"]:
         return 2
     elif comment in ["gt_bouton", "b", "bouton"]:
@@ -70,6 +98,7 @@ def comment2int(comment: str):
     elif comment in ["merger"]:
         return 12
     else:
+        # unidentified label names get the label from the nearest node with appropriate label
         return -1
 
 
@@ -82,13 +111,16 @@ def sso2kzip(id: int, ssd: SuperSegmentationDataset, ouput_path: str, skeleton: 
         sso.save_skeleton_to_kzip(ouput_path)
 
 
-def anno_skeleton2np(kzip, scaling, verbose=False):
+def anno_skeleton2np(kzip, scaling, verbose=False, convert_to_morphx=False):
     a_obj = load_skeleton(kzip)
-    a_obj = dict(skeleton=a_obj['skeleton'])
+    try:
+        a_obj = dict(skeleton=a_obj['skeleton'])
+    except KeyError:
+        a_obj = dict(skeleton=a_obj[''])
     a_obj = list(a_obj.values())[0]
     a_nodes = list(a_obj.getNodes())
     a_node_coords = np.array([n.getCoordinate() * scaling for n in a_nodes])
-    a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
+    a_node_labels = np.array([comment2int(n.getComment(), convert_to_morphx) for n in a_nodes], dtype=np.int)
     a_node_labels_raw = np.array([n.getComment() for n in a_nodes])
     # generate graph from nodes in annotation object
     a_edges = []
@@ -105,9 +137,9 @@ def anno_skeleton2np(kzip, scaling, verbose=False):
     g.add_edges_from(a_edges)
     a_edges = np.array(g.edges)
     # propagate labels, nodes with no label get label from nearest node with label
-    if verbose:
-        print("Propagating labels...")
     if -1 in a_node_labels:
+        if verbose:
+            print("Propagating labels...")
         nodes = np.array(g.nodes)
         # shuffling to make sure the label searches are not done for consecutive nodes => brings potential speedup
         np.random.shuffle(nodes)
@@ -117,6 +149,7 @@ def anno_skeleton2np(kzip, scaling, verbose=False):
                 if ix == -1:
                     a_node_labels[node] = 11
                 else:
+                    # all nodes between source and first node with label take on that label
                     path = nx.shortest_path(g, node, ix)
                     a_node_labels[path] = a_node_labels[ix]
     return a_node_coords, a_edges, a_node_labels, a_node_labels_raw, g

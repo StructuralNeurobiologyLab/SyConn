@@ -130,11 +130,6 @@ def gt_generation(kzip_paths, out_path, version: str = None):
         os.makedirs(out_path)
 
     params = [(p, out_path, version) for p in kzip_paths]
-    # for param in params:
-    #     print(param)
-    #     import ipdb
-    #     ipdb.set_trace()
-    #     labels2mesh(param)
     start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
 
 

@@ -1,7 +1,7 @@
 import os
 import pandas
 import numpy as np
-from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v2.csv"
 csv_p = os.path.expanduser(csv_p)

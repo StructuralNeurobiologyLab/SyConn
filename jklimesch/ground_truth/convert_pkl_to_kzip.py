@@ -6,6 +6,10 @@ import re
 from syconn.proc.meshes import write_mesh2kzip
 from syconn.handler.basics import load_pkl2obj
 
+
+""" Converts CloudEnsembles or HybridClouds saved in .pkl format to KNOSSOS .kzips. """
+
+
 if __name__ == '__main__':
     source_dir = os.path.expanduser('~/thesis/gt/cmn/dnh/raw/')
     out_dir = os.path.expanduser('~/thesis/gt/cmn/dnh/raw/')
