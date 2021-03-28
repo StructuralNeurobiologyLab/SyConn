@@ -41,12 +41,14 @@ def process_file(file: str, o_path: str, ctype: str, ssd: SuperSegmentationDatas
     cell.nodel2vertl()
 
     if not convert_to_morphx:
+        # --- generate new colorings and save them to new kzips ---
         sso2kzip(sso_id, ssd, kzip_path, skeleton=False)
         cols = np.array([col_lookup[el] for el in cell.labels.squeeze()], dtype=np.uint8)
         write_mesh2kzip(kzip_path, indices.astype(np.float32), cell.vertices.astype(np.float32), None, cols, f'colored.ply')
         labels = [str(label) for label in a_labels_raw]
         nxGraph2kzip(graph, a_coords, labels, kzip_path)
     else:
+        # --- convert annotations into MorphX CloudEnsembles ---
         # see comment2int in utils.py
         encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3,
                     'terminal': 4, 'neck': 5, 'head': 6, 'nr': 7,
@@ -71,7 +73,7 @@ def process_file(file: str, o_path: str, ctype: str, ssd: SuperSegmentationDatas
             vertices = vertices.reshape((-1, 3))
             labels = np.ones((len(vertices), 1)) * label_map[ix]
             organelle = HybridCloud(vertices=vertices, labels=labels)
-            cell.set_encoding({organelles[ix]: label_map[ix]})
+            organelle.set_encoding({organelles[ix]: label_map[ix]})
             clouds[organelles[ix]] = organelle
 
         # --- add myelin to main cell and merge main cell with organelles ---
@@ -95,5 +97,6 @@ if __name__ == '__main__':
                 print(f'Processing: {kzip}')
                 process_file(kzip, file, ssd)
         else:
+            # set convert_to_morphx = False to only generate new colorings of kzips
             process_file(a_path + file, o_path, file[:3], ssd, convert_to_morphx=True)
 
