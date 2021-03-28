@@ -22,6 +22,7 @@ def comment2int(comment: str):
 
 
 def v32v6(v3_id: int):
+    "Convert from areaxfs_v3 to areaxfs_v6"
     if v3_id == 141995:
         return 6201349
     elif v3_id == 11833344 or v3_id == 28479489:

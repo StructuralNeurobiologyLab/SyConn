@@ -4,7 +4,7 @@ import pickle as pkl
 import sklearn.metrics as sm
 from syconn import global_params
 from scipy.spatial import cKDTree
-from syconn_eval import merge
+from utils import merge
 from morphx.classes.pointcloud import PointCloud
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 

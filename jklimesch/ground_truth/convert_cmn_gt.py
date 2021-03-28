@@ -4,11 +4,9 @@ import numpy as np
 from typing import Union
 from tqdm import tqdm
 import networkx as nx
-from collections import deque
+from .utils import label_search
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
-
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
-
 from syconn import global_params
 from morphx.classes.cloudensemble import CloudEnsemble
 from morphx.classes.hybridmesh import HybridMesh
@@ -119,22 +117,6 @@ def convert_single(sso: SuperSegmentationObject, label: Union[int, np.ndarray], 
     types[myel_vertices] = 1
     hm.set_types(types)
     return ce
-
-
-def label_search(g: nx.Graph, source: int) -> int:
-    """ Find nearest node to source which has a label. """
-    visited = [source]
-    neighbors = g.neighbors(source)
-    de = deque([i for i in neighbors])
-    while de:
-        curr = de.pop()
-        if g.nodes[curr]['label'] != -1:
-            return curr
-        if curr not in visited:
-            visited.append(curr)
-            neighbors = g.neighbors(curr)
-            de.extendleft([i for i in neighbors if i not in visited])
-    return 0
 
 
 if __name__ == "__main__":
