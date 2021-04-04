@@ -10,7 +10,6 @@ Workflow of spinal semantic segmentation based on multiviews (2D semantic segmen
 It learns how to differentiate between spine head, spine neck and spine shaft.
 Caution! The input dataset was not manually corrected.
 """
-from syconn import global_params
 from syconn.cnn.TrainData import AxonsViewsE3
 import argparse
 import os

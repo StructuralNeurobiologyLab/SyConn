@@ -6,12 +6,8 @@
 # Authors: Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.extraction import cs_extraction_steps
+import pickle as pkl
+from syconn.proc import sd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +20,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cs_extraction_steps._write_props_to_syn_thread(args)
+out = sd_proc._write_props_to_sv_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

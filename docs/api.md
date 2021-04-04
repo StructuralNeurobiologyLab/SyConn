@@ -106,3 +106,29 @@ In case all data points are of interest, the recommended way to use the cache is
     
     In [96]: sv_sizes_vx_filtered = sd.sizes[~mask] 
 
+
+### Myelin prediction
+
+The entire myelin prediction for a single cell reconstruction including a smoothing
+is implemented and can be manually invoked as follows::
+
+    from syconn import global_params
+    from syconn.reps.super_segmentation import *
+    from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+
+    # init. example data set
+    global_params.wd = '~/SyConn/example_cube1/'
+
+    # initialize example cell reconstruction
+    ssd = SuperSegmentationDataset()
+    ssv = list(ssd.ssvs)[0]
+    ssv.load_skeleton()
+
+    # get myelin predictions
+    myelinated = map_myelin2coords(ssv.skeleton["nodes"])
+    ssv.skeleton["myelin"] = myelinated
+    # this will generate a smoothed version at ``ssv.skeleton["myelin_avg10000"]``
+    majorityvote_skeleton_property(ssv, "myelin")
+    # store results as a KNOSSOS readable k.zip file
+    ssv.save_skeleton_to_kzip(dest_path='~/{}_myelin.k.zip'.format(ssv.id),
+        additional_keys=['myelin', 'myelin_avg10000'])

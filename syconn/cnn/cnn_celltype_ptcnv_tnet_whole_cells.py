@@ -15,12 +15,10 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention
+from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3dTriplet, Backup
-from elektronn3.training import SWA
 import torch.nn.functional as F
 import numpy as np
-from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # Dimension of latent space
 Z_DIM = 10
@@ -159,12 +157,6 @@ if __name__ == '__main__':
     model = ModelNet40(input_channels, Z_DIM, dropout=dr, use_norm=use_norm,
                        track_running_stats=track_running_stats, act=act)
     name += '_moreAug4'
-
-    # model = ModelNetBig(input_channels, Z_DIM)
-    # name += '_big'
-
-    # model = ModelNetAttention(input_channels, Z_DIM, npoints=npoints)
-    # name += '_attention'
 
     model = TripletNet(model)
     model = nn.DataParallel(model)
