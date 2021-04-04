@@ -592,6 +592,15 @@ class DynConfig(Config):
         return self.model_dir + '/golgi/model.pts'
 
     @property
+    def mpath_golgi_er_mixed(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying cell parts occupied
+            by Golgi Apparatus and ER within 3D EM raw data.
+        """
+        return self.model_dir + '/golgi_er_mixed/model.pts'
+
+    @property
     def mpath_mivcsj(self) -> str:
         """
         Returns:
