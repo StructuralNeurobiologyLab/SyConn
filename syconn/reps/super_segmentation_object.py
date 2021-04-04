@@ -242,7 +242,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         # init mesh dicts
         self._meshes = {"sv": None, "vc": None, "mi": None, "sj": None, "syn_ssv": None, "syn_ssv_sym": None,
-                        "syn_ssv_asym": None}
+                        "syn_ssv_asym": None, "er": None, "golgi": None}
 
         self._views = None
         self._weighted_graph = None
