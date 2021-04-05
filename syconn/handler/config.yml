@@ -11,7 +11,7 @@ pyopengl_platform: 'egl'
 # This will be set during initialization
 version:
 
-existing_cell_organelles: ['mi', 'sj', 'vc', 'er', 'golgi']
+existing_cell_organelles: ['mi', 'sj', 'vc']#, 'er', 'golgi']
 syntype_avail: False
 
 # Compute backend: 'SLURM', None
