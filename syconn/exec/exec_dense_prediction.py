@@ -169,6 +169,6 @@ def predict_golgi_er_mixed(cube_of_interest: Optional[Tuple[np.ndarray]] = None)
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
                         global_params.config.mpath_golgi_er_mixed,
-                        mag=1, n_channel=2, target_names=['golgi', 'er'],
+                        mag=1, n_channel=3, target_names=['golgi', 'er'],
                         target_channels=[(1,), (2,)],
                         cube_of_interest=cube_of_interest)
