@@ -10,9 +10,9 @@ if __name__ == '__main__':
         base_dir = f'/wholebrain/scratch/pschuber/e3_trainings_cmn_celltypes_j0251/'
         for cval in range(nfold):
             params.append([cnn_script, dict(sr=f'{base_dir}/celltype_CV{cval}/', cval=cval, seed=run)])
-    params = list(basics.chunkify_successive(params, 2))
-    batchjob_script(params, 'launch_trainer', n_cores=20, additional_flags='--time=7-0 --qos=720h --gres=gpu:2',
+    params = list(basics.chunkify_successive(params, 1))
+    batchjob_script(params, 'launch_trainer', n_cores=20, additional_flags='--time=7-0 --qos=720h --gres=gpu:2 --mem=0',
                     disable_batchjob=False,
                     batchjob_folder=f'/wholebrain/scratch/pschuber/batchjobs/launch_trainer_celltypes_cmn_j0251/',
                     remove_jobfolder=False, overwrite=True,
-                    exclude_nodes=['wb02', 'wb03', 'wb04', 'wb05', 'wb06', 'wb07'])
+                    exclude_nodes=['wb06', 'wb07'])

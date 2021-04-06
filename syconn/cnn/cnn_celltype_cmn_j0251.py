@@ -70,9 +70,9 @@ def get_model():
 
 if __name__ == "__main__":
     lr = 1e-3
-    lr_stepsize = 500
-    lr_dec = 0.985
-    batch_size = 40
+    lr_stepsize = 750
+    lr_dec = 0.99
+    batch_size = 20
     n_classes = 11
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
@@ -80,7 +80,7 @@ if __name__ == "__main__":
                         default='',
                         help='Manually set experiment name')
     parser.add_argument(
-        '-m', '--max-steps', type=int, default=200e3,
+        '-m', '--max-steps', type=int, default=100e3,
         help='Maximum number of training steps to perform.'
     )
     parser.add_argument(

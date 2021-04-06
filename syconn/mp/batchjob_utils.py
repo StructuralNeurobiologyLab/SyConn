@@ -167,12 +167,10 @@ def batchjob_script(params: list, name: str,
         log_batchjob.error(msg)
         raise NotImplementedError(msg)
     cpus_per_node = global_params.config['ncores_per_node']
-    # mem_lim = int(global_params.config['mem_per_node'] /
-    #               cpus_per_node)
-    # if '--mem' in additional_flags:
-    #     raise ValueError('"--mem" must not be set via the "additional_flags"'
-    #                      ' kwarg.')
-    # additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+    mem_lim = int(global_params.config['mem_per_node'] /
+                  cpus_per_node)
+    if '--mem' not in additional_flags:
+        additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
 
     if exclude_nodes is None:
         exclude_nodes = global_params.config['slurm']['exclude_nodes']
