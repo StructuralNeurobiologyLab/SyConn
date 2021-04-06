@@ -874,7 +874,7 @@ class main_class(QtGui.QDialog):
     def gw_to_current_rec(self, gw_instance):
 
         self.rec_graph = gw_instance.rec_graph
-        self.split_graph = gw_instance.remove_nodes
+        self.split_graph = gw_instance.split_graph
         self.bad_svs = gw_instance.bad_svs
         self.current_rec_id = gw_instance.rec_id
         self.split_svs = gw_instance.split_svs

@@ -601,7 +601,7 @@ def map_myelin2coords(coords: np.ndarray,
     Returns:
         Myelin prediction (0: no myelin, 1: myelinated neuron) at every coordinate.
     """
-    myelin_kd_p = "/wholebrain/songbird/j0126/ssdscratch_data/knossosdatasets/myelin/"
+    myelin_kd_p = global_params.config.working_dir + "/knossosdatasets/myelin/"
     if not os.path.isdir(myelin_kd_p):
         raise ValueError(f'Could not find myelin KnossosDataset at {myelin_kd_p}.')
     kd = kd_factory(myelin_kd_p)

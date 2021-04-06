@@ -4,7 +4,7 @@ try:
 except ImportError:
     import pickle as pkl
 
-from jklimesch.evaluation.inference import predict_sso_thread
+from scripts.jklimesch import predict_sso_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
