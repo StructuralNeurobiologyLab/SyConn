@@ -251,27 +251,6 @@ def _dataset_analysis_thread(args):
     return global_attr_dict
 
 
-def _write_mapping_to_sv_thread(args):
-    """ Worker of map_objects_to_sv """
-
-    paths = args[0]
-    obj_type = args[1]
-    mapping_dict_path = args[2]
-
-    with open(mapping_dict_path, "rb") as f:
-        mapping_dict = pkl.load(f)
-
-    for p in paths:
-        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False)
-        for sv_id in this_attr_dc.keys():
-            this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
-                list(mapping_dict[sv_id].keys())
-            this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
-                list(mapping_dict[sv_id].values())
-        this_attr_dc.push()
-
-
 def _cache_storage_paths(args):
     target_p, all_ids, n_folders_fs = args
     # outputs target folder hierarchy for object storage
@@ -532,15 +511,16 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     start = time.time()
     # create "dummy" IDs which represent each a unique storage path
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs_sc)
-    n_jobs = int(min(2 * global_params.config.ncore_total, len(storage_location_ids)))
+    n_jobs = int(min(2 * global_params.config.ncore_total, len(storage_location_ids) / 2))
     multi_params = [(sv_id_block, n_folders_fs_sc, kd_organelle_paths)
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
-        sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
-                                   debug=False)
+        sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params, debug=False)
     else:
+        # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
+        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
-                           remove_jobfolder=True, n_cores=1)
+                           remove_jobfolder=True, n_cores=n_cores)
 
     # perform dataset analysis to cache all attributes in numpy arrays
     procs = []
@@ -571,11 +551,11 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                      list(kd_organelle_paths.keys()))
                     for sv_id_block in basics.chunkify(storage_location_ids, n_jobs)]
     if not qu.batchjob_enabled():
-        sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   debug=False)
+        sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params, debug=False)
     else:
-        qu.batchjob_script(multi_params, "write_props_to_sv",
-                           remove_jobfolder=True)
+        # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
+        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
     step_names.append("write cell SD")
@@ -1106,7 +1086,7 @@ def _write_props_to_sv_thread(args):
                 continue
             subcell_dc = md[subcell_id]
             for k, v in subcell_dc.items():
-                # normalize with respect to the number of voxels in the object
+                # normalize with respect to the number of voxels of the object
                 subcell_dc[k] = v / size_dc[subcell_id]
         del size_dc
         md = invert_mdc(md)  # invert to have cell SV IDs in highest layer

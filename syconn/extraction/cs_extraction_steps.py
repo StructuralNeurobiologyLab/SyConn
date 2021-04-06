@@ -26,7 +26,7 @@ from . import log_extraction
 from .block_processing_C import extract_cs_syntype
 from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
 from .object_extraction_steps import export_cset_to_kd_batchjob
-from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
+from .object_extraction_wrapper import calculate_chunk_numbers_for_box
 from .. import global_params
 from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage, CompressedStorage
 from ..handler import compression, basics
@@ -42,24 +42,66 @@ def process_block_nonzero(*args):
     return np.asarray(process_block_nonzero_cpp(*args))
 
 
-def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
-                          log: Optional[Logger] = None,
-                          max_n_jobs: Optional[int] = None,
-                          cube_of_interest_bb: Optional[np.ndarray] = None,
-                          n_folders_fs: int = 1000,
-                          cube_shape: Optional[Tuple[int]] = None,
-                          overwrite: bool = False):
+def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
+                          max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None,
+                          n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False):
     """
-    Extracts contact sites and their overlap with `sj` objects and stores them in a
+    Extracts contact sites and their overlap with ``sj`` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
     respectively. If synapse type is available, this information will be stored
     as the voxel-ratio per class in the attribute dictionary of the ``syn``
-    objects (keys: ``sym_prop``, ``asym_prop``).
+    objects (keys: ``sym_prop``, ``asym_prop``). These properties will further be used by
+    :func:`~syconn.extraction.cs_processing_steps.combine_and_split_syn` which aggregates per-SV synapse
+    fragments (syn) to per-SSV synapses (syn_ssv).
+
+    Examples:
+        The synapse type labels and KnossosDatasets are defined in the `config.yml` file and can be set
+        initially by changing the following attributes depending on how the synapse type prediction is stored.
+
+        (i) The type prediction is stored as segmentation in a single data set with three
+        labels (0: background, 1: symmetric, 2: asymmetric):
+
+            kd_asym_path = root_dir + 'kd_asym_sym/'
+            kd_sym_path = root_dir + 'kd_asym_sym/'
+            key_val_pairs_conf = [
+                ('cell_objects', {'sym_label': 1, 'asym_label': 2,}
+                )
+            ]
+                generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
+                          key_value_pairs=key_val_pairs_conf)
+
+
+        (ii) The type prediction is stored as segmentation in a two data sets each with two
+        labels (0: background, 1: symmetric and 0: background, 1: asymmetric):
+
+            kd_asym_path = root_dir + 'kd_asym/'
+            kd_sym_path = root_dir + 'kd_sym/'
+            key_val_pairs_conf = [
+                ('cell_objects', {'sym_label': 1, 'asym_label': 1,}
+                )
+            ]
+                generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
+                          key_value_pairs=key_val_pairs_conf)
+
+
+        (iii) The type prediction is stored as probability map in the raw channel (uint8, range: 0..255)
+        in a data set for each type:
+
+            kd_asym_path = root_dir + 'kd_asym/'
+            kd_sym_path = root_dir + 'kd_sym/'
+            key_val_pairs_conf = [
+                ('cell_objects', {'sym_label': None, 'asym_label': None,}
+                )
+            ]
+                generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
+                          key_value_pairs=key_val_pairs_conf)
 
     Todo:
-        Replace sj_0 Segmentation dataset by the overlapping CS<->
-        sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
-        syn_0. Do not extract sj objects in general.
+        * using the prob. maps of the initial synaptic junction prediction,
+          the object extraction of ``sj`` objects can be removed.
+        * Replace sj_0 Segmentation dataset by the overlapping CS<->
+          sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
+          syn_0. Do not extract sj objects in general.
 
     Notes:
         * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
@@ -79,8 +121,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None,
     """
     if extract_cs_syntype is None:
         msg = '`extract_contact_sites` requires the cythonized method ' \
-              '`extract_cs_syntype`. Use `find_contact_sites` and others ' \
-              'for contact site processing.'
+              '`extract_cs_syntype`.'
         log_extraction.error(msg)
         raise ImportError(msg)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
@@ -435,7 +476,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
-            # TODO: add to parameters to config
+            # TODO: add to parameters to config, why is this necessary?
             res = scipy.ndimage.binary_dilation(res, iterations=2)
             # only update background or the objects itself
             proc_mask = (binary_mask == 1) | (sub_vol == 0)
@@ -569,8 +610,7 @@ def _write_props_to_syn_thread(args):
                                    read_only=False, disable_locking=True)
         voxel_dc_store = VoxelStorage(vx_p, read_only=False, disable_locking=True)
 
-        # get dummy CS segmentation object to fetch attribute dictionary for this batch of object
-        # IDs
+        # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
         attr_p_cs = dummy_so_cs.attr_dict_path
         vx_p_cs = dummy_so_cs.voxel_path
@@ -705,64 +745,6 @@ def merge_type_dicts(type_dicts):
                 tot_map[cs_id] = cnt
 
 
-def find_contact_sites(cset, knossos_path, filename='cs',
-                       size=None, offset=None):
-    """
-    # TODO: add additional chunk-chunking (less number of submitted jobs)
-
-    Parameters
-    ----------
-    cset :
-    knossos_path :
-    filename :
-    size :
-    offset :
-
-    Returns
-    -------
-
-    """
-    log_extraction.warning(DeprecationWarning('"find_contact_sites" was replaced by '
-                                              '"extract_contact_sites".'))
-    if size is not None and offset is not None:
-        chunk_list, _ = \
-            calculate_chunk_numbers_for_box(cset, offset, size)
-    else:
-        chunk_list = [ii for ii in range(len(cset.chunk_dict))]
-
-    os.makedirs(cset.path_head_folder, exist_ok=True)
-    multi_params = []
-    for chunk_k in chunk_list:
-        multi_params.append([cset.chunk_dict[chunk_k], knossos_path, filename])
-
-    if not qu.batchjob_enabled():
-        _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-                                    debug=False)
-    else:
-        _ = qu.batchjob_script(
-            multi_params, "contact_site_detection")
-    chunky.save_dataset(cset)
-
-
-def _contact_site_detection_thread(args):
-    chunk = args[0]
-    knossos_path = args[1]
-    filename = args[2]
-
-    kd = basics.kd_factory(knossos_path)
-
-    overlap = np.array([6, 6, 3], dtype=np.int)
-    offset = np.array(chunk.coordinates - overlap)
-    size = 2 * overlap + np.array(chunk.size)
-    data = kd.load_seg(size=size, offset=offset, mag=1,
-                       datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
-    contacts = detect_cs(data)
-    os.makedirs(chunk.folder, exist_ok=True)
-    compression.save_to_h5py([contacts],
-                             chunk.folder + filename +
-                             ".h5", ["cs"])
-
-
 def detect_cs(arr: np.ndarray) -> np.ndarray:
     """
 
@@ -772,6 +754,9 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     Returns:
         3D contact site segmentation array (np.uint64).
     """
+    # simple edge detector, only works reliably if extra-cellular space is available
+    # TODO: switch to C++ loop with 6-neighborhood checks (unequal to center ID) to achieve symmetric
+    #  contact sites in the case of zero extra-cellular space.
     jac = np.zeros([3, 3, 3], dtype=np.int)
     jac[1, 1, 1] = -6
     jac[1, 1, 0] = 1
@@ -786,58 +771,3 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     cs_seg = process_block_nonzero(
         edges, arr, global_params.config['cell_objects']['cs_filtersize'])
     return cs_seg
-
-
-def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
-                              n_folders_fs=10000, suffix="", n_chunk_jobs=2000, size=None,
-                              offset=None, log=None, cube_shape=None):
-    """
-
-    Parameters
-    ----------
-    cset :
-    working_dir :
-    filename :
-    hdf5name :
-    n_folders_fs :
-    suffix :
-    n_chunk_jobs :
-    size :
-    offset :
-    cube_shape :
-
-    Returns
-    -------
-
-    """
-    if log is None:
-        log = log_extraction
-    if cube_shape is None:
-        cube_shape = (256, 256, 256)
-    chunky.save_dataset(cset)
-    # init CS segmentation KD
-    kd = basics.kd_factory(global_params.config.kd_seg_path)
-    path = "{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, filename)
-    if os.path.isdir(path):
-        log.debug('Found existing KD at {}. Removing it now.'.format(path))
-        shutil.rmtree(path)
-    target_kd = knossosdataset.KnossosDataset()
-    target_kd._cube_shape = cube_shape
-    scale = np.array(global_params.config['scaling'])
-    target_kd.scales = [scale, ]
-    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ],
-                                      create_pyk_conf=True, create_knossos_conf=False)
-
-    # convert Chunkdataset to KD
-    export_cset_to_kd_batchjob({hdf5name: path},
-                               cset, '{}'.format(filename), [hdf5name],
-                               offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-                               orig_dtype=np.uint64, unified_labels=False)
-    log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
-        cset.path_head_folder, target_kd.knossos_path))
-
-    # get CS SD
-    from_ids_to_objects(cset, filename, overlaydataset_path=target_kd.conf_path,
-                        n_chunk_jobs=n_chunk_jobs, hdf5names=[hdf5name], workfolder=working_dir,
-                        n_folders_fs=n_folders_fs, use_combined_extraction=True, suffix=suffix,
-                        size=size, offset=offset, log=log)

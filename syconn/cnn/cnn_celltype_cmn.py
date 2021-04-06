@@ -4,16 +4,8 @@
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
 
-"""
-Workflow of spinal semantic segmentation based on multiviews (2D semantic segmentation).
-
-It learns how to differentiate between spine head, spine neck and spine shaft.
-Caution! The input dataset was not manually corrected.
-"""
-from syconn import global_params
 from syconn.cnn.TrainData import CelltypeViewsE3
 import argparse
-import _pickle
 import zipfile
 import os
 import torch
@@ -24,9 +16,6 @@ from elektronn3.models.simple import Conv3DLayer, StackedConv2Scalar#, \
 from syconn.handler.basics import load_pkl2obj
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
-from elektronn3.training.metrics import channel_metric
-from elektronn3.training import metrics
-import adabound
 
 
 class StackedConv2ScalarWithLatentAdd(nn.Module):
@@ -262,14 +251,13 @@ if __name__ == "__main__":
         device=device,
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
-        batchsize=batch_size,
+        batch_size=batch_size,
         num_workers=0,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers=schedulers,
         valid_metrics=valid_metrics,
         ipython_shell=False,
-        mixed_precision=False,  # Enable to use Apex for mixed precision training
     )
 
     # Archiving training script, src folder, env info

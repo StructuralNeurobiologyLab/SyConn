@@ -593,7 +593,7 @@ def nodestates_slurm() -> Dict[int, dict]:
     Returns:
         Dictionary with the node states. (key: job ID, value: state dict)
     """
-    cmd_stat = f'sinfo -N  -o "%20N %10t %10c %10m %10G"'
+    cmd_stat = f'sinfo -N  -o "%N %t %c %m %G"'
     # yields e.g.
     """
     NODELIST             STATE      CPUS       MEMORY     GRES      
@@ -611,7 +611,7 @@ def nodestates_slurm() -> Dict[int, dict]:
     compute012           dead       32         208990     gpu:GP100G
     """
     node_states = dict()
-    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', str)]  # TOOD: gres should be number of gpus
+    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', int)]
     process = subprocess.Popen(cmd_stat, shell=True, stdout=subprocess.PIPE)
     out, err = process.communicate()
     if process.returncode != 0:
@@ -623,6 +623,8 @@ def nodestates_slurm() -> Dict[int, dict]:
         node_uri, *str_parsed = re.findall(r"(\S+)", line)
         ndc = dict()
         for k, v in zip(attr_keys, str_parsed):
+            if k[0] == 'gres':
+                v = v.split(':')[-1]
             ndc[k[0]] = k[1](v)
         node_states[node_uri] = ndc
     return node_states
@@ -699,3 +701,51 @@ def delete_jobs_by_name(job_name):
                          stdout=subprocess.PIPE)
     else:
         raise NotImplementedError
+
+
+def restart_nodes_daemon():
+    """
+    Only support gce. [WIP]
+
+    Returns:
+
+    """
+    zone = 'us-east1-c'
+    cluster_name = 'slurm-gluster-gpu-'
+    """
+    gcloud compute instances start slurm-gluster-gpu-client001 --zone us-east1-c"""
+    process = subprocess.Popen('gcloud compute instances stop --help', shell=True, stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    if process.returncode != 0:
+        log_mp.error(f'Could not run gcloud compute instances stop command. Error: {err}')
+        raise ValueError
+    log_mp.debug('Restart-slurm-nodes daemon running..')
+    while True:
+        node_states = nodestates_slurm()
+        ixs = np.array(list(node_states.keys()))
+        states = np.array(['down' in v['state'] for v in node_states.values()])
+        if np.sum(states) > 0:
+            node_ix_str = " ".join([f'{cluster_name}{ix}' for ix in ixs[states]])
+
+            log_mp.debug(f'Restarting {np.sum(states)} node(s): "{node_ix_str}".')
+            process = subprocess.Popen(f'gcloud compute instances stop {node_ix_str} --zone {zone}', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "gcloud compute instances stop" command. Error: {err}')
+            process = subprocess.Popen(f'gcloud compute instances start {node_ix_str} --zone {zone}', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "gcloud compute instances start" command. Error: {err}')
+            time.sleep(30)  # wait additional 30 s to give slurm time to start and update status
+        states = np.array(['drain' in v['state'] for v in node_states.values()])
+        if np.sum(states) > 0:
+            nodenames = f'client[{",".join(ix.replace("client", "") for ix in ixs)}]'
+            process = subprocess.Popen(f'sudo scontrol update nodename={nodenames} state=RESUME', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "scontrol update" command. Error: {err}')
+            time.sleep(30)  # wait additional 30 s to give slurm time to start and update status
+        time.sleep(30)

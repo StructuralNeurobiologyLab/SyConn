@@ -114,10 +114,9 @@ def nodes_in_pathlength(anno, max_path_len):
     return list_reachable_nodes
 
 
-def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
-                         model: Any, nb_views_model: int = 20, use_syntype=True,
-                         overwrite: bool = False, pred_key_appendix="",
-                         da_equals_tan=True):
+def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject', model: Any, nb_views_model: int = 20,
+                         use_syntype=True, overwrite: bool = False, pred_key_appendix="", da_equals_tan: bool = True,
+                         n_classes: int = 7, save_to_attr_dict: bool = True):
     """
     Celltype prediction based on local views and synapse type ratio feature.
     Uses on file system cached views (also used for axon and spine prediction).
@@ -134,7 +133,9 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
         overwrite:  bool
              Use the type of the pre-synapses.
         pred_key_appendix:  str
-        da_equals_tan:
+        da_equals_tan: Merge DA and TAN classes. `n_classes` must be 7 if True.
+        n_classes: Number of out classes of the model. Must be 7 if `da_equals_tan` is True.
+        save_to_attr_dict: Save prediction in attr_dict.
 
     Returns:
 
@@ -163,17 +164,18 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
         # INT is now at index 6 -> label 6 is INT
 
     clf = np.argmax(res, axis=1)
-    if np.max(clf) >= 7:
+    if np.max(clf) >= n_classes:
         raise ValueError('Unknown cell type predicted.')
-    major_dec = np.zeros(7)
+    major_dec = np.zeros(n_classes)
     for ii in range(len(major_dec)):
         major_dec[ii] = np.sum(clf == ii)
     major_dec /= np.sum(major_dec)
     pred = np.argmax(major_dec)
     sso.attr_dict[pred_key] = pred
     sso.attr_dict[f"{pred_key}_probas"] = res
-    sso.save_attributes([pred_key], [pred])
-    sso.save_attributes([f"{pred_key}_probas"], [res])
+    if save_to_attr_dict:
+        sso.save_attributes([pred_key], [pred])
+        sso.save_attributes([f"{pred_key}_probas"], [res])
 
 
 def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
@@ -551,7 +553,7 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
 def map_myelin2coords(coords: np.ndarray,
                       cube_edge_avg: np.ndarray = np.array([11, 11, 5]),
                       thresh_proba: float = 255 // 2, thresh_majority: float = 0.5,
-                      mag: int = 1) -> np.ndarray:
+                      mag: int = 4) -> np.ndarray:
     """
     Retrieves a myelin prediction at every location in `coords`. The classification
     is the majority label within a cube of size `cube_edge_avg` around the
@@ -1776,10 +1778,10 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
 
 
-def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_model=20,
-                            pred_key_appendix="", verbose=False,
-                            overwrite=True, use_syntype=True,
-                            da_equals_tan=True):
+def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_model: int = 20,
+                            pred_key_appendix: str = "", verbose: bool = False,
+                            overwrite: bool = True, use_syntype: bool = True,
+                            da_equals_tan: bool = True, n_classes: int = 7, save_to_attr_dict: bool = True):
     """
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file
@@ -1798,7 +1800,9 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
         verbose: Adds progress bars for view generation.
         overwrite:
         use_syntype: Use type of presynaptic synapses.
-        da_equals_tan:
+        da_equals_tan: Merge DA and TAN classes. `n_classes` must be 7 if True.
+        n_classes: Number of out classes of the model. Must be 7 if `da_equals_tan` is True.
+        save_to_attr_dict: Save prediction in attr_dict.
 
     Returns:
 
@@ -1839,6 +1843,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
         log_reps.debug('Finished prediction.')
     # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`, `predict_sso_celltype`
     if da_equals_tan:
+        assert n_classes == 7
         # accumulate evidence for DA and TAN
         res[:, 1] += res[:, 6]
         # remove TAN in proba array
@@ -1846,17 +1851,18 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
         # INT is now at index 6 -> label 6 is INT
 
     clf = np.argmax(res, axis=1)
-    if np.max(clf) >= 7:
+    if np.max(clf) >= n_classes:
         raise ValueError('Unknown cell type predicted.')
-    major_dec = np.zeros(7)
+    major_dec = np.zeros(n_classes)
     for ii in range(len(major_dec)):
         major_dec[ii] = np.sum(clf == ii)
     major_dec /= np.sum(major_dec)
     pred = np.argmax(major_dec)
     sso.attr_dict[pred_key] = pred
     sso.attr_dict[f"{pred_key}_probas"] = res
-    sso.save_attributes([pred_key], [pred])
-    sso.save_attributes([f"{pred_key}_probas"], [res])
+    if save_to_attr_dict:
+        sso.save_attributes([pred_key], [pred])
+        sso.save_attributes([f"{pred_key}_probas"], [res])
 
 
 def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],
@@ -2088,7 +2094,8 @@ def compartments_graph(ssv: 'super_segmentation.SuperSegmentationObject',
 
 
 def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', weighted: bool = True,
-                            recompute: bool = True, comp_types: Optional[List[int]] = None) -> float:
+                            recompute: bool = False, comp_types: Optional[List[int]] = None,
+                            save: bool = False) -> float:
     """
     Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects)
     on specified functional compartments (`comp_types`) of the cell
@@ -2121,13 +2128,20 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         comp_types: All synapses that are formed between any of the functional compartment types given in
             `comp_types` on the cell reconstruction are used for computing the ratio (0: dendrite, 1: axon, 2:
              soma). Default: [1, ].
+        save: Save ratio to attribute dict. The key 'syn_sign_ratio_celltype' or 'syn_sign_ratio_celltype_weighted' if
+            weighted is True, is combined with the compartment types `comp_types` via
+            ``ratio_key += '_' + "_".join([str(el) for el in comp_types])``
 
     Returns:
         (Area-weighted) ratio of symmetric synapses or -1 if no synapses.
     """
     if comp_types is None:
         comp_types = [1, ]
-    ratio = ssv.lookup_in_attribute_dict("syn_sign_ratio")
+    ratio_key = 'syn_sign_ratio_celltype'
+    if weighted:
+        ratio_key += '_weighted'
+    ratio_key += '_' + "_".join([str(el) for el in comp_types])
+    ratio = ssv.lookup_in_attribute_dict(ratio_key)
     if not recompute and ratio is not None:
         return ratio
     pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
@@ -2152,6 +2166,8 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         syn_signs.append(syn_sign)
         syn_sizes.append(syn_size)
     if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
+        if save:
+            ssv.save_attributes([ratio_key], [-1])
         return -1
     syn_signs = np.array(syn_signs)
     syn_sizes = np.array(syn_sizes)
@@ -2159,6 +2175,8 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject', w
         ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
     else:
         ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+    if save:
+        ssv.save_attributes([ratio_key], [ratio])
     return ratio
 
 
@@ -2176,6 +2194,8 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
     Notes:
         * 'spine_headvol' in µm^3.
+        * Segmentation mask is downsampled to z voxel size. i.e. a volume of shape (50, 50, 25) with (10, 10, 20) nm^3
+          voxels will be reduced to (25, 25, 25) voxels.
         * Requires a predicted cell mesh, i.e. 'spiness' must be present in ``label_dict('vertex')['spiness']``.
         * If the results have to be stored, call ``sso.save_attr_dict()``
 

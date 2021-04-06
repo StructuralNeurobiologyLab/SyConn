@@ -34,7 +34,7 @@ if __name__ == "__main__":
     ssv_labels = np.array([str2int_label[el] for el in str_labels], dtype=np.uint16)
     classes, c_cnts = np.unique(ssv_labels, return_counts=True)
     if np.max(classes) > 7:
-        raise ValueError('Now we got Glia or FS?!')
+        raise ValueError('')
     log_main.setLevel(20)  # This is INFO level (to filter copied file messages)
     log_main.info('Successfully parsed "{}" with the following cell type class '
                   'distribution [labels, counts]: {}, {}'.format(csv_p, classes,

@@ -6,11 +6,7 @@
 # Authors: Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.extraction import cs_extraction_steps
 
 path_storage_file = sys.argv[1]

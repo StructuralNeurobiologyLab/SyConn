@@ -13,13 +13,22 @@ import statsmodels.api as sm
 
 
 palette_ident = 'colorblind'
+scatter_size = None
 
 
-# TODO: use the same thickness for the lines, see cell type eval code
+def adapt_ax_params(ax, ls=6):
+    ax.tick_params(axis='x', which='both', labelsize=ls, direction='out',
+                   length=4, width=3, right=False, top=False, pad=10, rotation=45)
+    ax.tick_params(axis='y', which='both', labelsize=ls, direction='out',
+                   length=4, width=3, right=False, top=False, pad=10)
+    ax.spines['left'].set_linewidth(3)
+    ax.spines['bottom'].set_linewidth(3)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
 
 
 def get_speed_plots(base_dir):
-    sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
+    # sns.set_style("ticks", {"xtick.major.size": 20, "ytick.major.size": 20})
     wds = glob.glob(f'{base_dir}/j0251_*')
     assert len(wds) > 0
     base_dir = base_dir + '/timings/'
@@ -72,6 +81,7 @@ def get_speed_plots(base_dir):
         item.set_text(fmt.format(float(item.get_text())))
         xticklabels += [item]
     axes.set_xticklabels(xticklabels)
+    adapt_ax_params(axes)
     plt.subplots_adjust(right=0.5)
     plt.savefig(base_dir + '/speed_barplot.png', dpi=600)
     plt.close()
@@ -80,18 +90,18 @@ def get_speed_plots(base_dir):
     plt.figure()
     df_biggest = df.loc[lambda df: df['datasize[GVx]'] == df['datasize[GVx]'].max(), :]
     axes = sns.barplot(data=df_biggest, x="step", y="speed[GVx]", palette=palette)
-    axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
-                loc='upper left', borderaxespad=0.)
     axes.set_ylabel('speed [GVx / h]')
     axes.set_xlabel('step')
-    plt.subplots_adjust(right=0.5)
+    adapt_ax_params(axes)
+    plt.tight_layout()
     plt.savefig(base_dir + '/speed_barplot_biggest_only.png', dpi=600)
     plt.close()
 
     # Speed scatter plot regression
     log_reg = initialize_logging(f'speed_pointplot_reg', log_dir=base_dir)
     plt.figure()
-    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette)
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette,
+                           size=scatter_size)
     for ii, step in enumerate(np.unique(res_dc['step'])):
         x = np.array([df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
         y = [df['speed[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step]
@@ -114,17 +124,20 @@ def get_speed_plots(base_dir):
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('speed [GVx / h]')
     axes.set_xlabel('size [GVx]')
+    adapt_ax_params(axes)
     plt.subplots_adjust(right=0.5)
     plt.savefig(base_dir + '/speed_pointplot_reg.png', dpi=600)
     plt.close()
 
     # Speed scatter plot
     plt.figure()
-    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette)
+    axes = sns.scatterplot(data=df, x="datasize[GVx]", y="speed[GVx]", hue="step", palette=palette,
+                           size=scatter_size)
     axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                 loc='upper left', borderaxespad=0.)
     axes.set_ylabel('speed [GVx / h]')
     axes.set_xlabel('size [GVx]')
+    adapt_ax_params(axes)
     plt.subplots_adjust(right=0.5)
     plt.savefig(base_dir + '/speed_pointplot.png', dpi=600)
     plt.close()
@@ -188,7 +201,8 @@ def get_timing_plots(base_dir):
         # All steps time regression plot
         log_reg = initialize_logging(f'time_allsteps_regplot_diff_nodes', log_dir=base_dir)
         plt.figure()
-        axes = sns.scatterplot(data=df, x="n_compute_nodes", y="time", hue="step", palette=palette)
+        axes = sns.scatterplot(data=df, x="n_compute_nodes", y="time", hue="step", palette=palette,
+                               size=scatter_size)
         for ii, step in enumerate(np.unique(res_dc['step'])):
             x = np.array([df['n_compute_nodes'][ii] for ii in range(len(df['n_compute_nodes'])) if df['step'][ii] == step])
             y = [df['time'][ii] for ii in range(len(df['n_compute_nodes'])) if df['step'][ii] == step]
@@ -201,12 +215,11 @@ def get_timing_plots(base_dir):
             # plt.plot(x_fit, y_fit, color=palette[step])
         # plt.yscale('log')
         plt.xticks(np.arange(8, 28, step=4))
-        axes.spines['right'].set_visible(False)
-        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
         axes.set_ylabel('time [h]')
         axes.set_xlabel('no. compute nodes [1]')
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot_diff_nodes.png', dpi=600)
         plt.close()
@@ -226,7 +239,8 @@ def get_timing_plots(base_dir):
             res_dc['datasize[GVx]'].pop(ii)
             res_dc['n_compute_nodes'].pop(ii)
         df = pd.DataFrame(data=res_dc)
-        axes = sns.scatterplot(data=df, x="n_compute_nodes", y="time", hue="step", palette=palette)
+        axes = sns.scatterplot(data=df, x="n_compute_nodes", y="time", hue="step", palette=palette,
+                               size=scatter_size)
         for ii, step in enumerate(np.unique(res_dc['step'])):
             x = np.array([df['n_compute_nodes'][ii] for ii in range(len(df['n_compute_nodes'])) if df['step'][ii] == step])
             y = [df['time'][ii] for ii in range(len(df['n_compute_nodes'])) if df['step'][ii] == step]
@@ -239,12 +253,11 @@ def get_timing_plots(base_dir):
             # plt.plot(x_fit, y_fit, color=palette[step])
         # plt.yscale('log')
         plt.xticks(np.arange(8, 28, step=4))
-        axes.spines['right'].set_visible(False)
-        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
         axes.set_ylabel('time [h]')
         axes.set_xlabel('no. compute nodes [1]')
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/time_allsteps_regplot_diff_nodes_wo_views.png', dpi=600)
         plt.close()
@@ -262,17 +275,22 @@ def get_timing_plots(base_dir):
             item.set_text(fmt.format(float(item.get_text())))
             xticklabels += [item]
         axes.set_xticklabels(xticklabels)
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/time_barplot.png', dpi=600)
         plt.close()
 
         # Time scatter plot
         plt.figure()
-        axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
+        axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette,
+                               size=scatter_size)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
+        # plt.xlim(0, plt.xlim()[1])
+        plt.ylim(0, plt.ylim()[1])
         axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/time_pointplot.png', dpi=600)
         plt.close()
@@ -314,7 +332,8 @@ def get_timing_plots(base_dir):
         # All steps time regression plot
         log_reg = initialize_logging(f'time_allsteps_regplot', log_dir=base_dir)
         plt.figure()
-        axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
+        axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette,
+                               size=scatter_size)
         for ii, step in enumerate(np.unique(res_dc['step'])):
             x = np.array([df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
             y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step]
@@ -326,12 +345,14 @@ def get_timing_plots(base_dir):
             y_fit = res.params[1] * x_fit + res.params[0]
             plt.plot(x_fit, y_fit, color=palette[step])
         # plt.yscale('log')
-        axes.spines['right'].set_visible(False)
-        axes.spines['top'].set_visible(False)
+
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
         axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
+        plt.xlim(0, plt.xlim()[1])
+        # plt.ylim(0, plt.ylim()[1])
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot.png', dpi=600)
         plt.close()
@@ -353,6 +374,9 @@ def get_timing_plots(base_dir):
         plt.xticks(ind, [fmt.format(el) for el in x])
         ax.set_ylabel('Time [h]')
         ax.set_xlabel('size [GVx]')
+        plt.xlim(0, plt.xlim()[1])
+        # plt.ylim(0, plt.ylim()[1])
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/time_stackedbarplot.png', dpi=600)
         plt.close()
@@ -372,7 +396,8 @@ def get_timing_plots(base_dir):
             res_dc['datasize[GVx]'].pop(ii)
             res_dc['n_compute_nodes'].pop(ii)
         df = pd.DataFrame(data=res_dc)
-        axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette)
+        axes = sns.scatterplot(data=df, x="datasize[GVx]", y="time", hue="step", palette=palette,
+                               size=scatter_size)
         for ii, step in enumerate(np.unique(res_dc['step'])):
             x = np.array([df['datasize[GVx]'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step])
             y = [df['time'][ii] for ii in range(len(df['datasize[GVx]'])) if df['step'][ii] == step]
@@ -384,12 +409,13 @@ def get_timing_plots(base_dir):
             y_fit = res.params[1] * x_fit + res.params[0]
             plt.plot(x_fit, y_fit, color=palette[step])
         # plt.yscale('log')
-        axes.spines['right'].set_visible(False)
-        axes.spines['top'].set_visible(False)
         axes.legend(*axes.get_legend_handles_labels(), bbox_to_anchor=(1.05, 1),
                     loc='upper left', borderaxespad=0.)
         axes.set_ylabel('time [h]')
         axes.set_xlabel('size [GVx]')
+        plt.xlim(0, plt.xlim()[1])
+        # plt.ylim(0, plt.ylim()[1])
+        adapt_ax_params(axes)
         plt.subplots_adjust(right=0.75)
         plt.savefig(base_dir + '/timing_allsteps_regplot_wo_views.png', dpi=600)
         plt.close()

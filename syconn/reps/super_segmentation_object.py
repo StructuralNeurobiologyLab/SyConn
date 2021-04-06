@@ -242,7 +242,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         # init mesh dicts
         self._meshes = {"sv": None, "vc": None, "mi": None, "sj": None, "syn_ssv": None, "syn_ssv_sym": None,
-                        "syn_ssv_asym": None}
+                        "syn_ssv_asym": None, "er": None, "golgi": None}
 
         self._views = None
         self._weighted_graph = None
@@ -572,11 +572,15 @@ class SuperSegmentationObject(SegmentationBase):
 
         Returns:
             Three flat arrays: indices, vertices, normals
+
+        Raises
+            ValueError: If `mesh_type` does not exist in :py:attr:`~_meshes`.
+
         """
         if mesh_type in ('syn_ssv_sym', 'syn_ssv_asym'):
             self.typedsyns2mesh()
         if mesh_type not in self._meshes:
-            return None
+            raise ValueError(f'Unknown mesh type for objects "{mesh_type}" in {self}."')
         if self._meshes[mesh_type] is None:
             if not self.mesh_caching:
                 return self._load_obj_mesh(mesh_type)
@@ -1497,7 +1501,7 @@ class SuperSegmentationObject(SegmentationBase):
                 continue
             syn_signs.append(props['syn_sign'][syn.id])
             syn_sizes.append(props['mesh_area'][syn.id] / 2)
-        log_reps.debug(f'Used {len(syn_signs)} with a total size of {np.sum(syn_sizes)} um^2 between {comp_types} '
+        log_reps.debug(f'Used {len(syn_signs)} synapses with a total size of {np.sum(syn_sizes)} um^2 between {comp_types} '
                        f'(this cell) and {comp_types_partner} (other cells).')
         if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
             return -1
@@ -2373,26 +2377,14 @@ class SuperSegmentationObject(SegmentationBase):
         color = None
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        if obj_type == "sv":
-            mesh = self.mesh
-        elif obj_type == "sj":
-            mesh = self.sj_mesh
-            # color = np.array([int(0.849 * 255), int(0.138 * 255),
-            #                   int(0.133 * 255), 255])
-        elif obj_type == "vc":
-            mesh = self.vc_mesh
-            # color = np.array([int(0.175 * 255), int(0.585 * 255),
-            #                   int(0.301 * 255), 255])
-        elif obj_type == "mi":
-            mesh = self.mi_mesh
-            # color = np.array([0, 153, 255, 255])
-        elif obj_type == "syn_ssv":
+        # TODO: revisit re-definition of `obj_type` to 'sj'.
+        if obj_type == "syn_ssv":
             mesh = self.syn_ssv_mesh
             # also store it as 'sj' s.t. `init_sso_from_kzip` can use it for rendering.
             # TODO: add option to rendering code which enables rendering of arbitrary cell organelles
             obj_type = 'sj'
         else:
-            mesh = self._meshes[obj_type]
+            mesh = self.load_mesh(obj_type)
         if ext_color is not None:
             if type(ext_color) is list:
                 ext_color = np.array(ext_color)
@@ -2415,9 +2407,8 @@ class SuperSegmentationObject(SegmentationBase):
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply", **kwargs)
 
-    def meshes2kzip(self, dest_path: Optional[str] = None, sv_color: Optional[np.ndarray]=None,
-                    synssv_instead_sj: bool = True, object_types: Optional[List[str]]=None,
-                    **kwargs):
+    def meshes2kzip(self, dest_path: Optional[str] = None, sv_color: Optional[np.ndarray] = None,
+                    synssv_instead_sj: bool = True, object_types: Optional[List[str]] = None, **kwargs):
         """
         Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip.
 
@@ -3161,7 +3152,7 @@ class SuperSegmentationObject(SegmentationBase):
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
                              onthefly_views=False, overwrite=True, model_props=None,
-                             verbose: bool = False):
+                             verbose: bool = False, save_to_attr_dict: bool = True):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3178,6 +3169,7 @@ class SuperSegmentationObject(SegmentationBase):
             overwrite:
             model_props: Model properties. See config.yml for an example.
             verbose:
+            save_to_attr_dict: Save prediction in attr_dict.
 
         """
         if model_props is None:
@@ -3188,9 +3180,10 @@ class SuperSegmentationObject(SegmentationBase):
         view_props = view_props_def
         if not onthefly_views:
             ssh.predict_sso_celltype(self, model, pred_key_appendix=pred_key_appendix,
-                                     overwrite=overwrite, **model_props)
+                                     save_to_attr_dict=save_to_attr_dict, overwrite=overwrite, **model_props)
         else:
             ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
+                                        save_to_attr_dict=save_to_attr_dict,
                                         overwrite=overwrite, verbose=verbose, **view_props, **model_props)
         if model_tnet is not None:
             view_props = dict(view_props)  # create copy

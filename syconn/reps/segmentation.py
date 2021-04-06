@@ -423,6 +423,7 @@ class SegmentationObject(SegmentationBase):
             None if object is not of type 'cs', else return the IDs to the two
             supervoxels which are part of the contact site.
         """
+        # TODO: use `cs_id_to_partner_ids_vec`  (single source of truth)
         if self.type in ['cs', 'syn']:
             partner = [self.id >> 32]
             partner.append(self.id - (partner[0] << 32))

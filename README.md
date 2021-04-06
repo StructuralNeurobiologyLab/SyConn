@@ -33,7 +33,9 @@ The Team
 --------
 The Synaptic connectivity inference toolkit is currently developed at the Max-Planck-Institute of Neurobiology in Martinsried by
  Philipp Schubert, Jonathan Klimesch, Alexandra Rother and Joergen Kornfeld.
-
+Big thanks to Filippo Kiessler, David Outland, Santiago Aguirre, Hashir Ahmad, Andrei Mancu, Rangoli Saxena, Mariana Shumliakivska,
+Josef Mark, Maria Kawula, Atul Mohite, Carl Constantin v. Wedemeyer,
+Gaurav Kumar and Martin Drawitsch for code contributions.
 
 Acknowledgements
 ----------------
@@ -44,10 +46,10 @@ for providing egl extension code to handle multi-gpu rendering on the
 same machine. The original code snippet (under the Apache License 2.0)
 used for our project can be found
 [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
+SyConn uses the packages [zmesh](https://github.com/seung-lab/zmesh) for mesh and [kimimaro](https://github.com/seung-lab/kimimaro)
+for skeleton generation implemented and developed in the Seung Lab.
 Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful
-work) for designing and creating the logo and to Rangoli Saxena, Mariana
-Shumliakivska, Josef Mark, Maria Kawula, Atul Mohite, Carl Constantin v. Wedemeyer,
-Gaurav Kumar and Martin Drawitsch for code contributions.
+work) for designing and creating the logo! and
 
 
 Publications
