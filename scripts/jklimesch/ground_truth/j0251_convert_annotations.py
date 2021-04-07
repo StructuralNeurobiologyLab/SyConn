@@ -83,8 +83,8 @@ def process_file(file: str, o_path: str, ctype: str, ssd: SuperSegmentationDatas
 
 
 if __name__ == '__main__':
-    a_path = '/wholebrain/u/jklimesch/working_dir/test/annotations/'
-    o_path = '/wholebrain/u/jklimesch/working_dir/test/data/'
+    a_path = '/wholebrain/scratch/jklimesch/gt/j0251/21_03_13_annotations_refinment_round1/raw/'
+    o_path = '/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/'
     if not os.path.exists(o_path):
         os.makedirs(o_path)
     ssd = SuperSegmentationDataset(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
@@ -95,7 +95,7 @@ if __name__ == '__main__':
             kzips = glob.glob(a_path + file + '/*k.zip')
             for kzip in tqdm(kzips):
                 print(f'Processing: {kzip}')
-                process_file(kzip, file, ssd)
+                process_file(kzip, o_path, file[:3], ssd)
         else:
             # set convert_to_morphx = False to only generate new colorings of kzips
             process_file(a_path + file, o_path, file[:3], ssd, convert_to_morphx=True)
