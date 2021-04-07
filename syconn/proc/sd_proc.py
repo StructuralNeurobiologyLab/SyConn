@@ -251,27 +251,6 @@ def _dataset_analysis_thread(args):
     return global_attr_dict
 
 
-def _write_mapping_to_sv_thread(args):
-    """ Worker of map_objects_to_sv """
-
-    paths = args[0]
-    obj_type = args[1]
-    mapping_dict_path = args[2]
-
-    with open(mapping_dict_path, "rb") as f:
-        mapping_dict = pkl.load(f)
-
-    for p in paths:
-        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False)
-        for sv_id in this_attr_dc.keys():
-            this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
-                list(mapping_dict[sv_id].keys())
-            this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
-                list(mapping_dict[sv_id].values())
-        this_attr_dc.push()
-
-
 def _cache_storage_paths(args):
     target_p, all_ids, n_folders_fs = args
     # outputs target folder hierarchy for object storage

@@ -6,12 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.proc import sd_proc
+import pickle as pkl
+from syconn.reps.super_segmentation_dataset import _write_super_segmentation_dataset_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +20,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = sd_proc._write_mapping_to_sv_thread(args)
+out = _write_super_segmentation_dataset_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

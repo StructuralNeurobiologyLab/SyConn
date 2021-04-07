@@ -9,7 +9,6 @@ import os
 import torch
 import argparse
 import random
-import logging
 import numpy as np
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3

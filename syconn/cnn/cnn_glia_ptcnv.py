@@ -155,27 +155,8 @@ valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False
 
 # set up optimization
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-# optimizer = torch.optim.SGD(
-#     model.parameters(),
-#     lr=lr,  # Learning rate is set by the lr_sched below
-#     momentum=0.9,
-#     weight_decay=0.5e-5,
-# )
-
-# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
+
 criterion = torch.nn.CrossEntropyLoss()
 if use_cuda:
     criterion.cuda()

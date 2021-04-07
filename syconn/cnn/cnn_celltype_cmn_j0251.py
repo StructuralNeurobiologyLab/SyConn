@@ -6,10 +6,8 @@
 
 """
 """
-from syconn import global_params
 from syconn.cnn.TrainData import CelltypeViewsE3
 import argparse
-import _pickle
 import zipfile
 import numpy as np
 import os

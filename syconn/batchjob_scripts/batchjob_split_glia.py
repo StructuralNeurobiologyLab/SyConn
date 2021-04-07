@@ -6,10 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
 from syconn import global_params
