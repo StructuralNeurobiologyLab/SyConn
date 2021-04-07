@@ -165,9 +165,9 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     if cube_size is None:
         cube_size = np.array([1024, 1024, 512])  # this is in mag1
     if cube_of_interest_bb is not None:
-        cube_of_interest_bb = np.array(cube_of_interest_bb, dtype=np.int)
+        cube_of_interest_bb = np.array(cube_of_interest_bb, dtype=np.int32)
     else:
-        cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int)
+        cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int32)
 
     dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0])
 

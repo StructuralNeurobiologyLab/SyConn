@@ -604,6 +604,9 @@ class DynConfig(Config):
     def mpath_syn_rfc(self) -> str:
         return self.model_dir + '/conn_syn_rfc//rfc'
 
+    @property
+    def mpath_syn_rfc_old(self) -> str:
+        return self.model_dir + '/conn_syn_rfc//rfc_old'
 
     @property
     def allow_mesh_gen_cells(self) -> bool:

@@ -239,10 +239,10 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     # glia removal is based on the initial RAG and does not require explicitly stored SSVs
     version = "tmp"
 
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
 
-    cc_gs = sorted(list(nx.connected_component_subgraphs(G)), key=len, reverse=True)
-    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
+    cc_gs = sorted(list((G.subgraph(c) for c in nx.connected_components(G))), key=len, reverse=True)
+    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint64)
 
     # generate parameter for view rendering of individual SSV
     sv_size_dict = {}

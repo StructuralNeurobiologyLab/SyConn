@@ -90,7 +90,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     skel_nodes = list(skel.getNodes())
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
-    node_labels = np.array([str2int_converter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
+    node_labels = np.array([str2int_converter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int32)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
 
@@ -132,7 +132,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     #     os.makedirs(dest_folder)
     # loc_text = ''
     # for i, c in enumerate(locs):
-    #     loc_text += str(i) + "\t" + str((c / np.array([10, 10, 20])).astype(np.int)) +'\n' #rescalling to the voxel grid
+    #     loc_text += str(i) + "\t" + str((c / np.array([10, 10, 20])).astype(np.int32)) +'\n' #rescalling to the
+    #     voxel grid
     # with open("{}/viewcoords.txt".format(dest_folder), "w") as f:
     #     f.write(loc_text)
     # # # DEBUG PART END

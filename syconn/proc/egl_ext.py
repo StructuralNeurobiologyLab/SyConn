@@ -35,6 +35,10 @@ from OpenGL import EGL
 #from OpenGL import error
 from six.moves import range
 
+from warnings import simplefilter
+# ignore "OpenGL/images.py:142: DeprecationWarning: tostring() is deprecated. Use tobytes() instead"
+simplefilter(action='ignore', category=DeprecationWarning)
+
 # From the EGL_EXT_device_enumeration extension.
 EGLDeviceEXT = ctypes.c_void_p
 PFNEGLQUERYDEVICESEXTPROC = ctypes.CFUNCTYPE(

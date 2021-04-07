@@ -42,7 +42,7 @@ def kernel(chunk, center_id):
 
 
 def process_block(edges, arr, stencil=(7, 7, 3)):
-    stencil = np.array(stencil, dtype=np.int)
+    stencil = np.array(stencil, dtype=np.int32)
     assert np.sum(stencil % 2) == 3
 
     out = np.zeros_like(arr, dtype=np.uint64)
@@ -73,7 +73,7 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
             64-bit ids has a 32-bit cell-id corresponding to maximum cell
             count and corresponding to center cent_id
     """
-    stencil = np.array(stencil, dtype=np.int)
+    stencil = np.array(stencil, dtype=np.int32)
     assert np.sum(stencil % 2) == 3
 
     arr_shape = np.array(arr.shape)

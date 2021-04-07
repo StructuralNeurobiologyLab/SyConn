@@ -40,7 +40,7 @@ for ssv_id in ssv_ids:
     else:
         sso.skeleton["nodes"] = np.array([sso.rep_coord], dtype=np.float32)
         sso.skeleton["diameters"] = np.zeros((1, ), dtype=np.float32)
-        sso.skeleton["edges"] = np.array([[0, 0], ], dtype=np.int)
+        sso.skeleton["edges"] = np.array([[0, 0], ], dtype=np.int64)
     sso.save_skeleton()
 
 with open(path_out_file, "wb") as f:

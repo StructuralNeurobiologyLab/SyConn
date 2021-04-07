@@ -71,7 +71,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
         # points" link:https://github.com/seung-lab/cloud-volume/wiki/Advanced-Topic:-Skeleton
         skel = skel.downsample(10)
         skel = sparsify_skelcv(skel, scale=np.array([1, 1, 1]))
-        skel.vertices += (cube_offset * kd.scales[0]).astype(np.int)
+        skel.vertices += (cube_offset * kd.scales[0]).astype(np.int32)
         skels[cell_id] = skel
     return skels
 
@@ -145,14 +145,14 @@ def nxgraph2skelcv(g: nx.Graph, radius_key: str = 'radius') -> cloudvolume.Skele
     for ii, n in enumerate(g.nodes()):
         old2new_ixs[n] = ii
     if g.number_of_edges() == 1:
-        edges = np.array(list(g.edges()), dtype=np.int)
+        edges = np.array(list(g.edges()), dtype=np.int64)
     else:
-        edges = np.array(g.edges(), dtype=np.int)
+        edges = np.array(g.edges(), dtype=np.int64)
     for ii in range(edges.shape[0]):
         e1, e2 = edges[ii]
         edges[ii] = (old2new_ixs[e1], old2new_ixs[e2])
-    skel = cloudvolume.Skeleton(np.array([g.node[ix]['position'] for ix in g.nodes()], dtype=np.float32),
-                                edges, np.array([g.node[ix][radius_key] for ix in g.nodes()], dtype=np.float32))
+    skel = cloudvolume.Skeleton(np.array([g.nodes[ix]['position'] for ix in g.nodes()], dtype=np.float32),
+                                edges, np.array([g.nodes[ix][radius_key] for ix in g.nodes()], dtype=np.float32))
     return skel
 
 
@@ -187,17 +187,18 @@ def sparsify_skelcv(skel: cloudvolume.Skeleton, scale: Optional[np.ndarray] = No
                 left_node = neighbours[0]
                 right_node = neighbours[1]
                 vector_left_node = np.array(
-                    [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for
+                    [int(skel_nx.nodes[left_node]['position'][ix]) - int(skel_nx.nodes[visiting_node]['position'][ix])
+                     for
                      ix in range(3)]) * scale
-                vector_right_node = np.array([int(skel_nx.node[right_node]['position'][ix]) -
-                                              int(skel_nx.node[visiting_node]['position'][ix]) for ix in
+                vector_right_node = np.array([int(skel_nx.nodes[right_node]['position'][ix]) -
+                                              int(skel_nx.nodes[visiting_node]['position'][ix]) for ix in
                                               range(3)]) * scale
 
                 dot_prod = np.dot(vector_left_node / np.linalg.norm(vector_left_node),
                                   vector_right_node / np.linalg.norm(vector_right_node))
                 angle = np.arccos(np.clip(dot_prod, -1.0, 1.0)) * 180 / np.pi
-                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scale[ix]) - int(
-                    skel_nx.node[left_node]['position'][ix] * scale[ix]) for ix in range(3)])
+                dist = np.linalg.norm([int(skel_nx.nodes[right_node]['position'][ix] * scale[ix]) - int(
+                    skel_nx.nodes[left_node]['position'][ix] * scale[ix]) for ix in range(3)])
 
                 if (abs(angle) > angle_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
                     skel_nx.remove_node(visiting_node)

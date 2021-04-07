@@ -394,7 +394,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             ssd = SuperSegmentationDataset(**ssd_kwargs)
             ssv_ids = ssd.ssv_ids
         else:
-            ssv_ids = np.array(ssv_ids, np.uint)
+            ssv_ids = np.array(ssv_ids, np.uint64)
         ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
                                             nb_cpus=None)
         ssv_sizes = np.array(ssv_sizes)
@@ -626,7 +626,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             source_nodes_batch = source_nodes_all[curr_batch_ixs]
             node_ids_batch = node_ids_all[curr_batch_ixs]
             for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
-                node_ids = node_ids.astype(np.int)
+                node_ids = node_ids.astype(np.int32)
                 # This might be slow
                 sn_cnt = 1
                 while True:
@@ -740,7 +740,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+            ixs = np.ones((batchsize,), dtype=np.uint64) * ssv.id
             cnt = 0
             source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
             if draw_local:
@@ -755,7 +755,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         sn_new.append(np.random.randint(0, len(hc.nodes)))
                     else:
                         paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                        neighs = np.array(list(paths.keys()), dtype=np.int)
+                        neighs = np.array(list(paths.keys()), dtype=np.int32)
                         sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
@@ -2254,8 +2254,8 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
     pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
 
-    ld[pred_key_ax] = ax_pred.astype(np.int)
-    ld[pred_key_sp] = sp_pred.astype(np.int)
+    ld[pred_key_ax] = ax_pred.astype(np.int32)
+    ld[pred_key_sp] = sp_pred.astype(np.int32)
     del ld['dnh']
     del ld['abt']
     del ld['ads']
