@@ -41,7 +41,7 @@ if __name__ == '__main__':
                                          input_channels=1,
                                          use_val=True,
                                          architecture='randla_net',
-                                         val_path='/u/jklimesch/working_dir/gt/cmn/dnh/voxeled/evaluation/',
+                                         val_path='/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/',
                                          val_freq=30,
                                          features={'hc': np.array([1])},
                                          chunk_size=chunk_size,

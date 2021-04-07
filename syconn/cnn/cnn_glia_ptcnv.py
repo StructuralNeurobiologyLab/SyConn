@@ -17,11 +17,6 @@ import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import SegSmall
 from elektronn3.training import Trainer3d, Backup, metrics
-try:
-    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-except ModuleNotFoundError as e:
-    print(e)
-    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
