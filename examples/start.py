@@ -44,7 +44,7 @@ if __name__ == '__main__':
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
+        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),

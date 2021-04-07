@@ -25,7 +25,7 @@ import scipy.special
 import tqdm
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting_kdt, context_splitting_kdt_many
+from morphx.processing.objects import bfs_vertices, context_splitting_kdt
 from scipy import spatial
 from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
@@ -611,7 +611,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         if npoints_ssv == 0:
             log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
         if use_ctx_sampling:
-            node_ids_all = np.array(context_splitting_kdt_many(hc, source_nodes_all, ctx_size), dtype=object)
+            node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
         else:
             node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all], dtype=object)
         for ii in range(n_batches):
@@ -641,7 +641,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                         raise ValueError(msg)
                     source_node = source_nodes_all[sn_cnt]
                     if use_ctx_sampling:
-                        node_ids = context_splitting_kdt_many(hc, [source_node], ctx_size)[0]
+                        node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
                     else:
                         node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                     sn_cnt += 1
@@ -2067,7 +2067,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             if len(source_nodes) % bs != 0:
                 source_nodes = np.concatenate([np.random.choice(source_nodes, bs - len(source_nodes) % bs),
                                                source_nodes])
-            node_arrs = context_splitting_kdt_many(hc, source_nodes, ctx)
+            node_arrs = context_splitting_kdt(hc, source_nodes, ctx)
             # collect contexts into batches (each batch contains every n_batches contexts
             # (e.g. every 4th if n_batches = 4)
             for ii in range(n_batches):

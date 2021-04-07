@@ -290,7 +290,7 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            if requeue_dc[j] == cpus_per_node:
+            if requeue_dc[j] == cpus_per_node:  # TODO: use global_params NCORES_PER_NODE
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
@@ -591,7 +591,7 @@ def nodestates_slurm() -> Dict[int, dict]:
     Returns:
         Dictionary with the node states. (key: job ID, value: state dict)
     """
-    cmd_stat = f'sinfo -N  -o "%N %t %c %m %G"'
+    cmd_stat = f'sinfo -N  -o "%20N %10t %10c %10m %10G"'
     # yields e.g.
     """
     NODELIST             STATE      CPUS       MEMORY     GRES      
