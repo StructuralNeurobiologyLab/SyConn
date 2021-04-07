@@ -1188,15 +1188,20 @@ class SuperSegmentationObject(SegmentationBase):
             return
         ssh.create_sso_skeletons_wrapper([self], **kwargs)
 
-    def save_skeleton_to_kzip(self, dest_path: Optional[str] = None,
-                              additional_keys: Optional[List[str]] = None):
+    def save_skeleton_to_kzip(self, dest_path: Optional[str] = None, name: str = 'skeleton',
+                              additional_keys: Optional[List[str]] = None,
+                              comments: Optional[Union[np.ndarray, List[str]]] = None):
         """
 
         Args:
             dest_path: Destination path for k.zip file.
+            name: identifier / name of saved skeleton which appears in KNOSSOS
             additional_keys: Additional skeleton keys which are converted into
             KNOSSOS skeleton node properties. Will always attempt to write out the
             keys 'axoness', 'cell_type' and 'meta'.
+            comments: np.ndarray of strings or list of strings of length N where N
+            equals the number of skeleton nodes. Comments will be converted into
+            KNOSSOS skeleton node comments.
 
         Returns:
             Saves KNOSSOS compatible k.zip file containing the SSV skeleton and
@@ -1214,7 +1219,7 @@ class SuperSegmentationObject(SegmentationBase):
                                                (k, self.id, repr(self.skeleton.keys()))
             a = skeleton.SkeletonAnnotation()
             a.scaling = self.scaling
-            a.comment = "skeleton"
+            a.comment = name
 
             skel_nodes = []
             for i_node in range(len(self.skeleton["nodes"])):
@@ -1234,6 +1239,8 @@ class SuperSegmentationObject(SegmentationBase):
                 if additional_keys is not None:
                     for k in additional_keys:
                         skel_nodes[-1].data[k] = self.skeleton[k][i_node]
+                if comments is not None:
+                    skel_nodes[-1].setComment(str(comments[i_node]))
 
                 a.addNode(skel_nodes[-1])
 
