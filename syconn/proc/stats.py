@@ -733,7 +733,7 @@ class FileTimer:
         for i, (step_name, step_dt) in enumerate(self.timings.items()):
             step_dt_per = f"{(step_dt / dt_tot * 100):.1f}"
             step_dt = time.strftime("{}d:{}h:{}min:{}s".format(*self._s2str(step_dt)))
-            step_str = '{:<10}{:<40}{:<20}{:<4s}\n'.format(f'[{i}/{n_steps}]', step_name,
+            step_str = '{:<10}{:<40}{:<20}{:<4s}\n'.format(f'[{i+1}/{n_steps}]', step_name,
                                                            step_dt, f'{step_dt_per}%')
             time_summary_str += step_str
         return time_summary_str

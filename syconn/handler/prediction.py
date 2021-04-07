@@ -315,7 +315,7 @@ def create_h5_from_kzip(zip_fname: str, kd_p: str,
                         target_labels: Optional[Iterable[int]] = None,
                         apply_mops_seg: Optional[List[str]] = None):
     """
-    Create .h5 files for ELEKTRONN (zyx) input. Only supports binary labels
+    Create .h5 files for elektronn3 (zyx) input. Only supports binary labels
     (0=background, 1=foreground).
 
     Examples:

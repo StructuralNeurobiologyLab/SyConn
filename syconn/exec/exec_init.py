@@ -59,7 +59,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
         sv_size_dict = {}
-        bbs = sd.load_cached_data('bounding_box') * sd.scaling
+        bbs = sd.load_numpy_data('bounding_box') * sd.scaling
         for ii in range(len(sd.ids)):
             sv_size_dict[sd.ids[ii]] = bbs[ii]
         ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
@@ -89,12 +89,12 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
-    # also executes 'ssd.save_dataset_shallow()'
+    # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
     ssd.save_dataset_deep()
 
     max_n_jobs = global_params.config['ncores_per_node'] * 2
     # Write SSV RAGs
-    multi_params = ssd.ssv_ids[np.argsort(ssd.load_cached_data('size'))[::-1]]
+    multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     # split all cells into chunks within upper half and lower half (sorted by size)
     # -> process a balanced load of large cells with the first jobs, and then the other, smaller half
     half_ix = len(multi_params) // 2
@@ -109,7 +109,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
-    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'], nb_cpus=2)
     ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
     log.info('Finished mapping of cellular organelles to SSVs. Writing individual SSV graphs.')
 
@@ -327,7 +327,7 @@ def run_create_rag():
 
     # remove small connected components
     sv_size_dict = {}
-    bbs = sd.load_cached_data('bounding_box') * sd.scaling
+    bbs = sd.load_numpy_data('bounding_box') * sd.scaling
     for ii in range(len(sd.ids)):
         sv_size_dict[sd.ids[ii]] = bbs[ii]
     ccsize_dict = create_ccsize_dict(G, sv_size_dict)

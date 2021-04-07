@@ -188,7 +188,8 @@ if __name__ == '__main__':
                 assert os.path.isfile(mpath)
                 mkwargs['mpath'] = mpath
                 log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
-                fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_10fold_PRED.pkl'
+                fname_pred = f'{os.path.split(mpath)[0]}/../ctgt_v4_splitting_cv{CV}_redun{redundancy}_' \
+                             f'{run}_10fold_PRED.pkl'
                 if overwrite or not os.path.isfile(fname_pred):
                     res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, bs=10,
                                                  nloader=10, device='cuda', seeded=True, ssv_ids=split_dc['valid'],

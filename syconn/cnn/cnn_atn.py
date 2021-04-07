@@ -13,9 +13,6 @@ from torch import nn
 from torch import optim
 import torch.nn.functional as F
 from elektronn3.training.schedulers import SGDR
-import numpy as np
-from torch.distributions.cauchy import Cauchy
-from torch.distributions.normal import Normal
 
 # Dimension of latent space
 Z_DIM = 25
@@ -193,12 +190,6 @@ if __name__ == "__main__":
         lr=lr,
         amsgrad=True
     )
-    #
-    # optimizer = optim.SGD(
-    #     model.parameters(),
-    #     weight_decay=0.5e-3,
-    #     lr=lr, momentum=0.9
-    # )
 
     # optim. for discriminator model - true distr. vs. fake distr.
     optimizer_disc = optim.Adam(

@@ -689,11 +689,14 @@ def make_ply_string_wocolor(dest_path, indices, vertices,
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
-    ordering = -1 if invert_vertex_order else 1
-    vertices = np.array([tuple(el) for el in vertices], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
-    indices = np.array([tuple([el[::ordering]], ) for el in indices], dtype=[('vertex_indices', 'i4', (3,))])
-    PlyData([PlyElement.describe(vertices, 'vertex'),
-             PlyElement.describe(indices, 'face')]).write(dest_path)
+    if invert_vertex_order:
+        indices = indices[:, ::-1]
+    ply_verts = np.empty(len(vertices), dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+    ply_verts['x'], ply_verts['y'], ply_verts['z'] = vertices[:, 0], vertices[:, 1], vertices[:, 2]
+    ply_faces = np.empty(len(indices), dtype=[('vertex_indices', 'i4', (3,))])
+    ply_faces['vertex_indices'] = indices
+    PlyData([PlyElement.describe(ply_verts, 'vertex'),
+             PlyElement.describe(ply_faces, 'face')]).write(dest_path)
 
 
 def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,

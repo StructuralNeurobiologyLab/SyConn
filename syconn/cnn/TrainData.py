@@ -74,10 +74,7 @@ if elektronn3_avail:
                 use_syntype: If True, uses different features for symmetric and asymmetric
                     synapses,
             """
-            # TODO: built in cellshape_only, use_syntype, onehot again
-            if not use_syntype or cellshape_only or not onehot:
-                raise NotImplementedError
-            if not (onehot and use_syntype and not cellshape_only):
+            if not onehot:
                 raise NotImplementedError
             super().__init__()
             if ssd_kwargs is not None:
@@ -193,11 +190,13 @@ if elektronn3_avail:
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
                     train=True, draw_local=True, cache=False, map_myelin=self.map_myelin,
+                    use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
                     draw_local_dist=draw_local_dist)][0]
             else:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
+                    use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
                     train=True, cache=False, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
@@ -221,7 +220,7 @@ if elektronn3_avail:
             """
             super().__init__(**kwargs)
             if self.sso_ids is None:
-                bb = self.ssd.load_cached_data('bounding_box') * self.ssd.scaling  # N, 2, 3
+                bb = self.ssd.load_numpy_data('bounding_box') * self.ssd.scaling  # N, 2, 3
                 bb = np.linalg.norm(bb[:, 1] - bb[:, 0], axis=1)
                 self.sso_ids = self.ssd.ssv_ids[bb > 2 * self.ctx_size]
                 print(f'Using {len(self.sso_ids)} SSVs from {self.ssd} for triplet training.')
@@ -276,13 +275,13 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v2/')
+            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
             assert self.train, "Other mode than 'train' is not implemented."
-            csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v2.csv"
-            df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
+            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
+            df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
                 ixs, cnt = np.unique(ssv_ids, return_counts=True)
@@ -294,9 +293,10 @@ if elektronn3_avail:
                 kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
                 for ii, (train_ixs, test_ixs) in enumerate(kfold.split(ssv_ids, y=ssv_labels)):
                     if ii == self.cv_val:
-                        self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid:': ssv_ids[test_ixs]}
+                        self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid': ssv_ids[test_ixs]}
             else:
-                self.splitting_dict = {'train': ssv_ids, 'valid:': ssv_ids}  # use all data
+                self.splitting_dict = {'train': ssv_ids, 'valid': ssv_ids}  # use all data
+                log_cnn.critical(f'Using all GT data for training!')
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
             self.sso_ids = self.splitting_dict['train']
             for k, v in self.splitting_dict.items():
@@ -693,12 +693,15 @@ if elektronn3_avail:
     class CelltypeViewsE3(Dataset):
         """
         Wrapper method for CelltypeViews data loader.
+        Views need to be available. If `view_key` is specified, make sure they exist by running the appropriate
+        rendering for every SSV in the GT, e.g. ``ssv._render_rawviews(4)`` for 4 views per location.
         """
         def __init__(
                 self,
                 train=True,
                 transform: Callable = Identity(),
                 use_syntype_scal=False,
+                is_j0251=False,
                 **kwargs
         ):
             super().__init__()
@@ -706,17 +709,22 @@ if elektronn3_avail:
             self.use_syntype_scal = use_syntype_scal
             self.transform = transform
             # TODO: add gt paths to config
-            self.ctv = CelltypeViews(None, None, **kwargs)
+            if not is_j0251:
+                raise RuntimeError('This version is deprecated!')
+                self.ctv = CelltypeViews(None, None, **kwargs)
+            else:
+                self.ctv = CelltypeViewsJ0251(None, None, **kwargs)
 
         def __getitem__(self, index):
             if self.use_syntype_scal:
                 inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
                 inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-                return inp[0], target.squeeze().astype(np.int), syn_signs[0].astype(np.float32)  # target should just be a scalar
+                # target should just be a scalar
+                return {'inp': (inp[0], syn_signs[0].astype(np.float32)), 'target': target.squeeze().astype(np.int)}
             else:
                 inp, target = self.ctv.getbatch_alternative_noscal(1, source='train' if self.train else 'valid')
                 inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-                return inp[0], target.squeeze().astype(np.int)
+                return {'inp': inp[0], 'target': target.squeeze().astype(np.int)}
 
         def __len__(self):
             """Determines epoch size(s)"""
@@ -1018,7 +1026,9 @@ class Data(object):
 class MultiViewData(Data):
     def __init__(self, working_dir, gt_type, nb_cpus=20,
                  label_dict=None, view_kwargs=None, naive_norm=True,
-                 load_data=True, train_fraction=None, random_seed=0):
+                 load_data=True, train_fraction=None, random_seed=0,
+                 splitting_dict=None):
+        self.splitting_dict = splitting_dict
         if view_kwargs is None:
             view_kwargs = dict(raw_only=False,
                                nb_cpus=nb_cpus, ignore_missing=True,
@@ -1028,7 +1038,7 @@ class MultiViewData(Data):
         label_dc_path = self.gt_dir + "%s_labels.pkl" % gt_type
         if label_dict is None:
             self.label_dict = load_pkl2obj(label_dc_path)
-        if not os.path.isfile(splitting_dc_path) or train_fraction is \
+        if (not os.path.isfile(splitting_dc_path) and self.splitting_dict is None) or train_fraction is \
                 not None:
             if train_fraction is None:
                 msg = f'Did not find splitting dictionary at {splitting_dc_path} ' \
@@ -1064,7 +1074,8 @@ class MultiViewData(Data):
         else:
             if train_fraction is not None:
                 raise ValueError('Value fraction can only be set if splitting dict is not available.')
-            self.splitting_dict = load_pkl2obj(splitting_dc_path)
+            if self.splitting_dict is None:
+                self.splitting_dict = load_pkl2obj(splitting_dc_path)
 
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
         if not load_data:
@@ -1204,9 +1215,8 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.cache_size = 4000 * 2  # random permutations/subset in selected SSV views,
         # RandomFlip augmentation etc.
-        self.max_nb_cache_uses = self.cache_size
+        self.max_nb_cache_uses = 4000 * 2
         self.current_cache_uses = 0
         assert n_classes == len(class_weights)
         self.n_classes = n_classes
@@ -1228,7 +1238,7 @@ class CelltypeViews(MultiViewData):
                            k, v in self.splitting_dict.items()]
             now_splits = [(k, np.unique(v, return_counts=False)) for
                           k, v in splitting_dict.items()]
-            log_cnn.critical('Splitting dict was passed explicitely. Overwriting '
+            log_cnn.critical('Splitting dict was passed explicitly. Overwriting '
                              'default splitting of super-class. Support '
                              f'previous: {prev_splits}'
                              f'Support now: {now_splits}.')
@@ -1274,15 +1284,17 @@ class CelltypeViews(MultiViewData):
             self.valid_l = self.valid_l[ixs]
         # NOTE: also performs 'naive_view_normalization'
         if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
-            sample_fac = np.max([int(self.nb_views / 10), 2])  # draw more ssv if number of views
+            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views
             # is high
             nb_ssv = self.n_classes * sample_fac
             sample_ixs = []
             l = []
             labels2draw = np.arange(self.n_classes)
             np.random.shuffle(labels2draw)  # change order
-            for i in labels2draw:
+            for cnt, i in enumerate(labels2draw):
                 curr_nb_samples = max(nb_ssv // self.n_classes * self.class_weights[i], 1)
+                if source == 'valid' and cnt > 2:
+                    break
                 try:
                     if source == "train":
                         sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
@@ -1309,6 +1321,7 @@ class CelltypeViews(MultiViewData):
                 ssos.append(sso)
             self.view_cache[source] = [sso.load_views(view_key=self.view_key) for sso in ssos]
             # pre- and postsynapse type ratios
+            start = time.time()
             self.syn_sign_cache[source] = np.array(
                 [[syn_sign_ratio_celltype(sso), syn_sign_ratio_celltype(sso, comp_types=[0, ])]
                  for sso in ssos])
@@ -1437,13 +1450,14 @@ class CelltypeViews(MultiViewData):
         if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
             sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
             nb_ssv = self.n_classes * sample_fac  # 1 for each class
+
             sample_ixs = []
             l = []
             labels2draw = np.arange(self.n_classes)
             class_sample_weight = self.class_weights
             np.random.shuffle(labels2draw)  # change order
             for i in labels2draw:
-                curr_nb_samples = nb_ssv // self.n_classes * class_sample_weight[i]  # sample more EA and MSN
+                curr_nb_samples = nb_ssv // self.n_classes * class_sample_weight[i]
                 try:
                     if source == "train":
                         sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
@@ -1493,6 +1507,107 @@ class CelltypeViews(MultiViewData):
         if self.raw_only:
             return d[:, :1], l
         return tuple([d, l])
+
+
+class CelltypeViewsJ0251(CelltypeViews):
+    def __init__(self, inp_node, out_node, raw_only=False, nb_views=20, nb_views_renderinglocations=2,
+                 reduce_context=0, binary_views=False, reduce_context_fact=1, n_classes=4,
+                 class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1,
+                 random_seed=0, view_key=None, cv_val=None):
+        """
+        USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
+
+        Parameters
+        ----------
+        inp_node :
+        out_node :
+        raw_only :
+        nb_views : int
+            Number of sampled views used for prediction of cell type
+        nb_views_renderinglocations : int
+            Number of views per rendering location
+        reduce_context :
+        binary_views :
+        reduce_context_fact :
+        load_data :
+        nb_cpus :
+        view_key : str
+        """
+        global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
+        ctgt_key = None  # use standard ssv store
+        assert "rag_flat_Jan2019_v3" in global_params.config.working_dir
+        assert os.path.isdir(global_params.config.working_dir)
+        if view_key is None:
+            self.view_key = "raw{}".format(nb_views_renderinglocations)
+        else:
+            self.view_key = view_key
+        self.nb_views = nb_views
+        self.nb_cpus = nb_cpus
+        self.raw_only = raw_only
+        self.reduce_context = reduce_context
+        # RandomFlip augmentation etc.
+        self.max_nb_cache_uses = 4000 * 2
+        self.current_cache_uses = 0
+        assert n_classes == len(class_weights)
+        self.n_classes = n_classes
+        self.class_weights = np.array(class_weights)
+        self.view_cache = {'train': None, 'valid': None, 'test': None}
+        self.label_cache = {'train': None, 'valid': None, 'test': None}
+        self.syn_sign_cache = {'train': None, 'valid': None, 'test': None}
+        self.sample_weights = {'train': None, 'valid': None, 'test': None}
+        self.reduce_context_fact = reduce_context_fact
+        self.binary_views = binary_views
+        self.example_shape = (nb_views, 4, 2, 128, 256)
+        self.cv_val = cv_val
+        # load GT
+        self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
+        df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
+        ssv_ids = df[:, 0].astype(np.uint)
+        if len(np.unique(ssv_ids)) != len(ssv_ids):
+            ixs, cnt = np.unique(ssv_ids, return_counts=True)
+            raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
+        str_labels = df[:, 1]
+        ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
+        if self.cv_val is not None and self.cv_val != -1:
+            assert self.cv_val < 10
+            kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
+            for ii, (train_ixs, test_ixs) in enumerate(kfold.split(ssv_ids, y=ssv_labels)):
+                if ii == self.cv_val:
+                    self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid': ssv_ids[test_ixs]}
+        else:
+            self.splitting_dict = {'train': ssv_ids, 'valid': ssv_ids}  # use all data
+            log_cnn.critical(f'Using all GT data for training!')
+        self.label_dict = {k: v for k, v in zip(ssv_ids, ssv_labels)}
+        self.sso_ids = self.splitting_dict['train']
+        for k, v in self.splitting_dict.items():
+            classes, c_cnts = np.unique([self.label_dict[ix] for ix in
+                                         self.splitting_dict[k]], return_counts=True)
+            log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
+            log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
+
+        dc_split_prev = dict(self.splitting_dict)
+        dc_label_prev = dict(self.label_dict)
+
+        print("Initializing CelltypeViewsJ0251:", self.__dict__)  # TODO: add gt paths to config
+        super(CelltypeViews, self).__init__(global_params.config.working_dir, ctgt_key, train_fraction=None,
+                         naive_norm=False, load_data=load_data, random_seed=random_seed,
+                         splitting_dict=dc_split_prev, label_dict=dc_label_prev)
+        # check that super left dicts unmodified
+        assert self.splitting_dict == dc_split_prev
+        assert self.label_dict == dc_label_prev
+
+        self.train_d = np.array(self.splitting_dict["train"])
+        self.valid_d = np.array(self.splitting_dict["valid"])
+        ssv_gt_dict = self.label_dict
+        self.train_l = np.array([ssv_gt_dict[ix] for ix in self.train_d], np.int16)[:, None]
+        self.valid_l = np.array([ssv_gt_dict[ix] for ix in self.valid_d], np.int16)[:, None]
+        self.train_d = self.train_d[:, None]
+        self.valid_d = self.valid_d[:, None]
+        super(MultiViewData, self).__init__()
+        for k, v in self.splitting_dict.items():
+            classes, c_cnts = np.unique([self.label_dict[ix] for ix in
+                                         self.splitting_dict[k]], return_counts=True)
+            print(f"{k} [labels, counts]: {classes}, {c_cnts}")
 
 
 class GliaViews(Data):
@@ -1741,7 +1856,7 @@ class TripletData_N(Data):
             for el in v:
                 rev_dc[el] = k
         self.s_ids = np.concatenate(ssds.mapping_dict.values())
-        bb = ssds.load_cached_data("bounding_box")
+        bb = ssds.load_numpy_data("bounding_box")
         # sizes as diagonal of bounding box in um (SV size will be size of corresponding SSV)
         bb_size = np.linalg.norm((bb[:, 1] - bb[: ,0])*self.sds.scaling, axis=1) / 1e3
         ssds_sizes = {}
@@ -1814,7 +1929,7 @@ class TripletData_SSV(Data):
         self.valid_l = np.zeros((len(self.valid_d), 1))
 
         self.sso_ids = self.ssds.ssv_ids
-        bb = self.ssds.load_cached_data("bounding_box")
+        bb = self.ssds.load_numpy_data("bounding_box")
         for sso_ix in self.valid_d:
             bb[self.sso_ids == sso_ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
         for sso_ix in self.test_d:
@@ -1920,7 +2035,7 @@ class TripletData_SSV_nviews(Data):
         self.test_d = self.test_d[:, None]
 
         self.sso_ids = self.ssds.ssv_ids
-        bb = self.ssds.load_cached_data("bounding_box")
+        bb = self.ssds.load_numpy_data("bounding_box")
         for sso_ix in self.valid_d:
             ix = self.sso_ids.index(sso_ix)
             bb[ix] = 0  # bb below 8, i.e. also 0, will be ignored during training
@@ -2318,9 +2433,9 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     """
     syn_objs_total, syn_type_total = [], []
     sd_syn_ssv = SegmentationDataset('syn_ssv', working_dir=global_params.config.working_dir)
-    syn_cts = sd_syn_ssv.load_cached_data('partner_celltypes')
-    syn_axs = sd_syn_ssv.load_cached_data('partner_axoness')
-    syn_prob = sd_syn_ssv.load_cached_data('syn_prob')
+    syn_cts = sd_syn_ssv.load_numpy_data('partner_celltypes')
+    syn_axs = sd_syn_ssv.load_numpy_data('partner_axoness')
+    syn_prob = sd_syn_ssv.load_numpy_data('syn_prob')
     m_prob = syn_prob >= synprob_thresh
     # set bouton predictions to axon label
     syn_axs[syn_axs == 3] = 1

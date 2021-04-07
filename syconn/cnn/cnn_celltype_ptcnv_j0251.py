@@ -15,14 +15,9 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention, \
-    ModelNetSelection, ModelNetSelectionBig, ModelNetAttentionBig, ModelNet40xConv
+from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3d, Backup, metrics
-try:
-    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-except ModuleNotFoundError as e:
-    print(e)
-    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
+import distutils
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -35,8 +30,12 @@ parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor f
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
-parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
-parser.add_argument('--use_syntype', default=True, help='Use synapse type', type=bool)
+parser.add_argument('--use_bias', default=1, help='Use bias parameter in Convpoint layers.',
+                    type=distutils.util.strtobool)
+parser.add_argument('--use_syntype', default=1, help='Use synapse type',
+                    type=distutils.util.strtobool)
+parser.add_argument('--cellshape_only', default=0, help='Use only cell surface points',
+                    type=distutils.util.strtobool)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -68,7 +67,7 @@ cval = args.cval
 ctx = args.ctx
 use_bias = args.use_bias
 use_syntype = args.use_syntype
-
+cellshape_only = args.cellshape_only
 lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.99
@@ -76,7 +75,6 @@ max_steps = 500000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = False
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
@@ -84,15 +82,15 @@ num_classes = 11
 onehot = True
 act = 'relu'
 use_myelin = True
-
 if name is None:
     name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
-    if not use_syntype:
-        name += '_noSyntype'
-    if use_myelin:
-        name += '_myelin'
+    else:
+        if not use_syntype:
+            name += '_noSyntype'
+        if use_myelin:
+            name += '_myelin'
 if onehot:
     input_channels = 4
     if use_syntype:
@@ -102,6 +100,8 @@ if onehot:
 else:
     input_channels = 1
     name += '_flatinp'
+if cellshape_only:
+    input_channels = 1
 if use_norm is False:
     name += '_noBN'
     if track_running_stats:
@@ -167,10 +167,11 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                               cellshape_only=cellshape_only, use_syntype=use_syntype,
                               onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
-valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
-                              cv_val=cval, cellshape_only=cellshape_only,
-                              use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-                              ctx_size=ctx, map_myelin=use_myelin)
+# valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
+#                               cv_val=cval, cellshape_only=cellshape_only,
+#                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+#                               ctx_size=ctx, map_myelin=use_myelin)
+valid_ds = None
 
 # PREPARE AND START TRAINING #
 
@@ -186,17 +187,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
 # extra weight for HVC and LMAN
 # STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
 criterion = torch.nn.CrossEntropyLoss()  # weight=torch.Tensor([1]*num_classes))

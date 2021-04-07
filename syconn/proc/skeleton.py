@@ -5,7 +5,6 @@ from scipy import ndimage
 import kimimaro
 import networkx as nx
 import cloudvolume
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 from syconn.extraction.block_processing_C import relabel_vol_nonexist2zero
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import stitch_skel_nx

@@ -6,7 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import time
 from logging import Logger
-from typing import Optional
+from typing import Optional, Union
 
 import matplotlib
 import networkx as nx
@@ -29,6 +29,21 @@ def cs_id_to_partner_ids_vec(cs_ids):
     sv_ids = np.concatenate((sv_ids[:, None], (cs_ids - np.left_shift(sv_ids, 32))[:, None]),
                             axis=1)
     return sv_ids
+
+
+def cs_id_to_partner_inverse(partner_ids: Union[np.ndarray, list]) -> int:
+    """
+    Input permutation invariant transformation to bit-shift-based ID, which is used for `syn` and `cs`
+    :class:`~syconn.reps.segmentation.SegmentationObject`.
+
+    Args:
+        partner_ids: :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` IDs.
+
+    Returns:
+        Contact site or synapse fragment ID.
+    """
+    partner_ids = np.sort(partner_ids).astype(np.uint32)
+    return (partner_ids[0] << 32) + partner_ids[1]
 
 
 def connectivity_to_nx_graph(cd_dict):
@@ -91,37 +106,37 @@ def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)
     cd_dict = dict()
-    cd_dict['ids'] = csd.load_cached_data('id')
+    cd_dict['ids'] = csd.load_numpy_data('id')
     # in um2, overlap of cs and sj
     cd_dict['syn_size'] = \
-        csd.load_cached_data('mesh_area') / 2  # as used in export_matrix
+        csd.load_numpy_data('mesh_area') / 2  # as used in export_matrix
     cd_dict['synaptivity_proba'] = \
-        csd.load_cached_data('syn_prob')
+        csd.load_numpy_data('syn_prob')
     # -1 for inhibitory, +1 for excitatory
     cd_dict['syn_sign'] = \
-        csd.load_cached_data('syn_sign').astype(np.int)
+        csd.load_numpy_data('syn_sign').astype(np.int)
     cd_dict['coord_x'] = \
-        csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
-        csd.load_cached_data('rep_coord')[:, 1].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 1].astype(np.int)
     cd_dict['coord_z'] = \
-        csd.load_cached_data('rep_coord')[:, 2].astype(np.int)
+        csd.load_numpy_data('rep_coord')[:, 2].astype(np.int)
     cd_dict['ssv_partner_0'] = \
-        csd.load_cached_data('neuron_partners')[:, 0].astype(np.int)
+        csd.load_numpy_data('neuron_partners')[:, 0].astype(np.int)
     cd_dict['ssv_partner_1'] = \
-        csd.load_cached_data('neuron_partners')[:, 1].astype(np.int)
+        csd.load_numpy_data('neuron_partners')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ax_0'] = \
-        csd.load_cached_data('partner_axoness')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_axoness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ax_1'] = \
-        csd.load_cached_data('partner_axoness')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_axoness')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ct_0'] = \
-        csd.load_cached_data('partner_celltypes')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_celltypes')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ct_1'] = \
-        csd.load_cached_data('partner_celltypes')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_celltypes')[:, 1].astype(np.int)
     cd_dict['neuron_partner_sp_0'] = \
-        csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
+        csd.load_numpy_data('partner_spiness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_sp_1'] = \
-        csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
+        csd.load_numpy_data('partner_spiness')[:, 1].astype(np.int)
 
     log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
                                                           len(csd.ids)))

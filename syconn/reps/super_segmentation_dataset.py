@@ -95,8 +95,8 @@ class SuperSegmentationDataset(SegmentationBase):
         We can make use of the cached arrays to obtain the total number of synapses per
         cell type as follows::
 
-            celltypes = ssd.load_cached_data('celltype_cnn_e3')
-            n_synapses = np.array([len(el) for el in ssd.load_cached_data('syn_ssv')])
+            celltypes = ssd.load_numpy_data('celltype_cnn_e3')
+            n_synapses = np.array([len(el) for el in ssd.load_numpy_data('syn_ssv')])
             n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(9)}
             print(n_synapes_per_type)
 
@@ -404,7 +404,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.load_id_changer()
         return self._id_changer
 
-    def load_cached_data(self, prop_name: str, allow_nonexisting: bool = True):
+    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True):
         """
         Todo:
             * remove 's' appendix in file names.
@@ -513,7 +513,7 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
-        may change each run.
+        may change each run. Populates the ``sv_ids`` attribute of all SSVs.
         See :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
 
         Args:
@@ -628,17 +628,15 @@ class SuperSegmentationDataset(SegmentationBase):
             return
         if self._ssoid2ix is None:
             self._ssoid2ix = {k: ix for ix, k in enumerate(self.ssv_ids)}
-        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
+        self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
 
 
-def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
-                      attr_keys: Iterable = (), n_jobs: Optional[int] = None,
-                      nb_cpus: Optional[int] = None, use_batchjob=True,
+def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False, attr_keys: Iterable = (),
+                      n_jobs: Optional[int] = None, nb_cpus: Optional[int] = None, use_batchjob=True,
                       new_mapping: bool = True, overwrite=False):
     """
-    Saves attributes of all SSVs within the given SSD and computes properties
-    like size and representative coordinate. `ids.npy` order may change after
-    repeated runs.
+    Saves attributes of all SSVs within the given SSD and computes properties like size and representative
+    coordinate. `ids.npy` order may change after repeated runs.
 
     Todo:
         * extract_only requires refactoring as it stores cache arrays under a
@@ -649,17 +647,16 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
     Args:
         ssd: SuperSegmentationDataset
-        extract_only: Only cache attributes (see`attr_keys` from attribute dict.
-            This will add a suffix `_sel` to the numpy cache array file names
-            (-> updates will not apply to the `load_cached_data` method).
+        extract_only: Only cache attributes (see`attr_keys` from attribute dict. This will add a suffix `_sel` to
+            the numpy cache array file names (-> updates will not apply to the `load_cached_data` method).
         attr_keys: Attributes to cache, only used if `extract_only=True`
-        n_jobs: Currently requires any string to enable batch job system,
-            will be replaced by a global flag soon.
+        n_jobs: Currently requires any string to enable batch job system, will be replaced by a global flag soon.
         nb_cpus: CPUs per worker.
         use_batchjob: Use batchjob processing instead of local multiprocessing.
-        new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`).
-        overwrite: Remove existing SSD folder, if Fals and a folder already
-            exists it raises FileExistsError.
+        new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`).If True, Will use ``ssd.load_mapping_dict``
+            to populate ``sv_ids`` attribute of all :py:class:`~SuperSegmentationObject`.
+
+        overwrite: Remove existing SSD folder, if False and a folder already exists it raises FileExistsError.
     """
     if os.path.exists(ssd.path) and len(glob.glob(ssd.path)) > 1:
         if not overwrite:
@@ -673,19 +670,14 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
     if n_jobs is None:
         n_jobs = ssd.config.ncore_total
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
-    multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
-                     ssd.working_dir, extract_only, attr_keys,
+    multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir, extract_only, attr_keys,
                      ssd._type, new_mapping) for ssv_id_block in multi_params]
 
     if not qu.batchjob_enabled() or not use_batchjob:
-        results = sm.start_multiprocess(
-            _write_super_segmentation_dataset_thread,
-            multi_params, nb_cpus=nb_cpus)
+        results = sm.start_multiprocess(_write_super_segmentation_dataset_thread, multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.batchjob_script(multi_params,
-                                         "write_super_segmentation_dataset",
-                                         n_cores=nb_cpus)
+        path_to_out = qu.batchjob_script(multi_params, "write_super_segmentation_dataset", n_cores=nb_cpus)
 
         out_files = glob.glob(path_to_out + "/*")
         results = []
@@ -711,6 +703,9 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             np.save(ssd.path + "/%ss_sel.npy" % attribute,  # Why '_sel'?
                     attr_dict[attribute])
         else:
+            if len(ssd.ssv_ids) != len(attr_dict[attribute]):
+                log_reps.critical(f'Number of cells ({len(ssd.ssv_ids)}) is different to attribute array '
+                                  f'({len(attr_dict[attribute])}, "{attribute}")')
             np.save(ssd.path + "/%ss.npy" % attribute, attr_dict[attribute])
     log_reps.info(f'Finished `save_dataset_deep` of {ssd}.')
 
@@ -728,31 +723,34 @@ def _write_super_segmentation_dataset_thread(args):
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    ssd_type=ssd_type, version_dict=version_dict)
 
-    try:
-        ssd.load_mapping_dict()
+    if ssd.mapping_dict_exists:
         mapping_dict_avail = True
-    except:
+        if new_mapping:
+            ssd.load_mapping_dict()
+    else:
+        if new_mapping:
+            raise Exception(f"No mapping information found for {ssd}.")
         mapping_dict_avail = False
 
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                    new_mapping=new_mapping,
-                                                    create=True)
+        # assume SSV exists already if new_mapping is False to save IO.
+        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, new_mapping=new_mapping, create=new_mapping)
         if ssv_obj.attr_dict_exists:
             ssv_obj.load_attr_dict()
 
         if not extract_only:
-
             if len(ssv_obj.attr_dict["sv"]) == 0:
                 if mapping_dict_avail:
                     ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
                     if ssv_obj.attr_dict_exists:
                         ssv_obj.load_attr_dict()
+                    if len(ssv_obj.attr_dict["sv"]) == 0:
+                        raise Exception(f"No mapping information found for {ssv_obj}.")
                 else:
-                    raise Exception("No mapping information found")
+                    raise Exception(f"No mapping information found for {ssv_obj}.")
         if not extract_only:
             if "rep_coord" not in ssv_obj.attr_dict:
                 ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
@@ -761,8 +759,6 @@ def _write_super_segmentation_dataset_thread(args):
             if "size" not in ssv_obj.attr_dict:
                 ssv_obj.attr_dict["size"] = ssv_obj.size
 
-        ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
-                                           dtype=np.int)
         if extract_only:
             ignore = False
             for attribute in attr_keys:
@@ -792,47 +788,6 @@ def _write_super_segmentation_dataset_thread(args):
 
             ssv_obj.save_attr_dict()
     return attr_dict
-
-
-def export_to_knossosdataset(ssd, kd, stride=1000, nb_cpus=10):
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, kd.knossos_path, nb_cpus])
-
-    if not qu.batchjob_enabled():
-        sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
-                              multi_params, nb_cpus=nb_cpus)
-
-    else:
-        qu.batchjob_script(
-            multi_params, "export_ssv_to_knossosdataset", remove_jobfolder=True)
-
-
-def _export_ssv_to_knossosdataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    kd_path = args[4]
-    nb_threads = args[5]
-
-    kd = kd_factory(kd_path)
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_obj_id in ssv_obj_ids:
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-        offset = ssv_obj.bounding_box[0]
-        if not 0 in offset:
-            kd.from_matrix_to_cubes(offset,
-                                    data=ssv_obj.voxels.astype(np.uint64) *
-                                         ssv_obj_id,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
 
 
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
@@ -915,159 +870,6 @@ def predict_cell_type_skelbased_thread(args):
                 ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
             except:
                 pass
-
-
-def export_to_knossosdataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    kd_path = args[4]
-    nb_threads = args[5]
-
-    kd = kd_factory(kd_path)
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_obj_id in ssv_obj_ids:
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-        offset = ssv_obj.bounding_box[0]
-        if not 0 in offset:
-            kd.from_matrix_to_cubes(ssv_obj.bounding_box,
-                                    data=ssv_obj.voxels.astype(np.uint32) *
-                                         ssv_obj_id,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def convert_knossosdataset_thread(args):
-    version = args[0]
-    version_dict = args[1]
-    working_dir = args[2]
-    nb_threads = args[3]
-    sv_kd_path = args[4]
-    ssv_kd_path = args[5]
-    offsets = args[6]
-    size = args[7]
-
-    sv_kd = kd_factory(sv_kd_path)
-    ssv_kd = kd_factory(ssv_kd_path)
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_id_changer()
-
-    for offset in offsets:
-        block = sv_kd.from_overlaycubes_to_matrix(size, offset,
-                                                  datatype=np.uint32,
-                                                  nb_threads=nb_threads)
-
-        block = ssd.id_changer[block]
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=block.astype(np.uint32),
-                                    datatype=np.uint32,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-        raw = sv_kd.from_raw_cubes_to_matrix(size, offset,
-                                             nb_threads=nb_threads)
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=raw,
-                                    datatype=np.uint8,
-                                    as_raw=True,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def write_super_segmentation_dataset_thread(args: Tuple):
-    """
-    Todo:
-        * Check use-cases.
-    Args:
-        args:
-
-    Returns:
-
-    """
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    extract_only = args[4]
-    attr_keys = args[5]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    try:
-        ssd.load_mapping_dict()
-        mapping_dict_avail = True
-    except:
-        mapping_dict_avail = False
-
-    attr_dict = dict(id=[])
-
-    for ssv_obj_id in ssv_obj_ids:
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                    new_mapping=True,
-                                                    create=True)
-
-        if ssv_obj.attr_dict_exists:
-            ssv_obj.load_attr_dict()
-
-        if not extract_only:
-
-            if len(ssv_obj.attr_dict["sv"]) == 0:
-                if mapping_dict_avail:
-                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-                    if ssv_obj.attr_dict_exists:
-                        ssv_obj.load_attr_dict()
-                else:
-                    raise Exception("No mapping information found")
-        if not extract_only:
-            if "rep_coord" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
-            if "bounding_box" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["bounding_box"] = ssv_obj.bounding_box
-            if "size" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["size"] = ssv_obj.size
-
-        ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
-                                           dtype=np.int)
-
-        if extract_only:
-            ignore = False
-            for attribute in attr_keys:
-                if not attribute in ssv_obj.attr_dict:
-                    ignore = True
-                    break
-            if ignore:
-                continue
-
-            attr_dict["id"].append(ssv_obj_id)
-
-            for attribute in attr_keys:
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                if attribute in ssv_obj.attr_dict:
-                    attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-                else:
-                    attr_dict[attribute].append(None)
-        else:
-            attr_dict["id"].append(ssv_obj_id)
-            for attribute in ssv_obj.attr_dict.keys():
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-
-                ssv_obj.save_attr_dict()
-
-    return attr_dict
 
 
 def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],

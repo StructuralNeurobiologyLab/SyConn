@@ -3,7 +3,7 @@
 ### Usage of the SegmentationDataset property caches
 
 ``SegmentationObjects`` retrieved through the factory method ``SegmentationDataset.get_segmentation_object``
-will not load the object's attribute dictionary by default in order to reduce the IO overhead. E.g.
+will not load the object's attribute dictionary by default in order to reduce IO overhead. E.g.
 using the factory method can be convenient to access the voxels or meshes of many objects, but this does not
 require any properties from the attribute dictionary.
 
@@ -19,12 +19,12 @@ require any properties from the attribute dictionary.
     In [81]: sv.attr_dict                                                                                                 
     Out[81]: {}
 
-The properties stored in ``SegmentationObject.attr_dict`` are cached as numpy arrays and stored
+The properties stored in ``SegmentationObject.attr_dict`` are cached as numpy arrays and stored on disk
 in the ``SegmentationDataset`` folder during ``dataset_analysis``. Many, sparse look-ups for specific properties can
 be realized by loading the cache arrays via ``load_cached_data`` and using ``SegmentationDataset.ids`` to retrieve the
 index of the object of interest in the property cache:
 
-    In [82]: prop_look_up = dict(size=sd.load_cached_data('size'), rep_coord=sd.load_cached_data('rep_coord'))            
+    In [82]: prop_look_up = dict(size=sd.load_numpy_data('size'), rep_coord=sd.load_numpy_data('rep_coord'))
     
     In [83]: prop_look_up['rep_coord'][np.where(sd.ids == sv.id)]                                                         
     Out[83]: array([[1475, 1297,  882]], dtype=int32)
@@ -33,7 +33,7 @@ index of the object of interest in the property cache:
     Out[84]: array([1750])
 
 Another solution with similar complexity but a more convenient interface is to pass the property keys during the init. of ``SegmentationDataset``.
-Now ``get_segmentation_object`` will use a lookup from object ID to the index in the respective property cache array to populate the object's attribute dictionary:
+Now ``get_segmentation_object`` will use a lookup from object ID to the index in the respective property numpy array to populate the object's attribute dictionary:
 
     In [85]: sd = SegmentationDataset('sv', cache_properties=('rep_coord', 'size'))                                       
     
@@ -43,7 +43,7 @@ Now ``get_segmentation_object`` will use a lookup from object ID to the index in
     Out[87]: {'rep_coord': array([1475, 1297,  882], dtype=int32), 'size': 1750}
 
 This mechanism allows quick access to specific attributes instead of loading the entire dictionary from
-file for every single objects. Besides a considerable reduction of file reads this also avoids to read
+file for every single object. Besides a considerable reduction of file reads this also avoids to read
 properties which are not of interest for the current process, which can be quite many:
 
     In [88]: sv.load_attr_dict()                                                                                          
@@ -87,7 +87,7 @@ In case all data points are of interest, the recommended way to use the cache is
     In [89]: sd = SegmentationDataset('sv')
     
     # load the mesh bounding box
-    In [90]: mesh_bb = sd.load_cached_data('mesh_bb')  # N, 2, 3                                                          
+    In [90]: mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
 
     # calculate the diagonal
     In [91]: mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)                                              
@@ -106,3 +106,29 @@ In case all data points are of interest, the recommended way to use the cache is
     
     In [96]: sv_sizes_vx_filtered = sd.sizes[~mask] 
 
+
+### Myelin prediction
+
+The entire myelin prediction for a single cell reconstruction including a smoothing
+is implemented and can be manually invoked as follows::
+
+    from syconn import global_params
+    from syconn.reps.super_segmentation import *
+    from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+
+    # init. example data set
+    global_params.wd = '~/SyConn/example_cube1/'
+
+    # initialize example cell reconstruction
+    ssd = SuperSegmentationDataset()
+    ssv = list(ssd.ssvs)[0]
+    ssv.load_skeleton()
+
+    # get myelin predictions
+    myelinated = map_myelin2coords(ssv.skeleton["nodes"])
+    ssv.skeleton["myelin"] = myelinated
+    # this will generate a smoothed version at ``ssv.skeleton["myelin_avg10000"]``
+    majorityvote_skeleton_property(ssv, "myelin")
+    # store results as a KNOSSOS readable k.zip file
+    ssv.save_skeleton_to_kzip(dest_path='~/{}_myelin.k.zip'.format(ssv.id),
+        additional_keys=['myelin', 'myelin_avg10000'])
