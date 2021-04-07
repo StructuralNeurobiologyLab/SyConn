@@ -1133,7 +1133,7 @@ def _classify_synssv_objects_thread(args):
     try:
         rfc = joblib.load(global_params.config.mpath_syn_rfc)
     except ImportError:
-        rfc = joblib.load(global_params.config.mpath_syn_rfc_old)
+        rfc = joblib.load(global_params.config.mpath_syn_rfc_fallback)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
@@ -1190,7 +1190,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     Args:
         sd_syn_ssv: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
             type ``syn_ssv``. Used to identify synaptic object candidates annotated
-            in the kzip/xlsx file at `path2file`.
+            in the kzip/xls file at `path2file`.
         path2file: Path to kzip file with synapse labels as node comments
             ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
             respectively).

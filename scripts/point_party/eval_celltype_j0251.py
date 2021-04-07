@@ -92,7 +92,7 @@ def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    qs.to_excel(dest_p[:-4] + ".xlsx")
+    qs.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -138,7 +138,7 @@ def create_lineplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    df.to_excel(dest_p[:-4] + ".xlsx")
+    df.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -184,7 +184,7 @@ def create_pointplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    df.to_excel(dest_p[:-4] + ".xlsx")
+    df.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 

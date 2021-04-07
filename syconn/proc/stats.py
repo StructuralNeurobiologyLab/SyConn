@@ -212,7 +212,7 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
             ll = [["legend labels"] + list(legend_labels)]
         else:
             ll = [[]]
-        array2xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xlsx",
+        array2xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xls",
                   ll + [["labels", xlabel, ylabel]] + [xtick_labels] + [precision] + [recall])
 
     plt.tight_layout()

@@ -95,7 +95,7 @@ def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    qs.to_excel(dest_p[:-4] + ".xlsx")
+    qs.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
