@@ -1370,7 +1370,7 @@ def majority_vote_compartments(sso, ax_pred_key='axoness'):
     for n, d in g.nodes(data=True):
         if d[ax_pred_key] == 2:
             soma_free_g.remove_node(n)
-    ccs = list((soma_free_g.subgraph(c) for c in nxconnected_components(soma_free_g)))
+    ccs = list((soma_free_g.subgraph(c) for c in nx.connected_components(soma_free_g)))
     new_axoness_dc = nx.get_node_attributes(g, ax_pred_key)
     for cc in ccs:
         preds = [d[ax_pred_key] for n, d in cc.nodes(data=True)]

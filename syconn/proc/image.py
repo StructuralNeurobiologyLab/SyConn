@@ -4,11 +4,9 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-import warnings
 import numpy as np
 
 from ..proc import log_proc
-from ..mp.mp_utils import start_multiprocess_imap
 
 __cv2__ = True
 try:
