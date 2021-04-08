@@ -99,7 +99,7 @@ def generate_subcell_kd_from_proba(
         cube_shape = (256, 256, 256)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
     cd_dir = "{}/chunkdatasets/{}/".format(global_params.config.working_dir, "_".join(subcell_names))

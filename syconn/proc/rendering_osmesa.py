@@ -254,7 +254,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     ctx = init_ctx(ws, depth_map=depth_map)
     init_opengl(ws, enable_lightning, depth_map=depth_map, clear_value=background)
     vertices = np.array(vertices)
-    indices = np.array(indices, dtype=np.uint)
+    indices = np.array(indices, dtype=np.uint64)
     if colors is not None:
         colored = True
         colors = np.array(colors)
