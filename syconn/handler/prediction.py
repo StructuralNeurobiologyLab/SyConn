@@ -77,10 +77,10 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         kd = basics.kd_factory(curr_p)
         bb = kd.get_movement_area(zip_fname)
         offset, size = bb[0], bb[1] - bb[0]
-        scaling = np.array(kd.scale, dtype=np.int)
+        scaling = np.array(kd.scale, dtype=np.int32)
         if np.isscalar(raw_data_offset):
             raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
-                                       dtype=np.int)
+                                       dtype=np.int32)
             if verbose:
                 log_handler.debug(f'Using scale adapted raw offset: {raw_data_offset}')
         elif len(raw_data_offset) != 3:
@@ -491,8 +491,8 @@ def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     line = re.findall("MovementArea (.*)/>", anno_str)
     assert len(line) == 1
     line = line[0]
-    bb_min = np.array([re.findall(r'min.\w="(\d+)"', line)], dtype=np.uint)
-    bb_max = np.array([re.findall(r'max.\w="(\d+)"', line)], dtype=np.uint)
+    bb_min = np.array([re.findall(r'min.\w="(\d+)"', line)], dtype=np.uint64)
+    bb_max = np.array([re.findall(r'max.\w="(\d+)"', line)], dtype=np.uint64)
     # Movement area is stored with 0-indexing! No adjustment needed
     return np.concatenate([bb_min, bb_max])
 
@@ -544,7 +544,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     original_do_rates = m.dropout_rates
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
     offset = m.target_node.shape.offsets
-    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
+    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int32)
     cd = ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset,
                   box_coords=np.zeros(3), fit_box_size=True)
@@ -638,9 +638,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             Currently the following chunk/tile properties are used additionally
             (`overlap_shape` is the per-chunk overlap)::
 
-                chunk_size = np.array([1024, 1024, 256], dtype=np.int)  # XYZ
+                chunk_size = np.array([1024, 1024, 256], dtype=np.int32)  # XYZ
                 n_tiles = np.array([4, 4, 16])
-                tile_shape = (chunk_size / n_tiles).astype(np.int)
+                tile_shape = (chunk_size / n_tiles).astype(np.int32)
                 # the final input shape must be a multiple of tile_shape
                 overlap_shape = tile_shape // 2
 
@@ -772,7 +772,7 @@ def dense_predictor(args):
     tile_shape = np.array(tile_shape)
     while True:
         try:
-            out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
+            out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int32)[::-1]  # ZYX
             out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
             predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
                                   out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
@@ -799,10 +799,10 @@ def dense_predictor(args):
         ol = ch.overlap
 
         size = np.array(np.array(ch.size) + 2 * np.array(ol),
-                        dtype=np.int)
+                        dtype=np.int32)
 
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
-                          dtype=np.int)
+                          dtype=np.int32)
         raw = kd.load_raw(size=size * mag, offset=coords * mag, mag=mag)
 
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor,
@@ -895,7 +895,7 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
     original_do_rates = m.dropout_rates
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
     offset = m.target_node.shape.offsets
-    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
+    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int32)
     cd = ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset,
                   box_coords=np.zeros(3), fit_box_size=True)

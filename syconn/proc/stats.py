@@ -61,8 +61,8 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
 
 def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
                                target_names=None, labels=None):
-    y_pred = np.array(y_pred, dtype=np.int)
-    y_true = np.array(y_true, dtype=np.int)
+    y_pred = np.array(y_pred, dtype=np.int32)
+    y_true = np.array(y_true, dtype=np.int32)
     header = "----------------------------------------------------\n\t\t" \
              "%s\n" % prefix
     if target_names is None:
@@ -212,7 +212,7 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
             ll = [["legend labels"] + list(legend_labels)]
         else:
             ll = [[]]
-        array2xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xlsx",
+        array2xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xls",
                   ll + [["labels", xlabel, ylabel]] + [xtick_labels] + [precision] + [recall])
 
     plt.tight_layout()
@@ -707,7 +707,7 @@ class FileTimer:
             bb = None
         self.kd = kd_factory(conf.entries['paths']['kd_seg'])
         if bb is None:
-            bb = np.array([np.zeros(3, dtype=np.int), self.kd.boundary])
+            bb = np.array([np.zeros(3, dtype=np.int32), self.kd.boundary])
         else:
             bb = np.array(bb)
         self._dataset_shape = bb[1] - bb[0]

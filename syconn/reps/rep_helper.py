@@ -324,11 +324,11 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     """
     if colors is None:
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                                    [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+                                    [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.int32)
     else:
         if np.max(colors) <= 1.0:
             colors = np.array(colors) * 255
-        colors = np.array(colors, dtype=np.uint)
+        colors = np.array(colors, dtype=np.int32)
         if len(colors) < np.max(rep_values) + 1:
             msg = 'Length of colors has to be equal to "np.max(rep_values)+1"' \
                   '. Note that currently only consecutive labels are supported.'
@@ -338,7 +338,7 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     if k > len(rep_coords):
         k = len(rep_coords)
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
-    hull_rep = np.zeros((len(vertices)), dtype=np.int)
+    hull_rep = np.zeros((len(vertices)), dtype=np.int32)
     for i in range(len(ixs)):
         curr_reps = np.array(rep_values)[ixs[i]]
         if np.isscalar(curr_reps):
@@ -414,10 +414,10 @@ def surface_samples(coords: np.ndarray,
     """
     coords = np.array(coords)  # create copy!
     offset = np.min(coords, axis=0)
-    bin_sizes = np.array(bin_sizes, dtype=np.float)
+    bin_sizes = np.array(bin_sizes, dtype=np.float32)
     coords -= offset
     query_tree = spatial.cKDTree(coords)
-    nb_bins = np.ceil(np.max(coords, axis=0) / bin_sizes).astype(np.int)
+    nb_bins = np.ceil(np.max(coords, axis=0) / bin_sizes).astype(np.int32)
     nb_bins = np.max([[1, 1, 1], nb_bins], axis=0)
     H, edges = np.histogramdd(coords, bins=nb_bins)
     nb_smaples = np.min([np.sum(H != 0), max_nb_samples])
@@ -499,10 +499,10 @@ def _find_object_properties(cube: np.ndarray) -> \
         # sls = res[int(ii-1)]  # Old version which does not scale to huge IDs
         sls = res[int(ii - 1)]
         min_vec = np.array([sl.start for sl in sls],
-                           dtype=np.int)  # -1 because bounding boxes start at element with ID 1
-        max_vec = np.array([sl.stop for sl in sls], dtype=np.int)
+                           dtype=np.int32)  # -1 because bounding boxes start at element with ID 1
+        max_vec = np.array([sl.stop for sl in sls], dtype=np.int32)
         rand_obj_coord = np.transpose(np.nonzero(cube[sls] == ii))[0]
-        bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
+        bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int32)
         sizes[obj_id] = cnts[ii]
         rep_coords[
             obj_id] = min_vec + rand_obj_coord

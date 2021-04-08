@@ -75,7 +75,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                     continue
                 value = this_attr_dict[attribute]
                 if attribute == 'id':
-                    value = np.array(value, np.uint)
+                    value = np.array(value, np.uint64)
                 if attribute not in attr_dict:
                     if type(value) is not list:
                         sh = list(value.shape)
@@ -101,7 +101,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
-        file_mask = np.zeros(len(out_files), dtype=np.int)
+        file_mask = np.zeros(len(out_files), dtype=np.int64)
         res = sm.start_multiprocess_imap(_dataset_analysis_check, out_files, sm.cpu_count())
         for ix_cnt, r in enumerate(res):
             rk, n_el = r
@@ -162,7 +162,7 @@ def _load_attr_helper(args):
 
             value = dc[attr]
             if attr == 'id':
-                value = np.array(value, np.uint)
+                value = np.array(value, np.uint64)
             if type(value) is not list:  # assume numpy array
                 if len(res) == 0:
                     sh = list(value.shape)
@@ -245,7 +245,7 @@ def _dataset_analysis_thread(args):
     if 'rep_coord' in global_attr_dict:
         global_attr_dict['rep_coord'] = np.array(global_attr_dict['rep_coord'], dtype=np.int32)
     if 'size' in global_attr_dict:
-        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int)
+        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int32)
     if 'mesh_area' in global_attr_dict:
         global_attr_dict['mesh_area'] = np.array(global_attr_dict['mesh_area'], dtype=np.float32)
     return global_attr_dict
@@ -321,7 +321,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
@@ -625,7 +625,7 @@ def _map_subcell_extract_props_thread(args):
     start_all = time.time()
     for ch_cnt, ch_id in enumerate(chunks):
         ch = cd.chunk_dict[ch_id]
-        offset, size = ch.coordinates.astype(np.int), ch.size
+        offset, size = ch.coordinates.astype(np.int32), ch.size
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         subcell_d = []
         obj_ids_bdry = dict()
@@ -1451,9 +1451,9 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
         grid_c.append(np.arange(0, kd.boundary[i_dim], block_size[i_dim]))
 
     bbs_block_range = sd.load_numpy_data("bounding_box") / np.array(block_size)
-    bbs_block_range = bbs_block_range.astype(np.int)
+    bbs_block_range = bbs_block_range.astype(np.int32)
 
-    kd_block_range = np.array(kd.boundary / block_size + 1, dtype=np.int)
+    kd_block_range = np.array(kd.boundary / block_size + 1, dtype=np.int32)
 
     bbs_job_dict = defaultdict(list)
 
@@ -1499,7 +1499,7 @@ def _export_sd_to_knossosdataset_thread(args):
     kd_path = args[5]
     block_edge_length = args[6]
 
-    block_size = np.array([block_edge_length] * 3, dtype=np.int)
+    block_size = np.array([block_edge_length] * 3, dtype=np.int32)
 
     kd = basics.kd_factory(kd_path)
 
@@ -1508,7 +1508,7 @@ def _export_sd_to_knossosdataset_thread(args):
                                           version=version)
 
     overlay_block = np.zeros(block_size, dtype=np.uint64)
-    block_start = (block_loc * block_size).astype(np.int)
+    block_start = (block_loc * block_size).astype(np.int32)
 
     for so_id in so_ids:
         so = sd.get_segmentation_object(so_id, False)

@@ -134,12 +134,12 @@ def _collect_properties_from_ssv_partners_thread(args):
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
         if len(ssv_synids) == 0:
-            cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float)
-            cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int)
+            cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float32)
+            cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int32)
             cache_dc['synssv_ids'] = ssv_synids
-            cache_dc['partner_spiness'] = np.zeros((0,), dtype=np.int)
-            cache_dc['partner_celltypes'] = np.zeros((0,), dtype=np.int)
-            cache_dc['latent_morph'] = np.zeros((0,), dtype=np.float)
+            cache_dc['partner_spiness'] = np.zeros((0,), dtype=np.int32)
+            cache_dc['partner_celltypes'] = np.zeros((0,), dtype=np.int32)
+            cache_dc['latent_morph'] = np.zeros((0,), dtype=np.float32)
             cache_dc.push()
             continue
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
@@ -547,7 +547,7 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
         off = ixs_offset[ii]
         graph.add_nodes_from(np.arange(len(voxel_coords[ii])) + off)
         kdtree = spatial.cKDTree(voxel_coords[ii])
-        pairs = np.array(list(kdtree.query_pairs(r=2)), dtype=np.int)
+        pairs = np.array(list(kdtree.query_pairs(r=2)), dtype=np.int64)
         graph.add_edges_from(pairs + off)
     del kdtree, pairs
     voxel_coords_flat = np.concatenate(voxel_coords) * scale
@@ -774,12 +774,12 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
                          verbose=False):
     kdtree = spatial.cKDTree(voxel_list)
 
-    checked_ids = np.array([], dtype=np.int)
+    checked_ids = np.array([], dtype=np.int32)
     next_ids = np.array([0])
     ccs = [set(next_ids)]
 
     current_ccs = 0
-    vx_ids = np.arange(len(voxel_list), dtype=np.int)
+    vx_ids = np.arange(len(voxel_list), dtype=np.int32)
 
     while True:
         if verbose:
@@ -927,10 +927,10 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
                         (syn_neuronpartners[:, 1] == ssv_id)
         synssv_ids = sd_syn_ssv.ids[curr_ssv_mask]
         n_synssv = len(synssv_ids)
-        n_mi_objs = np.zeros((n_synssv,), dtype=np.int)
-        n_mi_vxs = np.zeros((n_synssv,), dtype=np.int)
-        n_vc_objs = np.zeros((n_synssv,), dtype=np.int)
-        n_vc_vxs = np.zeros((n_synssv,), dtype=np.int)
+        n_mi_objs = np.zeros((n_synssv,), dtype=np.int32)
+        n_mi_vxs = np.zeros((n_synssv,), dtype=np.int32)
+        n_vc_objs = np.zeros((n_synssv,), dtype=np.int32)
+        n_vc_vxs = np.zeros((n_synssv,), dtype=np.int32)
         cache_dc['synssv_ids'] = synssv_ids
         if n_synssv == 0:
             cache_dc['n_mi_objs'] = n_mi_objs
@@ -963,8 +963,8 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         # dts['kds'] += time.time() - start
 
         # start = time.time()
-        close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int)]
-        close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int))]
+        close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int32)]
+        close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int32))]
 
         md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_object(close_mi_ids),
                                             use_new_subfold=use_new_subfold)
@@ -1130,7 +1130,10 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    rfc = joblib.load(global_params.config.mpath_syn_rfc)
+    try:
+        rfc = joblib.load(global_params.config.mpath_syn_rfc)
+    except ImportError:
+        rfc = joblib.load(global_params.config.mpath_syn_rfc_fallback)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
@@ -1187,7 +1190,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     Args:
         sd_syn_ssv: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
             type ``syn_ssv``. Used to identify synaptic object candidates annotated
-            in the kzip/xlsx file at `path2file`.
+            in the kzip/xls file at `path2file`.
         path2file: Path to kzip file with synapse labels as node comments
             ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
             respectively).
@@ -1307,7 +1310,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     mask_annotated = (labels == "synaptic") | (labels == 'non-synaptic')
     v_features = features[mask_annotated]
     v_labels = labels[mask_annotated]
-    v_labels = (v_labels == "synaptic").astype(np.int)
+    v_labels = (v_labels == "synaptic").astype(np.int32)
     # score = cross_val_score(rfc, v_features, v_labels, cv=10)
     # log.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
     # log.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(

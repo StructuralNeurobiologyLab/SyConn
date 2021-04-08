@@ -487,7 +487,7 @@ class SuperSegmentationObject(SegmentationBase):
         All synaptic junction (sj) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return np.array(self.lookup_in_attribute_dict("sj"), dtype=np.uint)
+        return np.array(self.lookup_in_attribute_dict("sj"), dtype=np.uint64)
 
     @property
     def mi_ids(self) -> np.ndarray:
@@ -495,7 +495,7 @@ class SuperSegmentationObject(SegmentationBase):
         All mitochondria (mi) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return np.array(self.lookup_in_attribute_dict("mi"), dtype=np.uint)
+        return np.array(self.lookup_in_attribute_dict("mi"), dtype=np.uint64)
 
     @property
     def vc_ids(self) -> np.ndarray:
@@ -503,7 +503,7 @@ class SuperSegmentationObject(SegmentationBase):
         All vesicle cloud (vc) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return np.array(self.lookup_in_attribute_dict("vc"), dtype=np.uint)
+        return np.array(self.lookup_in_attribute_dict("vc"), dtype=np.uint64)
 
     @property
     def dense_kzip_ids(self) -> Dict[str, int]:
@@ -929,7 +929,7 @@ class SuperSegmentationObject(SegmentationBase):
     def sv_graph_uint(self) -> nx.Graph:
         if self._sv_graph_uint is None:
             if os.path.isfile(self.edgelist_path):
-                self._sv_graph_uint = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+                self._sv_graph_uint = nx.read_edgelist(self.edgelist_path, nodetype=np.uint64)
             else:
                 raise ValueError("Could not find graph data for SSV {}.".format(self.id))
         return self._sv_graph_uint
@@ -951,7 +951,7 @@ class SuperSegmentationObject(SegmentationBase):
         #     if os.path.isfile("{}neuron_rag.bz2".format(
         #             self.working_dir):
         #         G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
-        #                                   nodetype=np.uint)
+        #                                   nodetype=np.uint64)
         #         G = nx.Graph()
         #         cc = nx.node_connected_component(G_glob, self.sv_ids[0])
         #         assert len(set(cc).difference(set(self.sv_ids))) == 0, \
@@ -1011,7 +1011,7 @@ class SuperSegmentationObject(SegmentationBase):
                 mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False, disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
                 mesh_dc.push()
-        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.float32), np.array(normals, dtype=np.float32)
+        return np.array(ind, dtype=np.int32), np.array(vert, dtype=np.float32), np.array(normals, dtype=np.float32)
 
     def _load_obj_mesh_compr(self, obj_type: str = "sv") -> MeshType:
         """
@@ -1159,17 +1159,17 @@ class SuperSegmentationObject(SegmentationBase):
             nb_cpus: Number of CPUs to use for the calculation.
         """
         if len(self.svs) == 0:
-            self._bounding_box = np.zeros((2, 3), dtype=np.int)
+            self._bounding_box = np.zeros((2, 3), dtype=np.int32)
             self._size = 0
             return
 
-        self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
+        self._bounding_box = np.ones((2, 3), dtype=np.int32) * np.inf
         self._size = np.inf
         bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
         self._size = np.sum(sizes)
         self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
         self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
-        self._bounding_box = self._bounding_box.astype(np.int)
+        self._bounding_box = self._bounding_box.astype(np.int32)
 
     def calculate_skeleton(self, force: bool = False, **kwargs):
         """
@@ -1428,7 +1428,7 @@ class SuperSegmentationObject(SegmentationBase):
 
             node_scaled = self.skeleton["nodes"] * self.scaling
 
-            edges = np.array(self.skeleton["edges"], dtype=np.int)
+            edges = np.array(self.skeleton["edges"], dtype=np.int64)
             edge_coords = node_scaled[edges]
             weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1], axis=1)
             self._weighted_graph = nx.Graph()
@@ -2266,9 +2266,9 @@ class SuperSegmentationObject(SegmentationBase):
         cc_labels = np.array(cc_labels)
         cc_coords = np.array(cc_coords)
         np.random.seed(0)
-        neck_c = (cc_coords[cc_labels == 0] / self.scaling).astype(np.uint)
+        neck_c = (cc_coords[cc_labels == 0] / self.scaling).astype(np.uint64)
         neck_s = sizes[cc_labels == 0]
-        head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
+        head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint64)
         head_s = sizes[cc_labels == 1]
         if dest_folder is not None:
             np.save("{}/neck_coords_ssv{}_k{}_{}_ccsize{}.npy".format(
@@ -2914,13 +2914,13 @@ class SuperSegmentationObject(SegmentationBase):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(
                     self.weighted_graph(), i_node, max_dist)
-                neighs = np.array(list(paths.keys()), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int64)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
         pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
                                           max_dist)
-        self.skeleton[pred_key] = np.array(pred, dtype=np.int)
+        self.skeleton[pred_key] = np.array(pred, dtype=np.int32)
         self.skeleton[pred_key + "_proba"] = np.array(probas, dtype=np.float32)
         self.save_skeleton(to_object=True, to_kzip=False)
 
@@ -3266,7 +3266,7 @@ class SuperSegmentationObject(SegmentationBase):
         for ii in range(len(self.skeleton["nodes"])):
             paths = nx.single_source_dijkstra_path(self.weighted_graph(),
                                                    ii, max_dist)
-            neighs = np.array(list(paths.keys()), dtype=np.int)
+            neighs = np.array(list(paths.keys()), dtype=np.int64)
             labels, cnts = np.unique(prop_array[neighs], return_counts=True)
             maj_label = labels[np.argmax(cnts)]
             maj_votes[ii] = maj_label
@@ -3505,7 +3505,7 @@ def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
         **map_properties)
 
     # perform average only on axon dendrite and soma predictions
-    nodes_ax_den_so = np.array(node_preds, dtype=np.int)
+    nodes_ax_den_so = np.array(node_preds, dtype=np.int32)
     # set en-passant and terminal boutons to axon class for averaging
     # bouton labels are stored in node_preds
     nodes_ax_den_so[nodes_ax_den_so == 3] = 1
@@ -3558,7 +3558,7 @@ def semsegspiness_predictor(args) -> List[int]:
             ssv.load_skeleton()
             if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
                 log_reps.warning(f"Skeleton of SSV {ssv.id} has zero nodes.")
-                node_preds = np.zeros((0, ), dtype=np.int)
+                node_preds = np.zeros((0, ), dtype=np.int32)
             else:
                 # vertex predictions
                 node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],

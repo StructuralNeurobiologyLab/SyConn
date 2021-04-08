@@ -109,7 +109,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
             tmp_dir = os.path.dirname(path)
             tmp_p = "{}/rag.bz2".format(tmp_dir)
             z.extract('rag.bz2', tmp_dir)
-            sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint)
+            sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint64)
             os.remove(tmp_p)
             _ = sso.rag  # invoke node conversion into SegmentationObjects
         files.remove("rag.bz2")

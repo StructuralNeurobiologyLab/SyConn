@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
 from typing import Union, List, Callable, Optional, Tuple, TYPE_CHECKING, Iterable
 

@@ -92,7 +92,7 @@ def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    qs.to_excel(dest_p[:-4] + ".xlsx")
+    qs.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -138,7 +138,7 @@ def create_lineplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    df.to_excel(dest_p[:-4] + ".xlsx")
+    df.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -184,7 +184,7 @@ def create_pointplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    df.to_excel(dest_p[:-4] + ".xlsx")
+    df.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -261,7 +261,7 @@ if __name__ == '__main__':
         target_names = [int2str_label[kk] for kk in range(nclasses)]
         csv_p = ccd.csv_p
         df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
-        ssv_ids = df[:, 0].astype(np.uint)
+        ssv_ids = df[:, 0].astype(np.uint64)
         if len(np.unique(ssv_ids)) != len(ssv_ids):
             raise ValueError('Multi-usage of IDs!')
         str_labels = df[:, 1]

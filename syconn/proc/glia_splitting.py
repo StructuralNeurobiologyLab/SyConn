@@ -71,7 +71,7 @@ def collect_gliaSV_helper(cc_ixs):
         sso.load_attr_dict()
         ad = sso.attr_dict
         glia_svids += list(flatten_list(ad["glia_svs"]))
-    return np.array(glia_svids, dtype=np.uint)
+    return np.array(glia_svids, dtype=np.uint64)
 
 
 def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str = "",
@@ -171,7 +171,7 @@ def transform_rag_edgelist2pkl(rag):
     ----------
     rag : networkx.Graph
     """
-    ccs = nx.connected_component_subgraphs(rag)
+    ccs = (rag.subgraph(c) for c in nx.connected_components(rag))
     cc_dict_graph = {}
     cc_dict = {}
     for cc in ccs:

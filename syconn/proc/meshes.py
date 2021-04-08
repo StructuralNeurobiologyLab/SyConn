@@ -6,6 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import itertools
+import warnings
 from collections import Counter
 from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
 
@@ -77,12 +78,12 @@ class MeshObject(object):
             self.vertices = vertices.flatten()
         else:
             # assume flat array
-            self.vertices = np.array(vertices, dtype=np.float)
+            self.vertices = np.array(vertices, dtype=np.float32)
         if indices.ndim == 2 and indices.shape[1] == 3:
-            self.indices = indices.flatten().astype(np.uint)
+            self.indices = indices.flatten().astype(np.uint64)
         else:
             # assume flat array
-            self.indices = np.array(indices, dtype=np.uint)
+            self.indices = np.array(indices, dtype=np.uint64)
         if len(self.vertices) == 0:
             self.center = 0
             self.max_dist = 1
@@ -93,8 +94,8 @@ class MeshObject(object):
         else:
             self.center = bounding_box[0]
             self.max_dist = bounding_box[1]
-        self.center = self.center.astype(np.float)
-        self.max_dist = self.max_dist.astype(np.float)
+        self.center = self.center.astype(np.float32)
+        self.max_dist = self.max_dist.astype(np.float32)
         vert_resh = np.array(self.vertices).reshape((len(self.vertices) // 3, 3))
         vert_resh -= np.array(self.center, dtype=self.vertices.dtype)
         vert_resh = vert_resh / np.array(self.max_dist)
@@ -162,16 +163,16 @@ class MeshObject(object):
         """
         if len(coords) == 0:
             return coords
-        coords = np.array(coords, dtype=np.float)
+        coords = np.array(coords, dtype=np.float32)
         coords = coords - self.center
         coords /= self.max_dist
         return coords
 
     def retransform_external_coords(self, coords):
-        coords = np.array(coords, dtype=np.float)
+        coords = np.array(coords, dtype=np.float32)
         coords *= self.max_dist
         coords += self.center
-        return coords.astype(np.int)
+        return coords.astype(np.int32)
 
     @property
     def bounding_box(self):
@@ -203,8 +204,8 @@ class MeshObject(object):
         if bounding_box is None:
             bounding_box = get_bounding_box(self.vertices)
         self.center, self.max_dist = bounding_box
-        self.center = self.center.astype(np.float)
-        self.max_dist = self.max_dist.astype(np.float)
+        self.center = self.center.astype(np.float32)
+        self.max_dist = self.max_dist.astype(np.float32)
         vert_resh = np.array(self.vertices).reshape(len(self.vertices) // 3, 3)
         vert_resh -= self.center
         vert_resh /= self.max_dist
@@ -386,7 +387,7 @@ def get_bounding_box(coordinates: np.ndarray) -> Tuple[np.ndarray, float]:
 
 @jit
 def get_avg_normal(normals, indices, nbvert):
-    normals_avg = np.zeros((nbvert, 3), np.float)
+    normals_avg = np.zeros((nbvert, 3), np.float32)
     for n in range(len(indices)):
         ix = indices[n]
         normals_avg[ix] += normals[n]
@@ -408,7 +409,7 @@ def unit_normal(vertices: np.ndarray, indices: np.ndarray) -> np.ndarray:
         Unit face normals per vertex [N x 1].
 
     """
-    vertices = np.array(vertices, dtype=np.float)
+    vertices = np.array(vertices, dtype=np.float32)
     nbvert = len(vertices) // 3
     # get coordinate list
     vert_lst = vertices.reshape(nbvert, 3)[indices]
@@ -469,12 +470,12 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
     if len(vert_lst) == 0:
-        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
+        return [np.zeros((0,), dtype=np.uint64), np.zeros((0,)), np.zeros((0,))]
     else:
         all_vert = np.concatenate(vert_lst)
     # store index and vertex offset of every partial mesh
     vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
-        np.uint)
+        np.uint64)
     ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
     all_ind = np.concatenate(ind_lst)
     for i in range(0, len(vert_lst)):
@@ -503,7 +504,7 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
     if len(vert_lst) == 0:
-        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
+        return [np.zeros((0,), dtype=np.uint64), np.zeros((0,)), np.zeros((0,))]
     else:
         all_vert = np.concatenate(vert_lst)
 
@@ -513,7 +514,7 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
         all_norm = np.concatenate(norm_lst)
     # store index and vertex offset of every partial mesh
     vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
-        np.uint)
+        np.uint64)
     ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
     all_ind = np.concatenate(ind_lst)
     for i in range(0, len(vert_lst)):
@@ -545,7 +546,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
         indices, vertices (scaled) [, colors]
 
     """
-    all_ind = np.zeros((0,), dtype=np.uint)
+    all_ind = np.zeros((0,), dtype=np.uint64)
     all_norm = np.zeros((0,))
     all_vert = np.zeros((0,))
     colors = np.zeros((0,))
@@ -584,7 +585,7 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
     if len(ind_lst) != 0:
         all_ind = np.concatenate(ind_lst)
         # store index and vertex offset of every partial mesh
-        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(np.uint)
+        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(np.uint64)
         ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
         for i in range(0, len(vert_lst)):
             start_ix, end_ix = ind_ixs[i], ind_ixs[i + 1]
@@ -621,7 +622,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
     if not rgba_color.ndim == 2:
         rgba_color = np.array(rgba_color, dtype=np.uint8).reshape((-1, 4))
     if not indices.ndim == 2:
-        indices = np.array(indices, dtype=np.int).reshape((-1, 3))
+        indices = np.array(indices, dtype=np.int64).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
     if len(rgba_color) != len(vertices) and len(rgba_color) == 1 and rgba_color.shape[1] == 4:
@@ -686,7 +687,7 @@ def make_ply_string_wocolor(dest_path, indices, vertices,
     vertices = vertices.astype(np.float32)
     indices = indices.astype(np.int32)
     if not indices.ndim == 2:
-        indices = np.array(indices, dtype=np.int).reshape((-1, 3))
+        indices = np.array(indices, dtype=np.int64).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
     if invert_vertex_order:
@@ -861,7 +862,7 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
         remap_dict = {}
         for i in range(len(unique_comp_ind)):
             remap_dict[unique_comp_ind[i]] = i
-        comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
+        comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint64)
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
 
@@ -1168,7 +1169,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         mo = MeshObject("", ind, verts)
         # compute normals
         norm = mo.normals.reshape((-1, 3))
-    return [np.array(ind, dtype=np.int), verts, norm]
+    return [np.array(ind, dtype=np.int64), verts, norm]
 
 
 def mesh_area_calc(mesh):

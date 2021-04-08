@@ -10,9 +10,7 @@ import time
 import argparse
 import re
 import networkx as nx
-from knossos_utils import knossosdataset
 import numpy as np
-from knossos_utils import knossosdataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects

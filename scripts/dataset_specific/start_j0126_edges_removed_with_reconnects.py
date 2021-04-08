@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     # remove edges from original neuron rag as returned by the glia separation
     shutil.move(example_wd + '/glia/neuron_rag.bz2', example_wd + '/glia/neuron_rag_ORIG.bz2')
-    rag = nx.read_edgelist(example_wd + '/glia/neuron_rag_ORIG.bz2', nodetype=np.uint)
+    rag = nx.read_edgelist(example_wd + '/glia/neuron_rag_ORIG.bz2', nodetype=np.uint64)
     with open(example_wd + '/glia/edges_to_remove.013.txt', 'r') as f:
         edges = [tuple(map(int, l.replace('\n', '').split(','))) for l in f.readlines()]
     # only for
