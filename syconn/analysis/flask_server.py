@@ -1,83 +1,76 @@
-from flask import Flask, request, abort, jsonify, send_from_directory, send_file, make_response
+from flask import Flask, request, abort, send_from_directory, make_response
 from flask_cors import CORS, cross_origin
 from syconn import global_params
-import os, json
-import zipfile
-import numpy as np
-from syconn.analysis.utils import _to_filename
+from utils import get_encoded_mesh
+from syconn.analysis.backend import SyConnBackend
+from knossos_utils import KnossosDataset
+import os
+import json
+import concurrent.futures
 
-def createDownloadUrl():
-    # MESH_DIRECTORY = os.path.expanduser('~/mnt/wholebrain/scratch/hashirah/SyConn/syconn/meshes')
+ATTRIBUTES = ('sv', 'mi', 'sj', 'vc')
+
+def createDownloadUrl(host, port, backend: SyConnBackend, logger, seg_path, debug):
+    """
+    Provide info, metadata and encoded mesh to Neuroglancer frontend
+    http://<HOST>:<PORT>/<obj_type>/info => info
+    http://<HOST>:<PORT>/<ssv_id>:<lod> => json metadata
+    http://<HOST>:<PORT>/<ssv_id>:<lod>:<ssv_id> => encoded mesh
+    """
     app = Flask(__name__)
-    cors = CORS(app, resources={r"/foo": {"origins": "*"}})
-
+    cors = CORS(app, resources={r"/*": {"origins": "*"}})
     app.config['CORS_HEADERS'] = 'Content-Type'
-    app.config['MESH_DIRECTORY'] = os.path.expanduser('~/mnt/wholebrain/scratch/hashirah/SyConn/syconn/meshes/mi')
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+    dataset = KnossosDataset(seg_path)
 
-    @app.route("/")
-    def get():
-        """Welcome"""
-        return 'Welcome to Flask!'
-
-    @app.route("/<path:path>/info", methods=['GET'])
-    @cross_origin(origin='*',headers=['Content-Type','Authorization', 'Access-Control-Allow-Origin'])
-    def get_info(path):
+    @app.route("/<string:obj_type>/info", methods=['GET'])
+    def get_info(obj_type):
         """Download info."""
         try:
-            print('in info')
-            response = make_response(send_from_directory(app.config['MESH_DIRECTORY'], filename='info', as_attachment=True))
-            response.cache_control.max_age=0
-            # response.headers['Content-Type'] = 'application/json'
+            # info file for LocalVolume
+            if (obj_type == 'sv'):
+                print("in volume info")
+                print(dataset.boundary)
+                response = make_response(volume_info(dataset.boundary))
+            # info file for a single resolution mesh
+            else:
+                response = make_response(json.dumps({"@type": "neuroglancer_legacy_mesh"}))
+            response.cache_control.max_age = 0
             response.content_type = 'application/json'
-
             return response
-            # return send_from_directory(app.config['MESH_DIRECTORY'], filename='info', as_attachment=True)
         except FileNotFoundError:
             abort(404)
 
-    @app.route("/<path:path>/<seg>:0", methods=['GET'])
-    @cross_origin(origin='*',headers=['Content-Type','Authorization','Access-Control-Allow-Origin'])
-    def get_metadata(path, seg):
-        filename = f"{seg}:0"
-        """Download meta data file"""
+    @app.route("/<string:obj_type>/<int:ssv_id>:<int:lod>", methods=['GET'])
+    def get_metadata(obj_type, ssv_id, lod):
+        """Download metadata"""
         try:
-            print('in seg:0')
-            print(filename)
-            response = make_response(send_from_directory(app.config['MESH_DIRECTORY'], filename=filename, as_attachment=True))
-            response.cache_control.max_age=0
+            fragments = []
+            fragments.append('{}:{}:{}_mesh'.format(ssv_id, lod, ssv_id))
+            response = make_response(json.dumps({"fragments": fragments}))
+            response.cache_control.max_age = 0
             response.content_type = 'application/json'
-
             return response
-            # return send_from_directory(app.config['MESH_DIRECTORY'], filename=filename, as_attachment=True)
         except FileNotFoundError:
-            print(':0 error')
+            print('Error retrieving json metadata of ssv_id {}'.format(ssv_id))
             abort(404)
 
-    @app.route("/<path:path>/<seg1>:0:<seg2>", methods=['GET'])
-    @cross_origin(origin='*',headers=['Content-Type','Authorization','Access-Control-Allow-Origin'])
-    def get_seg(path, seg1, seg2):
-        print('Found seg: ', seg1)
-        prefix = seg1
-        """Download fragments"""
+    @app.route("/<string:obj_type>/<int:ssv_id_1>:<int:lod>:<int:ssv_id_2>_mesh", methods=['GET'])
+    def get_seg(obj_type, ssv_id_1, lod, ssv_id_2):
+        """Download encoded mesh"""
+        print('Found seg: ', ssv_id_1)
         try:
-            print('in seg')
-            print('Prefix: ', prefix)
-            # bounds = _to_filename(np.array([600 * 20, 400 * 10, 400 * 10])*1e-9)
-            filename = prefix + ':0:' + prefix + '_mesh'
-            filename = seg1 + ':0:' + seg2
-            print('Filename: ', filename)
-            response = make_response(send_from_directory(app.config['MESH_DIRECTORY'], filename=filename, as_attachment=True))
-            response.cache_control.max_age=0
+            if ssv_id_1 != ssv_id_2:
+                print('over here amigo')
+                abort(404)
+            encoded_mesh = get_encoded_mesh(backend, ssv_id_1, obj_type)
+            response = make_response(encoded_mesh)
+            response.cache_control.max_age = 0
             response.content_type = 'application/octet-stream'
             response.content_encoding = 'precomputed'
-
             return response
-            # return send_from_directory(app.config['MESH_DIRECTORY'], filename=filename+':0:0-12000_0-4000_0-4000', as_attachment=True)
         except FileNotFoundError:
+            print('Error retrieving encoded mesh of ssv_id {}'.format(ssv_id_1))
             abort(404)
 
-    app.run(debug=True, host='127.0.0.1', port=8000)
-
-
-if __name__ == "__main__":
-    createDownloadUrl()
+    app.run(debug=debug, host=host, port=port, use_reloader=False)
