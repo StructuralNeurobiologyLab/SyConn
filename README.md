@@ -49,7 +49,7 @@ used for our project can be found
 SyConn uses the packages [zmesh](https://github.com/seung-lab/zmesh) for mesh and [kimimaro](https://github.com/seung-lab/kimimaro)
 for skeleton generation implemented and developed in the Seung Lab.
 Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful
-work) for designing and creating the logo! and
+work) for designing and creating the logo!
 
 
 Publications

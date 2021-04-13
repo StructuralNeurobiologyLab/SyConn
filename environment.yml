@@ -55,8 +55,8 @@ dependencies:
   # From -c menpo
   - osmesa
 
-  # From -c open3d-admin; 0.10.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
-  - open3d =0.9.0
+  # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
+  - open3d >=0.9.0
 
   # For tests (optional):
   - pytest
@@ -79,6 +79,11 @@ dependencies:
     - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx
     - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
+
+    # training scripts
+    - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
+    - # PointConv definitions
+    - git+https://github.com/valeoai/LightConvPoint.git
 
       #for skeletonisation
     - fill-voids

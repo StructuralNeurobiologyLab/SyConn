@@ -136,11 +136,11 @@ cell_objects:
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
 
   # --------- CONTACT SITE AND SYNAPSE PARAMETERS
+  cs_filtersize: [13, 13, 7]
+  cs_nclosings: 7  # TODO: bind to cs_filtersize
   # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
   # into 'syn_ssv'
   cs_gap_nm: 250
-  cs_filtersize: [13, 13, 7]
-  cs_nclosings: 7  # TODO: bind to cs_filtersize
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
   # organelles to syn_ssv
@@ -171,10 +171,22 @@ meshes:
 
   mesh_min_obj_vx: 100  # adapt to size threshold
 
+  # used for mitochondria, vesicle clouds, and cell supervoxel meshing
   meshing_props:
     normals: False
     simplification_factor: 500
     max_simplification_error: 40  # in nm
+
+  # used for cs and syn_ssv
+  meshing_props_points:
+    cs:
+      depth: 11 # detail level used in open3d create_from_point_cloud_poisson
+      vertex_size: 80  # in nm; used for mesh simplification
+      min_num_vert: 200  # minimum number of vertices in a single connected component mesh
+    syn_ssv:
+      depth: 11
+      vertex_size: 80
+      min_num_vert: 200
 
 skeleton:
   # If True, allow cell skeleton generation from rendering locations (inaccurate).

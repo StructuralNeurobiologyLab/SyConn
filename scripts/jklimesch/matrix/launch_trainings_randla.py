@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
                 name = today + '_{}'.format(chunk_size) + '_{}'.format(sample_num)
                 argscont = ArgsContainer(save_root='/wholebrain/scratch/pschuber/compartments_j0251/models_refined01/',
-                                         train_path='/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/',
+                                         train_path='/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/train/',
                                          sample_num=sample_num,
                                          name=name + f'_{i}',
                                          random_seed=i,
@@ -40,8 +40,8 @@ if __name__ == '__main__':
                                          batch_size=batch_size,
                                          input_channels=1,
                                          use_val=True,
-                                         architecture='randla_net',
-                                         val_path='/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/',
+                                         model='randla_net',
+                                         val_path='/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/test/',
                                          val_freq=30,
                                          features={'hc': np.array([1])},
                                          chunk_size=chunk_size,

@@ -274,12 +274,15 @@ class VoxelStorageDyn(CompressedStorage):
             return super().__setitem__(key, value)
 
     def __getitem__(self, item: int):
+        return self.get_voxelmask_offset(item)
+
+    def get_voxelmask_offset(self, item: int, overlap: int = 0):
         if self.voxel_mode:
             res = []
             bbs = super().__getitem__(item)
             for bb in bbs:  # iterate over all bounding boxes
-                size = bb[1] - bb[0]
-                off = bb[0]
+                size = bb[1] - bb[0] + 2 * overlap
+                off = bb[0] - overlap
                 curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
                 res.append(curr_mask.swapaxes(0, 2))
             return res, bbs[:, 0]  # (N, 3) --> all offset
