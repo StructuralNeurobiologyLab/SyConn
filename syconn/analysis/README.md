@@ -9,7 +9,7 @@ Currently Neuroglancer can render the following meshes:
 * Vesticle Clouds ('vc')
 
 
-##Input
+#Input
 
 The client can be run standalone and supports the following input: \
 **1. `wd`**:
@@ -36,9 +36,20 @@ The client can be run standalone and supports the following input: \
 
 **For no adress/port input, the default adress where Neuroglancer is found on 127.0.0.1:5000**
 
-##How it works
+#How it works
 
 The SyConn client starts up Neuroglancer and acts as a client to the Neuroglancer server, where it passes the host and port arguments.
 SyConn backend is also initialized with the corresponding working directory coming from the arguments or global SyConn config working directory.
-Data is gotten from Knossos and is put in `Neuroglancer.viewer` layers, then passed on to Neuroglancer for processing.
-At the end the link where the data visualisation is available is being printed by the logger. 
+Data is parsed from Knossos and is put in `Neuroglancer.viewer` layers, then passed on to Neuroglancer for processing.
+
+The layers with the following sources:\
+**1.** `ImageLayer` for the ground truth 
+* Raw Knossos dataset encapsulated in a `LocalVolume` object
+
+**2.** `SegmentationLayer` for the segmentation data 
+* Segmented Knossos dataset encapsulated in a `LocalVolume` object
+
+**3.** `SegmentationLayer` for each type of organelle mesh mentioned above linked to the segmentation data
+* Precomputed links according to [Neuroglancer Legacy single-resolution mesh format](https://github.com/google/neuroglancer/blob/master/src/neuroglancer/datasource/precomputed/meshes.md#legacy-single-resolution-mesh-format)
+
+At the end the link for the data visualisation is prompted. 
