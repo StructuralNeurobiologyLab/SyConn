@@ -185,8 +185,8 @@ meshes:
       min_num_vert: 200  # minimum number of vertices in a single connected component mesh
     syn_ssv:
       depth: 11
-      vertex_size: 80
-      min_num_vert: 200
+      vertex_size: 10
+      min_num_vert: 50
 
 skeleton:
   # If True, allow cell skeleton generation from rendering locations (inaccurate).

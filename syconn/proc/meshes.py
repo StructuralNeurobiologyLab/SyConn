@@ -26,7 +26,7 @@ from vigra.filters import gaussianGradient
 
 from .image import apply_pca
 from .. import global_params
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn
 from ..handler.basics import write_data2kzip, data2kzip
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
@@ -1223,8 +1223,9 @@ def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarra
     pts, norm = [], []
     for m, off in zip(mask_list, offset_list):
         bndry = m.astype(np.float32) - binary_erosion(m, boundary_struct, iterations=1)
-        m = m[overlap:-overlap, overlap:-overlap, overlap:-overlap]
-        bndry = bndry[overlap:-overlap, overlap:-overlap, overlap:-overlap]
+        if overlap > 0:
+            m = m[overlap:-overlap, overlap:-overlap, overlap:-overlap]
+            bndry = bndry[overlap:-overlap, overlap:-overlap, overlap:-overlap]
         try:
             grad = gaussianGradient(m.astype(np.float32), 1)  # sigma=1
         except RuntimeError:  # PreconditionViolation (current mask cube is smaller than kernel)
@@ -1236,7 +1237,7 @@ def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarra
         nonzero_mask = np.nonzero(bndry)
         if np.abs(mag[nonzero_mask]).min() == 0:
             raise ValueError('Found zero gradient during mesh generation.')
-        pts_ = np.transpose(nonzero_mask) + off
+        pts_ = np.transpose(nonzero_mask) + off + overlap
         pts.append(pts_)
         norm_ = grad[nonzero_mask]
         norm.append(norm_)
@@ -1286,5 +1287,11 @@ def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarra
 def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject', **gen_kwgs):
     assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
     voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
-    bin_arrs, block_offsets = voxel_dc.get_voxelmask_offset(segobj.id, overlap=1)
-    return _gen_mesh_voxelmask(bin_arrs, block_offsets, segobj.scaling, **gen_kwgs)
+    if isinstance(voxel_dc, VoxelStorageDyn):
+        bin_arrs, block_offsets = voxel_dc.get_voxelmask_offset(segobj.id, overlap=1)
+        return _gen_mesh_voxelmask(bin_arrs, block_offsets, segobj.scaling, overlap=1, **gen_kwgs)
+    else:
+        # no overlap possible, stored as a single mask anyway.
+        bin_arrs, block_offsets = voxel_dc[segobj.id]
+        assert len(bin_arrs) == 1, 'Multiple mask cubes are not expected.'
+        return _gen_mesh_voxelmask(bin_arrs, block_offsets, segobj.scaling, overlap=0, **gen_kwgs)
