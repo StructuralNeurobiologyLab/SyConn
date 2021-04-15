@@ -154,7 +154,7 @@ class FSBase(StorageBase):
             if type(inp_p) is str:
                 self.pull(inp_p)
             else:
-                msg = "Unsupported initialization type {} for LZ4Dict.".format(type(inp_p))
+                msg = "Unsupported initialization type {} for 'FSBase'.".format(type(inp_p))
                 log_extraction.error(msg)
                 raise NotImplementedError(msg)
 

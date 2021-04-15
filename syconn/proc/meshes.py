@@ -9,7 +9,7 @@ import itertools
 import warnings
 import copy
 from collections import Counter
-from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
+from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING, Iterator
 
 import numpy as np
 import tqdm
@@ -67,9 +67,10 @@ if TYPE_CHECKING:
     from ..reps import super_segmentation_object
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation', 'calc_contact_syn_mesh',
-           'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
+           'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip', 'gen_mesh_voxelmask',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
-           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes', 'find_meshes']
+           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes', 'find_meshes',
+           '']
 
 
 class MeshObject(object):
@@ -1188,15 +1189,14 @@ def mesh_area_calc(mesh):
                              mesh[0].reshape(-1, 3)) / 1e6
 
 
-def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarray], scale: np.ndarray,
-                        vertex_size: float = 80, boundary_struct: Optional[np.ndarray] = None,
-                        depth: int = 11, compute_connected_components: bool = True,
-                        min_vert_num: int = 200, overlap: int = 1) \
+def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scale: np.ndarray,
+                       vertex_size: float = 80, boundary_struct: Optional[np.ndarray] = None,
+                       depth: int = 11, compute_connected_components: bool = True,
+                       min_vert_num: int = 200, overlap: int = 1, verbose: bool = False) \
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
     Args:
-        mask_list: Binary voxel maks, list of 3D cubes.
-        offset_list: Cube offsets (in voxels), for each cube in `mask_list`.
+        voxel_iter: Iterator of binary voxel mak (3D cube) and cube offset (in voxels).
         scale: Size of voxels in `mask_list` in nm (x, y, z).
         vertex_size: In nm. Resolution used to simplify mesh.
         boundary_struct: Connectivity of kernel used to determine boundary
@@ -1209,6 +1209,7 @@ def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarra
         min_vert_num: Minimum number of vertices of the connected component meshes (only applied if
             `compute_connected_components=True`).
         overlap: Overlap between adjacent masks in `mask_list`.
+        verbose: Extra stdout output.
 
     Notes: Use `mask_list` with cubes with 1-voxel-overlap to guarantee that boundaries that align with
         the 3D  array border are identified correctly.
@@ -1221,7 +1222,7 @@ def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarra
         # 26-connected
         boundary_struct = np.ones((3, 3, 3))
     pts, norm = [], []
-    for m, off in zip(mask_list, offset_list):
+    for m, off in tqdm.tqdm(voxel_iter, disable=not verbose, desc='VoxelLoad'):
         bndry = m.astype(np.float32) - binary_erosion(m, boundary_struct, iterations=1)
         if overlap > 0:
             m = m[overlap:-overlap, overlap:-overlap, overlap:-overlap]
@@ -1284,14 +1285,33 @@ def _gen_mesh_voxelmask(mask_list: List[np.ndarray], offset_list: List[np.ndarra
     return mesh
 
 
-def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject', **gen_kwgs):
+def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
+                          voxel_dc: Optional[VoxelStorage] = None, **gen_kwgs):
+    """
+
+    Args:
+        segobj:
+        voxel_dc:
+        **gen_kwgs:
+
+    Returns:
+
+    """
     assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
-    voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
+    if voxel_dc is None:
+        voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
     if isinstance(voxel_dc, VoxelStorageDyn):
-        bin_arrs, block_offsets = voxel_dc.get_voxelmask_offset(segobj.id, overlap=1)
-        return _gen_mesh_voxelmask(bin_arrs, block_offsets, segobj.scaling, overlap=1, **gen_kwgs)
+        voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
+        return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1, **gen_kwgs)
     else:
         # no overlap possible, stored as a single mask anyway.
         bin_arrs, block_offsets = voxel_dc[segobj.id]
         assert len(bin_arrs) == 1, 'Multiple mask cubes are not expected.'
-        return _gen_mesh_voxelmask(bin_arrs, block_offsets, segobj.scaling, overlap=0, **gen_kwgs)
+        return gen_mesh_voxelmask(zip(bin_arrs, block_offsets), segobj.scaling, overlap=0, **gen_kwgs)
+
+
+def calc_cell_mesh_from_points(segobj: 'segmentation.SegmentationObject', **gen_kwgs):
+    voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
+    voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
+    return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1,
+                              compute_connected_components=False, **gen_kwgs)

@@ -6,13 +6,13 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import copy
 import re
-from typing import Union, Tuple, List, Optional, Dict, Generator, Any
+from typing import Union, Tuple, List, Optional, Dict, Generator, Any, Iterator
 
 import networkx as nx
 from knossos_utils import knossosdataset
 from scipy import spatial
 
-from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase
+from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase, get_unique_subfold_ixs
 from .segmentation_helper import *
 from ..handler.basics import get_filepaths_from_dir, safe_copy, \
     write_txt2kzip, temp_seed
@@ -643,7 +643,7 @@ class SegmentationObject(SegmentationBase):
         if self.version == 'tmp':
             return False
         location_dc = CompressedStorage(self.locations_path,
-                                        disable_locking=True)  # look-up only, PS 12Dec2018
+                                        disable_locking=True)
         return self.id in location_dc
 
     def views_exist(self, woglia: bool, index_views: bool = False,
@@ -659,7 +659,7 @@ class SegmentationObject(SegmentationBase):
         if self.version == 'tmp':
             return False
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    disable_locking=True)  # look-up only, PS 12Dec2018
+                                    disable_locking=True)
         return self.id in view_dc
 
     def views(self, woglia: bool, index_views: bool = False,
@@ -1477,6 +1477,7 @@ class SegmentationDataset(SegmentationBase):
         self._config = config
         self._soid2ix = None
         self._property_cache = dict()
+        self._version = None
         if cache_properties is None:
             cache_properties = tuple()
 
@@ -1687,6 +1688,21 @@ class SegmentationDataset(SegmentationBase):
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
         return sorted(glob.glob(p))
+
+    def iter_so_dir_paths(self) -> Iterator[str]:
+        """
+        Iterator over all possible `SegmentationObject` storage base directories.
+
+        Notes:
+            In contrast to :attr:`~so_dir_paths` this iterator may return paths to storages that
+            do not exist, in the case that no object fell into its ID bucket.
+
+        Returns:
+            Path to ID storage base folder.
+        """
+        storage_location_ids = get_unique_subfold_ixs(self.n_folders_fs)
+        for ix in storage_location_ids:
+            yield self.so_storage_path + subfold_from_ix(ix, self.n_folders_fs)
 
     @property
     def config(self) -> DynConfig:

@@ -72,7 +72,9 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         * 'syn': Objects representing the overlap between 'cs' and the initial
           synaptic junction predictions. Note: These objects effectively represent
           synapse fragments between supervoxels.
-        * 'syn_ssv': Agglomerated 'syn' objects based on the supervoxel graph.
+        * 'syn_ssv': Final synapse objects. Agglomerated 'syn' objects based on the supervoxel graph.
+        * 'cs_ssv': Final contact site objects. Agglomerated 'cs' objects based on the supervoxel graph.
+            Only processed if `generate_cs_ssv` is set to True in the config.
 
     Args:
         chunk_size: The size of processed cubes.
@@ -94,17 +96,29 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
 
-    # create KDs and SDs for syn and cs
+    # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
-    # create SD of type 'syn_ssv'
+    # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
 
+    # create SD of type 'cs_ssv' -> cell-cell contact sites
+    if global_params.config['generate_cs_ssv']:
+        cps.combine_and_split_cs(global_params.config.working_dir,
+                                 log=log, n_folders_fs=n_folders_fs)
+        sd_cs_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
+                                        obj_type='cs_ssv')
+        # recompute=False: size, bounding box, rep_coord and mesh properties
+        # have already been processed in combine_and_split_syn
+        dataset_analysis(sd_cs_ssv, compute_meshprops=False, recompute=False)
+        log.info(f'SegmentationDataset of type "cs_ssv" was generated with {len(sd_cs_ssv.ids)} '
+                 f'objects.')
+        del sd_cs_ssv
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 

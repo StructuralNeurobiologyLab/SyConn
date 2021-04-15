@@ -16,7 +16,7 @@ except ImportError:
     from lz4 import compress, decompress
 
 from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, List
+from typing import Any, Tuple, Optional, Union, List, Iterator
 
 import numpy as np
 
@@ -288,6 +288,14 @@ class VoxelStorageDyn(CompressedStorage):
             return res, bbs[:, 0]  # (N, 3) --> all offset
         else:
             return super().__getitem__(item)
+
+    def iter_voxelmask_offset(self, item: int, overlap: int = 0) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        bbs = super().__getitem__(item)
+        for bb in bbs:  # iterate over all bounding boxes
+            size = bb[1] - bb[0] + 2 * overlap
+            off = bb[0] - overlap
+            curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
+            yield curr_mask.swapaxes(0, 2), bb[0]
 
     def object_size(self, item):
         if not self.voxel_mode:

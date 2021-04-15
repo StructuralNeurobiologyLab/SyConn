@@ -518,7 +518,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=n_cores)
 
@@ -554,7 +554,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)

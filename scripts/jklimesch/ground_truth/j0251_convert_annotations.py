@@ -3,6 +3,7 @@ import glob
 import os
 import re
 from tqdm import tqdm
+from scipy.spatial import cKDTree
 from morphx.classes.cloudensemble import CloudEnsemble
 from syconn.proc.meshes import write_mesh2kzip
 from morphx.classes.hybridcloud import HybridCloud
@@ -36,7 +37,7 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
 
     ssd = SuperSegmentationDataset(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
     # Point cloud reduction
-    voxel_sizes = dict(sv=100, mi=120, sy=120, vc=120)
+    voxel_sizes = dict(sv=80, mi=1200, sy=1200, vc=1200)
 
     sso_id = int(max(re.findall('(\d+)', file.replace(a_path, '')), key=len))
 
@@ -47,8 +48,8 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
 
     sso = ssd.get_super_segmentation_object(sso_id)
     scaling = sso.scaling
-    a_coords, a_edges, a_labels, a_labels_raw, graph = anno_skeleton2np(file, scaling, verbose=False,
-                                                                        convert_to_morphx=convert_to_morphx)
+    a_coords, a_edges, a_labels, a_labels_raw, graph, a_node_labels_orig = \
+        anno_skeleton2np(file, scaling, verbose=False, convert_to_morphx=convert_to_morphx)
 
     indices, vertices, _ = sso.mesh
     vertices = vertices.reshape((-1, 3))
@@ -59,7 +60,6 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
     cell = HybridCloud(vertices=vertices, labels=labels, nodes=a_coords, edges=a_edges, node_labels=a_labels)
     # map labels from nodes to vertices
     cell.nodel2vertl()
-
     if not convert_to_morphx:
         # --- generate new colorings and save them to new kzips ---
         sso2kzip(sso_id, ssd, kzip_path, skeleton=False)
@@ -80,7 +80,18 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
         skel = sso.skeleton
         nodes = skel['nodes'] * sso.scaling
         edges = skel['edges']
-        cell = HybridCloud(vertices=cell.vertices, labels=cell.labels, nodes=nodes, edges=edges, encoding=encoding)
+
+        # now set skeleton nodes far away from manual annotations to be ignored during source node selection
+        kdt = cKDTree(a_coords[a_node_labels_orig != -1])
+        node_labels = np.ones((len(nodes), 1))
+        dists, ixs = kdt.query(nodes, distance_upper_bound=2000)
+        node_labels[dists == np.inf] = 0
+        # set nodes that are ignored or merger to 0
+        node_labels[a_node_labels_orig[ixs] == 11] = 0
+        node_labels[a_node_labels_orig[ixs] == 12] = 0
+
+        cell = HybridCloud(vertices=cell.vertices, labels=cell.labels, nodes=nodes, edges=edges, encoding=encoding,
+                           node_labels=node_labels)
 
         # --- prepare cell organelles ---
         organelles = ['mi', 'vc', 'sy']
@@ -96,7 +107,6 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
             organelle = HybridCloud(vertices=vertices, labels=labels)
             organelle.set_encoding({organelles[ix]: label_map[ix]})
             clouds[organelles[ix]] = organelle
-
         # --- add myelin to main cell and merge main cell with organelles ---
         cell = map_myelin(sso, cell)
         ce = CloudEnsemble(clouds, cell, no_pred=organelles)
@@ -104,6 +114,8 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
 
 
 if __name__ == '__main__':
+    # set convert_to_morphx = False to only generate new colorings of kzips
+    convert_to_morphx = False
     a_path = '/wholebrain/scratch/jklimesch/gt/j0251/21_03_13_annotations_refinment_round1/raw/'
     o_path = '/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/'
     if not os.path.exists(o_path):
@@ -117,8 +129,7 @@ if __name__ == '__main__':
                 print(f'Processing: {kzip}')
                 args.append([kzip, o_path, file[:3]])
         else:
-            # set convert_to_morphx = False to only generate new colorings of kzips
-            args.append([a_path + file, o_path, file[:3], True])
+            args.append([a_path + file, o_path, file[:3], convert_to_morphx])
 
-    start_multiprocess_imap(_process_file, args, nb_cpus=10)
+    start_multiprocess_imap(_process_file, args, nb_cpus=10, debug=False)
 

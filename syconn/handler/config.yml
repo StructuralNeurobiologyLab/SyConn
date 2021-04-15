@@ -53,6 +53,8 @@ paths:
   init_rag:
   use_new_subfold:
 
+generate_cs_ssv: True
+
 # (Super-)SegmentationDataset versions
 versions:
   sv: 0   # these are the cell supervoxels
@@ -60,6 +62,7 @@ versions:
   sj: 0
   syn: 0
   syn_ssv: 0
+  cs_ssv: 0
   mi: 0
   er: 0 # chosen as placeholder analogous to others, might have to be adapted later
   golgi: 0 # chosen as placeholder analogous to others, might have to be adapted later
@@ -177,16 +180,17 @@ meshes:
     simplification_factor: 500
     max_simplification_error: 40  # in nm
 
-  # used for cs and syn_ssv
+  # used cell-level contacts (cs_ssv) and synapses (syn_ssv)
   meshing_props_points:
-    cs:
+    cs_ssv:
       depth: 11 # detail level used in open3d create_from_point_cloud_poisson
       vertex_size: 80  # in nm; used for mesh simplification
-      min_num_vert: 200  # minimum number of vertices in a single connected component mesh
+      min_vert_num: 200  # minimum number of vertices in a single connected component mesh
     syn_ssv:
       depth: 11
       vertex_size: 10
-      min_num_vert: 50
+      min_vert_num: 50
+      compute_connected_components: False  # at this stage the syn_ssv have already been split and merged
 
 skeleton:
   # If True, allow cell skeleton generation from rendering locations (inaccurate).

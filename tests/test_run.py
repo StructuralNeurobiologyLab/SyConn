@@ -20,7 +20,7 @@ from knossos_utils import knossosdataset
 
 def test_full_run():
     example_cube_id = 1
-    working_dir = "~/SyConn/tests/example_cube{}/".format(example_cube_id)
+    working_dir = f"~/SyConn/tests/example_cube{example_cube_id}_{os.getpid()}/"
     example_wd = os.path.expanduser(working_dir) + "/"
     shutil.rmtree(example_wd, ignore_errors=True)
     # set up basic parameter, log, working directory and config file
@@ -29,6 +29,7 @@ def test_full_run():
     scale = np.array([10, 10, 20])
     prior_glia_removal = True
     use_myelin = True
+    use_point_models = True
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
@@ -37,6 +38,7 @@ def test_full_run():
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),
         ('log_level', 'INFO'),
+        ('use_point_models', use_point_models),
         ('cell_objects', {
           }),
     ]
@@ -226,6 +228,7 @@ def test_full_run():
 
     if os.environ.get('syconn_wd') is not None:
         del os.environ['syconn_wd']
+    shutil.rmtree(example_wd, ignore_errors=True)
 
 
 if __name__ == '__main__':
