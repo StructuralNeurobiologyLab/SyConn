@@ -184,7 +184,7 @@ meshes:
   meshing_props_points:
     cs_ssv:
       depth: 11 # detail level used in open3d create_from_point_cloud_poisson
-      vertex_size: 80  # in nm; used for mesh simplification
+      vertex_size: 10  # in nm; used for mesh simplification
       min_vert_num: 200  # minimum number of vertices in a single connected component mesh
     syn_ssv:
       depth: 11

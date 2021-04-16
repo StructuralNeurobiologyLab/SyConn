@@ -919,12 +919,12 @@ class SegmentationObject(SegmentationBase):
             color = (130, 130, 130, 160)
         elif self.type == "cs":
             color = (100, 200, 30, 255)
-        elif self.type == "conn":
-            color = (150, 50, 200, 255)
         elif self.type == "syn":
             color = (150, 50, 200, 255)
         elif self.type == "syn_ssv":
             color = (240, 50, 50, 255)
+        elif self.type == "cs_ssv":
+            color = (100, 200, 30, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -932,7 +932,7 @@ class SegmentationObject(SegmentationBase):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise TypeError("Given object type '{}' does not exist."
+            raise TypeError("Color for bbject type '{}' does not exist."
                             "".format(self.type))
         color = np.array(color, dtype=np.uint8)
         if ext_color is not None:

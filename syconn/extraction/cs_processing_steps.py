@@ -582,9 +582,6 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
     In contrast to :func:`~combine_and_split_syn` this method performs connected component analysis on
     the mesh of all cell-cell contacts instead of their voxels.
 
-    Notes:
-        * Untested!
-
     Parameters
     ----------
     wd :

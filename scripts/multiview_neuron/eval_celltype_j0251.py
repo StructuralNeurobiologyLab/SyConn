@@ -44,7 +44,6 @@ if __name__ == "__main__":
     from syconn.proc.stats import cluster_summary, projection_tSNE, model_performance
     from elektronn3.models.base import InferenceModel
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
-    import tqdm
     np.set_printoptions(precision=4)
     # --------------------------------------------------------------------------
     base_dir = '/wholebrain/scratch/pschuber/e3_trainings_cmn_celltypes_j0251/'
@@ -72,19 +71,17 @@ if __name__ == "__main__":
                 ssv.nb_cpus = 20
                 ssv._view_caching = True
                 ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2, onthefly_views=True,
-                                         view_props={"overwrite": False, 'use_syntype': True, 'nb_views': 20},
-                                         model_props={'n_classes': nclasses, 'da_equals_tan': False,
-                                                      'save_to_attr_dict': False})
+                                         view_props={'use_syntype': True, 'nb_views': 20}, overwrite=False,
+                                         save_to_attr_dict=False, verbose=True,
+                                         model_props={'n_classes': nclasses, 'da_equals_tan': False})
                 # GT
                 curr_l = ssv_label_dc[ssv.id]
                 gt_l.append(curr_l)
 
-                # small FoV
                 pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
                 preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
                 major_dec = np.zeros(preds_small.shape[1])
                 preds_small = np.argmax(preds_small, axis=1)
-                # For printing with all classes (in case da_equals_tan is True)
                 for ii in range(len(major_dec)):
                     major_dec[ii] = np.sum(preds_small == ii)
                 major_dec /= np.sum(major_dec)

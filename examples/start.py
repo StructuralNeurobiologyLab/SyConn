@@ -173,52 +173,51 @@ if __name__ == '__main__':
     log.info(f'Finished example cube initialization (shape: {bd}). Starting SyConn pipeline.')
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
-    # # START SyConn
-    # log.info('Step 1/9 - Predicting sub-cellular structures')
-    # ftimer.start('Dense predictions')
-    # # TODO: launch all predictions in parallel
-    # # exec_dense_prediction.predict_myelin()
-    # # TODO: if performed, work-in paths of the resulting KDs to the config
-    # # TODO: might also require adaptions in init_cell_subcell_sds
-    # # exec_dense_prediction.predict_cellorganelles()
-    # # exec_dense_prediction.predict_synapsetype()
-    # ftimer.stop()
-    #
-    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    # ftimer.start('SD generation')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-    #                                 n_folders_fs_sc=n_folders_fs_sc)
-    # exec_init.run_create_rag()
-    # ftimer.stop()
-    #
-    # log.info('Step 3/9 - Glia separation')
-    # if global_params.config.prior_glia_removal:
-    #     ftimer.start('Glia separation')
-    #     if not global_params.config.use_point_models:
-    #         exec_render.run_glia_rendering()
-    #         exec_inference.run_glia_prediction()
-    #     else:
-    #         exec_inference.run_glia_prediction_pts()
-    #     exec_inference.run_glia_splitting()
-    #     ftimer.stop()
-    # else:
-    #     log.info('Glia separation disabled. Skipping.')
-    #
-    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    # ftimer.start('SSD generation')
-    # exec_init.run_create_neuron_ssd()
-    # ftimer.stop()
-    #
-    # log.info('Step 5/9 - Skeleton generation')
-    # ftimer.start('Skeleton generation')
-    # exec_skeleton.run_skeleton_generation()
-    # ftimer.stop()
-    #
-    # if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-    #     log.info('Step 5.5/9 - Neuron rendering')
-    #     ftimer.start('Neuron rendering')
-    #     exec_render.run_neuron_rendering()
-    #     ftimer.stop()
+    # START SyConn
+    log.info('Step 1/9 - Predicting sub-cellular structures')
+    ftimer.start('Dense predictions')
+    # exec_dense_prediction.predict_myelin()
+    # TODO: if performed, work-in paths of the resulting KDs to the config
+    # TODO: might also require adaptions in init_cell_subcell_sds
+    # exec_dense_prediction.predict_cellorganelles()
+    # exec_dense_prediction.predict_synapsetype()
+    ftimer.stop()
+
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    ftimer.start('SD generation')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                    n_folders_fs_sc=n_folders_fs_sc)
+    exec_init.run_create_rag()
+    ftimer.stop()
+
+    log.info('Step 3/9 - Glia separation')
+    if global_params.config.prior_glia_removal:
+        ftimer.start('Glia separation')
+        if not global_params.config.use_point_models:
+            exec_render.run_glia_rendering()
+            exec_inference.run_glia_prediction()
+        else:
+            exec_inference.run_glia_prediction_pts()
+        exec_inference.run_glia_splitting()
+        ftimer.stop()
+    else:
+        log.info('Glia separation disabled. Skipping.')
+
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    ftimer.start('SSD generation')
+    exec_init.run_create_neuron_ssd()
+    ftimer.stop()
+
+    log.info('Step 5/9 - Skeleton generation')
+    ftimer.start('Skeleton generation')
+    exec_skeleton.run_skeleton_generation()
+    ftimer.stop()
+
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Step 5.5/9 - Neuron rendering')
+        ftimer.start('Neuron rendering')
+        exec_render.run_neuron_rendering()
+        ftimer.stop()
 
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
