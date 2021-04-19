@@ -505,6 +505,8 @@ def _combine_and_split_syn_thread(args):
             attr_dc.push()
             mesh_dc.push()
             cur_path_id += 1
+            if len(voxel_rel_paths) == cur_path_id:
+                raise ValueError(f'Worker ran out of possible storage paths for storing {sd_syn_ssv.type}.')
             n_items_for_path = 0
             id_chunk_cnt = 0
             base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
@@ -677,7 +679,7 @@ def _combine_and_split_cs_thread(args):
         ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
 
         for mesh_cc in ccs:
-            abs_offset = np.min(mesh_cc[1], axis=0) // scaling
+            abs_offset = np.min(mesh_cc[1].reshape((-1, 3)), axis=0) // scaling
             cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id)
             if (os.path.abspath(cs_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
@@ -691,7 +693,7 @@ def _combine_and_split_cs_thread(args):
             csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
             csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
             csssv_attr_dc["bounding_box"] = cs_ssv.mesh_bb // scaling
-            csssv_attr_dc["rep_coord"] = mesh_cc[1][0] // scaling  # take first vertex coordinate
+            csssv_attr_dc["rep_coord"] = mesh_cc[1].reshape((-1, 3))[0] // scaling  # take first vertex coordinate
 
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
@@ -723,6 +725,8 @@ def _combine_and_split_cs_thread(args):
             attr_dc.push()
             mesh_dc.push()
             cur_path_id += 1
+            if len(voxel_rel_paths) == cur_path_id:
+                raise ValueError(f'Worker ran out of possible storage paths for storing {sd_cs_ssv.type}.')
             n_items_for_path = 0
             id_chunk_cnt = 0
             base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)

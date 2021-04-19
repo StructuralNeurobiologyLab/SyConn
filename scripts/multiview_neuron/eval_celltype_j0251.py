@@ -64,9 +64,11 @@ if __name__ == "__main__":
             pred_key_appendix2 = 'celltype_CV{}/celltype_cmn_j0251v2_adam_nbviews20_longRUN_2ratios_BIG_bs40_10fold_CV{}_eval0'.format(cv, cv)
             print('Loading cv-{}-data of model {}'.format(cv, pred_key_appendix2))
             m_path = base_dir + pred_key_appendix2
+            pred_key_appendix2 += '_cmn'
             m = InferenceModel(m_path, bs=80)
             for ssv_id in ssv_ids:
                 ssv = ssd.get_super_segmentation_object(ssv_id)
+                ssv.load_attr_dict()
                 # predict
                 ssv.nb_cpus = 20
                 ssv._view_caching = True
@@ -74,6 +76,7 @@ if __name__ == "__main__":
                                          view_props={'use_syntype': True, 'nb_views': 20}, overwrite=False,
                                          save_to_attr_dict=False, verbose=True,
                                          model_props={'n_classes': nclasses, 'da_equals_tan': False})
+                ssv.save_attr_dict()
                 # GT
                 curr_l = ssv_label_dc[ssv.id]
                 gt_l.append(curr_l)
@@ -90,7 +93,7 @@ if __name__ == "__main__":
                     print(f'{pred_l[-1]}\t{gt_l[-1]}\t{ssv.id}\t{major_dec}')
                 certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
 
-        assert set(loaded_ssv_ids) == len(ssv_label_dc)
+        assert len(set(loaded_ssv_ids)) == len(ssv_label_dc)
         # # WRITE OUT COMBINED RESULTS
         pred_proba = np.array(pred_proba)
         certainty = np.array(certainty)

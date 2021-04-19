@@ -16,6 +16,10 @@ from logging import Logger
 from typing import Optional, Dict, List, Tuple, Union
 
 from multiprocessing import Process
+
+import numba
+from numba import typed
+
 import numpy as np
 import scipy.ndimage
 import tqdm
@@ -417,7 +421,14 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         start = time.time()
         # contacts has size as given with `size`, because it performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
-        contacts = np.asarray(detect_cs(data))
+        # TODO: use new detect_cs after verification
+        # contacts = np.asarray(detect_cs(data))
+        contacts = np.asarray(detect_cs_64bit(data))
+        res = np.zeros(contacts.shape[:3], dtype=np.uint64)
+        mask = contacts[..., 0] != 0
+        res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
+        contacts = res
+
         cum_dt_proc += time.time() - start
 
         start = time.time()
@@ -771,3 +782,114 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     cs_seg = process_block_nonzero(
         edges, arr, global_params.config['cell_objects']['cs_filtersize'])
     return cs_seg
+
+
+def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:
+    """
+    Uses :func:`detect_seg_boundaries` to generate initial contact mask.
+
+    Args:
+        arr: 3D segmentation array
+
+    Returns:
+        4D contact site segmentation array (XYZC; with C=2).
+    """
+    # first identify boundary voxels
+    bdry = detect_seg_boundaries(arr)
+
+    stencil = np.array(global_params.config['cell_objects']['cs_filtersize'])
+    assert np.sum(stencil % 2) == 3
+    offset = stencil // 2
+
+    # extract adjacent majority ID on sparse boundary voxels
+    offset = np.array([(-offset[0], offset[0]), (-offset[1], offset[1]), (-offset[2], offset[2])])
+    cs_seg = detect_contact_partners(arr, bdry, offset)
+    return cs_seg
+
+
+@numba.jit(nopython=True)
+def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: np.ndarray) -> np.ndarray:
+    """
+    Identify whether IDs differ within `offset` and return boundary mask. Resulting array will be ``2*offset`` smaller
+    than input `seg_arr` ("valid convolution").
+
+    Args:
+        seg_arr: Segmentation volume (XYZ).
+        edge_arr: Boundary/edge mask array (XYZ). Inspects location if != 0, skips if 0.
+        offset: Offset for all spatial axes. Must have shape (3, 2). E.g. [(-1, 1), (-1, 1), (-1, 1)]
+            will check a 3x3x3 cube around every voxel.
+
+    Returns:
+        Boundary mask. Axes will be ``2*offset`` smaller.
+    """
+    nx, ny, nz = seg_arr.shape[:3]
+    contact_partners = np.zeros((nx+offset[0, 0]-offset[0, 1],
+                                 ny+offset[1, 0]-offset[1, 1],
+                                 nz+offset[2, 0]-offset[2, 1], 2
+                                 ), dtype=np.uint64)
+    for xx in range(-offset[0, 0], nx-offset[0, 1]):
+        for yy in range(-offset[1, 0], ny-offset[1, 1]):
+            for zz in range(-offset[2, 0], nz-offset[2, 1]):
+                center_id = seg_arr[xx, yy, zz]
+                if edge_arr[xx, yy, zz] == 0:
+                    continue
+                d = typed.Dict.empty(
+                    key_type=numba.uint64,
+                    value_type=numba.uint64,
+                )
+                # inspect cube around center voxel
+                for neigh_x in range(offset[0, 0], offset[0, 1]):
+                    for neigh_y in range(offset[1, 0], offset[1, 1]):
+                        for neigh_z in range(offset[2, 0], offset[2, 1]):
+                            neigh_id = seg_arr[xx + neigh_x, yy + neigh_y, zz + neigh_z]
+                            if (neigh_id == 0) or (neigh_id == center_id):
+                                continue
+                            if neigh_id in d:
+                                d[neigh_id] += 1
+                            else:
+                                d[neigh_id] = 1
+                if len(d) != 0:
+                    # get most common ID
+                    most_comm = 0
+                    most_comm_cnt = 0
+                    for k, v in d.items():
+                        if most_comm_cnt < v:
+                            most_comm = k
+                            most_comm_cnt = v
+                    partners = [most_comm, center_id] if center_id > most_comm else [center_id, most_comm]
+                    contact_partners[xx+offset[0, 0], yy+offset[1, 0], zz+offset[2, 0]] = partners
+    return contact_partners
+
+
+@numba.jit(nopython=True)
+def detect_seg_boundaries(arr: np.ndarray) -> np.ndarray:
+    """
+    Identify whether IDs differ within 6-connectivity and return boundary mask.
+    0 IDs are skipped.
+
+    Args:
+        arr: Segmentation volume (XYZ).
+
+    Returns:
+        Boundary mask.
+    """
+    nx, ny, nz = arr.shape[:3]
+    boundary = np.zeros((nx, ny, nz), dtype=np.bool_)
+    for xx in range(nx):
+        for yy in range(ny):
+            for zz in range(nz):
+                center_id = arr[xx, yy, zz]
+                # no need to flag background
+                if center_id == 0:
+                    continue
+                for neigh_x, neigh_y, neigh_z in [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0),
+                                                  (0, 0, -1), (0, 0, 1)]:
+                    if (xx + neigh_x < 0) or (xx + neigh_x >= nx):
+                        continue
+                    if (yy + neigh_y < 0) or (yy + neigh_y >= ny):
+                        continue
+                    if (zz + neigh_z < 0) or (zz + neigh_z >= nz):
+                        continue
+                    neigh_id = arr[xx + neigh_x, yy + neigh_y, zz + neigh_z]
+                    boundary[xx, yy, zz] = (neigh_id != center_id) or boundary[xx, yy, zz]
+    return boundary

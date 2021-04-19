@@ -1215,7 +1215,8 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         the 3D  array border are identified correctly.
 
     Returns:
-        Indices, vertices, normals of the mesh. List[ind, vert, norm] if `compute_connected_components=True`.
+        Flat Index/triangle, vertex and normals array of the mesh. List[ind, vert, norm] if
+        `compute_connected_components=True`.
     """
     vertex_size = np.array(vertex_size)
     if boundary_struct is None:
@@ -1281,7 +1282,11 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         mesh = mesh_
     else:
         mesh = [mesh]
-    mesh = [[np.asarray(m.triangles), np.asarray(m.vertices), np.asarray(m.vertex_normals)] for m in mesh]
+    for ii in range(len(mesh)):
+        m = mesh[ii]
+        verts = np.asarray(m.vertices).flatten()
+        verts[verts < 0] = 0
+        mesh[ii] = [np.asarray(m.triangles).flatten(), verts, np.asarray(m.vertex_normals).flatten()]
     return mesh
 
 
