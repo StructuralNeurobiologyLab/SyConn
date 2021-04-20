@@ -1,12 +1,9 @@
-from flask import Flask, request, abort, send_from_directory, make_response
+from flask import Flask, abort, make_response
 from flask_cors import CORS, cross_origin
-from syconn import global_params
 from utils import get_encoded_mesh
 from syconn.analysis.backend import SyConnBackend
 from knossos_utils import KnossosDataset
-import os
 import json
-import concurrent.futures
 
 ATTRIBUTES = ('sv', 'mi', 'sj', 'vc')
 
@@ -27,14 +24,7 @@ def createDownloadUrl(host, port, backend: SyConnBackend, logger, seg_path, debu
     def get_info(obj_type):
         """Download info."""
         try:
-            # info file for LocalVolume
-            if (obj_type == 'sv'):
-                print("in volume info")
-                print(dataset.boundary)
-                response = make_response(volume_info(dataset.boundary))
-            # info file for a single resolution mesh
-            else:
-                response = make_response(json.dumps({"@type": "neuroglancer_legacy_mesh"}))
+            response = make_response(json.dumps({"@type": "neuroglancer_legacy_mesh"}))
             response.cache_control.max_age = 0
             response.content_type = 'application/json'
             return response
