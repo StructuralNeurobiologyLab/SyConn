@@ -85,7 +85,8 @@ def configure_viewer(backend: SyConnBackend, state, raw_dataset=None, seg_datase
                     object_type='sv',
                     volume_type='image',
                     chunk_layout='isotropic',
-                    downsampling='3d'
+                    downsampling='3d',
+                    task_type='highest_then_upsample'
                 ),
             ],
         )
@@ -107,7 +108,8 @@ def configure_viewer(backend: SyConnBackend, state, raw_dataset=None, seg_datase
                     object_type='sv',
                     volume_type='segmentation',
                     chunk_layout='isotropic',
-                    downsampling='3d'
+                    downsampling='3d',
+                    task_type='highest_then_upsample'
                 ),
                 SkeletonSource(dimensions, backend),
             ],
