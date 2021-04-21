@@ -2,9 +2,12 @@ import pytest
 import os
 import numpy as np
 import logging
+import warnings
 
+# TODO: filter does not work..
 # ignore "OpenGL/images.py:142: DeprecationWarning: tostring() is deprecated. Use tobytes() instead"
 pytest.mark.filterwarnings("ignore:tostring() is deprecated")
+warnings.filterwarnings('ignore', message=".*tostring() is deprecated.*")
 
 log = logging.Logger('test_render', level='DEBUG')
 log.addHandler(logging.StreamHandler())

@@ -17,9 +17,6 @@ from typing import Optional, Dict, List, Tuple, Union
 
 from multiprocessing import Process
 
-import numba
-from numba import typed
-
 import numpy as np
 import scipy.ndimage
 import tqdm
@@ -28,7 +25,6 @@ from knossos_utils import knossosdataset
 
 from . import log_extraction
 from .block_processing_C import extract_cs_syntype
-from .block_processing_C import process_block_nonzero as process_block_nonzero_cpp
 from .object_extraction_steps import export_cset_to_kd_batchjob
 from .object_extraction_wrapper import calculate_chunk_numbers_for_box
 from .. import global_params
@@ -40,10 +36,7 @@ from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from ..reps import rep_helper
 from ..reps import segmentation
-
-
-def process_block_nonzero(*args):
-    return np.asarray(process_block_nonzero_cpp(*args))
+from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
@@ -403,27 +396,29 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     cum_dt_proc = 0
     cum_dt_proc2 = 0
     cs_filtersize = np.array(global_params.config['cell_objects']['cs_filtersize'])
+    cs_dilation = global_params.config['cell_objects']['cs_dilation']
+    # stencil_offset is used to load more data as these will be cropped when performing detect_cs(_64bit)
+    stencil_offset = cs_filtersize // 2
+    # additional overlap, e.g. to prevent boundary artifacts by dilation/closing
+    overlap = max(stencil_offset)
     for chunk in chunks:
-        # additional overlap, e.g. to prevent boundary artifacts by dilation/closing
-        # TODO: if this is set to 0, `detect_cs` still returns a black boundary region
-        #  although it already incorporates an additional offset (-> stencil_offset)
-        overlap = max(cs_filtersize) // 2
         offset = np.array(chunk.coordinates - overlap)  # also used for loading synapse data
         size = 2 * overlap + np.array(chunk.size)  # also used for loading synapse data
         start = time.time()
-
-        stencil_offset = (cs_filtersize - 1) // 2
 
         data = kd.load_seg(size=size + 2 * stencil_offset,
                            offset=offset - stencil_offset,
                            mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
         cum_dt_data += time.time() - start
         start = time.time()
-        # contacts has size as given with `size`, because it performs valid conv.
+
+        # contacts has size as given with `size`, because detect_cs performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
+
         # TODO: use new detect_cs after verification
         # contacts = np.asarray(detect_cs(data))
         contacts = np.asarray(detect_cs_64bit(data))
+        contacts_new = np.array(contacts)
         res = np.zeros(contacts.shape[:3], dtype=np.uint64)
         mask = contacts[..., 0] != 0
         res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
@@ -473,8 +468,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         start = time.time()
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
-        _, bb_dc, _ = rep_helper.find_object_properties(contacts)
-        n_closings = min(cs_filtersize)
+        _, bb_dc, _ = find_object_properties(contacts)  # TODO: change to find_object_properties_cs from
+        # find_object_properties_numba
+        n_closings = overlap
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
             obj_start -= n_closings
@@ -487,10 +483,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
-            # TODO: add to parameters to config, why is this necessary?
-            res = scipy.ndimage.binary_dilation(res, iterations=2)
-            # only update background or the objects itself
-            proc_mask = (binary_mask == 1) | (sub_vol == 0)
+            # reduce fragmenting of contact sites
+            res = scipy.ndimage.binary_dilation(res, iterations=cs_dilation)
+            # only update background or the objects itself and do not remove object voxels (res == 1), e.g. at boundary
+            proc_mask = ((binary_mask == 1) | (sub_vol == 0)) & (res == 1)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
         cum_dt_proc2 += time.time() - start
 
@@ -507,12 +503,12 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "cs.h5",
                                  ['cs'], overwrite=True)
-        # syn segmentation only contain the overlap voxels between SJ and CS
+        # syn segmentation contains the intersecting voxels between SJ and CS
         contacts[sj_d == 0] = 0
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "syn.h5",
                                  ['syn'], overwrite=True)
-        # overlap was removed for the analysis of the object properties
+        # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)
         merge_type_dicts([tot_asym_cnt, asym_cnt])
@@ -573,7 +569,6 @@ def _write_props_to_syn_thread(args):
                 worker_dir_props = f"{dir_props}/{worker_id}/"
                 # cs
                 fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
-                start = time.time()
                 dc = basics.load_pkl2obj(fname)
                 tmp_dcs = [dict(), defaultdict(list), dict()]
                 for k in intersec:
@@ -710,186 +705,3 @@ def _generate_storage_lookup(args):
         if subfold_key in cs_ids_ch_set:
             dest_dc_tmp[subfold_key].append(obj_id)
     return dest_dc_tmp
-
-
-def convert_nvox2ratio_syntype(syn_cnts, sym_cnts, asym_cnts):
-    """get ratio of sym. and asym. voxels to the synaptic foreground voxels of each contact site
-    object.
-    Sym. and asym. ratios do not necessarily sum to 1 if types are predicted independently
-    """
-    # TODO consider to implement in cython
-
-    sym_ratio = {}
-    asym_ratio = {}
-    for cs_id, cnt in syn_cnts.items():
-        if cs_id in sym_cnts:
-            sym_ratio[cs_id] = sym_cnts[cs_id] / cnt
-        else:
-            sym_ratio[cs_id] = 0
-        if cs_id in asym_cnts:
-            asym_ratio[cs_id] = asym_cnts[cs_id] / cnt
-        else:
-            asym_ratio[cs_id] = 0
-    return asym_ratio, sym_ratio
-
-
-def merge_type_dicts(type_dicts):
-    """
-    Merge map dictionaries in-place. Values will be stored in first dictionary
-
-    Parameters
-    ----------
-    type_dicts
-
-    Returns
-    -------
-
-    """
-    tot_map = type_dicts[0]
-    for el in type_dicts[1:]:
-        # iterate over subcell. ids with dictionaries as values which store
-        # the number of overlap voxels to cell SVs
-        for cs_id, cnt in el.items():
-            if cs_id in tot_map:
-                tot_map[cs_id] += cnt
-            else:
-                tot_map[cs_id] = cnt
-
-
-def detect_cs(arr: np.ndarray) -> np.ndarray:
-    """
-
-    Args:
-        arr: 3D segmentation array (only np.uint32!)
-
-    Returns:
-        3D contact site segmentation array (np.uint64).
-    """
-    # simple edge detector, only works reliably if extra-cellular space is available
-    # TODO: switch to C++ loop with 6-neighborhood checks (unequal to center ID) to achieve symmetric
-    #  contact sites in the case of zero extra-cellular space.
-    jac = np.zeros([3, 3, 3], dtype=np.int32)
-    jac[1, 1, 1] = -6
-    jac[1, 1, 0] = 1
-    jac[1, 1, 2] = 1
-    jac[1, 0, 1] = 1
-    jac[1, 2, 1] = 1
-    jac[2, 1, 1] = 1
-    jac[0, 1, 1] = 1
-    edges = scipy.ndimage.convolve(arr.astype(np.int32), jac) < 0
-    edges = edges.astype(np.uint32, copy=False)
-    arr = arr.astype(np.uint32, copy=False)
-    cs_seg = process_block_nonzero(
-        edges, arr, global_params.config['cell_objects']['cs_filtersize'])
-    return cs_seg
-
-
-def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:
-    """
-    Uses :func:`detect_seg_boundaries` to generate initial contact mask.
-
-    Args:
-        arr: 3D segmentation array
-
-    Returns:
-        4D contact site segmentation array (XYZC; with C=2).
-    """
-    # first identify boundary voxels
-    bdry = detect_seg_boundaries(arr)
-
-    stencil = np.array(global_params.config['cell_objects']['cs_filtersize'])
-    assert np.sum(stencil % 2) == 3
-    offset = stencil // 2
-
-    # extract adjacent majority ID on sparse boundary voxels
-    offset = np.array([(-offset[0], offset[0]), (-offset[1], offset[1]), (-offset[2], offset[2])])
-    cs_seg = detect_contact_partners(arr, bdry, offset)
-    return cs_seg
-
-
-@numba.jit(nopython=True)
-def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: np.ndarray) -> np.ndarray:
-    """
-    Identify whether IDs differ within `offset` and return boundary mask. Resulting array will be ``2*offset`` smaller
-    than input `seg_arr` ("valid convolution").
-
-    Args:
-        seg_arr: Segmentation volume (XYZ).
-        edge_arr: Boundary/edge mask array (XYZ). Inspects location if != 0, skips if 0.
-        offset: Offset for all spatial axes. Must have shape (3, 2). E.g. [(-1, 1), (-1, 1), (-1, 1)]
-            will check a 3x3x3 cube around every voxel.
-
-    Returns:
-        Boundary mask. Axes will be ``2*offset`` smaller.
-    """
-    nx, ny, nz = seg_arr.shape[:3]
-    contact_partners = np.zeros((nx+offset[0, 0]-offset[0, 1],
-                                 ny+offset[1, 0]-offset[1, 1],
-                                 nz+offset[2, 0]-offset[2, 1], 2
-                                 ), dtype=np.uint64)
-    for xx in range(-offset[0, 0], nx-offset[0, 1]):
-        for yy in range(-offset[1, 0], ny-offset[1, 1]):
-            for zz in range(-offset[2, 0], nz-offset[2, 1]):
-                center_id = seg_arr[xx, yy, zz]
-                if edge_arr[xx, yy, zz] == 0:
-                    continue
-                d = typed.Dict.empty(
-                    key_type=numba.uint64,
-                    value_type=numba.uint64,
-                )
-                # inspect cube around center voxel
-                for neigh_x in range(offset[0, 0], offset[0, 1]):
-                    for neigh_y in range(offset[1, 0], offset[1, 1]):
-                        for neigh_z in range(offset[2, 0], offset[2, 1]):
-                            neigh_id = seg_arr[xx + neigh_x, yy + neigh_y, zz + neigh_z]
-                            if (neigh_id == 0) or (neigh_id == center_id):
-                                continue
-                            if neigh_id in d:
-                                d[neigh_id] += 1
-                            else:
-                                d[neigh_id] = 1
-                if len(d) != 0:
-                    # get most common ID
-                    most_comm = 0
-                    most_comm_cnt = 0
-                    for k, v in d.items():
-                        if most_comm_cnt < v:
-                            most_comm = k
-                            most_comm_cnt = v
-                    partners = [most_comm, center_id] if center_id > most_comm else [center_id, most_comm]
-                    contact_partners[xx+offset[0, 0], yy+offset[1, 0], zz+offset[2, 0]] = partners
-    return contact_partners
-
-
-@numba.jit(nopython=True)
-def detect_seg_boundaries(arr: np.ndarray) -> np.ndarray:
-    """
-    Identify whether IDs differ within 6-connectivity and return boundary mask.
-    0 IDs are skipped.
-
-    Args:
-        arr: Segmentation volume (XYZ).
-
-    Returns:
-        Boundary mask.
-    """
-    nx, ny, nz = arr.shape[:3]
-    boundary = np.zeros((nx, ny, nz), dtype=np.bool_)
-    for xx in range(nx):
-        for yy in range(ny):
-            for zz in range(nz):
-                center_id = arr[xx, yy, zz]
-                # no need to flag background
-                if center_id == 0:
-                    continue
-                for neigh_x, neigh_y, neigh_z in [(-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0),
-                                                  (0, 0, -1), (0, 0, 1)]:
-                    if (xx + neigh_x < 0) or (xx + neigh_x >= nx):
-                        continue
-                    if (yy + neigh_y < 0) or (yy + neigh_y >= ny):
-                        continue
-                    if (zz + neigh_z < 0) or (zz + neigh_z >= nz):
-                        continue
-                    neigh_id = arr[xx + neigh_x, yy + neigh_y, zz + neigh_z]
-                    boundary[xx, yy, zz] = (neigh_id != center_id) or boundary[xx, yy, zz]
-    return boundary

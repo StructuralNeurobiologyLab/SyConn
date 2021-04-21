@@ -96,7 +96,7 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/pschuber/e3_trainings_randla_semseg_j0251/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_randla_semseg_j0251_run2/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET

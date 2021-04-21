@@ -25,6 +25,7 @@ from ..mp import mp_utils as sm
 from ..proc.meshes import mesh_chunk, find_meshes
 from ..reps import rep_helper
 from ..reps import segmentation
+from ..extraction.find_object_properties import map_subcell_extract_props as map_subcell_extract_props_func
 
 from multiprocessing import Process
 import pickle as pkl
@@ -579,7 +580,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
 
 def _map_subcell_extract_props_thread(args):
-    from syconn.reps.find_object_properties_C import map_subcell_extract_propsC
     chunks = args[0]
     chunk_size = args[1]
     kd_cell_p = args[2]
@@ -653,7 +653,7 @@ def _map_subcell_extract_props_thread(args):
         start = time.time()
         # extract properties and mapping information
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = \
-            map_subcell_extract_propsC(cell_d, subcell_d)
+            map_subcell_extract_props_func(cell_d, subcell_d)
         dt_times_dc['prop_dicts_extract'] += time.time() - start
 
         # remove objects that are purely inside this chunk and smaller than the size threshold

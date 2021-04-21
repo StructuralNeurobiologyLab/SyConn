@@ -139,10 +139,12 @@ cell_objects:
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
 
   # --------- CONTACT SITE AND SYNAPSE PARAMETERS
+  # determines the distance to "touching" partner cells to determine contact sites, must be uneven numbers
+  # max(cs_filtersize // 2) closings are performed afterwards (only background voxels will be affected)
   cs_filtersize: [13, 13, 7]
-  cs_nclosings: 7  # TODO: bind to cs_filtersize
-  # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
-  # into 'syn_ssv'
+  # number of dilations performed after closing (see above; only background voxels will be affected)
+  cs_dilation: 2
+  # used to agglomerate 'syn' objects (cell supervoxel-based synapse fragments) into 'syn_ssv'
   cs_gap_nm: 250
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular

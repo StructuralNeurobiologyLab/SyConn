@@ -2,8 +2,8 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 
-from syconn.reps.rep_helper import find_object_properties
-from syconn.extraction.cs_extraction_steps import detect_cs, detect_seg_boundaries, detect_cs_64bit
+from syconn.extraction.find_object_properties import detect_cs, detect_cs_64bit, detect_seg_boundaries, \
+    find_object_properties
 import numpy as np
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
@@ -137,10 +137,13 @@ def test_detect_cs_64bit():
 
 
 def test_boundary_gen():
-    bdry = detect_seg_boundaries(np.arange(1000).reshape((10, 10, 10)))
-    assert np.all(bdry)
+    bdry = detect_seg_boundaries(np.arange(1000).reshape((10, 10, 10))).flatten()
+    # background IDs (0) are not inspected
+    assert bdry[0] == 0
+    # all IDs > 0 must have been detected as boundary
+    assert np.all(bdry[1:])
     bdry = detect_seg_boundaries(np.zeros((10, 10, 10)))
-    assert not np.all(bdry)
+    assert np.all(~bdry)
 
 
 def test_chunk_weighted():

@@ -27,7 +27,7 @@ from ..mp import batchjob_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..proc.image import apply_morphological_operations, get_aniso_struct
 from ..reps import segmentation, rep_helper as rh
-from ..reps.rep_helper import find_object_properties
+from .find_object_properties import find_object_properties
 
 try:
     import vigra

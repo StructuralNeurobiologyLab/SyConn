@@ -6,7 +6,6 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import itertools
-import warnings
 import copy
 from collections import Counter
 from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING, Iterator
@@ -57,9 +56,9 @@ except ImportError as e:
                    'Writing meshes as `.obj` files will not be'
                    ' possible. {}'.format(e))
 try:
-    from .in_bounding_boxC import in_bounding_box
+    from syconn.extraction.in_bounding_boxC import in_bounding_box
 except ImportError:
-    from .in_bounding_box import in_bounding_box
+    from syconn.extraction.in_bounding_box import in_bounding_box
     log_proc.error('ImportError. Could not import `in_boundinb_box` from '
                    '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 if TYPE_CHECKING:
@@ -1190,7 +1189,7 @@ def mesh_area_calc(mesh):
 
 
 def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scale: np.ndarray,
-                       vertex_size: float = 80, boundary_struct: Optional[np.ndarray] = None,
+                       vertex_size: float = 10, boundary_struct: Optional[np.ndarray] = None,
                        depth: int = 11, compute_connected_components: bool = True,
                        min_vert_num: int = 200, overlap: int = 1, verbose: bool = False) \
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:

@@ -26,7 +26,7 @@ from ..extraction.block_processing_C import relabel_vol_nonexist2zero
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
-    from ..proc.in_bounding_box import in_bounding_box
+    from syconn.extraction.in_bounding_box import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import super_segmentation
