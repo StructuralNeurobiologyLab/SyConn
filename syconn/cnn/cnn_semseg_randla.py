@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall
+from elektronn3.models.randla_net import RandLANet
 from elektronn3.training import Trainer3d, Backup, metrics
 
 # PARSE PARAMETERS #
@@ -24,12 +24,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=4, help='Batch size')
-parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=12000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=8000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
-parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=8000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -56,7 +55,6 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
-use_bias = args.use_bias
 
 lr = 2e-3
 lr_stepsize = 100
@@ -65,11 +63,9 @@ max_steps = 300000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = True
+cellshape_only = False
 use_syntype = False
-dr = 0.2
-track_running_stats = False
-use_norm = 'gn'
+dr = 0.1
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
@@ -79,8 +75,8 @@ if cellshape_only:
 act = 'relu'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall_boarderMask'
+    name = f'semseg_randla_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
+           f'{num_classes}'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -89,33 +85,24 @@ if not cellshape_only and use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
-if use_norm is False:
-    name += '_noBN'
-else:
-    name += f'_{use_norm}'
-if track_running_stats:
-    name += '_trackRunStats'
 
 if use_cuda:
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
-if not use_bias:
-    name += '_noBias'
 
 print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '~/e3_training_convpoint/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_randla_semseg_j0251/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
 
-# Model selection
-model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+# +1 classes for border class
+model = RandLANet(input_channels, num_classes + 1, dropout_p=dr)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -146,38 +133,22 @@ train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='norma
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
-# mask boarder points with 'num_classes' and set its weight to 0
+# mask border points with 'num_classes' and set its weight to 0
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx)
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 
 # PREPARE AND START TRAINING #
 
 # set up optimization
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
-# optimizer = torch.optim.SGD(
-#     model.parameters(),
-#     lr=lr,  # Learning rate is set by the lr_sched below
-#     momentum=0.9,
-#     weight_decay=0.5e-5,
-# )
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
-# set weight of the masking label at context boarders to 0
-# class_weights = torch.tensor([1, 0, 0, 0, 0, 1, 1] + [0], dtype=torch.float32, device=device)
+
+# set weight of the masking label at context borders to 0
 class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 
@@ -206,7 +177,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=5,
+    num_workers=8,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
@@ -215,7 +186,7 @@ trainer = Trainer3d(
     num_classes=num_classes + 1,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=5
+    nbatch_avg=5, tqdm_kwargs={'disable': False}
 )
 
 # Archiving training script, src folder, env info

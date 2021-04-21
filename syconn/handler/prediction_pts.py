@@ -25,7 +25,7 @@ import scipy.special
 import tqdm
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting_kdt
+from morphx.processing.objects import bfs_vertices, context_splitting_kdt, context_splitting_graph_many
 from scipy import spatial
 from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
@@ -1251,7 +1251,7 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
 def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                             npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None,
-                            use_subcell: bool = False, mask_boarders_with_id: Optional[int] = None
+                            use_subcell: bool = False, mask_borders_with_id: Optional[int] = None
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -1265,7 +1265,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         ctx_size:
         transform:
         use_subcell:
-        mask_boarders_with_id:
+        mask_borders_with_id:
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -1302,22 +1302,22 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             n_out_pts_curr = n_out_pts + npoints_add
             npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
             npoints_ssv += npoints_add
-            batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.ones((batchsize, npoints_ssv, len(feat_dc)))
-            batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
+            batch = np.zeros((batchsize, n_out_pts_curr, 3))
+            batch_f = np.ones((batchsize, n_out_pts_curr, len(feat_dc)))
+            # batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
             batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
             cnt = 0
             for source_node in source_nodes[ii::n_batches]:
                 # create local context
                 # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                 while True:
-                    node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
+                    node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
                     hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                    if mask_boarders_with_id is not None:
-                        source_node_c = hc_sub.nodes[hc_sub.relabel_dc[source_node]]
-                        boarder_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
-                                            ctx_size_fluct * 0.8
-                        hc_sub._labels[boarder_vert_mask] = mask_boarders_with_id
+                    # if mask_borders_with_id is not None:
+                    #     source_node_c = hc_sub.nodes[hc_sub.relabel_dc[source_node]]
+                    #     boarder_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
+                    #                         ctx_size_fluct * 0.8
+                    #     hc_sub._labels[boarder_vert_mask] = mask_borders_with_id
                     sample_feats = hc_sub.features
                     if len(sample_feats) > 0:
                         break
@@ -1328,16 +1328,17 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 # sub-sample vertices
                 sample_ixs = np.arange(len(sample_pts))
                 np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                sample_labels = sample_labels[sample_ixs][:npoints_ssv]
+                sample_pts = sample_pts[sample_ixs][:n_out_pts_curr]
+                sample_feats = sample_feats[sample_ixs][:n_out_pts_curr]
+                sample_labels = sample_labels[sample_ixs][:n_out_pts_curr]
                 # add duplicate points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(len(sample_pts), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                sample_labels = np.concatenate([sample_labels, sample_labels[idx]])
+                # has less points than n_out_pts_curr
+                npoints_add = n_out_pts_curr - len(sample_pts)
+                if npoints_add > 0:
+                    idx = np.random.choice(len(sample_pts), npoints_add)
+                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                    sample_labels = np.concatenate([sample_labels, sample_labels[idx]])
 
                 hc_sub._vertices = sample_pts
                 hc_sub._features = sample_feats
@@ -1350,17 +1351,23 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 if use_subcell:
                     batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
                 # get target locations
-                out_pts_mask = (hc_sub.features == 0).squeeze()
-                n_out_pts_actual = np.sum(out_pts_mask)
-                idx = np.random.choice(n_out_pts_actual, n_out_pts_curr,
-                                       replace=n_out_pts_actual < n_out_pts_curr)
-                batch_out[cnt] = hc_sub.vertices[out_pts_mask][idx]
+                # TODO: Add masking if beneficial - for now just use all input points and their labels
+                # out_pts_mask = (hc_sub.features == 0).squeeze()
+                # n_out_pts_actual = np.sum(out_pts_mask)
+                # idx = np.random.choice(n_out_pts_actual, n_out_pts_curr,
+                #                        replace=n_out_pts_actual < n_out_pts_curr)
+                # batch_out[cnt] = hc_sub.vertices[out_pts_mask][idx]
                 # TODO: currently only supports type(out_point_label) = int
-                batch_out_l[cnt] = hc_sub.labels[out_pts_mask][idx]
-                assert -1 not in batch_out_l[cnt]
+                # batch_out_l[cnt] = hc_sub.labels[out_pts_mask][idx]
+                batch_out_l[cnt] = hc_sub.labels
+                if -1 in batch_out_l[cnt]:
+                    assert mask_borders_with_id is not None
+                    batch_out_l[cnt][batch_out_l[cnt] == -1] = mask_borders_with_id
                 cnt += 1
             assert cnt == batchsize
-            yield (batch_f, batch), (batch_out, batch_out_l)
+            # TODO: Add masking if beneficial - for now just use all input points and their labels
+            # yield (batch_f, batch), (batch_out, batch_out_l)
+            yield batch_f, batch, batch_out_l
 
 
 def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
