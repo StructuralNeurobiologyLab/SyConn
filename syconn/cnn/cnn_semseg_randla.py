@@ -76,7 +76,7 @@ act = 'relu'
 
 if name is None:
     name = f'semseg_randla_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}'
+           f'{num_classes}_run2'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -96,7 +96,7 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/pschuber/e3_trainings_randla_semseg_j0251_run2/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_randla_semseg_j0251/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET

@@ -448,8 +448,8 @@ if elektronn3_avail:
 
 
     class CloudDataSemseg(Dataset):
-        def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, batch_size=1, use_subcell=True, ctx_size=20000, mask_borders_with_id=None):
+        def __init__(self, source_dir=None, npoints=12000, transform: Callable = Identity(),
+                     train=True, batch_size=2, use_subcell=True, ctx_size=8000, mask_borders_with_id=None):
             if source_dir is None:
                 # source_dir = '/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/'
                 # ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,

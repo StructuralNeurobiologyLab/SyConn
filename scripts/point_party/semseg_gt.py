@@ -64,6 +64,8 @@ def anno_skeleton2np(a_obj, scaling, verbose=False):
     g.add_edges_from(a_edges)
     a_edges = np.array(g.edges)
     a_node_labels_orig = np.array(a_node_labels)
+    # remove labels on branches that are only at the soma
+
     # propagate labels, nodes with no label get label from nearest node with label
     if -1 in a_node_labels:
         if verbose:
@@ -143,8 +145,11 @@ def labels2mesh(args):
     # 0: not close to a labeled GT node, 1: close to an annotated node
     kdt = cKDTree(a_node_coords_orig)
     node_labels = np.ones((len(nodes), 1), dtype=np.int32)
+    node_orig_labels = -np.ones((len(nodes), ), dtype=np.int32)
+    # TODO: use graph traversal approach
     dists, ixs = kdt.query(nodes, distance_upper_bound=1000)
     node_labels[dists == np.inf] = 0
+    node_orig_labels[dists != np.inf] = a_node_labels_orig[ixs[dists != np.inf]]
 
     kdt = cKDTree(a_node_coords)
     # load cell and cell organelles
@@ -178,8 +183,9 @@ def labels2mesh(args):
             cols = np.array([col_lookup[el] for el in vert_l.squeeze()], dtype=np.uint8)
             write_mesh2kzip(f'{out_path}/sso_{sso.id}.k.zip', indices.astype(np.float32),
                             vertices.astype(np.float32), None, cols, f'{sso_id}.ply')
-            sso.skeleton['source'] = node_labels
-            sso.save_skeleton_to_kzip(f'{out_path}/sso_{sso.id}.k.zip', additional_keys=['source'])
+            sso.skeleton['source'] = node_labels.squeeze()
+            sso.skeleton['orig_labels'] = node_orig_labels.squeeze()
+            sso.save_skeleton_to_kzip(f'{out_path}/sso_{sso.id}.k.zip', additional_keys=['source', 'orig_labels'])
 
         # only set labels for cell surface points -> subcellular structures will have label -1
         if ix == 0:
