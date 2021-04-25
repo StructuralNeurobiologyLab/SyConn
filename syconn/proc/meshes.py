@@ -1065,6 +1065,56 @@ def mesh2obj_file(dest_path: str, mesh: List[np.ndarray],
     openmesh.write_mesh(dest_path, mesh_obj)
 
 
+def mesh2obj_file_colors(dest_path: str, mesh: List[np.ndarray],
+                  colors: Optional[Union[int, np.ndarray]] = None,
+                  center: Optional[np.ndarray] = None,
+                  scale: Optional[float] = None):
+    """
+    Writes mesh to .obj file.
+
+    Args:
+        dest_path: Path to file.
+        mesh: Flat arrays of indices (triangle faces), vertices and normals.
+        colors: List of numpy arrays (rgba) for the colors of vertices, must contain the same length as the vertices.
+        center: Subtracts center from original vertex locations.
+        scale: Multiplies vertex locations after centering.
+
+    Returns:
+
+    """
+    mesh_obj = openmesh.TriMesh()
+    ind, vert, norm = mesh
+    if vert.ndim == 1:
+        vert = vert.reshape(-1, 3)
+    if ind.ndim == 1:
+        ind = ind.reshape(-1, 3)
+    if center is not None:
+        vert -= center
+    if scale is not None:
+        vert *= scale
+    vert_openmesh = []
+    if colors is not None:
+        mesh_obj.request_vertex_colors()
+        # if colors.ndim == 2 and len(colors) == len(vert):
+        #     colors = colors.astype(np.float64)  # required by openmesh
+        # else:
+        #     msg = f'Expected dimension 1, got {colors.ndim} and expected length of array {len(vert)}, got {len(colors)}'
+        #     raise ValueError(msg)
+        colors = colors.astype(np.float64)
+    for i, v in enumerate(vert):
+        v = v.astype(np.float64)  # Point requires double
+        v_openmesh = mesh_obj.add_vertex(v)
+        if colors is not None:
+            mesh_obj.set_color(v_openmesh, colors[i])
+        vert_openmesh.append(v_openmesh)
+    for f in ind:
+        f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
+                      vert_openmesh[f[2]]]
+        mesh_obj.add_face(f_openmesh)
+
+    openmesh.write_mesh(dest_path, mesh_obj, vertex_color=True)
+
+
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
                   decimate_mesh=0, gradient_direction='descent',
                   force_single_cc=False):
