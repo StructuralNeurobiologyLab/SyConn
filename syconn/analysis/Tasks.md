@@ -1,24 +1,25 @@
 # Tasks
 
-- [x] Skeleton rendering
+- [x] Skeleton rendering (neuroglancer.SkeletonSource)
 - [x] Simple mesh generation in LocalVolume
 - [x] Mitochondira mesh rendering
 - [x] Synaptic junction mesh rendering
 - [x] Synapse mesh rendering
 - [x] Merge mesh with skeleton in one layer
 - [x] Seg ids are only connected to the ssv_mesh. When unselecting a mesh/data, only the ssv_mesh disappears not all the cell organelles too. Make a tab in Neuroglancer for visibility of organelle meshes? All the local volumes of the organelles needs to be in the same segmentation layer for disappearing (conflicts with segment colors)
-- [x] Data is passed in every single layer => slow. Find a way to optimize or merge layers. Create an independent mesh source?
+- [x] Data is passed in every single layer (redundant neuroglancer.LocalVolume) => slow. Find a way to optimize or merge layers. Create an independent mesh source?
 - [x] Change colors of cell organelles and opacity of ssv mesh
 - [x] Colors are overlayed in the 2d layouts because of the same `segment_colors` argument of the segmentation layer. Need to define color only for the mesh.
 - [x] Get colors working with linking segmentation layers
 - [x] Level of detail integration
+- [x] Precomputed skeleton source 
 - [ ] Dynamically generate layers for the obj_types wanted
-- [ ] EM GT render (Brainmaps) + credential managing
-- [ ] Response in flask json.dumps and binary
+- [x] Response in flask json.dumps and binary
 - [x] Integrate flask into cli main
 - [ ] Specify organelle types in the main parameters
 - [ ] Look into import folders for absolute path
-- Look into the downsampling where it is happening in the frontend or Neuroglancer server
-- Compare highest factor and upsampling with lowest factor and downsampling (runtime)
-- Render differently colored organelle meshes with a mouse click (without the seg query)
-- Coloring of meshes (diff obj types)
+- [x] Look into the downsampling where it is happening in the frontend or Neuroglancer server
+- [x] Compare highest factor and upsampling with lowest factor and downsampling (runtime)
+- [x] Render differently colored organelle meshes with a mouse click (without the seg query)
+- [ ] Coloring of meshes (diff obj types)
+- [x] Fix rendering of subvolume chunks (gray boxes); check available mags
