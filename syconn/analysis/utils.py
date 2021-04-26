@@ -1,5 +1,5 @@
 from syconn import global_params
-from storage import MeshStorage
+from syconn.analysis.storage import MeshStorage
 from syconn.handler.logger import log_main as logger
 from syconn import global_params
 import json
@@ -9,6 +9,48 @@ import shutil
 from knossos_utils import KnossosDataset
 from neuroglancer.chunks import encode_npz
 
+def get_encoded_skeleton(backend, ssv_id, scales):
+    """
+    Get encoded skeleton for ssv_id.
+    :param backend: SyConnBackend object initialized with 'global_params.config.working_dir'
+    :param ssv_id: int
+    :param scales: np.array (KnossosDataset.scale)
+    :return: bytes
+    """
+    logger.info('Getting binary encoded skeleton for ssv_id {}'.format(ssv_id))
+    
+    skeleton = {}
+    
+    try:
+        skeleton = backend.ssv_skeleton(ssv_id)
+    except:
+        logger.error('Skeleton not available for ssv_id: {}'.format(ssv_id))
+
+    if skeleton == {}:
+        print('empty skeleton')
+        logger.error('Skeleton could not be retrieved for ssv_id: {}'.format(ssv_id))
+        
+    nodes = np.array(skeleton["nodes"], dtype=np.float32).reshape(-1, 3)
+
+    # accomodate dimension scaling
+    nodes[:, 0] *= scales[0]
+    nodes[:, 1] *= scales[1]
+    nodes[:, 2] *= scales[2]
+    
+    edges = np.array(skeleton["edges"], dtype=np.uint32).reshape(-1, 2)
+    num_vert = nodes.shape[0]
+    num_edges = edges.shape[0]
+
+    data = [
+        np.uint32(num_vert),
+        np.uint32(num_edges),
+        nodes,
+        edges
+    ]
+
+    encoded_skeleton = b''.join([array.tobytes('C') for array in data])
+
+    return encoded_skeleton
 
 def get_encoded_mesh(backend, ssv_id, obj_type):
     """
@@ -46,13 +88,11 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
     encoded_mesh = b''.join([array.tobytes('C') for array in data])
     return encoded_mesh
 
-
 def _to_filename(bounds):
     """
     Converts boundaries to file names for file storage
     """
     return '_'.join('0' + '-' + str(bounds[i]) for i in range(len(bounds)))
-
 
 def _upload_individuals(mesh_dir, progress, mesh_binaries, generate_manifests, lod, boundaries):
     """
@@ -61,6 +101,7 @@ def _upload_individuals(mesh_dir, progress, mesh_binaries, generate_manifests, l
     boundaryFilename = _to_filename(boundaries)
     storage = MeshStorage(mesh_dir, progress)
     for segid, mesh_binary in mesh_binaries.items():
+
         storage.put_files([(
             '{}/{}:{}:{}'.format(  # file_path
                 storage.get_path(), segid, lod,
@@ -71,6 +112,7 @@ def _upload_individuals(mesh_dir, progress, mesh_binaries, generate_manifests, l
             compress='precomputed',
             compress_level=9,
         )
+
         if generate_manifests:
             fragments = []
             fragments.append('{}:{}:{}'.format(segid, lod, boundaryFilename))
@@ -81,8 +123,7 @@ def _upload_individuals(mesh_dir, progress, mesh_binaries, generate_manifests, l
                 content=json.dumps({"fragments": fragments}),
                 content_type='application/json',
                 compress=None
-            )
-
+        )
 
 def _dump_encoded_mesh(obj_mesh_path, backend, lod, obj_type):
     mesh_binaries = get_encoded_mesh(backend, obj_type)
@@ -103,7 +144,6 @@ def _dump_encoded_mesh(obj_mesh_path, backend, lod, obj_type):
                 f.write(mesh_binary)
         except IOError as err:
             print('Error writing binary mesh data for ssv id {}'.format(segid))
-
 
 def mesh_task(mesh_dir, backend, lod, obj_type, force=False):
     if not os.path.exists(mesh_dir):  # make meshes subdirectory if not present
