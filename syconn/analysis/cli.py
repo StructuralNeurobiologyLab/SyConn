@@ -26,6 +26,7 @@ def configure_backend():
     Setups SyConnBackend object and logger
     :return SyConnBackend:
     """
+
     global logger
     logger = log_gate
     logger.info('SyConn gate server starting up on working directory '
@@ -56,6 +57,7 @@ def configure_viewer(backend: SyConnBackend, state, raw_dataset=None, seg_datase
     :param data: numpy.ndarray (e.g KnossosDataset)
     :param dimensions: neuroglancer.CoordinateSpace (viewer/layer dimensions)
     """
+
     # set local volume dimensions if not provided
     scales = seg_dataset.scale
     if dimensions is None:
@@ -76,7 +78,6 @@ def configure_viewer(backend: SyConnBackend, state, raw_dataset=None, seg_datase
                     precomputedMesh=False,
                     object_type='sv',
                     volume_type='image',
-                    chunk_layout='isotropic',
                     downsampling='3d',
                     task_type='highest_then_upsample'
                 ),
@@ -98,7 +99,6 @@ def configure_viewer(backend: SyConnBackend, state, raw_dataset=None, seg_datase
                     precomputedMesh=True,
                     object_type='sv',
                     volume_type='segmentation',
-                    chunk_layout='isotropic',
                     downsampling='3d',
                     task_type='highest_then_upsample'
                 ),
@@ -203,8 +203,8 @@ if __name__ == '__main__':
     # print(type(seg_dataset.scale))
     
     # flask server here
-    flask_PORT = 8000
-    flask_server = th.Thread(target=createDownloadUrl, args=('127.0.0.1', flask_PORT, backend, seg_dataset.scale, True,))
+    PORT = 8000
+    flask_server = th.Thread(target=createDownloadUrl, args=('127.0.0.1', PORT, backend, seg_dataset.scale, True,))
     flask_server.start()
 
     viewer = neuroglancer.Viewer()
@@ -212,7 +212,7 @@ if __name__ == '__main__':
     
     # configure viewer
     with viewer.txn() as s:
-        configure_viewer(backend, s, raw_dataset=raw_dataset, seg_dataset=seg_dataset, flask_PORT)
+        configure_viewer(backend, s, raw_dataset=raw_dataset, seg_dataset=seg_dataset, flask_PORT=PORT)
 
     logger.info('Neuroglancer server running at {}'.format(viewer))
     flask_server.join()
