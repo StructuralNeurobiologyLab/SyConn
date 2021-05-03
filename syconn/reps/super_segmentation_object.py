@@ -3150,9 +3150,9 @@ class SuperSegmentationObject(SegmentationBase):
         raise DeprecationWarning('This method is deprecated. Use '
                                  '"predict_nodes" instead!')
 
-    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             onthefly_views=False, overwrite=True, model_props=None,
-                             verbose: bool = False, save_to_attr_dict: bool = True):
+    def predict_celltype_multiview(self, model, pred_key_appendix, model_tnet=None, view_props=None,
+                                   onthefly_views=False, overwrite=True, model_props=None,
+                                   verbose: bool = False, save_to_attr_dict: bool = True):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3218,8 +3218,8 @@ class SuperSegmentationObject(SegmentationBase):
         else:
             return views
 
-    def certainty_celltype(self, proba_key: Optional[str] = None) -> float:
-        """
+    def certainty_celltype(self, pred_key: Optional[str] = None) -> float:
+        """_probas
         Certainty estimate of the celltype prediction:
             1. If `is_logit` is True, Generate pseudo-probabilities from the
                input using softmax.
@@ -3231,30 +3231,30 @@ class SuperSegmentationObject(SegmentationBase):
             See :func:`~syconn.handler.prediction.certainty_estimate`
 
         Args:
-            proba_key: Key of classification results (one C-class probability
-                vector for every N-view sample). Must exist in
+            pred_key: Key of classification results (one C-class probability
+                vector for every multi-view sample). ``pred_key + '_probas'`` must exist in
                 :py:attr:`~attr_dict`.
 
         Returns:
             Certainty measure based on the entropy of the cell type logits.
         """
-        if proba_key is None:
-            proba_key = 'celltype_cnn_e3_probas'
-        logits = self.lookup_in_attribute_dict(proba_key)
+        if pred_key is None:
+            pred_key = 'celltype_cnn_e3'
+        cert = self.lookup_in_attribute_dict(pred_key + '_certainty')
+        if cert is not None:
+            return cert
 
+        logits = self.lookup_in_attribute_dict(pred_key + '_probas')
         return certainty_estimate(logits, is_logit=True)
 
-    def majority_vote(self, prop_key, max_dist):
+    def majority_vote(self, prop_key: str, max_dist: float) -> np.ndarray:
         """
-        Smoothes (average using sliding window of 2 times max_dist and majority
-        vote) property prediction in annotation, whereas for axoness somata are
-        untouched.
+        Smooths (average using sliding window of 2 times max_dist and majority
+        vote) property prediction in annotation.
 
         Args:
-            prop_key: str
-                which property to average
-            max_dist: int
-                maximum distance (in nm) for sliding window used in majority voting
+            prop_key: Property to average.
+            max_dist: Maximum distance (in nm) for sliding window used in majority voting.
 
         Returns:
 
@@ -3443,8 +3443,8 @@ def celltype_predictor(args) -> Iterable:
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
-            ssv.predict_celltype_cnn(m, pred_key_appendix="", onthefly_views=use_onthefly_views,
-                                     overwrite=True, view_props=view_props, model_props=model_props)
+            ssv.predict_celltype_multiview(m, pred_key_appendix="", onthefly_views=use_onthefly_views,
+                                           overwrite=True, view_props=view_props, model_props=model_props)
         except RuntimeError as e:
             missing_ssvs.append(ssv.id)
             msg = 'ERROR during celltype prediction of SSV {}. {}'.format(ssv.id, repr(e))

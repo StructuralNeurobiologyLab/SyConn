@@ -308,8 +308,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
-        start_multiprocess_imap(_write_props_to_syn_thread,
-                                multi_params, nb_cpus=1, debug=False)
+        start_multiprocess_imap(_write_props_to_syn_thread, multi_params)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
                            n_cores=1, remove_jobfolder=True)
@@ -416,13 +415,13 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # -> contacts result is cropped by stencil_offset on each side
 
         # TODO: use new detect_cs after verification
-        # contacts = np.asarray(detect_cs(data))
-        contacts = np.asarray(detect_cs_64bit(data))
-        contacts_new = np.array(contacts)
-        res = np.zeros(contacts.shape[:3], dtype=np.uint64)
-        mask = contacts[..., 0] != 0
-        res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
-        contacts = res
+        contacts = np.asarray(detect_cs(data))
+        # contacts = np.asarray(detect_cs_64bit(data))
+        # contacts_new = np.array(contacts)
+        # res = np.zeros(contacts.shape[:3], dtype=np.uint64)
+        # mask = contacts[..., 0] != 0
+        # res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
+        # contacts = res
 
         cum_dt_proc += time.time() - start
 

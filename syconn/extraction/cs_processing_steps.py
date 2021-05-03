@@ -363,6 +363,7 @@ def _combine_and_split_syn_thread(args):
     scaling = sd_syn.scaling
 
     syn_meshing_kws = global_params.config['meshes']['meshing_props_points']['syn_ssv']
+    mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
     cell_obj_cnf = global_params.config['cell_objects']
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
@@ -431,31 +432,29 @@ def _combine_and_split_syn_thread(args):
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
             synssv_attr_dc = dict(neuron_partners=ssv_ids)
-            try:
-                voxel_dc[syn_ssv_id] = [id_mask], [abs_offset]
-                syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
-                # make sure load_voxels still calculates bounding box and size
-                if syn_ssv._bounding_box is None or syn_ssv._size is None:
-                    msg = f'load_voxels call did not calculate size and/or bounding box of {syn_ssv}.'
-                    log_extraction.error(msg)
-                    raise ValueError(msg)
-                syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
-                synssv_attr_dc["rep_coord"] = syn_ssv.rep_coord
-                synssv_attr_dc["bounding_box"] = syn_ssv.bounding_box
-                synssv_attr_dc["size"] = syn_ssv.size
-                # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
-                ind, vert, normals = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
-                mesh_dc[syn_ssv.id] = [ind, vert, normals]
+            voxel_dc[syn_ssv_id] = [id_mask], [abs_offset]
+            syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
+            # make sure load_voxels still calculates bounding box and size
+            if syn_ssv._bounding_box is None or syn_ssv._size is None:
+                msg = f'load_voxels call did not calculate size and/or bounding box of {syn_ssv}.'
+                log_extraction.error(msg)
+                raise ValueError(msg)
+            syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
+            synssv_attr_dc["rep_coord"] = syn_ssv.rep_coord
+            synssv_attr_dc["bounding_box"] = syn_ssv.bounding_box
+            synssv_attr_dc["size"] = syn_ssv.size
+            # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
+            if mesh_min_obj_vx < syn_ssv.size:
+                syn_ssv._mesh = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
+                mesh_dc[syn_ssv.id] = syn_ssv.mesh
                 synssv_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
                 synssv_attr_dc["mesh_area"] = syn_ssv.mesh_area
-            except Exception as e:
-                debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
-                    sd_syn_ssv.so_storage_path, syn_ssv_id, abs_offset[0],
-                    abs_offset[1], abs_offset[2])
-                msg = f"Saving {syn_ssv} failed with '{type(e)}: {e}'. Debug file at {debug_out_fname}."
-                log_extraction.error(msg)
-                np.save(debug_out_fname, this_vx)
-                raise ValueError(msg)
+            else:
+                zero_mesh = [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),
+                             np.zeros((0,), dtype=np.float32)]
+                mesh_dc[syn_ssv.id] = zero_mesh
+                synssv_attr_dc["mesh_bb"] = syn_ssv.bounding_box * scaling
+                synssv_attr_dc["mesh_area"] = 0
             # aggregate syn properties
             syn_props_agg = {}
             # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
@@ -642,6 +641,7 @@ def _combine_and_split_cs_thread(args):
 
     scaling = sd_cs.scaling
     meshing_kws = global_params.config['meshes']['meshing_props_points']['cs_ssv']
+    mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
 
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
@@ -669,13 +669,17 @@ def _combine_and_split_cs_thread(args):
         # verify ssv_partner_ids
         cs_lst = sd_cs.get_segmentation_object(cs_ids)
         vxl_iter_lst = []
+        vx_cnt = 0
         for cs in cs_lst:
-            vx_iter = VoxelStorage(cs.voxel_path, read_only=True,
-                                   disable_locking=True).iter_voxelmask_offset(cs.id, overlap=1)
-            vxl_iter_lst.append(vx_iter)
-
-        # generate connected component meshes; vertices are in nm
-        ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
+            vx_store = VoxelStorage(cs.voxel_path, read_only=True,
+                                    disable_locking=True)
+            vxl_iter_lst.append(vx_store.iter_voxelmask_offset(cs.id, overlap=1))
+            vx_cnt += vx_store.object_size(cs.id)
+        if mesh_min_obj_vx > vx_cnt:
+            ccs = []
+        else:
+            # generate connected component meshes; vertices are in nm
+            ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
 
         for mesh_cc in ccs:
             abs_offset = np.min(mesh_cc[1].reshape((-1, 3)), axis=0) // scaling

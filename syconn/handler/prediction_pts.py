@@ -911,7 +911,7 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
     cls_maj = collections.Counter(cls).most_common(1)[0][0]
 
     sso.save_attributes([pred_key, f"{pred_key}_probas", f"{pred_key}_certainty"],
-                        [cls_maj, logit, certainty_estimate(logit)])
+                        [cls_maj, logit, certainty_estimate(logit, is_logit=True)])
 
     return [sso.id], [True]
 

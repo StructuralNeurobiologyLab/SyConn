@@ -215,17 +215,31 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g, sizes, is_connected_components=False):
+def create_ccsize_dict(g: nx.Graph, bbs: np.ndarray, is_connected_components: bool = False) -> dict:
+    """
+
+    Args:
+        g: Supervoxel graph.
+        bbs: Bounding boxes (physical units).
+        is_connected_components: If graph `g` already is connected components. If False,
+            ``nx.connected_components`` is applied.
+
+    Returns:
+
+    """
     if not is_connected_components:
         ccs = nx.connected_components(g)
     else:
         ccs = g
     node2cssize_dict = {}
     for cc in ccs:
-        # if ID is not in sizes, then i
-        mesh_bbs = np.concatenate([sizes[n] for n in cc if n in sizes])
-        cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0) -
-                                 np.min(mesh_bbs, axis=0), ord=2)
+        # if ID is not in bbs, it was skipped due to low voxel count
+        curr_bbs = [bbs[n] for n in cc if n in bbs]
+        if len(curr_bbs) == 0:
+            raise ValueError(f'Could not find a single bounding box for connected component with IDs: {cc}.')
+        curr_bbs = np.concatenate(curr_bbs)
+        cc_size = np.linalg.norm(np.max(curr_bbs, axis=0) -
+                                 np.min(curr_bbs, axis=0), ord=2)
         for n in cc:
             node2cssize_dict[n] = cc_size
     return node2cssize_dict

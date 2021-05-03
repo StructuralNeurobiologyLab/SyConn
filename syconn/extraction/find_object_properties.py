@@ -194,7 +194,7 @@ def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.n
            (rep_coords_syn, bounding_box_syn, sizes_syn), cs_asym, cs_sym
 
 
-@numba.jit(nopython=True, debug=True)
+@numba.jit(nopython=True)
 def find_object_properties_cs(cs_seg: np.ndarray):
     """
     Extract contact properties for every contact site ID tuple inside `cs_seg`.

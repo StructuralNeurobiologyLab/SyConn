@@ -72,10 +72,10 @@ if __name__ == "__main__":
                 # predict
                 ssv.nb_cpus = 20
                 ssv._view_caching = True
-                ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2, onthefly_views=True,
-                                         view_props={'use_syntype': True, 'nb_views': 20}, overwrite=False,
-                                         save_to_attr_dict=False, verbose=True,
-                                         model_props={'n_classes': nclasses, 'da_equals_tan': False})
+                ssv.predict_celltype_multiview(model=m, pred_key_appendix=pred_key_appendix2, onthefly_views=True,
+                                               view_props={'use_syntype': True, 'nb_views': 20}, overwrite=False,
+                                               save_to_attr_dict=False, verbose=True,
+                                               model_props={'n_classes': nclasses, 'da_equals_tan': False})
                 ssv.save_attr_dict()
                 # GT
                 curr_l = ssv_label_dc[ssv.id]
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                 pred_proba.append(major_dec)
                 if pred_l[-1] != gt_l[-1]:
                     print(f'{pred_l[-1]}\t{gt_l[-1]}\t{ssv.id}\t{major_dec}')
-                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
+                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}".format(pred_key_appendix2)))
 
         assert len(set(loaded_ssv_ids)) == len(ssv_label_dc)
         # # WRITE OUT COMBINED RESULTS

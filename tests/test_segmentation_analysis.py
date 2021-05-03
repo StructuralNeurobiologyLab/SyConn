@@ -3,12 +3,17 @@
 # All rights reserved
 
 from syconn.extraction.find_object_properties import detect_cs, detect_cs_64bit, detect_seg_boundaries, \
-    find_object_properties
+    find_object_properties, find_object_properties_cs
 import numpy as np
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
 from syconn.reps.rep_helper import colorcode_vertices
+from syconn.reps.connectivity_helper import cs_id_to_partner_ids_vec
 from scipy import spatial
+
+# test cube properties
+cube_size = 5
+stencil = np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32)
 
 
 def test_find_object_properties():
@@ -119,21 +124,34 @@ def _gen_sample_seg(distance_between_cube, stencil, cube_size):
 
 
 def test_detect_cs():
-    _helpertest_detect_cs(np.array([0, 6, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs(np.array([6, 0, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs(np.array([0, 0, 6]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
+    _helpertest_detect_cs(np.array([0, 6, 0]), stencil, cube_size)
+    _helpertest_detect_cs(np.array([6, 0, 0]), stencil, cube_size)
+    _helpertest_detect_cs(np.array([0, 0, 6]), stencil, cube_size)
 
 
 def test_detect_cs_64bit():
-    _helpertest_detect_cs_64bit(np.array([0, 6, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs_64bit(np.array([6, 0, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs_64bit(np.array([0, 0, 6]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
+    _helpertest_detect_cs_64bit(np.array([0, 6, 0]), stencil, cube_size)
+    _helpertest_detect_cs_64bit(np.array([6, 0, 0]), stencil, cube_size)
+    _helpertest_detect_cs_64bit(np.array([0, 0, 6]), stencil, cube_size)
+
+
+def test_find_object_properties_cs():
+    sample, *_ = _gen_sample_seg(np.array([0, 6, 0]), stencil, cube_size)
+    sizes1, bounding_boxes1, rep_coords1 = find_object_properties(sample)
+    sizes2, bounding_boxes2, rep_coords2 = find_object_properties_cs(sample)
+    for k in sizes1:  # keys are tuples of IDs
+        # get properties from 32 bit extraction method
+        s1 = sizes1[k]
+        r1 = rep_coords1[k]
+        b1 = bounding_boxes1[k]
+        # get properties from 64 bit extraction method
+        id1, id2 = cs_id_to_partner_ids_vec([k])[0]
+        s2 = sizes2[id1][id2]
+        r2 = rep_coords2[id1][id2]
+        b2 = bounding_boxes2[id1][id2]
+        assert s1 == s2, f'Size mis-match (32 bit vs 64 bit): {s1} vs. {s2}'
+        assert r1 == r2, f'Coordinate mis-match (32 bit vs 64 bit): {r1} vs. {r2}'
+        assert b1 == b2, f'Bounding box mis-match (32 bit vs 64 bit): {b1} vs. {b2}'
 
 
 def test_boundary_gen():
@@ -186,4 +204,4 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
 
 
 if __name__ == '__main__':
-    test_detect_cs_64bit()
+    test_find_object_properties_cs()

@@ -40,7 +40,6 @@ dependencies:
   - numba >0.48  # =0.48 led to freeze when importing elektronn3.data
   - openmesh-python
   - prompt_toolkit
-  - vtki
   - dill
   - joblib
   - seaborn >= 0.11
@@ -50,13 +49,13 @@ dependencies:
   # for pandas xls support
   - xlrd >= 1.0.0
    # >= 7 raises "cannot import name 'PILLOW_VERSION' from 'PIL'" with torchvision=0.3.0
-  - pillow <7
+  - pillow < 7
 
   # From -c menpo
   - osmesa
 
   # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
-  - open3d >=0.9.0
+  - open3d = 0.9.0
 
   # For tests (optional):
   - pytest
@@ -82,8 +81,8 @@ dependencies:
 
     # training scripts
     - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
-    - # PointConv definitions
-    - git+https://github.com/valeoai/LightConvPoint.git
+#    - # PointConv definitions
+#    - git+https://github.com/valeoai/LightConvPoint.git
 
       #for skeletonisation
     - fill-voids

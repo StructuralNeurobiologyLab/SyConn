@@ -13,10 +13,10 @@ zmesh
 lz4
 flask
 fasteners
-numpy
+numpy <= 1.21
 coloredlogs
 termcolor
-scikit-learn>=0.21.3
+scikit-learn>=0.24.1
 scikit-image
 pyopengl
 opencv-python
@@ -30,7 +30,7 @@ pytest-xdist
 prompt-toolkit
 dill
 pyyaml
-kimimaro
-fill-voids
 git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 git+git://github.com/StructuralNeurobiologyLab/MorphX@master#egg=morphx
+kimimaro
+fill-voids

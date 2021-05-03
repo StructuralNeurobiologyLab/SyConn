@@ -97,7 +97,7 @@ class SuperSegmentationDataset(SegmentationBase):
 
             celltypes = ssd.load_numpy_data('celltype_cnn_e3')
             n_synapses = np.array([len(el) for el in ssd.load_numpy_data('syn_ssv')])
-            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(9)}
+            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(np.max(celltypes)}
             print(n_synapes_per_type)
 
     Attributes:
@@ -535,8 +535,7 @@ class SuperSegmentationDataset(SegmentationBase):
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
                           new_mapping=new_mapping, overwrite=overwrite, use_batchjob=use_batchjob)
 
-    def predict_cell_types_skelbased(self, stride: int = 1000,
-                                     nb_cpus=1):
+    def predict_cell_types_skelbased(self, stride: int = 1000, nb_cpus=1):
         """
         Not used anymore.
         """

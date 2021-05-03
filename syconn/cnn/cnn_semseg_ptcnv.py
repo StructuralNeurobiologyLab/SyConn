@@ -108,7 +108,7 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '~/e3_training_convpoint/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
@@ -150,7 +150,7 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx)
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 
 # PREPARE AND START TRAINING #
 

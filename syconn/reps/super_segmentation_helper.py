@@ -157,6 +157,7 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject', mode
 
     # DA and TAN are type modulatory, if this is changes, also change `certainty_celltype`, `celltype_of_sso_nocache`
     if da_equals_tan:
+        assert n_classes == 7, 'Incompatible number of classes for cell type prediction with "da_equals_tan=True".'
         # accumulate evidence for DA and TAN
         res[:, 1] += res[:, 6]
         # remove TAN in proba array
@@ -173,9 +174,10 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject', mode
     pred = np.argmax(major_dec)
     sso.attr_dict[pred_key] = pred
     sso.attr_dict[f"{pred_key}_probas"] = res
+    cert = sso.certainty_celltype(pred_key)
+    sso.attr_dict[f"{pred_key}_certainty"] = cert
     if save_to_attr_dict:
-        sso.save_attributes([pred_key], [pred])
-        sso.save_attributes([f"{pred_key}_probas"], [res])
+        sso.save_attributes([pred_key, f"{pred_key}_probas", f"{pred_key}_certainty"], [pred, res, cert])
 
 
 def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
@@ -1861,9 +1863,10 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
     pred = np.argmax(major_dec)
     sso.attr_dict[pred_key] = pred
     sso.attr_dict[f"{pred_key}_probas"] = res
+    cert = sso.certainty_celltype(pred_key)
+    sso.attr_dict[f"{pred_key}_certainty"] = cert
     if save_to_attr_dict:
-        sso.save_attributes([pred_key], [pred])
-        sso.save_attributes([f"{pred_key}_probas"], [res])
+        sso.save_attributes([pred_key, f"{pred_key}_probas", f"{pred_key}_certainty"], [pred, res, cert])
 
 
 def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],

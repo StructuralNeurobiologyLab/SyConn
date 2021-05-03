@@ -39,10 +39,10 @@ if __name__ == '__main__':
     experiment_name = 'j0126_example'
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
-    prior_glia_removal = True
+    prior_glia_removal = False
     key_val_pairs_conf = [
         ('glia', {'prior_glia_removal': prior_glia_removal}),
-        ('use_point_models', True),
+        ('use_point_models', False),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
@@ -55,9 +55,15 @@ if __name__ == '__main__':
         # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
         # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
-        ('cell_objects', {
-          # 'sym_label': 1, 'asym_label': 2,
-          })
+        ('cell_objects',
+         {
+          # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
+          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
+                                      'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
+          }
+         ),
     ]
     if example_cube_id == 1:
         chunk_size = (256, 256, 128)
