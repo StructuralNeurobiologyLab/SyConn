@@ -9,7 +9,7 @@ from .. import global_params
 from ..handler import basics
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..proc.meshes import mesh_creator_sso
+from ..proc.meshes import mesh_creator_sso, merge_meshes
 from ..reps import segmentation, super_segmentation
 from ..reps.segmentation_helper import prepare_so_attr_cache
 from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
@@ -325,6 +325,55 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
     ssv2 = init_ssv(new_id2, list(set2), ssd=ssd)
     # TODO: add ignore flag or destroy original SSV in its SSD.
     return ssv1, ssv2
+
+# WORK IN PROGRESS
+def merge_ssv(cell_obj1, cell_obj2):
+    """
+        Merge two cells into one
+
+        Parameters
+        ----------
+        cell_obj1, cell_obj2 : SuperSegmentationObject
+            Two cells to be merged.
+    """
+    merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
+    for mesh_type in ['sv', 'syn_ssv', 'vc', 'mi']:                                     # 'sj' fails for current dataset (Not Found)
+        mesh1 = cell_obj1.load_mesh(mesh_type)
+        mesh2 = cell_obj2.load_mesh(mesh_type)
+        ind_lst = [mesh1[0], mesh2[0]]
+        vert_lst = [mesh1[1], mesh2[1]]
+
+        merged_cell._meshes[mesh_type] = merge_meshes(ind_lst, vert_lst)
+        merged_cell._meshes[mesh_type] += ([None, None],)  # add normals
+
+    # merge skeletons
+    merged_cell.skeleton = {}
+    cell_obj1.load_skeleton()
+    cell_obj2.load_skeleton()
+    merged_cell.skeleton['edges'] = np.concatenate([cell_obj1.skeleton['edges'],
+                                                    cell_obj2.skeleton['edges'] +
+                                                    len(cell_obj1.skeleton['nodes'])])  # additional offset
+    # Find the two nodes that are the nearest
+    skeleton1 = cell_obj1.skeleton['nodes']
+    skeleton2 = cell_obj2.skeleton['nodes']
+
+    min_distance = 10e10
+    node_pair = [0, 0]
+    for i, node1 in enumerate(skeleton1):
+        for j, node2 in enumerate(skeleton2):
+            dist = np.linalg.norm(node1 - node2)
+            if dist < min_distance:
+                node_pair = np.array([i, j+len(skeleton1)], dtype=np.uint64)
+                min_distance = dist
+    node_pair = np.resize(node_pair, (1, 2))
+
+    merged_cell.skeleton['edges'] = np.concatenate([merged_cell.skeleton['edges'], node_pair])
+    merged_cell.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
+                                                    cell_obj2.skeleton['nodes']])
+    merged_cell.skeleton['diameters'] = np.concatenate([cell_obj1.skeleton['diameters'],
+                                                        cell_obj2.skeleton['diameters']])
+
+    return merged_cell
 
 
 def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset) \
