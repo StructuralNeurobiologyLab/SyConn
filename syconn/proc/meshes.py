@@ -1095,11 +1095,6 @@ def mesh2obj_file_colors(dest_path: str, mesh: List[np.ndarray],
     vert_openmesh = []
     if colors is not None:
         mesh_obj.request_vertex_colors()
-        # if colors.ndim == 2 and len(colors) == len(vert):
-        #     colors = colors.astype(np.float64)  # required by openmesh
-        # else:
-        #     msg = f'Expected dimension 1, got {colors.ndim} and expected length of array {len(vert)}, got {len(colors)}'
-        #     raise ValueError(msg)
         colors = colors.astype(np.float64)
     for i, v in enumerate(vert):
         v = v.astype(np.float64)  # Point requires double
