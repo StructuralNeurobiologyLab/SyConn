@@ -257,7 +257,6 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids >= len(ssd.id_changer)] = 0
-    # ^^^^ -1 changed to 0 due to overflow in uint array... PS 13Aug2020; 0 should be fine as it is background anyway
     mapped_sv_ids = ssd.id_changer[sv_ids]
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
@@ -746,8 +745,7 @@ def _combine_and_split_cs_thread(args):
         mesh_dc.push()
 
 
-def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
-                         verbose=False):
+def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000, verbose=False):
     kdtree = spatial.cKDTree(voxel_list)
 
     checked_ids = np.array([], dtype=np.int32)

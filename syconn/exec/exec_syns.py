@@ -107,18 +107,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs)
 
-    # create SD of type 'cs_ssv' -> cell-cell contact sites
-    if global_params.config['generate_cs_ssv']:
-        cps.combine_and_split_cs(global_params.config.working_dir,
-                                 log=log, n_folders_fs=n_folders_fs)
-        sd_cs_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
-                                        obj_type='cs_ssv')
-        # recompute=False: size, bounding box, rep_coord and mesh properties
-        # have already been processed in combine_and_split_syn
-        dataset_analysis(sd_cs_ssv, compute_meshprops=False, recompute=False)
-        log.info(f'SegmentationDataset of type "cs_ssv" was generated with {len(sd_cs_ssv.ids)} '
-                 f'objects.')
-        del sd_cs_ssv
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
@@ -148,6 +136,29 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     map_synssv_objects(log=log)
     log.info('Finished.')
+
+
+def run_cs_ssv_generation(n_folders_fs: int = 10000):
+    """
+    Create agglomerated contact site objects between cells. For this, 'cs' objects need to be extracted.
+
+    Args:
+        n_folders_fs: Number of folders used to create the folder structure in
+            each :class:`~syconn.reps.segmentation.SegmentationDataset`.
+    """
+    # create SD of type 'cs_ssv' -> cell-cell contact sites
+    log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
+                             overwrite=True)
+    cps.combine_and_split_cs(global_params.config.working_dir,
+                             log=log, n_folders_fs=n_folders_fs)
+    sd_cs_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
+                                    obj_type='cs_ssv')
+    # recompute=False: size, bounding box, rep_coord and mesh properties
+    # have already been processed in combine_and_split_syn
+    dataset_analysis(sd_cs_ssv, compute_meshprops=False, recompute=False)
+    log.info(f'SegmentationDataset of type "cs_ssv" was generated with {len(sd_cs_ssv.ids)} '
+             f'objects.')
+    del sd_cs_ssv
 
 
 def run_spinehead_volume_calc():

@@ -49,6 +49,7 @@ if __name__ == '__main__':
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
+        ('generate_cs_ssv', True),
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -64,6 +65,10 @@ if __name__ == '__main__':
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          ),
+        ('meshes', {'meshing_props_points':
+            {'cs_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20),
+             'syn_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20)}}
+         )
     ]
     if example_cube_id == 1:
         chunk_size = (256, 256, 128)
@@ -91,6 +96,12 @@ if __name__ == '__main__':
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 
+    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
+    # system is None
+    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
+    from syconn.handler.compression import load_from_h5py
+
+    # PREPARE TOY DATA
     generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf,
                           force_overwrite=True)
 
@@ -102,12 +113,6 @@ if __name__ == '__main__':
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
 
-    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
-    # system is None
-    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
-    from syconn.handler.compression import load_from_h5py
-
-    # PREPARE TOY DATA
     log.info(f'Step 0/9 - Preparation')
     ftimer = FileTimer(example_wd + '/.timing.pkl')
     ftimer.start('Preparation')
@@ -228,6 +233,14 @@ if __name__ == '__main__':
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    ftimer.stop()
+
+    log.info('Step 6.5/9 - Contact detection')
+    ftimer.start('Contact detection')
+    if global_params.config['generate_cs_ssv']:
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    else:
+        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
 
     log.info('Step 7/9 - Compartment prediction')

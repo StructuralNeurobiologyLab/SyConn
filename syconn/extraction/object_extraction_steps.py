@@ -1084,6 +1084,8 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
     -------
 
     """
+    if overlaydataset_path is None:
+        raise ValueError('This processing option is deprecated!')
     if dataset_names is None:
         dataset_names = hdf5names
 
@@ -1141,7 +1143,7 @@ def _extract_voxels_combined_thread(args):
                             '`VoxelStorageDyn` storing less data redundantly '
                             'use KnossosDataset as segmentation source '
                             '(see kwarg `overlaydataset_path`).')
-        return _extract_voxels_combined_thread_OLD(args)
+        raise RuntimeError('This processing option is deprecated!')
     else:
         return _extract_voxels_combined_thread_NEW(args)
 
@@ -1274,7 +1276,8 @@ def _extract_voxels_combined_thread_OLD(args):
 def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1,
                                offset=None, size=None, stride=(4 * 128, 4 * 128, 4 * 128),
                                overwrite=False, as_raw=False, fast_downsampling=False,
-                               n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None):
+                               n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None,
+                               compresslevel=None):
     """
     Batchjob version of :class:`knossos_utils.chunky.ChunkDataset.export_cset_to_kd`
     method, see ``knossos_utils.chunky`` for details.
@@ -1300,6 +1303,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
         unified_labels:
         orig_dtype:
         log:
+        compresslevel: Compression level in case segmentation data is written for (seg.sz.zip files).
 
     Returns:
 
@@ -1335,7 +1339,8 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
     multi_params = basics.chunkify(multi_params, n_max_job)
     multi_params = [[coords, stride, cset.path_head_folder, target_kd_paths, name,
                      hdf5names, as_raw, unified_labels, 1, orig_dtype,
-                     fast_downsampling, overwrite] for coords in multi_params]
+                     fast_downsampling, overwrite,
+                     compresslevel] for coords in multi_params]
 
     job_suffix = "_" + "_".join(hdf5names)
     qu.batchjob_script(
@@ -1358,6 +1363,7 @@ def _export_cset_as_kds_thread(args):
     nb_threads = args[8]
     orig_dtype = args[9]
     fast_downsampling = args[10]
+    compresslevel = args[11]
 
     cset = chunky.load_dataset(cset_path, update_paths=True)
 
@@ -1392,4 +1398,4 @@ def _export_cset_as_kds_thread(args):
                         fast_resampling=fast_downsampling)
         else:
             kd.save_seg(offset=coords, mags=kd.available_mags, data=data_list, data_mag=1,
-                        fast_resampling=fast_downsampling)
+                        fast_resampling=fast_downsampling, compresslevel=compresslevel)

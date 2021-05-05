@@ -189,15 +189,19 @@ meshes:
   meshing_props_points:
     cs_ssv:
       depth: 10  # detail level used in create_from_point_cloud_poisson (open3d)
-      vertex_size: 50  # in nm; used for downsizing initial points
+      vertex_size: 20  # in nm; used for downsizing initial points
       voxel_size_simplify: 20  # in nm; used for mesh simplification
-      min_vert_num: 200  # minimum number of vertices in a single connected component mesh
+      min_vert_num: 10  # minimum number of vertices in a single connected component mesh
+      nb_neighbors: 20  # number of neighbors used to calculate distance standard deviation
+      std_ratio: 2.0  # threshold of std to filter outlier points
     syn_ssv:
       depth: 10
-      vertex_size: 50
+      vertex_size: 20
       voxel_size_simplify: 20
-      min_vert_num: 50  # not used if compute_connected_components=False
+      min_vert_num: 10  # not used if compute_connected_components=False
       compute_connected_components: False  # at this stage the syn_ssv have already been split and merged
+      nb_neighbors: 20
+      std_ratio: 2.0
 
 skeleton:
   use_kimimaro: True

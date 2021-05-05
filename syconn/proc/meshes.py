@@ -8,6 +8,7 @@
 import itertools
 import copy
 from collections import Counter
+import time
 from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING, Iterator
 
 import numpy as np
@@ -29,6 +30,7 @@ from ..handler.basics import write_data2kzip, data2kzip
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
 from ..reps.segmentation_helper import load_so_meshes_bulk
+from syconn.extraction.in_bounding_boxC import in_bounding_box
 
 from skimage.measure import mesh_surface_area
 
@@ -47,12 +49,6 @@ except ImportError as e:
     log_proc.error('ImportError. Could not import openmesh. '
                    'Writing meshes as `.obj` files will not be'
                    ' possible. {}'.format(e))
-try:
-    from syconn.extraction.in_bounding_boxC import in_bounding_box
-except ImportError:
-    from syconn.extraction.in_bounding_box import in_bounding_box
-    log_proc.error('ImportError. Could not import `in_boundinb_box` from '
-                   '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 if TYPE_CHECKING:
     from ..reps import segmentation
     from ..reps import super_segmentation_object
@@ -1071,10 +1067,11 @@ def mesh_area_calc(mesh):
 
 
 def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scale: np.ndarray,
-                       vertex_size: float = None, boundary_struct: Optional[np.ndarray] = None,
+                       vertex_size: float = 10, boundary_struct: Optional[np.ndarray] = None,
                        depth: int = 10, compute_connected_components: bool = True,
-                       voxel_size_simplify: Optional[float] = 10,
-                       min_vert_num: int = 200, overlap: int = 1, verbose: bool = False) \
+                       voxel_size_simplify: Optional[float] = None,
+                       min_vert_num: int = 200, overlap: int = 1, verbose: bool = False,
+                       nb_neighbors: int = 20, std_ratio: float = 2.0) \
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
     Args:
@@ -1093,6 +1090,10 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
             `compute_connected_components=True`).
         overlap: Overlap between adjacent masks in `mask_list`.
         verbose: Extra stdout output.
+        nb_neighbors: Number of neighbors used to calculate distance mean and standard deviation. See
+            http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
+        std_ratio: Standard deviation of distance between points used as threshold for filtering. See
+            http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
 
     Notes: Use `mask_list` with cubes with 1-voxel-overlap to guarantee that boundaries that align with
         the 3D  array border are identified correctly.
@@ -1101,7 +1102,8 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         Flat Index/triangle, vertex and normals array of the mesh. List[ind, vert, norm] if
         `compute_connected_components=True`.
     """
-    vertex_size = np.array(vertex_size)
+    if voxel_size_simplify is None:
+        voxel_size_simplify = vertex_size
     if boundary_struct is None:
         # 26-connected
         boundary_struct = np.ones((3, 3, 3))
@@ -1133,6 +1135,8 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
     pcd.points = o3d.utility.Vector3dVector(pts)
     pcd.normals = o3d.utility.Vector3dVector(norm)
     pcd = pcd.voxel_down_sample(voxel_size=vertex_size)  # reduce number of points
+    # TODO: add to config
+    pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
     pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(
         radius=4*np.max(scale), max_nn=30))
     # # TODO: use orient_normals_consistent_tangent_plane as soon as open3d>0.10 is working

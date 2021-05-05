@@ -34,7 +34,8 @@ dependencies:
   - numpy <= 1.21
   - coloredlogs
   - termcolor
-  - scikit-learn >= 0.24.1
+  # fix version due to stored RFC models.
+  - scikit-learn = 0.24.1
   - scikit-image
   - opencv
   - numba >0.48  # =0.48 led to freeze when importing elektronn3.data

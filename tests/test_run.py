@@ -200,6 +200,14 @@ def test_full_run():
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     ftimer.stop()
 
+    log.info('Step 6.5/9 - Contact detection')
+    ftimer.start('Contact detection')
+    if global_params.config['generate_cs_ssv']:
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    else:
+        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
+    ftimer.stop()
+
     log.info('Step 7/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
     exec_inference.run_semsegaxoness_prediction()

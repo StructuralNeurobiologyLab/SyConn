@@ -22,11 +22,8 @@ from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
 from ..proc.sd_proc import predict_views
 from ..extraction.block_processing_C import relabel_vol_nonexist2zero
+from ..extraction.in_bounding_boxC import in_bounding_box
 
-try:
-    from ..proc.in_bounding_boxC import in_bounding_box
-except ImportError:
-    from syconn.extraction.in_bounding_box import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import super_segmentation
@@ -2277,14 +2274,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
         # relabelled spine neck as 9, actually not needed here
         semseg_bb[semseg_bb == 0] = 9
         distance = ndimage.distance_transform_edt(seg)
+        maxima = peak_local_max(distance, footprint=np.ones((3, 3, 3)), labels=seg).astype(np.uint64)
 
-        local_maxi = peak_local_max(distance, indices=False, footprint=np.ones((3, 3, 3)),
-                                    labels=seg).astype(np.uint64)
-        maxima = np.transpose(np.nonzero(local_maxi))
         # assign labels from nearby vertices; convert maxima coordinates back to mag 1 via 'ds'
         maxima_sp = colorcode_vertices(maxima * ds, verts_bb - offset, semseg_bb,
                                        k=sso.config['spines']['semseg2coords_spines']['k'],
                                        return_color=False, nb_cpus=sso.nb_cpus)
+        local_maxi = np.zeros_like(distance)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)

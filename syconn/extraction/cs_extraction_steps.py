@@ -270,7 +270,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
                                           mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
         target_kd = basics.kd_factory(path_kd)  # test if init is possible
         export_cset_to_kd_batchjob({ot: path_kd}, cset, ot, [ot],  offset=offset, size=size,
-                                   stride=chunk_size, as_raw=False,
+                                   stride=chunk_size, as_raw=False, compresslevel=1,
                                    orig_dtype=np.uint64, unified_labels=False, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
                   ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
