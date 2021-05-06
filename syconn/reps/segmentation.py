@@ -652,7 +652,7 @@ class SegmentationObject(SegmentationBase):
         True if rendering locations have been stored at :func:`~view_path`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
         """
@@ -669,7 +669,7 @@ class SegmentationObject(SegmentationBase):
         :py:attr:`~type` must be `sv`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
 
@@ -963,7 +963,7 @@ class SegmentationObject(SegmentationBase):
         Loader method of :py:attr:`~views`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
             raw_only: If True, ignores cell organelles projections.
@@ -1000,7 +1000,7 @@ class SegmentationObject(SegmentationBase):
             * remove `cellobjects_only`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
             views: View array.
@@ -1399,7 +1399,7 @@ class SegmentationDataset(SegmentationBase):
             * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SVs.
             * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
 
-        If a glia separation is performed, the following attributes will be stored as numpy array as well:
+        If astrocyte separation is performed, the following attributes will be stored as numpy array as well:
             * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
               locations, 2: 0-index=neuron, 1-index=glia).
 
@@ -1920,7 +1920,7 @@ class SegmentationDataset(SegmentationBase):
             g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'glia':
-            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint64)
+            g = nx.read_edgelist(global_params.config.working_dir + "/glia/astrocyte_svgraph.bz2", nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'total':
             svids = self.ids

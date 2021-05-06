@@ -33,9 +33,9 @@ def test_load_write_conf():
 
 
 def test_key_value_pairs():
-    prior_glia_removal = True
+    prior_astrocyte_removal = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
         ('cell_objects', {'asym_label': 10})
     ]
 

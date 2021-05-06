@@ -72,7 +72,7 @@ if __name__ == '__main__':
         rag_sub_g = rag_g.subgraph(sv_ids)
         print('Writing subgraph within {} and {} SVs.'.format(
             bb, rag_sub_g.number_of_nodes()))
-        g_p = "{}/glia/glia_rag.bz2".format(global_params.config.working_dir)
+        g_p = "{}/glia/astrocyte_svgraph.bz2".format(global_params.config.working_dir)
         rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
         rag_sub_g_glia = rag_g.subgraph(sv_ids)
         rag_sub_g = nx.union(rag_sub_g, rag_sub_g_glia)

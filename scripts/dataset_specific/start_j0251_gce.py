@@ -47,10 +47,11 @@ if __name__ == '__main__':
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int32)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int32)
     # cube_of_interest_bb = None  # process the entire cube!
-    prior_glia_removal = True
+    prior_astrocyte_removal = True
     use_point_models = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
+        ('min_cc_size_ssv', 5000),  # minimum bounding box diagonal of cell (fragments) in nm
+        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', ncores_per_node),
@@ -173,7 +174,7 @@ if __name__ == '__main__':
     # add SV IDs to graph via self-edges
     mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
     mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
     rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
     log.info('{} SVs were added to the RAG after applying the size '
              'filter.'.format(len(filtered_ids)))
@@ -182,16 +183,16 @@ if __name__ == '__main__':
     exec_init.run_create_rag()
     ftimer.stop()
     #
-    log.info('Step 3/10 - Glia separation')
-    if global_params.config.prior_glia_removal:
+    log.info('Step 3/10 - Astrocyte separation')
+    if global_params.config.prior_astrocyte_removal:
         if test_view_models:
             global_params.config['use_point_models'] = False
             global_params.config.write_config()
             time.sleep(10)  # wait for changes to apply
             ftimer.start('Glia prediction (multi-views)')
             # if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
+            exec_render.run_astrocyte_rendering()
+            exec_inference.run_astrocyte_prediction()
             ftimer.stop()
 
         # else:
@@ -200,11 +201,11 @@ if __name__ == '__main__':
             global_params.config.write_config()
             time.sleep(10)  # wait for changes to apply
             ftimer.start('Glia prediction (points)')
-            exec_inference.run_glia_prediction_pts()
+            exec_inference.run_astrocyte_prediction_pts()
             ftimer.stop()
 
         ftimer.start('Glia splitting')
-        exec_inference.run_glia_splitting()
+        exec_inference.run_astrocyte_splitting()
         ftimer.stop()
 
     log.info('Step 4/10 - Creating SuperSegmentationDataset')

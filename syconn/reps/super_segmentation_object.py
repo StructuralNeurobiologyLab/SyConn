@@ -2680,12 +2680,12 @@ class SuperSegmentationObject(SegmentationBase):
     def gliapred2mesh(self, dest_path=None, thresh=None, pred_key_appendix=""):
         if thresh is None:
             thresh = self.config['glia']['glia_thresh']
-        glia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
-        nonglia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
+        astrocyte_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
+        nonastrocyte_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        mesh = merge_someshes(glia_svs, use_new_subfold=self.config.use_new_subfold)
-        neuron_mesh = merge_someshes(nonglia_svs, use_new_subfold=self.config.use_new_subfold)
+        mesh = merge_someshes(astrocyte_svs, use_new_subfold=self.config.use_new_subfold)
+        neuron_mesh = merge_someshes(nonastrocyte_svs, use_new_subfold=self.config.use_new_subfold)
         write_meshes2kzip(dest_path, [mesh[0], neuron_mesh[0]], [mesh[1], neuron_mesh[1]],
                           [mesh[2], neuron_mesh[2]], [None, None],
                           ["glia_%0.2f.ply" % thresh, "nonglia_%0.2f.ply" % thresh])
@@ -2710,29 +2710,29 @@ class SuperSegmentationObject(SegmentationBase):
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
     def gliasplit(self, recompute=False, thresh=None, verbose=False, pred_key_appendix=""):
-        glia_svs_key = "glia_svs" + pred_key_appendix
-        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
+        astrocyte_svs_key = "astrocyte_svs" + pred_key_appendix
+        neuron_svs_key = "neuron_svs" + pred_key_appendix
         if thresh is None:
             thresh = self.config['glia']['glia_thresh']
-        if recompute or not (self.attr_exists(glia_svs_key) and
-                             self.attr_exists(nonglia_svs_key)):
+        if recompute or not (self.attr_exists(astrocyte_svs_key) and
+                             self.attr_exists(neuron_svs_key)):
             if verbose:
                 log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(
                     self.id, len(self.svs)))
                 start = time.time()
-            nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
-                                               pred_key_appendix=pred_key_appendix)
+            nonglia_ccs, astrocyte_ccs = split_glia(self, thresh=thresh,
+                                                    pred_key_appendix=pred_key_appendix)
             if verbose:
                 log_reps.debug("Splitting glia in SSV %d with %d SV's finished "
                                "after %.4gs." % (self.id, len(self.svs),
                                                  time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
-            glia_ccs_ixs = [[so.id for so in glia] for glia in glia_ccs]
-            self.attr_dict[glia_svs_key] = glia_ccs_ixs
-            self.attr_dict[nonglia_svs_key] = non_glia_ccs_ixs
-            self.save_attributes([glia_svs_key, nonglia_svs_key],
-                                 [glia_ccs_ixs, non_glia_ccs_ixs])
+            astrocyte_ccs_ixs = [[so.id for so in glia] for glia in astrocyte_ccs]
+            self.attr_dict[astrocyte_svs_key] = astrocyte_ccs_ixs
+            self.attr_dict[neuron_svs_key] = non_glia_ccs_ixs
+            self.save_attributes([astrocyte_svs_key, neuron_svs_key],
+                                 [astrocyte_ccs_ixs, non_glia_ccs_ixs])
         else:
             log_reps.critical('Skipping SSO {}, glia splits already exist'
                               '.'.format(self.id))
@@ -2749,18 +2749,18 @@ class SuperSegmentationObject(SegmentationBase):
         """
         # TODO: adapt writemesh2kzip to work with multiple writes
         #  to same file or use write_meshes2kzip here.
-        glia_svs_key = "glia_svs" + pred_key_appendix
-        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
+        astrocyte_svs_key = "astrocyte_svs" + pred_key_appendix
+        neuron_svs_key = "neuron_svs" + pred_key_appendix
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
-        glia_ccs = self.attr_dict[glia_svs_key]
-        for kk, glia in enumerate(glia_ccs):
+        astrocyte_ccs = self.attr_dict[astrocyte_svs_key]
+        for kk, astrocyte in enumerate(astrocyte_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
-                                   glia], use_new_subfold=self.config.use_new_subfold)
+                                   astrocyte], use_new_subfold=self.config.use_new_subfold)
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
-                            "glia_cc%d.ply" % kk)
-        non_glia_ccs = self.attr_dict[nonglia_svs_key]
+                            "astrocyte_cc%d.ply" % kk)
+        non_glia_ccs = self.attr_dict[neuron_svs_key]
         for kk, nonglia in enumerate(non_glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    nonglia], use_new_subfold=self.config.use_new_subfold)

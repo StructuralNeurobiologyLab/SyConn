@@ -27,11 +27,11 @@ def test_full_run():
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
     experiment_name = 'j0126_example'
     scale = np.array([10, 10, 20])
-    prior_glia_removal = True
+    prior_astrocyte_removal = True
     use_myelin = True
     use_point_models = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
@@ -101,7 +101,7 @@ def test_full_run():
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    if not prior_glia_removal:
+    if not prior_astrocyte_removal:
         shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
@@ -166,18 +166,18 @@ def test_full_run():
     exec_init.run_create_rag()
     ftimer.stop()
 
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
+    log.info('Step 3/9 - Astrocyte separation')
+    if global_params.config.prior_astrocyte_removal:
+        ftimer.start('Astrocyte separation')
         if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
+            exec_render.run_astrocyte_rendering()
+            exec_inference.run_astrocyte_prediction()
         else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
+            exec_inference.run_astrocyte_prediction_pts()
+        exec_inference.run_astrocyte_splitting()
         ftimer.stop()
     else:
-        log.info('Glia separation disabled. Skipping.')
+        log.info('Astrocyte separation disabled. Skipping.')
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')

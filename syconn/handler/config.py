@@ -407,8 +407,8 @@ class DynConfig(Config):
     @property
     def pruned_rag_path(self) -> str:
         """
-        See config parameter
-        ``global_params.config['glia']['min_cc_size_ssv']``.
+        Pruned SV graph. All cells or cell fragments with bounding box diagonal
+        of less than ``global_params.config['min_cc_size_ssv']`` are filtered.
 
         Returns:
             Path to pruned RAG after size filtering.
@@ -706,16 +706,16 @@ class DynConfig(Config):
         return f"{self.working_dir}/{self['batch_proc_system']}/"
 
     @property
-    def prior_glia_removal(self) -> bool:
+    def prior_astrocyte_removal(self) -> bool:
         """
-        If ``True`` glia separation procedure will be initiated to create a
-        glia-separated RAG (see ``glia/neuron_rag.bz2`` and
-        ``glia/glia_rag.bz2``).
+        If ``True`` astrocyte separation procedure will be initiated to create a
+        astrocyte-separated RAG (see ``glia/neuron_rag.bz2`` and
+        ``glia/astrocyte_svgraph.bz2``).
 
         Returns:
             Value stored in ``config.yml``.
         """
-        return self.entries['glia']['prior_glia_removal']
+        return self.entries['glia']['prior_astrocyte_removal']
 
     @property
     def use_new_subfold(self) -> bool:
@@ -762,7 +762,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           kd_sj: Optional[str] = None, kd_mi: Optional[str] = None,
                           kd_vc: Optional[str] = None, kd_er: Optional[str] = None,
                           kd_golgi: Optional[str] = None, init_rag_p: str = "",
-                          prior_glia_removal: bool = True,
+                          prior_astrocyte_removal: bool = True,
                           use_new_meshing: bool = True,
                           allow_mesh_gen_cells: bool = True,
                           use_new_subfold: bool = True, force_overwrite=False,
@@ -804,7 +804,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         kd_er: Path to the ER predictions.
         kd_golgi: Path to the Golgi-Apparatus predictions.
         init_rag_p: Path to the initial supervoxel graph.
-        prior_glia_removal: If True, applies glia separation before analysing
+        prior_astrocyte_removal: If True, applies astrocyte separation before analysing
             cell reconstructions.
         use_new_meshing: If True, uses new meshing procedure based on `zmesh`.
         allow_mesh_gen_cells: If True, meshing of cell supervoxels will be
@@ -855,7 +855,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
-    entries['glia']['prior_glia_removal'] = prior_glia_removal
+    entries['glia']['prior_astrocyte_removal'] = prior_astrocyte_removal
     if key_value_pairs is not None:
         _update_key_value_pair_rec(key_value_pairs, entries)
     default_conf._working_dir = working_dir

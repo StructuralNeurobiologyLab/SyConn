@@ -225,7 +225,7 @@ if __name__ == '__main__':
 
     state_dict_fname = 'state_dict.pth'
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
-    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/'
+    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251_rerunFeb21/'
     all_res_paths = set()
     for ctx, npts, use_syntype, cellshape_only in [(20000, 50000, False, False), (20000, 50000, True, False),
                                                    (20000, 50000, True, True),

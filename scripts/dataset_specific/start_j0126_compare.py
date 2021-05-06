@@ -72,13 +72,13 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
-    if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
-        exec_inference.run_glia_splitting()
+    if global_params.config.prior_astrocyte_removal:
+        log.info('Step 1.5/8 - Astrocyte separation')
+        exec_render.run_astrocyte_rendering()
+        exec_inference.run_astrocyte_prediction()
+        exec_inference.run_astrocyte_splitting()
         time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+        step_idents.append('Astrocyte separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_init.run_create_neuron_ssd()

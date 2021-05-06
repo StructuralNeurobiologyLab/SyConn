@@ -16,7 +16,6 @@ import networkx as nx
 import numpy as np
 
 from syconn import global_params
-from syconn.exec import exec_skeleton
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.handler.basics import chunkify, kd_factory
 from syconn.handler.config import initialize_logging
@@ -29,19 +28,21 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
+def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the RAG
-    at ``/glia/neuron_rag.bz2``. In case glia splitting is active, this will be
-    the RAG after glia removal, if it was disabled it is identical to ``pruned_rag.bz2``.
+    at ``/glia/neuron_rag.bz2``. In case astrocyte splitting is active, this will be
+    the RAG after astrocyte removal, if it was disabled it is identical to ``pruned_rag.bz2``.
 
     Args:
-        apply_ssv_size_threshold:
+        apply_ssv_size_threshold: Apply filter with minimum bounding box diagonal. This is usually not needed as the
+            filter is applied either in :func:`~run_create_rag` (prior_astrocyte_removal=False) or during the astrocyte
+            separation.
 
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
-        optionally :func:`~run_glia_splitting`.
+        optionally :func:`~run_astrocyte_splitting`.
 
     Returns:
 
@@ -52,9 +53,6 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
 
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
 
-    # if rag was not created by glia splitting procedure this filtering is required
-    if apply_ssv_size_threshold is None:
-        apply_ssv_size_threshold = not global_params.config.prior_glia_removal
     if apply_ssv_size_threshold:
         sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
@@ -63,13 +61,13 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
         for ii in range(len(sd.ids)):
             sv_size_dict[sd.ids[ii]] = bbs[ii]
         ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
-        log.debug("Finished preparation of SSV size dictionary based "
-                  "on bounding box diagional of corresponding SVs.")
+        log.info("Finished preparation of SSV size dictionary based "
+                 "on bounding box diagional of corresponding SVs.")
         before_cnt = len(rag_g.nodes())
         for ix in list(rag_g.nodes()):
-            if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
+            if ccsize_dict[ix] < global_params.config['min_cc_size_ssv']:
                 rag_g.remove_node(ix)
-        log.debug("Removed %d neuron CCs because of size." %
+        log.info("Removed %d neuron CCs because of size." %
                   (before_cnt - len(rag_g.nodes())))
 
     ccs = nx.connected_components(rag_g)
@@ -295,9 +293,9 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
 
 def run_create_rag():
     """
-    If ``global_params.config.prior_glia_removal==True``:
+    If ``global_params.config.prior_astrocyte_removal==True``:
         stores pruned RAG at ``global_params.config.pruned_rag_path``, required for all glia
-        removal steps. :func:`~syconn.exec.exec_inference.run_glia_splitting`
+        removal steps. :func:`~syconn.exec.exec_inference.run_astrocyte_splitting`
         will finally store the ``neuron_rag.bz2`` at the currently active working directory.
     else:
         stores pruned RAG at ``global_params.config.working_dir + /glia/neuron_rag.bz2``,
@@ -335,19 +333,18 @@ def run_create_rag():
               "on bounding box diagonal of corresponding SVs.")
     before_cnt = len(G.nodes())
     for ix in list(G.nodes()):
-        if ccsize_dict[ix] <= global_params.config['glia']['min_cc_size_ssv']:
+        if ccsize_dict[ix] <= global_params.config['min_cc_size_ssv']:
             G.remove_node(ix)
     total_size = 0
     for n in G.nodes():
         total_size += sd.get_segmentation_object(n).size
     total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
-    cc_gs = list((G.subgraph(c) for c in nx.connected_components(G)))
     log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
-             f"{global_params.config['glia']['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
-             f"{len(cc_gs)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
+             f"{global_params.config['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
+             f"{nx.number_connected_components(G)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
     nx.write_edgelist(G, global_params.config.pruned_rag_path)
 
-    if not global_params.config.prior_glia_removal:
+    if not global_params.config.prior_astrocyte_removal:
         os.makedirs(global_params.config.working_dir + '/glia/', exist_ok=True)
         shutil.copy(global_params.config.pruned_rag_path, global_params.config.working_dir
                     + '/glia/neuron_rag.bz2')

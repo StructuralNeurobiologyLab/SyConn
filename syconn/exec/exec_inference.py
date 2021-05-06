@@ -18,7 +18,7 @@ from syconn.handler.config import initialize_logging
 from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd, \
     predict_cmpt_ssd
 from syconn.mp import batchjob_utils as qu
-from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_glia_rag, transform_rag_edgelist2pkl
+from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_astrocyte_svgraph, transform_rag_edgelist2pkl
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc.graphs import split_subcc_join
 from syconn.reps.segmentation import SegmentationDataset
@@ -214,9 +214,9 @@ def run_semsegspiness_prediction(max_n_jobs_gpu: Optional[int] = None):
     log.info('Finished spine prediction.')
 
 
-def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
+def run_astrocyte_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     """
-    Predict glia and neuron supervoxels with point cloud based convolutional networks.
+    Predict astrocyte and neuron supervoxels with point cloud based convolutional networks.
 
     Notes:
         * post-processing currently requires locking. In order to prevent locking, an additional map-reduce step
@@ -259,7 +259,7 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
             parts = split_subcc_join(g, max_nb_sv, lo_first_n=lo_first_n)
             multi_params.extend([(p, g.subgraph(p), True) for p in parts])
         # TODO: can be removed
-        elif ccsize_dict[list(g.nodes())[0]] < global_params.config['glia']['min_cc_size_ssv']:
+        elif ccsize_dict[list(g.nodes())[0]] < global_params.config['min_cc_size_ssv']:
             raise ValueError(f'Pruned rag did contain SSVs below minimum bounding box size!')
         else:
             multi_params.append((list(g.nodes()), g, False))
@@ -287,13 +287,13 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     log.info('Finished glia prediction.')
 
 
-def run_glia_prediction():
+def run_astrocyte_prediction():
     """
-    Predict glia supervoxels based on the ``img2scalar`` CMN.
+    Predict astrocyte supervoxels based on the ``img2scalar`` CMN.
 
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
-        :func:`~run_glia_rendering`.
+        :func:`~run_astrocyte_rendering`.
     """
     log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
@@ -338,10 +338,10 @@ def run_glia_prediction():
         log.info('Success.')
 
 
-def run_glia_splitting():
+def run_astrocyte_splitting():
     """
     Uses the pruned RAG at ``global_params.config.pruned_rag_path`` (stored as edge list .bz2 file)
-    which is  computed in :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to split glia
+    which is  computed in :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to split astrocyte
     fragments from neuron reconstructions and separate those and entire glial cells from
     the neuron supervoxel graph.
 
@@ -353,8 +353,10 @@ def run_glia_splitting():
 
     Notes:
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds`,
-        :func:`~run_glia_rendering` and :func:`~run_glia_prediction`.
+        :func:`~run_astrocyte_rendering` and :func:`~run_astrocyte_prediction`.
     """
+    # TODO: built-in new sv agglomeration list data format
+    raise NotImplementedError('Glia splitting requires refactoring.')
     log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
@@ -375,6 +377,6 @@ def run_glia_splitting():
     # use reconnected RAG or initial rag here
     recon_nx = G
     # create glia / neuron RAGs
-    write_glia_rag(recon_nx, global_params.config['glia']['min_cc_size_ssv'], log=log)
-    log.info("Finished glia splitting. Resulting neuron and glia RAGs are stored at {}."
+    write_astrocyte_svgraph(recon_nx, global_params.config['min_cc_size_ssv'], log=log)
+    log.info("Finished astrocyte splitting. Resulting neuron and astrocyte SV graphs are stored at {}."
              "".format(global_params.config.working_dir + "/glia/"))

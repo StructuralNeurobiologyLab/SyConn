@@ -55,6 +55,9 @@ paths:
 
 generate_cs_ssv: True
 
+# min. connected component size of glia nodes/SV after thresholding glia proba
+min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
+
 # (Super-)SegmentationDataset versions
 versions:
   sv: 0   # these are the cell supervoxels
@@ -117,7 +120,6 @@ cell_objects:
     vc: 10
     er: 30 # arbitrary placeholder, to be adjusted
     golgi: 30 # arbitrary placeholder, to be adjusted
-
 
   # Hook for morphological operations from scipy.ndimage applied during object extraction.
   # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
@@ -225,7 +227,7 @@ views:
   use_new_renderings_locs: True
   # ordering sensitive; 'sj' will be replaced by 'syn_ssv' if use_onthefly_views == True
   subcell_objects: ['mi', 'vc', 'sj']
-  # used for default view rendering (glia separation, spine detection, cell type prediction)
+  # used for default view rendering (astrocyte separation, spine detection, cell type prediction)
   view_properties:
     comp_window: 8000  # in nm
     ws: [256, 128]  # in pixel (x, y)
@@ -241,11 +243,7 @@ points:
 
 # --------- GLIA PARAMETERS
 glia:
-  # TODO: rename to 'prior_glia_separation'
-  prior_glia_removal: True
-  # TODO: move param 'min_cc_size_ssv' as this is also used if 'prior_glia_removal=False'
-  # min. connected component size of glia nodes/SV after thresholding glia proba
-  min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
+  prior_astrocyte_removal: True
 
   # Threshold for glia classification
   glia_thresh: 0.161489

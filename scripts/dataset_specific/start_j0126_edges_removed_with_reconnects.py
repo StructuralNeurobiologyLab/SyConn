@@ -53,15 +53,15 @@ if __name__ == '__main__':
 
     nx.write_edgelist(G, global_params.config.init_rag_path)
     exec_init.run_create_rag()
-    if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
-        exec_inference.run_glia_splitting()
+    if global_params.config.prior_astrocyte_removal:
+        log.info('Step 1.5/8 - Astrocyte separation')
+        exec_render.run_astrocyte_rendering()
+        exec_inference.run_astrocyte_prediction()
+        exec_inference.run_astrocyte_splitting()
         time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+        step_idents.append('Astrocyte separation')
 
-    # remove edges from original neuron rag as returned by the glia separation
+    # remove edges from original neuron rag as returned by the astrocyte separation
     shutil.move(example_wd + '/glia/neuron_rag.bz2', example_wd + '/glia/neuron_rag_ORIG.bz2')
     rag = nx.read_edgelist(example_wd + '/glia/neuron_rag_ORIG.bz2', nodetype=np.uint64)
     with open(example_wd + '/glia/edges_to_remove.013.txt', 'r') as f:

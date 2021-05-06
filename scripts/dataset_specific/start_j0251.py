@@ -21,9 +21,10 @@ if __name__ == '__main__':
     working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
-    prior_glia_removal = True
+    prior_astrocyte_removal = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal, 'min_cc_size_ssv': 5000}),  # in nm
+        ('min_cc_size_ssv', 5000),  # minimum bounding box diagonal of cell (fragments) in nm
+        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 20),
@@ -129,25 +130,25 @@ if __name__ == '__main__':
     # # add SV IDs to graph via self-edges
     # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
     # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    # filtered_ids = sd.ids[mesh_bb > global_params.config['glia']['min_cc_size_ssv']]
+    # filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
     # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
     # log.info('{} SVs were added to the RAG after applying size filter with bounding box '
-    #          'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['glia']['min_cc_size_ssv']))
+    #          'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['min_cc_size_ssv']))
     # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
     # exec_init.run_create_rag()
     # ftimer.stop()
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
+    log.info('Step 3/9 - Astrocyte separation')
+    if global_params.config.prior_astrocyte_removal:
+        ftimer.start('Astrocyte separation')
         if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
+            exec_render.run_astrocyte_rendering()
+            exec_inference.run_astrocyte_prediction()
         else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
+            exec_inference.run_astrocyte_prediction_pts()
+        exec_inference.run_astrocyte_splitting()
         ftimer.stop()
     else:
-        log.info('Glia separation disabled. Skipping.')
+        log.info('Astrocyte separation disabled. Skipping.')
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
