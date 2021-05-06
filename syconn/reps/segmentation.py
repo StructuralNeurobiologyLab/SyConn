@@ -1917,7 +1917,7 @@ class SegmentationDataset(SegmentationBase):
         """
         self.enable_property_cache(['size'])
         if source == 'neuron':
-            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+            g = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'glia':
             g = nx.read_edgelist(global_params.config.working_dir + "/glia/astrocyte_svgraph.bz2", nodetype=np.uint64)

@@ -178,7 +178,7 @@ if __name__ == '__main__':
     rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
     log.info('{} SVs were added to the RAG after applying the size '
              'filter.'.format(len(filtered_ids)))
-    nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+    nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
 
     exec_init.run_create_rag()
     ftimer.stop()

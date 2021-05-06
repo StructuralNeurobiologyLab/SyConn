@@ -102,9 +102,9 @@ def test_full_run():
                              'directory "{}".'.format(mpath, example_wd))
 
     if not prior_astrocyte_removal:
-        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
     else:
-        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
 
     tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
     offset = np.array([0, 0, 0])

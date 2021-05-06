@@ -134,7 +134,7 @@ if __name__ == '__main__':
     # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
     # log.info('{} SVs were added to the RAG after applying size filter with bounding box '
     #          'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['min_cc_size_ssv']))
-    # nx.write_edgelist(rag_sub_g, global_params.config.init_rag_path)
+    # nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
     # exec_init.run_create_rag()
     # ftimer.stop()
     log.info('Step 3/9 - Astrocyte separation')

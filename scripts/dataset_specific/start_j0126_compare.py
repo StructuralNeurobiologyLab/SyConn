@@ -20,9 +20,8 @@ from syconn import global_params
 from syconn.exec import exec_syns, exec_render, exec_skeleton, exec_init, exec_inference
 
 
-# TODO add materialize button and store current process in config.ini
-#  -> allows to resume interrupted processes
 if __name__ == '__main__':
+    raise DeprecationWarning('This script is outdated. See earlier commits for functional versions.')
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
@@ -49,7 +48,7 @@ if __name__ == '__main__':
             edges = [int(v) for v in re.findall(r'(\d+)', l)]
             G.add_edge(edges[0], edges[1])
 
-    nx.write_edgelist(G, global_params.config.init_rag_path)
+    nx.write_edgelist(G, global_params.config.init_svgraph_path)
     start = time.time()
     # Checking models
     for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',

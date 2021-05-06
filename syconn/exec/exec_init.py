@@ -14,6 +14,7 @@ from typing import Optional, Callable, Tuple, Dict, Any, Union
 
 import networkx as nx
 import numpy as np
+import tqdm
 
 from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
@@ -31,9 +32,9 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
-    ``version=0`` at the currently active working directory based on the RAG
-    at ``/glia/neuron_rag.bz2``. In case astrocyte splitting is active, this will be
-    the RAG after astrocyte removal, if it was disabled it is identical to ``pruned_rag.bz2``.
+    ``version=0`` at the currently active working directory based on the SV graph
+    at :attr:`~syconn.handler.config.DynConfig.neuron_svgraph_path`. In case astrocyte splitting is active,
+    this will be the SV graph after astrocyte removal, if it was disabled it is identical to ``pruned_svgraph.bz2``.
 
     Args:
         apply_ssv_size_threshold: Apply filter with minimum bounding box diagonal. This is usually not needed as the
@@ -41,41 +42,46 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
             separation.
 
     Notes:
-        Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
-        optionally :func:`~run_astrocyte_splitting`.
+        * Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
+          optionally :func:`~run_astrocyte_splitting`.
+        * Networkx requires a lot of memory for >1e9 edges, graph_tool and igraph are not usable for this either.
+          Currently the work-around is to not use the graph information when storing the cell SV graph, but only the
+          connected component as complete graph (edges are not meaningful). [TODO]
 
     Returns:
 
     """
     log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-    g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
 
-    rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
-
+    cc_dict = {}
     if apply_ssv_size_threshold:
+        g_p = global_params.config.neuron_svgraph_path
+        sv_g = nx.read_edgelist(global_params.config.neuron_svgraph_path, nodetype=np.uint64)
         sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
 
         sv_size_dict = {}
         bbs = sd.load_numpy_data('bounding_box') * sd.scaling
         for ii in range(len(sd.ids)):
             sv_size_dict[sd.ids[ii]] = bbs[ii]
-        ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
+        ccsize_dict = create_ccsize_dict(sv_g, sv_size_dict)
         log.info("Finished preparation of SSV size dictionary based "
                  "on bounding box diagional of corresponding SVs.")
-        before_cnt = len(rag_g.nodes())
-        for ix in list(rag_g.nodes()):
+        before_cnt = len(sv_g.nodes())
+        for ix in list(sv_g.nodes()):
             if ccsize_dict[ix] < global_params.config['min_cc_size_ssv']:
-                rag_g.remove_node(ix)
-        log.info("Removed %d neuron CCs because of size." %
-                  (before_cnt - len(rag_g.nodes())))
-
-    ccs = nx.connected_components(rag_g)
-    cc_dict = {}
-    for cc in ccs:
-        cc_arr = np.array(list(cc))
-        cc_dict[np.min(cc_arr)] = cc_arr
-
+                sv_g.remove_node(ix)
+        log.info("Removed %d neuron CCs because of size." % (before_cnt - len(sv_g.nodes())))
+        for cc in nx.connected_components(sv_g):
+            cc_arr = np.array(list(cc), dtype=np.uint64)
+            cc_dict[np.min(cc_arr)] = cc_arr
+    else:
+        g_p = global_params.config.neuron_svagg_list_path
+        with open(g_p, 'r') as f:
+            for line in f:
+                cc = [int(el) for el in line.split(',')]
+                cc = np.array(cc, dtype=np.uint64)
+                cc_dict[np.min(cc)] = cc
     cc_dict_inv = {}
     for ssv_id, cc in cc_dict.items():
         for sv_id in cc:
@@ -83,7 +89,6 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
 
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         g_p, len(cc_dict), len(cc_dict_inv)))
-
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
@@ -100,38 +105,24 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
     multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
                    chunkify(multi_params[half_ix:], njobs_per_half)
 
-    multi_params = [(g_p, ssv_ids) for ssv_ids in multi_params]
-    start_multiprocess_imap(_ssv_rag_writer, multi_params,
+    multi_params = [(g_p, ssv_ids, [cc_dict[ssv_id] for ssv_id in ssv_ids]) for ssv_ids in multi_params]
+    start_multiprocess_imap(_ssv_svgraph_writer, multi_params,
                             nb_cpus=global_params.config['ncores_per_node'])
-    log.info('Finished saving individual SSV RAGs.')
+    log.info('Finished saving cell SV graphs.')
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
     ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'], nb_cpus=2)
     ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
-    log.info('Finished mapping of cellular organelles to SSVs. Writing individual SSV graphs.')
+    log.info('Finished mapping of cellular organelles to SSVs.')
 
 
-def _ssv_rag_writer(args):
-    g_p, ssv_ids = args
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir,
-                                   version='0', ssd_type="ssv")
-    rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
-    ccs = nx.connected_components(rag_g)
-    cc_dict = {}
-    for cc in ccs:
-        cc_arr = np.array(list(cc))
-        cc_dict[np.min(cc_arr)] = cc_arr
-    for ssv in ssd.get_super_segmentation_object(ssv_ids):
-        # get all nodes in CC of this SSV
-        if len(cc_dict[ssv.id]) > 1:  # CCs with 1 node do not exist in the global RAG
-            n_list = nx.node_connected_component(rag_g, ssv.id)
-            # get SSV RAG as subgraph
-            ssv_rag = nx.subgraph(rag_g, n_list)
-        else:
-            ssv_rag = nx.Graph()
-            # ssv.id is the minimal SV ID, and therefore the only SV in this case
-            ssv_rag.add_edge(ssv.id, ssv.id)
+def _ssv_svgraph_writer(args):
+    g_p, ssv_ids, sv_lists = args
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0', ssd_type="ssv")
+    for ssv, sv_list in zip(ssd.get_super_segmentation_object(ssv_ids), sv_lists):
+        # create "dummy" graph with all-to-all edges
+        ssv_rag = nx.complete_graph(sv_list)
         nx.write_edgelist(ssv_rag, ssv.edgelist_path)
 
 
@@ -294,17 +285,17 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
 def run_create_rag():
     """
     If ``global_params.config.prior_astrocyte_removal==True``:
-        stores pruned RAG at ``global_params.config.pruned_rag_path``, required for all glia
+        stores pruned RAG at ``global_params.config.pruned_svgraph_path``, required for all glia
         removal steps. :func:`~syconn.exec.exec_inference.run_astrocyte_splitting`
-        will finally store the ``neuron_rag.bz2`` at the currently active working directory.
+        will finally store the neuron SV graph.
     else:
-        stores pruned RAG at ``global_params.config.working_dir + /glia/neuron_rag.bz2``,
+        stores pruned SV graph at :attr:`~syconn.handler.config.DynConfig.pruned_svgraph_path`,
         required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
     """
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=False)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
-    G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint64)
+    G = nx.read_edgelist(global_params.config.init_svgraph_path, nodetype=np.uint64)
     if 0 in G.nodes():
         G.remove_node(0)
         log.warning('Found background node 0 in original graph. Removing.')
@@ -342,9 +333,12 @@ def run_create_rag():
     log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
              f"{global_params.config['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
              f"{nx.number_connected_components(G)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
-    nx.write_edgelist(G, global_params.config.pruned_rag_path)
+    nx.write_edgelist(G, global_params.config.pruned_svgraph_path)
+    with open(global_params.config.pruned_svagg_list_path, 'w') as f:
+        for cc in tqdm.tqdm(nx.connected_components(G), desc='Write SV agg.'):
+            f.write(','.join([str(el) for el in cc]) + '\n')
 
     if not global_params.config.prior_astrocyte_removal:
         os.makedirs(global_params.config.working_dir + '/glia/', exist_ok=True)
-        shutil.copy(global_params.config.pruned_rag_path, global_params.config.working_dir
-                    + '/glia/neuron_rag.bz2')
+        shutil.copy(global_params.config.pruned_svgraph_path, global_params.config.neuron_svgraph_path)
+        shutil.copy(global_params.config.pruned_svagg_list_path, global_params.config.neuron_svagg_list_path)

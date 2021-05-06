@@ -74,7 +74,7 @@ def collect_gliaSV_helper(cc_ixs):
     return np.array(astrocyte_svs, dtype=np.uint64)
 
 
-def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str = "",
+def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
                             log: Optional[Logger] = None):
     """
     Stores astrocyte and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx edge list
@@ -83,8 +83,7 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float, suff
     Parameters
     ----------
     rag : SV agglomeration
-    min_ssv_size : Bounding box diagonal in NM
-    suffix : Suffix for saved RAGs
+    min_ssv_size : Bounding box diagonal in nm
     log: Logger
     """
     if log is None:
@@ -131,8 +130,8 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float, suff
     ccs = list(nx.connected_components(neuron_g))
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt, "mergelist.txt")
-    nx.write_edgelist(neuron_g, global_params.config.working_dir + "/glia/neuron_rag%s.bz2" % suffix)
+    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_svgraph_ml.k.zip", txt, "mergelist.txt")
+    nx.write_edgelist(neuron_g, global_params.config.neuron_svgraph_path)
     log.info("Nb neuron CCs: {}".format(len(ccs)))
     log.info("Nb neuron SVs: {}".format(len([n for cc in ccs for n in cc])))
 
@@ -156,11 +155,10 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float, suff
     log.info("Glia RAG contains {} SVs in {} CCs ({} mm^3; {} Gvx).".format(
         astrocyte_g.number_of_nodes(), len(ccs), total_size_cmm, total_size / 1e9))
 
-    nx.write_edgelist(astrocyte_g, global_params.config.working_dir + "/glia/astrocyte_svgraph%s.bz2" % suffix)
+    nx.write_edgelist(astrocyte_g, global_params.config.astrocyte_svgraph_path())
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/astrocyte_svgraph_ml%s.k.zip" % suffix, txt,
-                   "mergelist.txt")
+    write_txt2kzip(global_params.config.working_dir + "/glia/astrocyte_svgraph_ml.k.zip", txt, "mergelist.txt")
 
 
 def transform_rag_edgelist2pkl(rag):

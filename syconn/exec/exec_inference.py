@@ -234,7 +234,7 @@ def run_astrocyte_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     pred_key = "glia_probas"
 
     log.info("Preparing RAG.")
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+    G = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
 
     cc_gs = sorted(list((G.subgraph(c) for c in nx.connected_components(G))), key=len, reverse=True)
 
@@ -301,7 +301,7 @@ def run_astrocyte_prediction():
     pred_key = "glia_probas"
 
     # Load initial RAG from  Knossos mergelist text file.
-    g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+    g = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
     all_sv_ids_in_rag = np.array(list(g.nodes()), dtype=np.uint64)
 
     log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
@@ -340,13 +340,13 @@ def run_astrocyte_prediction():
 
 def run_astrocyte_splitting():
     """
-    Uses the pruned RAG at ``global_params.config.pruned_rag_path`` (stored as edge list .bz2 file)
+    Uses the pruned RAG at ``global_params.config.pruned_svgraph_path`` (stored as edge list .bz2 file)
     which is  computed in :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to split astrocyte
     fragments from neuron reconstructions and separate those and entire glial cells from
     the neuron supervoxel graph.
 
-    Stores neuron RAG at ``"{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir,
-    suffix)`` which is then used by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
+    Stores neuron SV graph at :attr:`~syconn.handler.config.DynConfig.neuron_svgraph_path`
+    which is then used by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
 
     Todo:
         * refactor how splits are stored, currently those are stored at ssv_tmp
@@ -356,10 +356,10 @@ def run_astrocyte_splitting():
         :func:`~run_astrocyte_rendering` and :func:`~run_astrocyte_prediction`.
     """
     # TODO: built-in new sv agglomeration list data format
-    raise NotImplementedError('Glia splitting requires refactoring.')
-    log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
+    raise NotImplementedError('Astrocyte splitting requires refactoring.')
+    log = initialize_logging('astrocyte_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+    G = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
     log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
         nx.number_connected_components(G), G.number_of_nodes()))
 

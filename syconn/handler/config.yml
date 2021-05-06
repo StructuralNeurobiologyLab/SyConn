@@ -50,7 +50,7 @@ paths:
   kd_mi:
   kd_er:
   kd_golgi:
-  init_rag:
+  init_svgraph:
   use_new_subfold:
 
 generate_cs_ssv: True

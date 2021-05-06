@@ -66,8 +66,7 @@ if __name__ == '__main__':
         save_to_h5py([asym], data_dir + 'asym.h5', hdf5_names=['asym'])
 
         # store subgraph of SV-agglomeration
-        g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
-        rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
+        rag_g = nx.read_edgelist(global_params.config.neuron_svgraph_path, nodetype=np.uint64)
         sv_ids = np.unique(seg)
         rag_sub_g = rag_g.subgraph(sv_ids)
         print('Writing subgraph within {} and {} SVs.'.format(

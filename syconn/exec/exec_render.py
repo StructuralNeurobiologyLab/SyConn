@@ -207,7 +207,7 @@ def _run_huge_ssv_render_worker(q: Queue, q_out: Queue):
 
 def run_astrocyte_rendering(max_n_jobs: Optional[int] = None):
     """
-    Uses the pruned RAG at ``global_params.config.pruned_rag_path``
+    Uses the pruned RAG at ``global_params.config.pruned_svgraph_path``
     (stored as edge list .bz2 file) which is computed in
     :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to aggregate the
     rendering context from the underlying supervoxel graph.
@@ -239,7 +239,7 @@ def run_astrocyte_rendering(max_n_jobs: Optional[int] = None):
     # glia removal is based on the initial RAG and does not require explicitly stored SSVs
     version = "tmp"
 
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+    G = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
 
     cc_gs = sorted(list((G.subgraph(c) for c in nx.connected_components(G))), key=len, reverse=True)
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint64)

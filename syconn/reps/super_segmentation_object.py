@@ -948,10 +948,9 @@ class SuperSegmentationObject(SegmentationBase):
         G = self.sv_graph_uint
         # # Might be useful as soon as global graph path is available
         # else:
-        #     if os.path.isfile("{}neuron_rag.bz2".format(
-        #             self.working_dir):
-        #         G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
-        #                                   nodetype=np.uint64)
+        #     if os.path.isfile(global_params.config.neuron_svgraph_path):
+        #         G_glob = nx.read_edgelist(global_params.config.neuron_svgraph_path,
+        #                                    nodetype=np.uint64)
         #         G = nx.Graph()
         #         cc = nx.node_connected_component(G_glob, self.sv_ids[0])
         #         assert len(set(cc).difference(set(self.sv_ids))) == 0, \
