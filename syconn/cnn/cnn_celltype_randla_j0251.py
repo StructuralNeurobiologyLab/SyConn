@@ -3,7 +3,7 @@
 # Copyright (c) 2019 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
-from syconn.cnn.TrainData import CellCloudGlia
+from syconn.cnn.TrainData import CellCloudDataJ0251
 
 import os
 import torch
@@ -15,21 +15,26 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall
+from elektronn3.models.randla_net import RandLANetClassification
 from elektronn3.training import Trainer3d, Backup, metrics
+import distutils
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=750, help='Scale factor for normalization')
+parser.add_argument('--bs', type=int, default=10, help='Batch size')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
-parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=7500, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
+
+parser.add_argument('--use_syntype', default=1, help='Use synapse type',
+                    type=distutils.util.strtobool)
+parser.add_argument('--cellshape_only', default=0, help='Use only cell surface points',
+                    type=distutils.util.strtobool)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -38,6 +43,8 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
+parser.add_argument('--cval', default=None, help='Cross-validation split indicator.', type=int)
+
 
 args = parser.parse_args()
 
@@ -55,44 +62,42 @@ batch_size = args.bs
 npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
+cval = args.cval
 ctx = args.ctx
-use_bias = args.use_bias
-
+use_syntype = args.use_syntype
+cellshape_only = args.cellshape_only
 lr = 5e-4
 lr_stepsize = 100
 lr_dec = 0.99
-max_steps = 300000
+max_steps = 500000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = False
-use_syntype = False
 dr = 0.3
-track_running_stats = False
-use_norm = 'gn'
-num_classes = 2
-use_subcell = False
-act = 'swish'
-
+num_classes = 11
+onehot = True
+act = 'relu'
+use_myelin = True
 if name is None:
-    name = f'glia_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_randla_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
+    else:
+        if not use_syntype:
+            name += '_noSyntype'
+        if use_myelin:
+            name += '_myelin'
+if onehot:
+    input_channels = 4
     if use_syntype:
-        name += '_Syntype'
-if use_subcell:
-    input_channels = 5 if use_syntype else 4
+        input_channels += 1
+    if use_myelin:
+        input_channels += 1
 else:
     input_channels = 1
-if use_norm is False:
-    name += '_noBN'
-else:
-    name += f'_{use_norm}'
-if track_running_stats:
-    name += '_trackRunStats'
-
-if not use_bias:
-    name += '_noBias'
+    name += '_flatinp'
+if cellshape_only:
+    input_channels = 1
 
 if use_cuda:
     device = torch.device('cuda')
@@ -103,17 +108,20 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '~/e3_training_convpoint/'
+    save_root = '~/e3_trainings_convpoint_celltypes_j0251_randla/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+model = RandLANetClassification(input_channels, num_classes, dropout_p=dr)
 
+if cval is not None:
+    name += f'_CV{cval}'
+else:
+    name += f'_AllGT'
 name += f'_eval{eval_nr}'
-# model = nn.DataParallel(model)
+model = nn.DataParallel(model)
 
 if use_cuda:
     model.to(device)
@@ -135,24 +143,39 @@ elif args.jit == 'train':
 
 # Transformations to be applied to samples before feeding them to the network
 train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
-                                  clouds.Center(500, distr='uniform'),  # in nm
+                                  clouds.Center(),
                                   clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
+                                  clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
-train_ds = CellCloudGlia(npoints=npoints, transform=train_transform,
-                         batch_size=batch_size, ctx_size=ctx)
-valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False,
-                         batch_size=batch_size, ctx_size=ctx)
+train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
+                              cellshape_only=cellshape_only, use_syntype=use_syntype,
+                              onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
+# valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
+#                               cv_val=cval, cellshape_only=cellshape_only,
+#                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+#                               ctx_size=ctx, map_myelin=use_myelin)
+valid_ds = None
 
 # PREPARE AND START TRAINING #
 
 # set up optimization
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-criterion = torch.nn.CrossEntropyLoss()
+# optimizer = torch.optim.SGD(
+#     model.parameters(),
+#     lr=lr,  # Learning rate is set by the lr_sched below
+#     momentum=0.9,
+#     weight_decay=0.5e-5,
+# )
+
+# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
+lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+# extra weight for HVC and LMAN
+# STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7
+criterion = torch.nn.CrossEntropyLoss()  # weight=torch.Tensor([1]*num_classes))
 if use_cuda:
     criterion.cuda()
 
@@ -175,7 +198,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=8,
+    num_workers=20,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
@@ -184,7 +207,7 @@ trainer = Trainer3d(
     num_classes=num_classes,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=10
+    nbatch_avg=10,
 )
 
 # Archiving training script, src folder, env info

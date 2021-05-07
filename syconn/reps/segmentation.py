@@ -6,13 +6,13 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import copy
 import re
-from typing import Union, Tuple, List, Optional, Dict, Generator, Any
+from typing import Union, Tuple, List, Optional, Dict, Generator, Any, Iterator
 
 import networkx as nx
 from knossos_utils import knossosdataset
 from scipy import spatial
 
-from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase
+from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase, get_unique_subfold_ixs
 from .segmentation_helper import *
 from ..handler.basics import get_filepaths_from_dir, safe_copy, \
     write_txt2kzip, temp_seed
@@ -643,7 +643,7 @@ class SegmentationObject(SegmentationBase):
         if self.version == 'tmp':
             return False
         location_dc = CompressedStorage(self.locations_path,
-                                        disable_locking=True)  # look-up only, PS 12Dec2018
+                                        disable_locking=True)
         return self.id in location_dc
 
     def views_exist(self, woglia: bool, index_views: bool = False,
@@ -652,14 +652,14 @@ class SegmentationObject(SegmentationBase):
         True if rendering locations have been stored at :func:`~view_path`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
         """
         if self.version == 'tmp':
             return False
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    disable_locking=True)  # look-up only, PS 12Dec2018
+                                    disable_locking=True)
         return self.id in view_dc
 
     def views(self, woglia: bool, index_views: bool = False,
@@ -669,7 +669,7 @@ class SegmentationObject(SegmentationBase):
         :py:attr:`~type` must be `sv`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
 
@@ -919,12 +919,12 @@ class SegmentationObject(SegmentationBase):
             color = (130, 130, 130, 160)
         elif self.type == "cs":
             color = (100, 200, 30, 255)
-        elif self.type == "conn":
-            color = (150, 50, 200, 255)
         elif self.type == "syn":
             color = (150, 50, 200, 255)
         elif self.type == "syn_ssv":
             color = (240, 50, 50, 255)
+        elif self.type == "cs_ssv":
+            color = (100, 200, 30, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -932,7 +932,7 @@ class SegmentationObject(SegmentationBase):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise TypeError("Given object type '{}' does not exist."
+            raise TypeError("Color for bbject type '{}' does not exist."
                             "".format(self.type))
         color = np.array(color, dtype=np.uint8)
         if ext_color is not None:
@@ -963,7 +963,7 @@ class SegmentationObject(SegmentationBase):
         Loader method of :py:attr:`~views`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
             raw_only: If True, ignores cell organelles projections.
@@ -1000,7 +1000,7 @@ class SegmentationObject(SegmentationBase):
             * remove `cellobjects_only`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
             views: View array.
@@ -1399,7 +1399,7 @@ class SegmentationDataset(SegmentationBase):
             * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SVs.
             * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
 
-        If a glia separation is performed, the following attributes will be stored as numpy array as well:
+        If astrocyte separation is performed, the following attributes will be stored as numpy array as well:
             * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
               locations, 2: 0-index=neuron, 1-index=glia).
 
@@ -1477,6 +1477,7 @@ class SegmentationDataset(SegmentationBase):
         self._config = config
         self._soid2ix = None
         self._property_cache = dict()
+        self._version = None
         if cache_properties is None:
             cache_properties = tuple()
 
@@ -1687,6 +1688,21 @@ class SegmentationDataset(SegmentationBase):
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
         return sorted(glob.glob(p))
+
+    def iter_so_dir_paths(self) -> Iterator[str]:
+        """
+        Iterator over all possible `SegmentationObject` storage base directories.
+
+        Notes:
+            In contrast to :attr:`~so_dir_paths` this iterator may return paths to storages that
+            do not exist, in the case that no object fell into its ID bucket.
+
+        Returns:
+            Path to ID storage base folder.
+        """
+        storage_location_ids = get_unique_subfold_ixs(self.n_folders_fs)
+        for ix in storage_location_ids:
+            yield self.so_storage_path + subfold_from_ix(ix, self.n_folders_fs)
 
     @property
     def config(self) -> DynConfig:
@@ -1901,10 +1917,10 @@ class SegmentationDataset(SegmentationBase):
         """
         self.enable_property_cache(['size'])
         if source == 'neuron':
-            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+            g = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'glia':
-            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint)
+            g = nx.read_edgelist(global_params.config.working_dir + "/glia/astrocyte_svgraph.bz2", nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'total':
             svids = self.ids

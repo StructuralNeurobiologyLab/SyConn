@@ -3,7 +3,7 @@
 # Copyright (c) 2019 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert
-from syconn.cnn.TrainData import CellCloudGlia
+from syconn.cnn.TrainData import CloudDataSemseg
 
 import os
 import torch
@@ -15,7 +15,7 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall
+from elektronn3.models.randla_net import RandLANet
 from elektronn3.training import Trainer3d, Backup, metrics
 
 # PARSE PARAMETERS #
@@ -23,13 +23,12 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=12, help='Batch size')
-parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=750, help='Scale factor for normalization')
+parser.add_argument('--bs', type=int, default=4, help='Batch size')
+parser.add_argument('--sp', type=int, default=12000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=8000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
-parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=7500, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=8000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -56,67 +55,59 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
-use_bias = args.use_bias
 
-lr = 5e-4
+lr = 2e-3
 lr_stepsize = 100
-lr_dec = 0.99
+lr_dec = 0.992
 max_steps = 300000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
 use_syntype = False
-dr = 0.3
-track_running_stats = False
-use_norm = 'gn'
-num_classes = 2
-use_subcell = False
-act = 'swish'
+dr = 0.1
+# 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
+num_classes = 7
+use_subcell = True
+if cellshape_only:
+    use_subcell = False
+    use_syntype = False
+act = 'relu'
 
 if name is None:
-    name = f'glia_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'semseg_randla_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
+           f'{num_classes}_run2'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
         name += '_Syntype'
-if use_subcell:
+if not cellshape_only and use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
-if use_norm is False:
-    name += '_noBN'
-else:
-    name += f'_{use_norm}'
-if track_running_stats:
-    name += '_trackRunStats'
-
-if not use_bias:
-    name += '_noBias'
 
 if use_cuda:
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
 
+
 print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '~/e3_training_convpoint/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_randla_semseg_j0251/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
 
-# Model selection
-model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+# +1 classes for border class
+model = RandLANet(input_channels, num_classes + 1, dropout_p=dr)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
 
-if use_cuda:
-    model.to(device)
+model.to(device)
 
 example_input = (torch.ones(batch_size, npoints, input_channels).to(device),
                  torch.ones(batch_size, npoints, 3).to(device))
@@ -134,27 +125,32 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='normal'),  # in nm
-                                  clouds.Center(500, distr='uniform'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='normal'),  # in nm
+                                  clouds.Center(),
                                   clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
+                                  clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
 
-train_ds = CellCloudGlia(npoints=npoints, transform=train_transform,
-                         batch_size=batch_size, ctx_size=ctx)
-valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False,
-                         batch_size=batch_size, ctx_size=ctx)
+# mask border points with 'num_classes' and set its weight to 0
+train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
+valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 
 # PREPARE AND START TRAINING #
 
 # set up optimization
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+
+# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-criterion = torch.nn.CrossEntropyLoss()
-if use_cuda:
-    criterion.cuda()
+# set weight of the masking label at context borders to 0
+class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
 
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
@@ -163,6 +159,12 @@ valid_metrics = {  # mean metrics
     'val_DSC_mean': metrics.DSC(),
     'val_IoU_mean': metrics.IoU(),
 }
+if num_classes > 2:
+    # Add separate per-class accuracy metrics only if there are more than 2 classes
+    valid_metrics.update({
+        f'val_IoU_c{i}': metrics.Accuracy(i)
+        for i in range(num_classes)
+    })
 
 # Create trainer
 # it seems pytorch 1.1 does not support batch_size=None to enable batched dataloader, instead
@@ -181,10 +183,10 @@ trainer = Trainer3d(
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
-    num_classes=num_classes,
+    num_classes=num_classes + 1,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=10
+    nbatch_avg=5, tqdm_kwargs={'disable': False}
 )
 
 # Archiving training script, src folder, env info

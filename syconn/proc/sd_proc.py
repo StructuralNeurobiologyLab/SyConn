@@ -25,6 +25,7 @@ from ..mp import mp_utils as sm
 from ..proc.meshes import mesh_chunk, find_meshes
 from ..reps import rep_helper
 from ..reps import segmentation
+from ..extraction.find_object_properties import map_subcell_extract_props as map_subcell_extract_props_func
 
 from multiprocessing import Process
 import pickle as pkl
@@ -75,7 +76,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                     continue
                 value = this_attr_dict[attribute]
                 if attribute == 'id':
-                    value = np.array(value, np.uint)
+                    value = np.array(value, np.uint64)
                 if attribute not in attr_dict:
                     if type(value) is not list:
                         sh = list(value.shape)
@@ -101,7 +102,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
-        file_mask = np.zeros(len(out_files), dtype=np.int)
+        file_mask = np.zeros(len(out_files), dtype=np.int64)
         res = sm.start_multiprocess_imap(_dataset_analysis_check, out_files, sm.cpu_count())
         for ix_cnt, r in enumerate(res):
             rk, n_el = r
@@ -162,7 +163,7 @@ def _load_attr_helper(args):
 
             value = dc[attr]
             if attr == 'id':
-                value = np.array(value, np.uint)
+                value = np.array(value, np.uint64)
             if type(value) is not list:  # assume numpy array
                 if len(res) == 0:
                     sh = list(value.shape)
@@ -245,7 +246,7 @@ def _dataset_analysis_thread(args):
     if 'rep_coord' in global_attr_dict:
         global_attr_dict['rep_coord'] = np.array(global_attr_dict['rep_coord'], dtype=np.int32)
     if 'size' in global_attr_dict:
-        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int)
+        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int32)
     if 'mesh_area' in global_attr_dict:
         global_attr_dict['mesh_area'] = np.array(global_attr_dict['mesh_area'], dtype=np.float32)
     return global_attr_dict
@@ -321,7 +322,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
@@ -518,7 +519,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=n_cores)
 
@@ -554,7 +555,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
@@ -579,7 +580,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
 
 def _map_subcell_extract_props_thread(args):
-    from syconn.reps.find_object_properties_C import map_subcell_extract_propsC
     chunks = args[0]
     chunk_size = args[1]
     kd_cell_p = args[2]
@@ -625,7 +625,7 @@ def _map_subcell_extract_props_thread(args):
     start_all = time.time()
     for ch_cnt, ch_id in enumerate(chunks):
         ch = cd.chunk_dict[ch_id]
-        offset, size = ch.coordinates.astype(np.int), ch.size
+        offset, size = ch.coordinates.astype(np.int32), ch.size
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         subcell_d = []
         obj_ids_bdry = dict()
@@ -653,7 +653,7 @@ def _map_subcell_extract_props_thread(args):
         start = time.time()
         # extract properties and mapping information
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = \
-            map_subcell_extract_propsC(cell_d, subcell_d)
+            map_subcell_extract_props_func(cell_d, subcell_d)
         dt_times_dc['prop_dicts_extract'] += time.time() - start
 
         # remove objects that are purely inside this chunk and smaller than the size threshold
@@ -1451,9 +1451,9 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512, nb_cpus=10):
         grid_c.append(np.arange(0, kd.boundary[i_dim], block_size[i_dim]))
 
     bbs_block_range = sd.load_numpy_data("bounding_box") / np.array(block_size)
-    bbs_block_range = bbs_block_range.astype(np.int)
+    bbs_block_range = bbs_block_range.astype(np.int32)
 
-    kd_block_range = np.array(kd.boundary / block_size + 1, dtype=np.int)
+    kd_block_range = np.array(kd.boundary / block_size + 1, dtype=np.int32)
 
     bbs_job_dict = defaultdict(list)
 
@@ -1499,7 +1499,7 @@ def _export_sd_to_knossosdataset_thread(args):
     kd_path = args[5]
     block_edge_length = args[6]
 
-    block_size = np.array([block_edge_length] * 3, dtype=np.int)
+    block_size = np.array([block_edge_length] * 3, dtype=np.int32)
 
     kd = basics.kd_factory(kd_path)
 
@@ -1508,7 +1508,7 @@ def _export_sd_to_knossosdataset_thread(args):
                                           version=version)
 
     overlay_block = np.zeros(block_size, dtype=np.uint64)
-    block_start = (block_loc * block_size).astype(np.int)
+    block_start = (block_loc * block_size).astype(np.int32)
 
     for so_id in so_ids:
         so = sd.get_segmentation_object(so_id, False)

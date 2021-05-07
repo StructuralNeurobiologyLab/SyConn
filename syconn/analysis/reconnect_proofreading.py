@@ -107,7 +107,7 @@ def analyze_j0126_reconnector_task(path_to_kzip, make_plots = False, verbose=Fal
         these_ts = []
         for n in nxg.nodes():
             try:
-                these_ts.append(nxg.node[n]['ts'] / 1000.)
+                these_ts.append(nxg.nodes[n]['ts'] / 1000.)
             except KeyError:
                 continue
         all_timestamps.append(these_ts)
@@ -178,9 +178,9 @@ def nx_skel_to_knossos_skel(nxg):
     this_anno.scaling = [10., 10., 20.]
     nodes_to_remove = []
     for n in nxg.nodes():
-        #print(nxg.node[n])
+        #print(nxg.nodes[n])
         try:
-            coord = map(int, nxg.node[n]['coord'].replace('(','').replace(')', '').replace('L','').split(','))
+            coord = map(int, nxg.nodes[n]['coord'].replace('(','').replace(')', '').replace('L','').split(','))
         except KeyError:
             #print('nx node has no coord defined, skipping.')
             nodes_to_remove.append(n)
@@ -206,7 +206,7 @@ def get_skel_times_from_nx_skel(nxg):
     for n in nxg.nodes():
 
         try:
-            ts.append(int(nxg.node[n]['ts']))
+            ts.append(int(nxg.nodes[n]['ts']))
         except KeyError:
             nodes_to_remove.append(n)
             continue

@@ -46,7 +46,7 @@ def glia_pred_so(so: 'SegmentationObject', thresh: float,
     if pred_key not in so.attr_dict:
         so.load_attr_dict()
     try:
-        preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int)
+        preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int32)
         pred = np.mean(so.attr_dict[pred_key][:, 1]) > thresh
     except KeyError:
         raise KeyError('Could not find glia proba key `{}` in so,attr_dict (keys: {})'.format(
@@ -162,8 +162,8 @@ def load_voxels_depr(so: 'SegmentationObject',
         block_extents.append(np.array(bin_arrs[i_bin_arr].shape) +
                              block_offsets[i_bin_arr])
 
-    block_offsets = np.array(block_offsets, dtype=np.int)
-    block_extents = np.array(block_extents, dtype=np.int)
+    block_offsets = np.array(block_offsets, dtype=np.int32)
+    block_extents = np.array(block_extents, dtype=np.int32)
 
     so._bounding_box = np.array([block_offsets.min(axis=0),
                                  block_extents.max(axis=0)])
@@ -236,7 +236,7 @@ def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
 
 
 def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
-    downsampling = np.array(downsampling, dtype=np.int)
+    downsampling = np.array(downsampling, dtype=np.int32)
     dvoxels = so.load_voxels_downsampled(downsampling)
 
     if len(dvoxels) == 0:
@@ -285,7 +285,7 @@ def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
             msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)" \
                   "with id %d.".format(e, so.type, so.id)
             log_reps.error(msg)
-            return [np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,))]
+            return [np.zeros((0,)).astype(np.int32), np.zeros((0,)), np.zeros((0,))]
     else:
         if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
@@ -297,8 +297,8 @@ def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
         except Exception as e:
             log_reps.error("Mesh of %s %d could not be saved:\n%s\n".format(
                 so.type, so.id, e))
-    vertices = np.array(vertices, dtype=np.int)
-    indices = np.array(indices, dtype=np.int)
+    vertices = np.array(vertices, dtype=np.int32)
+    indices = np.array(indices, dtype=np.int64)
     normals = np.array(normals, dtype=np.float32)
     col = np.array(col, dtype=np.uint8)
     return [indices, vertices, normals]
@@ -315,8 +315,8 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
         Dictionary with "nodes", "diameters" and "edges".
 
     """
-    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int), edges=np.zeros((0, 2)),
-                      diameters=np.zeros((0,)).astype(np.int))
+    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int54), edges=np.zeros((0, 2)),
+                      diameters=np.zeros((0,)).astype(np.int32))
     if not recompute and so.skeleton_exists:
         try:
             skeleton_dc = SkeletonStorage(so.skeleton_path, disable_locking=not so.enable_locking)
@@ -605,7 +605,7 @@ def get_sd_load_distribution(sd: 'SegmentationDataset', use_vxsize: bool = True)
     """
     n_objects = start_multiprocess_imap(_helper_func, [(ch, use_vxsize) for ch in chunkify(sd.so_dir_paths, 1000)],
                                         nb_cpus=None)
-    return np.concatenate(n_objects).astype(np.int)
+    return np.concatenate(n_objects).astype(np.int64)
 
 
 def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
@@ -639,7 +639,7 @@ def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
         raise ValueError("Edge list ist not a 2D array: {}\n{}".format(
             edge_list.shape, edge_list))
     skeleton = dict()
-    skeleton["nodes"] = (locs / np.array(so.scaling)).astype(np.int)
+    skeleton["nodes"] = (locs / np.array(so.scaling)).astype(np.int32)
     skeleton["edges"] = edge_list
     skeleton["diameters"] = np.ones(len(locs))
     return skeleton

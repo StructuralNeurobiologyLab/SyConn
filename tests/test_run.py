@@ -20,23 +20,25 @@ from knossos_utils import knossosdataset
 
 def test_full_run():
     example_cube_id = 1
-    working_dir = "~/SyConn/tests/example_cube{}/".format(example_cube_id)
+    working_dir = f"~/SyConn/tests/example_cube{example_cube_id}_{os.getpid()}/"
     example_wd = os.path.expanduser(working_dir) + "/"
     shutil.rmtree(example_wd, ignore_errors=True)
     # set up basic parameter, log, working directory and config file
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
     experiment_name = 'j0126_example'
     scale = np.array([10, 10, 20])
-    prior_glia_removal = True
+    prior_astrocyte_removal = True
     use_myelin = True
+    use_point_models = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 1),
         ('log_level', 'INFO'),
+        ('use_point_models', use_point_models),
         ('cell_objects', {
           }),
     ]
@@ -99,10 +101,10 @@ def test_full_run():
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    if not prior_glia_removal:
-        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+    if not prior_astrocyte_removal:
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
     else:
-        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
 
     tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
     offset = np.array([0, 0, 0])
@@ -164,18 +166,18 @@ def test_full_run():
     exec_init.run_create_rag()
     ftimer.stop()
 
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
+    log.info('Step 3/9 - Astrocyte separation')
+    if global_params.config.prior_astrocyte_removal:
+        ftimer.start('Astrocyte separation')
         if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
+            exec_render.run_astrocyte_rendering()
+            exec_inference.run_astrocyte_prediction()
         else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
+            exec_inference.run_astrocyte_prediction_pts()
+        exec_inference.run_astrocyte_splitting()
         ftimer.stop()
     else:
-        log.info('Glia separation disabled. Skipping.')
+        log.info('Astrocyte separation disabled. Skipping.')
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
@@ -196,6 +198,14 @@ def test_full_run():
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    ftimer.stop()
+
+    log.info('Step 6.5/9 - Contact detection')
+    ftimer.start('Contact detection')
+    if global_params.config['generate_cs_ssv']:
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    else:
+        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
 
     log.info('Step 7/9 - Compartment prediction')
@@ -226,6 +236,7 @@ def test_full_run():
 
     if os.environ.get('syconn_wd') is not None:
         del os.environ['syconn_wd']
+    shutil.rmtree(example_wd, ignore_errors=True)
 
 
 if __name__ == '__main__':

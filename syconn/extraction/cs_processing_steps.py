@@ -11,6 +11,7 @@ import time
 from collections import defaultdict
 from logging import Logger
 from typing import Optional, Dict, List, Tuple, TYPE_CHECKING
+from itertools import chain
 
 import joblib
 import numpy as np
@@ -21,6 +22,7 @@ from scipy import spatial
 from sklearn import ensemble
 from sklearn.model_selection import cross_val_predict
 from sklearn import metrics
+import open3d as o3d
 
 from . import log_extraction
 from .. import global_params
@@ -32,6 +34,7 @@ from ..mp import mp_utils as sm
 from ..reps import segmentation_helper as seghelp
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
+from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
@@ -134,12 +137,12 @@ def _collect_properties_from_ssv_partners_thread(args):
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
         if len(ssv_synids) == 0:
-            cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float)
-            cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int)
+            cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float32)
+            cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int32)
             cache_dc['synssv_ids'] = ssv_synids
-            cache_dc['partner_spiness'] = np.zeros((0,), dtype=np.int)
-            cache_dc['partner_celltypes'] = np.zeros((0,), dtype=np.int)
-            cache_dc['latent_morph'] = np.zeros((0,), dtype=np.float)
+            cache_dc['partner_spiness'] = np.zeros((0,), dtype=np.int32)
+            cache_dc['partner_celltypes'] = np.zeros((0,), dtype=np.int32)
+            cache_dc['latent_morph'] = np.zeros((0,), dtype=np.float32)
             cache_dc.push()
             continue
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
@@ -254,7 +257,6 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids >= len(ssd.id_changer)] = 0
-    # ^^^^ -1 changed to 0 due to overflow in uint array... PS 13Aug2020; 0 should be fine as it is background anyway
     mapped_sv_ids = ssd.id_changer[sv_ids]
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
@@ -359,6 +361,8 @@ def _combine_and_split_syn_thread(args):
 
     scaling = sd_syn.scaling
 
+    syn_meshing_kws = global_params.config['meshes']['meshing_props_points']['syn_ssv']
+    mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
     cell_obj_cnf = global_params.config['cell_objects']
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
@@ -384,7 +388,6 @@ def _combine_and_split_syn_thread(args):
 
         # verify ssv_partner_ids
         syn.load_attr_dict()
-        ssv_partners_check = syn.cs_partner
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
         voxel_list = [syn.voxel_list]
         # store index of syn. objects for attribute dict retrieval
@@ -392,7 +395,6 @@ def _combine_and_split_syn_thread(args):
         for syn_ix, syn_id in enumerate(syn_ids[1:]):
             syn = sd_syn.get_segmentation_object(syn_id)
             syn.load_attr_dict()
-            ssv_partners_check.extend(syn.cs_partner)
             syn_attr_list.append(syn.attr_dict)
             voxel_list.append(syn.voxel_list)
             synix_list += [syn_ix] * len(voxel_list[-1])
@@ -429,30 +431,29 @@ def _combine_and_split_syn_thread(args):
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
             synssv_attr_dc = dict(neuron_partners=ssv_ids)
-            try:
-                voxel_dc[syn_ssv_id] = [id_mask], [abs_offset]
-                syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
-                # make sure load_voxels still calculates bounding box and size
-                if syn_ssv._bounding_box is None or syn_ssv._size is None:
-                    msg = f'load_voxels call did not calculate size and/or bounding box of {syn_ssv}.'
-                    log_extraction.error(msg)
-                    raise ValueError(msg)
-                syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
-                synssv_attr_dc["rep_coord"] = syn_ssv.rep_coord
-                synssv_attr_dc["bounding_box"] = syn_ssv.bounding_box
-                synssv_attr_dc["size"] = syn_ssv.size
-                ind, vert, normals = syn_ssv.mesh_from_scratch()
-                mesh_dc[syn_ssv.id] = [ind, vert, normals]
+            voxel_dc[syn_ssv_id] = [id_mask], [abs_offset]
+            syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
+            # make sure load_voxels still calculates bounding box and size
+            if syn_ssv._bounding_box is None or syn_ssv._size is None:
+                msg = f'load_voxels call did not calculate size and/or bounding box of {syn_ssv}.'
+                log_extraction.error(msg)
+                raise ValueError(msg)
+            syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
+            synssv_attr_dc["rep_coord"] = syn_ssv.rep_coord
+            synssv_attr_dc["bounding_box"] = syn_ssv.bounding_box
+            synssv_attr_dc["size"] = syn_ssv.size
+            # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
+            if mesh_min_obj_vx < syn_ssv.size:
+                syn_ssv._mesh = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
+                mesh_dc[syn_ssv.id] = syn_ssv.mesh
                 synssv_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
                 synssv_attr_dc["mesh_area"] = syn_ssv.mesh_area
-            except Exception as e:
-                debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
-                    sd_syn_ssv.so_storage_path, syn_ssv_id, abs_offset[0],
-                    abs_offset[1], abs_offset[2])
-                msg = f"Saving {syn_ssv} failed with '{type(e)}: {e}'. Debug file at {debug_out_fname}."
-                log_extraction.error(msg)
-                np.save(debug_out_fname, this_vx)
-                raise ValueError(msg)
+            else:
+                zero_mesh = [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),
+                             np.zeros((0,), dtype=np.float32)]
+                mesh_dc[syn_ssv.id] = zero_mesh
+                synssv_attr_dc["mesh_bb"] = syn_ssv.bounding_box * scaling
+                synssv_attr_dc["mesh_area"] = 0
             # aggregate syn properties
             syn_props_agg = {}
             # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
@@ -502,6 +503,8 @@ def _combine_and_split_syn_thread(args):
             attr_dc.push()
             mesh_dc.push()
             cur_path_id += 1
+            if len(voxel_rel_paths) == cur_path_id:
+                raise ValueError(f'Worker ran out of possible storage paths for storing {sd_syn_ssv.type}.')
             n_items_for_path = 0
             id_chunk_cnt = 0
             base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
@@ -547,7 +550,7 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
         off = ixs_offset[ii]
         graph.add_nodes_from(np.arange(len(voxel_coords[ii])) + off)
         kdtree = spatial.cKDTree(voxel_coords[ii])
-        pairs = np.array(list(kdtree.query_pairs(r=2)), dtype=np.int)
+        pairs = np.array(list(kdtree.query_pairs(r=2)), dtype=np.int64)
         graph.add_edges_from(pairs + off)
     del kdtree, pairs
     voxel_coords_flat = np.concatenate(voxel_coords) * scale
@@ -571,20 +574,17 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
     return list(nx.connected_components(graph))
 
 
-# TODO: Use this in case contact objects are required
-def combine_and_split_cs(wd, cs_gap_nm=300, ssd_version=None, cs_version=None,
+def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
                          nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False):
     """
-    Creates 'cs_ssv' objects from 'cs' objects. Therefore, computes connected
+    Creates 'cs_ssv' objects from 'cs' objects. Computes connected
     cs-objects on SSV level and re-calculates their attributes (mesh_area, size, ..).
-
-    Notes:
-        * Untested!
+    In contrast to :func:`~combine_and_split_syn` this method performs connected component analysis on
+    the mesh of all cell-cell contacts instead of their voxels.
 
     Parameters
     ----------
     wd :
-    cs_gap_nm :
     ssd_version :
     cs_version :
     nb_cpus :
@@ -595,8 +595,6 @@ def combine_and_split_cs(wd, cs_gap_nm=300, ssd_version=None, cs_version=None,
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
-    # TODO: this procedure creates folders with single and double digits, e.g. '0' and '00'. Single digit folders are
-    #  not used during write-outs, they are probably generated within this method's makedirs
     rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd)
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
@@ -618,35 +616,32 @@ def combine_and_split_cs(wd, cs_gap_nm=300, ssd_version=None, cs_version=None,
     for p in voxel_rel_paths_2stage:
         os.makedirs(sd_cs_ssv.so_storage_path + p)
 
-    # TODO: apply weighting-scheme to balance worker load
     rel_ssv_with_cs_ids_items = list(rel_ssv_with_cs_ids.items())
 
     rel_csssv_to_cs_ids_items_chunked = chunkify(rel_ssv_with_cs_ids_items, n_used_paths)
     multi_params = [(wd, rel_csssv_to_cs_ids_items_chunked[ii], voxel_rel_paths[ii],
-                     cs_sd.version, sd_cs_ssv.version, cs_gap_nm) for
+                     cs_sd.version, sd_cs_ssv.version) for
                     ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.batchjob_script(
-            multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log)
 
 
-# TODO: Use this in case contact objects are required
 def _combine_and_split_cs_thread(args):
     wd = args[0]
     rel_ssv_with_cs_ids_items = args[1]
     voxel_rel_paths = args[2]
     cs_version = args[3]
     cs_ssv_version = args[4]
-    cs_gap_nm = args[5]
 
-    sd_cs_ssv = segmentation.SegmentationDataset("cs_ssc", working_dir=wd, version=cs_ssv_version)
+    sd_cs_ssv = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version=cs_ssv_version)
     sd_cs = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
 
     scaling = sd_cs.scaling
+    meshing_kws = global_params.config['meshes']['meshing_props_points']['cs_ssv']
+    mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
 
-    cell_obj_cnf = global_params.config['cell_objects']
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
     div_base = 1e3
@@ -664,75 +659,53 @@ def _combine_and_split_cs_thread(args):
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
+    # iterate over cell partners and their contact site IDs (each contact site is between two supervoxels
+    # of the partner cells)
     for ssvpartners_enc, cs_ids in rel_ssv_with_cs_ids_items:
         n_items_for_path += 1
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
-        cs = sd_cs.get_segmentation_object(cs_ids[0])
 
         # verify ssv_partner_ids
-        cs.load_attr_dict()
-        ssv_partners_check = cs.cs_partner
-        voxel_list = [cs.voxel_list]
-        # store index of cs objects for attribute dict retrieval
-        csix_list = [0] * len(voxel_list[0])
-        for cs_ix, cs_id in enumerate(cs_ids[1:]):
-            cs = sd_cs.get_segmentation_object(cs_id)
-            cs.load_attr_dict()
-            ssv_partners_check.extend(cs.cs_partner)
-            voxel_list.append(cs.voxel_list)
-            csix_list += [cs_ix] * len(voxel_list[-1])
-        csix_list = np.array(csix_list)
+        cs_lst = sd_cs.get_segmentation_object(cs_ids)
+        vxl_iter_lst = []
+        vx_cnt = 0
+        for cs in cs_lst:
+            vx_store = VoxelStorage(cs.voxel_path, read_only=True,
+                                    disable_locking=True)
+            vxl_iter_lst.append(vx_store.iter_voxelmask_offset(cs.id, overlap=1))
+            vx_cnt += vx_store.object_size(cs.id)
+        if mesh_min_obj_vx > vx_cnt:
+            ccs = []
+        else:
+            # generate connected component meshes; vertices are in nm
+            ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
 
-        if len(csix_list) == 0:
-            msg = f'Voxels not available for cs-objects {cs_ids}.'
-            log_extraction.error(msg)
-            raise ValueError(msg)
-
-        ccs = connected_cluster_kdtree(voxel_list, dist_intra_object=cs_gap_nm, dist_inter_object=20000, scale=scaling)
-
-        voxel_list = np.concatenate(voxel_list)
-
-        for this_cc in ccs:
-            this_cc_mask = np.array(list(this_cc))
-            # retrieve the index of the cs objects selected for this CC
-            this_cs_ixs, this_cs_ids_cnt = np.unique(csix_list[this_cc_mask], return_counts=True)
-            # the weight is important
-            if np.sum(this_cs_ids_cnt) < cell_obj_cnf['min_obj_vx']['cs_ssv']:
-                continue
-            this_vx = voxel_list[this_cc_mask]
-            abs_offset = np.min(this_vx, axis=0)
-            this_vx -= abs_offset
-            id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
-            id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
+        for mesh_cc in ccs:
+            abs_offset = np.min(mesh_cc[1].reshape((-1, 3)), axis=0) // scaling
             cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id)
             if (os.path.abspath(cs_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
             csssv_attr_dc = dict(neuron_partners=ssv_ids)
-            try:
-                voxel_dc[cs_ssv_id] = [id_mask], [abs_offset]
-                cs_ssv._voxels = cs_ssv.load_voxels(voxel_dc=voxel_dc)
-                # make sure load_voxels still calculates bounding box and size
-                if cs_ssv._bounding_box is None or cs_ssv._size is None:
-                    msg = f'load_voxels call did not calculate size and/or bounding box of {cs_ssv}.'
-                    log_extraction.error(msg)
-                    raise ValueError(msg)
-                cs_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
-                csssv_attr_dc["rep_coord"] = cs_ssv.rep_coord
-                csssv_attr_dc["bounding_box"] = cs_ssv.bounding_box
-                csssv_attr_dc["size"] = cs_ssv.size
-                ind, vert, normals = cs_ssv.mesh_from_scratch()
-                mesh_dc[cs_ssv.id] = [ind, vert, normals]
-                csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
-                csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
-            except Exception as e:
-                debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
-                    sd_cs_ssv.so_storage_path, cs_ssv_id, abs_offset[0],
-                    abs_offset[1], abs_offset[2])
-                msg = f"Saving {cs_ssv} failed with '{type(e)}: {e}'. Debug file at {debug_out_fname}."
-                log_extraction.error(msg)
-                np.save(debug_out_fname, this_vx)
-                raise ValueError(msg)
+            # store dummy (no) voxels at correct offset
+            voxel_dc[cs_ssv_id] = [np.zeros((0, 0, 0))], [abs_offset]
+            # don't store normals
+            cs_ssv._mesh = [mesh_cc[0], mesh_cc[1], np.zeros((0,), dtype=np.float32)]
+            mesh_dc[cs_ssv.id] = cs_ssv.mesh
+            csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
+            csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
+            csssv_attr_dc["bounding_box"] = cs_ssv.mesh_bb // scaling
+            csssv_attr_dc["rep_coord"] = mesh_cc[1].reshape((-1, 3))[0] // scaling  # take first vertex coordinate
+
+            # create open3d mesh instance to compute volume
+            # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
+            # tm = o3d.geometry.TriangleMesh
+            # tm.triangles = o3d.utility.Vector3iVector(mesh_cc[0].reshape((-1, 3)))
+            # tm.vertices = o3d.utility.Vector3dVector(mesh_cc[1].reshape((-1, 3)))
+            # tm.normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
+            # assert tm.is_watertight()
+            # csssv_attr_dc["size"] = tm.get_volume // np.prod(scaling)
+            csssv_attr_dc["size"] = 0
 
             # add cs_ssv dict to AttributeStorage
             attr_dc[cs_ssv_id] = csssv_attr_dc
@@ -754,6 +727,8 @@ def _combine_and_split_cs_thread(args):
             attr_dc.push()
             mesh_dc.push()
             cur_path_id += 1
+            if len(voxel_rel_paths) == cur_path_id:
+                raise ValueError(f'Worker ran out of possible storage paths for storing {sd_cs_ssv.type}.')
             n_items_for_path = 0
             id_chunk_cnt = 0
             base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
@@ -770,16 +745,15 @@ def _combine_and_split_cs_thread(args):
         mesh_dc.push()
 
 
-def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
-                         verbose=False):
+def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000, verbose=False):
     kdtree = spatial.cKDTree(voxel_list)
 
-    checked_ids = np.array([], dtype=np.int)
+    checked_ids = np.array([], dtype=np.int32)
     next_ids = np.array([0])
     ccs = [set(next_ids)]
 
     current_ccs = 0
-    vx_ids = np.arange(len(voxel_list), dtype=np.int)
+    vx_ids = np.arange(len(voxel_list), dtype=np.int32)
 
     while True:
         if verbose:
@@ -927,10 +901,10 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
                         (syn_neuronpartners[:, 1] == ssv_id)
         synssv_ids = sd_syn_ssv.ids[curr_ssv_mask]
         n_synssv = len(synssv_ids)
-        n_mi_objs = np.zeros((n_synssv,), dtype=np.int)
-        n_mi_vxs = np.zeros((n_synssv,), dtype=np.int)
-        n_vc_objs = np.zeros((n_synssv,), dtype=np.int)
-        n_vc_vxs = np.zeros((n_synssv,), dtype=np.int)
+        n_mi_objs = np.zeros((n_synssv,), dtype=np.int32)
+        n_mi_vxs = np.zeros((n_synssv,), dtype=np.int32)
+        n_vc_objs = np.zeros((n_synssv,), dtype=np.int32)
+        n_vc_vxs = np.zeros((n_synssv,), dtype=np.int32)
         cache_dc['synssv_ids'] = synssv_ids
         if n_synssv == 0:
             cache_dc['n_mi_objs'] = n_mi_objs
@@ -963,8 +937,8 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         # dts['kds'] += time.time() - start
 
         # start = time.time()
-        close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int)]
-        close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int))]
+        close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int32)]
+        close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int32))]
 
         md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_object(close_mi_ids),
                                             use_new_subfold=use_new_subfold)
@@ -1021,7 +995,6 @@ def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2
         Number of SegmentationObjects with >0 vertices, approximated number of
         object voxels within `max_vert_dist_nm`.
     """
-    # synssv_kdtree = spatial.cKDTree(synssv_o.mesh[1].reshape(-1, 3)[::sample_fact])
     synssv_kdtree = spatial.cKDTree(synssv_o.voxel_list[::sample_fact] * synssv_o.scaling)
 
     n_obj_vxs = []
@@ -1130,7 +1103,10 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    rfc = joblib.load(global_params.config.mpath_syn_rfc)
+    try:
+        rfc = joblib.load(global_params.config.mpath_syn_rfc)
+    except ImportError:
+        rfc = joblib.load(global_params.config.mpath_syn_rfc_fallback)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
@@ -1187,7 +1163,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     Args:
         sd_syn_ssv: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
             type ``syn_ssv``. Used to identify synaptic object candidates annotated
-            in the kzip/xlsx file at `path2file`.
+            in the kzip/xls file at `path2file`.
         path2file: Path to kzip file with synapse labels as node comments
             ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
             respectively).
@@ -1307,7 +1283,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     mask_annotated = (labels == "synaptic") | (labels == 'non-synaptic')
     v_features = features[mask_annotated]
     v_labels = labels[mask_annotated]
-    v_labels = (v_labels == "synaptic").astype(np.int)
+    v_labels = (v_labels == "synaptic").astype(np.int32)
     # score = cross_val_score(rfc, v_features, v_labels, cv=10)
     # log.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
     # log.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
@@ -1494,11 +1470,6 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
     if export_kzip:
         ax_labels = np.array(["N/A", "D", "A", "S"])  # TODO: this is already defined in handler.multiviews!
         ax_label_ids = np.array([-1, 0, 1, 2])
-        # Documentation of prediction labels, maybe add somewhere to .k.zip or .csv
-        ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']  # TODO: this is already defined in handler.multiviews!
-        ct_label_ids = np.array([-1, 0, 1, 2, 3])
-        sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']  # TODO: this is already defined in handler.multiviews!
-        sp_label_ids = np.array([-1, 0, 1, 2, 3])
 
         annotations = []
         m_sizes = np.abs(m_sizes)

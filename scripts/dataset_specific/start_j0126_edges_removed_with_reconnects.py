@@ -21,9 +21,8 @@ from syconn import global_params
 from syconn.exec import exec_syns, exec_render, exec_skeleton, exec_init, exec_inference
 
 
-# TODO add materialize button and store current process in config.ini
-#  -> allows to resume interrupted processes
 if __name__ == '__main__':
+    raise DeprecationWarning('This script is outdated. See earlier commits for functional versions.')
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
@@ -51,19 +50,19 @@ if __name__ == '__main__':
             edges = [int(v) for v in re.findall(r'(\d+)', l)]
             G.add_edge(edges[0], edges[1])
 
-    nx.write_edgelist(G, global_params.config.init_rag_path)
+    nx.write_edgelist(G, global_params.config.init_svgraph_path)
     exec_init.run_create_rag()
-    if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
-        exec_inference.run_glia_splitting()
+    if global_params.config.prior_astrocyte_removal:
+        log.info('Step 1.5/8 - Astrocyte separation')
+        exec_render.run_astrocyte_rendering()
+        exec_inference.run_astrocyte_prediction()
+        exec_inference.run_astrocyte_splitting()
         time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+        step_idents.append('Astrocyte separation')
 
-    # remove edges from original neuron rag as returned by the glia separation
-    shutil.move(example_wd + '/glia/neuron_rag.bz2', example_wd + '/glia/neuron_rag_ORIG.bz2')
-    rag = nx.read_edgelist(example_wd + '/glia/neuron_rag_ORIG.bz2', nodetype=np.uint)
+    # remove edges from original neuron rag as returned by the astrocyte separation
+    shutil.move(example_wd + '/glia/neuron_svgraph.bz2', example_wd + '/glia/neuron_svgraph_ORIG.bz2')
+    rag = nx.read_edgelist(example_wd + '/glia/neuron_svgraph_ORIG.bz2', nodetype=np.uint64)
     with open(example_wd + '/glia/edges_to_remove.013.txt', 'r') as f:
         edges = [tuple(map(int, l.replace('\n', '').split(','))) for l in f.readlines()]
     # only for
@@ -86,10 +85,10 @@ if __name__ == '__main__':
              f'created edge list from the original RAG and added {cnt_singlenode} '
              f'self-edges to single-node connected components (#nodes:'
              f' {n_nodes}, #edges: {n_edges}).')
-    log.info(f'Storing modified RAG as "neuron_rag.bz2" which will be used for further '
+    log.info(f'Storing modified RAG as "neuron_svgraph.bz2" which will be used for further '
              f'processing (#nodes: {rag.number_of_nodes()}, #edges: {rag.number_of_edges()}).')
 
-    nx.write_edgelist(rag, example_wd + '/glia/neuron_rag.bz2')
+    nx.write_edgelist(rag, example_wd + '/glia/neuron_svgraph.bz2')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     # apply size threshold again because after additional edges were removed after

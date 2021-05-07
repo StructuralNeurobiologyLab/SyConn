@@ -136,6 +136,7 @@ def anno_skeleton2np(kzip, scaling, verbose=False, convert_to_morphx=False):
     g.add_nodes_from([(i, dict(label=a_node_labels[i])) for i in range(len(a_nodes))])
     g.add_edges_from(a_edges)
     a_edges = np.array(g.edges)
+    a_node_labels_orig = np.array(a_node_labels)
     # propagate labels, nodes with no label get label from nearest node with label
     if -1 in a_node_labels:
         if verbose:
@@ -152,4 +153,4 @@ def anno_skeleton2np(kzip, scaling, verbose=False, convert_to_morphx=False):
                     # all nodes between source and first node with label take on that label
                     path = nx.shortest_path(g, node, ix)
                     a_node_labels[path] = a_node_labels[ix]
-    return a_node_coords, a_edges, a_node_labels, a_node_labels_raw, g
+    return a_node_coords, a_edges, a_node_labels, a_node_labels_raw, g, a_node_labels_orig

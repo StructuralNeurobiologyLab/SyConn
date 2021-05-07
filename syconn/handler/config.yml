@@ -38,7 +38,7 @@ log_level: 10  # INFO: 20, DEBUG: 10
 disable_file_logging: True
 
 # File locking - deprecated.
-disable_locking: False
+disable_locking: True
 
 # Data paths
 paths:
@@ -50,8 +50,13 @@ paths:
   kd_mi:
   kd_er:
   kd_golgi:
-  init_rag:
+  init_svgraph:
   use_new_subfold:
+
+generate_cs_ssv: True
+
+# min. connected component size of glia nodes/SV after thresholding glia proba
+min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
 
 # (Super-)SegmentationDataset versions
 versions:
@@ -60,6 +65,7 @@ versions:
   sj: 0
   syn: 0
   syn_ssv: 0
+  cs_ssv: 0
   mi: 0
   er: 0 # chosen as placeholder analogous to others, might have to be adapted later
   golgi: 0 # chosen as placeholder analogous to others, might have to be adapted later
@@ -115,7 +121,6 @@ cell_objects:
     er: 30 # arbitrary placeholder, to be adjusted
     golgi: 30 # arbitrary placeholder, to be adjusted
 
-
   # Hook for morphological operations from scipy.ndimage applied during object extraction.
   # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'sv': []}
   # if erosion is applied last, use watershed to form segmentation on original mask data, seeds are generated
@@ -136,11 +141,13 @@ cell_objects:
   thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
 
   # --------- CONTACT SITE AND SYNAPSE PARAMETERS
-  # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
-  # into 'syn_ssv'
-  cs_gap_nm: 250
+  # determines the distance to "touching" partner cells to determine contact sites, must be uneven numbers
+  # max(cs_filtersize // 2) closings are performed afterwards (only background voxels will be affected)
   cs_filtersize: [13, 13, 7]
-  cs_nclosings: 7  # TODO: bind to cs_filtersize
+  # number of dilations performed after closing (see above; only background voxels will be affected)
+  cs_dilation: 2
+  # used to agglomerate 'syn' objects (cell supervoxel-based synapse fragments) into 'syn_ssv'
+  cs_gap_nm: 250
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
   # organelles to syn_ssv
@@ -157,8 +164,10 @@ cell_objects:
 
 meshes:
   allow_mesh_gen_cells: False
+  # TODO: remove old meshing
   use_new_meshing: True
 
+  # TODO: downsampling for syn_ssv is deprecated
   downsampling:
     sv: [4, 4, 2]
     sj: [2, 2, 1]
@@ -169,20 +178,47 @@ meshes:
     cs: [2, 2, 1]
     syn_ssv: [2, 2, 1]
 
+  # this is also used for cs_ssv and syn_ssv
   mesh_min_obj_vx: 100  # adapt to size threshold
 
+  # used for mitochondria, vesicle clouds, and cell supervoxel meshing
   meshing_props:
     normals: False
-    simplification_factor: 500
+    simplification_factor: 50
     max_simplification_error: 40  # in nm
 
+  # used cell-level contacts (cs_ssv) and synapses (syn_ssv)
+  meshing_props_points:
+    cs_ssv:
+      depth: 10  # detail level used in create_from_point_cloud_poisson (open3d)
+      vertex_size: 20  # in nm; used for downsizing initial points
+      voxel_size_simplify: 20  # in nm; used for mesh simplification
+      min_vert_num: 10  # minimum number of vertices in a single connected component mesh
+      nb_neighbors: 20  # number of neighbors used to calculate distance standard deviation
+      std_ratio: 2.0  # threshold of std to filter outlier points
+    syn_ssv:
+      depth: 10
+      vertex_size: 20
+      voxel_size_simplify: 20
+      min_vert_num: 10  # not used if compute_connected_components=False
+      compute_connected_components: False  # at this stage the syn_ssv have already been split and merged
+      nb_neighbors: 20
+      std_ratio: 2.0
+
 skeleton:
+  use_kimimaro: True
   # If True, allow cell skeleton generation from rendering locations (inaccurate).
   allow_ssv_skel_gen: True
+  # TODO: skeleton RFC not tested for a long time
   feature_context_rfc: # in nm
     axoness: 8000
     spiness: 1000
-  use_kimimaro: True
+  kimimaro_merge:
+    dust_threshold: 250  # in nm
+    tick_threshold: 500  # in nm
+  # TODO: add TEASAR params to config
+  kimimaro_skelgen:
+    dust_threshold: 1000 # in voxels
 
 use_point_models: False
 
@@ -191,7 +227,7 @@ views:
   use_new_renderings_locs: True
   # ordering sensitive; 'sj' will be replaced by 'syn_ssv' if use_onthefly_views == True
   subcell_objects: ['mi', 'vc', 'sj']
-  # used for default view rendering (glia separation, spine detection, cell type prediction)
+  # used for default view rendering (astrocyte separation, spine detection, cell type prediction)
   view_properties:
     comp_window: 8000  # in nm
     ws: [256, 128]  # in pixel (x, y)
@@ -207,9 +243,7 @@ points:
 
 # --------- GLIA PARAMETERS
 glia:
-  prior_glia_removal: True
-  # min. connected component size of glia nodes/SV after thresholding glia proba
-  min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
+  prior_astrocyte_removal: True
 
   # Threshold for glia classification
   glia_thresh: 0.161489
@@ -238,7 +272,7 @@ spines:
   # and 5 (unpredicted), use labels of the k-nearest vertices
   semseg2coords_spines:
     k: 50
-    ds_vertices: 1
+    ds_vertices: 1   # striding, i.e. skip every Xth vertex
     ignore_labels: [4, 5]  # background, unpredicted
 
 # --------- COMPARTMENT PARAMETERS

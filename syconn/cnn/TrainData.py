@@ -152,7 +152,7 @@ if elektronn3_avail:
             item = np.random.randint(0, len(self.sso_ids))
             self._curr_ssv_id = self.sso_ids[item]
             pts, feats = self.load_ssv_sample(item)
-            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size, dtype=np.int)
+            lbs = np.array([self.label_dc[self._curr_ssv_id]]*self._batch_size, dtype=np.int32)
             pts = torch.from_numpy(pts).float()
             lbs = torch.from_numpy(lbs[..., None]).long()
             feats = torch.from_numpy(feats).float()
@@ -282,7 +282,7 @@ if elektronn3_avail:
             assert self.train, "Other mode than 'train' is not implemented."
             self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
-            ssv_ids = df[:, 0].astype(np.uint)
+            ssv_ids = df[:, 0].astype(np.uint64)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
                 ixs, cnt = np.unique(ssv_ids, return_counts=True)
                 raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
@@ -338,11 +338,11 @@ if elektronn3_avail:
                 10919937, 16096256, 23144450, 2734465, 34811392, 491527,
                 15933443, 16113665, 24414208, 2854913, 37558272, 8339462,
                 15982592, 18571264, 26501121, 33581058, 46319619
-            ], dtype=np.uint)
+            ], dtype=np.uint64)
             # use celltype GT
             csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
             df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
-            nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint), nonglia_ssv_ids])
+            nonglia_ssv_ids = np.concatenate([df[:, 0].astype(np.uint64), nonglia_ssv_ids])
             self.ctx_size = ctx_size
             self.sso_params = {sso.id: dict(**sso.ssv_kwargs) for sso in ssd.get_super_segmentation_object(nonglia_ssv_ids)}
             ssd_glia = SuperSegmentationDataset(working_dir=wd_path, version='gliagt')
@@ -448,18 +448,22 @@ if elektronn3_avail:
 
 
     class CloudDataSemseg(Dataset):
-        def __init__(self, source_dir=None, npoints=20000, transform: Callable = Identity(),
-                     train=True, batch_size=1, use_subcell=True, ctx_size=20000, mask_boarders_with_id=None):
+        def __init__(self, source_dir=None, npoints=12000, transform: Callable = Identity(),
+                     train=True, batch_size=2, use_subcell=True, ctx_size=8000, mask_borders_with_id=None):
             if source_dir is None:
-                source_dir = ('/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/')
+                # source_dir = '/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/'
+                # ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
+                #                  16113665, 24414208, 18571264, 2734465, 23144450, 15982592, 15933443, 8339462, 18251791,
+                #                  17079297, 31967234, 23400450, 1090051, 3447296, 2091009, 28790786, 14637059, 19449344,
+                #                  12806659, 26331138, 22335491, 26169344, 12179464, 24434691, 18556928, 8003584,
+                #                  27435010]
+                # self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
+                #                in ssv_ids_proof]
+                source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2/hc_out_2021_04/'
+
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')
-            ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
-                             16113665, 24414208, 18571264, 2734465, 23144450, 15982592, 15933443, 8339462, 18251791,
-                             17079297, 31967234, 23400450, 1090051, 3447296, 2091009, 28790786, 14637059, 19449344,
-                             12806659, 26331138, 22335491, 26169344, 12179464, 24434691, 18556928, 8003584, 27435010]
-            self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
-                           in ssv_ids_proof]
+
             print(f'Using {len(self.fnames)} cells for training.')
             if use_subcell:  # TODO: add syntype
                 self._num_obj_types = 4
@@ -471,22 +475,20 @@ if elektronn3_avail:
             self.num_pts = npoints
             self._batch_size = batch_size
             self.transform = transform
-            self.mask_boarders_with_id = mask_boarders_with_id
+            self.mask_borders_with_id = mask_borders_with_id
 
         def __getitem__(self, item):
             item = np.random.randint(0, len(self.fnames))
-            sample_pts, sample_feats, out_pts, out_labels = self.load_sample(item)
+            sample_pts, sample_feats, out_labels = self.load_sample(item)
             pts = torch.from_numpy(sample_pts).float()
             feats = torch.from_numpy(sample_feats).float()
-            out_pts = torch.from_numpy(out_pts).float()
             lbs = torch.from_numpy(out_labels).long()
-            return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': lbs}
+            return {'pts': pts, 'features': feats, 'target': lbs,
+                    'extra': os.path.split(self.fnames[item])[1][:-4]}
 
         def __len__(self):
             if self.train:
-                # make use of the underlying LRU cache with high epoch size,
-                # worker instances of the pytorch loader will reset after each epoch
-                return len(self.fnames) * 100
+                return len(self.fnames) * 50
             else:
                 return max(len(self.fnames), 1)
 
@@ -501,12 +503,12 @@ if elektronn3_avail:
                 Numpy arrays of points, point features, target points and target labels.
             """
             p = self.fnames[item]
-            (sample_feats, sample_pts), (out_pts, out_labels) = \
+            sample_feats, sample_pts, out_labels = \
                 [*pts_loader_semseg_train([p], self._batch_size, self.num_pts,
                                           transform=self.transform, ctx_size=self.ctx_size,
                                           use_subcell=self.use_subcell,
-                                          mask_boarders_with_id=self.mask_boarders_with_id)][0]
-            return sample_pts, sample_feats, out_pts, out_labels
+                                          mask_borders_with_id=self.mask_borders_with_id)][0]
+            return sample_pts, sample_feats, out_labels
 
 
     class MultiviewDataCached(Dataset):
@@ -680,8 +682,8 @@ if elektronn3_avail:
             inp, target = self.av.getbatch(1, source='train' if self.train else 'valid')
             inp = naive_view_normalization_new(inp)
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
-            return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
+            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int32)]  # one-hot encoding
+            return inp[0], target.squeeze().astype(np.int32)  # target should just be a scalar
 
         def __len__(self):
             """Determines epoch size(s)"""
@@ -720,11 +722,11 @@ if elektronn3_avail:
                 inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
                 inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
                 # target should just be a scalar
-                return {'inp': (inp[0], syn_signs[0].astype(np.float32)), 'target': target.squeeze().astype(np.int)}
+                return {'inp': (inp[0], syn_signs[0].astype(np.float32)), 'target': target.squeeze().astype(np.int32)}
             else:
                 inp, target = self.ctv.getbatch_alternative_noscal(1, source='train' if self.train else 'valid')
                 inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-                return {'inp': inp[0], 'target': target.squeeze().astype(np.int)}
+                return {'inp': inp[0], 'target': target.squeeze().astype(np.int32)}
 
         def __len__(self):
             """Determines epoch size(s)"""
@@ -755,8 +757,8 @@ if elektronn3_avail:
             inp, target = self.gv.getbatch(1, source='train' if self.train else 'valid')
             inp = naive_view_normalization_new(inp)
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
-            return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
+            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int32)]  # one-hot encoding
+            return inp[0], target.squeeze().astype(np.int32)  # target should just be a scalar
 
         def __len__(self):
             """Determines epoch size(s)"""
@@ -1046,8 +1048,8 @@ class MultiViewData(Data):
                 log_cnn.error(msg)
                 raise ValueError(msg)
             # TODO: Use  stratified splitting for per-class balanced splitting
-            ssv_ids = np.array(list(self.label_dict.keys()), dtype=np.uint)
-            ssv_labels = np.array(list(self.label_dict.values()), dtype=np.uint)
+            ssv_ids = np.array(list(self.label_dict.keys()), dtype=np.uint64)
+            ssv_labels = np.array(list(self.label_dict.values()), dtype=np.uint64)
             avail_classes, c_count = np.unique(ssv_labels, return_counts=True)
             n_classes = len(avail_classes)
             for c, cnt in zip(avail_classes, c_count):
@@ -1562,7 +1564,7 @@ class CelltypeViewsJ0251(CelltypeViews):
         # load GT
         self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
         df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
-        ssv_ids = df[:, 0].astype(np.uint)
+        ssv_ids = df[:, 0].astype(np.uint64)
         if len(np.unique(ssv_ids)) != len(ssv_ids):
             ixs, cnt = np.unique(ssv_ids, return_counts=True)
             raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
@@ -1865,7 +1867,7 @@ class TripletData_N(Data):
         sizes = np.array([ssds_sizes[rev_dc[ix]] for ix in self.s_ids], dtype=np.float32)
         # assign weights: 0 for SV below 8, 1 for 8 to 18, 2 for 19 to 28, truncated at 5 for 49 to 58
         self.s_weights = (sizes - 8.) / 10.
-        self.s_weights *= np.array(self.s_weights > 0, dtype=np.int)
+        self.s_weights *= np.array(self.s_weights > 0, dtype=np.int32)
         self.s_weights = np.ceil(self.s_weights)
         self.s_weights[self.s_weights > 6] = 6
         print("Data Summary:\nweight\t#samples")
@@ -1942,7 +1944,7 @@ class TripletData_SSV(Data):
             ssds_sizes[i] = bb_size[i]
         # assign weights: 0 for SV below 8, 1 for 8 to 18, 2 for 19 to 28, truncated at 5 for 49 to 58
         self.sso_weights = (ssds_sizes - 8.) / 10.
-        self.sso_weights *= np.array(self.sso_weights > 0, dtype=np.int)
+        self.sso_weights *= np.array(self.sso_weights > 0, dtype=np.int32)
         self.sso_weights = np.ceil(self.sso_weights)
         self.sso_weights[self.sso_weights > 6] = 6
         self.sso_ids = np.array(self.sso_ids, dtype=np.uint32)
@@ -2050,7 +2052,7 @@ class TripletData_SSV_nviews(Data):
             ssds_sizes[i] = bb_size[i]
         # assign weights: 0 for SV below 8, 1 for 8 to 18, 2 for 19 to 28, truncated at 5 for 49 to 58
         self.sso_weights = (ssds_sizes - 8.) / 10.
-        self.sso_weights *= np.array(self.sso_weights > 0, dtype=np.int)
+        self.sso_weights *= np.array(self.sso_weights > 0, dtype=np.int32)
         self.sso_weights = np.ceil(self.sso_weights)
         self.sso_weights[self.sso_weights > 6] = 6
         self.sso_ids = np.array(self.sso_ids, dtype=np.uint32)

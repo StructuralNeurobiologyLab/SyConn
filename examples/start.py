@@ -39,25 +39,36 @@ if __name__ == '__main__':
     experiment_name = 'j0126_example'
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
-    prior_glia_removal = True
+    prior_astrocyte_removal = False
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal}),
-        ('use_point_models', True),
+        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
+        ('use_point_models', False),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
+        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
+        ('generate_cs_ssv', True),
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
         # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
         # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
-        ('cell_objects', {
-          # 'sym_label': 1, 'asym_label': 2,
-          })
+        ('cell_objects',
+         {
+          # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
+          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
+                                      'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
+          }
+         ),
+        ('meshes', {'meshing_props_points':
+            {'cs_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20),
+             'syn_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20)}}
+         )
     ]
     if example_cube_id == 1:
         chunk_size = (256, 256, 128)
@@ -85,6 +96,12 @@ if __name__ == '__main__':
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 
+    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
+    # system is None
+    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
+    from syconn.handler.compression import load_from_h5py
+
+    # PREPARE TOY DATA
     generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf,
                           force_overwrite=True)
 
@@ -96,12 +113,6 @@ if __name__ == '__main__':
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
 
-    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
-    # system is None
-    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
-    from syconn.handler.compression import load_from_h5py
-
-    # PREPARE TOY DATA
     log.info(f'Step 0/9 - Preparation')
     ftimer = FileTimer(example_wd + '/.timing.pkl')
     ftimer.start('Preparation')
@@ -121,10 +132,10 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    if not prior_glia_removal:
-        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+    if not prior_astrocyte_removal:
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
     else:
-        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
 
     tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
     offset = np.array([0, 0, 0])
@@ -176,7 +187,6 @@ if __name__ == '__main__':
     # START SyConn
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
-    # TODO: launch all predictions in parallel
     # exec_dense_prediction.predict_myelin()
     # TODO: if performed, work-in paths of the resulting KDs to the config
     # TODO: might also require adaptions in init_cell_subcell_sds
@@ -191,18 +201,18 @@ if __name__ == '__main__':
     exec_init.run_create_rag()
     ftimer.stop()
 
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
+    log.info('Step 3/9 - Astrocyte separation')
+    if global_params.config.prior_astrocyte_removal:
+        ftimer.start('Astrocyte separation')
         if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
+            exec_render.run_astrocyte_rendering()
+            exec_inference.run_astrocyte_prediction()
         else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
+            exec_inference.run_astrocyte_prediction_pts()
+        exec_inference.run_astrocyte_splitting()
         ftimer.stop()
     else:
-        log.info('Glia separation disabled. Skipping.')
+        log.info('Astrocyte separation disabled. Skipping.')
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
@@ -223,6 +233,14 @@ if __name__ == '__main__':
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    ftimer.stop()
+
+    log.info('Step 6.5/9 - Contact detection')
+    ftimer.start('Contact detection')
+    if global_params.config['generate_cs_ssv']:
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    else:
+        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
 
     log.info('Step 7/9 - Compartment prediction')

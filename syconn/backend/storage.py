@@ -16,7 +16,7 @@ except ImportError:
     from lz4 import compress, decompress
 
 from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, List
+from typing import Any, Tuple, Optional, Union, List, Iterator
 
 import numpy as np
 
@@ -274,17 +274,28 @@ class VoxelStorageDyn(CompressedStorage):
             return super().__setitem__(key, value)
 
     def __getitem__(self, item: int):
+        return self.get_voxelmask_offset(item)
+
+    def get_voxelmask_offset(self, item: int, overlap: int = 0):
         if self.voxel_mode:
             res = []
             bbs = super().__getitem__(item)
             for bb in bbs:  # iterate over all bounding boxes
-                size = bb[1] - bb[0]
-                off = bb[0]
+                size = bb[1] - bb[0] + 2 * overlap
+                off = bb[0] - overlap
                 curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
                 res.append(curr_mask.swapaxes(0, 2))
             return res, bbs[:, 0]  # (N, 3) --> all offset
         else:
             return super().__getitem__(item)
+
+    def iter_voxelmask_offset(self, item: int, overlap: int = 0) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        bbs = super().__getitem__(item)
+        for bb in bbs:  # iterate over all bounding boxes
+            size = bb[1] - bb[0] + 2 * overlap
+            off = bb[0] - overlap
+            curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
+            yield curr_mask.swapaxes(0, 2), bb[0]
 
     def object_size(self, item):
         if not self.voxel_mode:
@@ -347,13 +358,13 @@ class VoxelStorageDyn(CompressedStorage):
         bin_arrs, block_offsets = self[item]
         min_off = np.min(block_offsets, axis=0)
         block_extents = np.array([off + np.array(bin_arr.shape) for bin_arr, off in zip(bin_arrs, block_offsets)],
-                                 dtype=np.int)
+                                 dtype=np.int32)
         max_extent = np.max(block_extents, axis=0)
         size = max_extent - min_off
         block_offsets -= min_off
         voxel_arr = np.zeros(size, dtype=np.bool)
         for bin_arr, off in zip(bin_arrs, block_offsets):
-            sh = off + np.array(bin_arr.shape, dtype=np.int)
+            sh = off + np.array(bin_arr.shape, dtype=np.int32)
             voxel_arr[off[0]:sh[0], off[1]:sh[1], off[2]:sh[2]] = bin_arr
         return voxel_arr, min_off
 

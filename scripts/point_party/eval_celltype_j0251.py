@@ -8,8 +8,7 @@ from syconn.handler.prediction import certainty_estimate, str2int_converter, int
 import numpy as np
 import re
 import matplotlib.pyplot as plt
-from sklearn.metrics.classification import classification_report
-from sklearn.metrics import confusion_matrix, f1_score, accuracy_score
+from sklearn.metrics import confusion_matrix, f1_score, accuracy_score, classification_report
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 
 from syconn.handler.prediction_pts import predict_pts_plain, pts_loader_scalar_infer,\
@@ -92,7 +91,7 @@ def create_catplot(dest_p, qs, ls=6, r=(0, 1.0), add_boxplot=False, legend=False
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    qs.to_excel(dest_p[:-4] + ".xlsx")
+    qs.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -138,7 +137,7 @@ def create_lineplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    df.to_excel(dest_p[:-4] + ".xlsx")
+    df.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -184,7 +183,7 @@ def create_pointplot(dest_p, df, ls=6, r=(0, 1.0), legend=True, **kwargs):
     plt.ylim(r)
     plt.tight_layout()
     fig.savefig(dest_p, dpi=400)
-    df.to_excel(dest_p[:-4] + ".xlsx")
+    df.to_excel(dest_p[:-4] + ".xls")
     plt.close()
 
 
@@ -226,7 +225,8 @@ if __name__ == '__main__':
 
     state_dict_fname = 'state_dict.pth'
     wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
-    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251/'
+    bbase_dir = '/wholebrain/scratch/pschuber/e3_trainings_convpoint_celltypes_j0251_rerunFeb21/'
+    all_res_paths = set()
     for ctx, npts, use_syntype, cellshape_only in [(20000, 50000, False, False), (20000, 50000, True, False),
                                                    (20000, 50000, True, True),
                                                    (20000, 25000, True, False), (20000, 75000, True, False),
@@ -261,7 +261,7 @@ if __name__ == '__main__':
         target_names = [int2str_label[kk] for kk in range(nclasses)]
         csv_p = ccd.csv_p
         df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
-        ssv_ids = df[:, 0].astype(np.uint)
+        ssv_ids = df[:, 0].astype(np.uint64)
         if len(np.unique(ssv_ids)) != len(ssv_ids):
             raise ValueError('Multi-usage of IDs!')
         str_labels = df[:, 1]
@@ -295,7 +295,18 @@ if __name__ == '__main__':
                     mkwargs['mpath'] = mpath
                     log.info(f'Using model "{mpath}" for cross-validation split {CV}.')
                     fname_pred = f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_{run}_10fold_PRED.pkl'
-                    if overwrite or not os.path.isfile(fname_pred):
+                    assert fname_pred not in all_res_paths
+                    all_res_paths.add(fname_pred)
+                    # check pred if available
+                    incorrect_pred = False
+                    if os.path.isfile(fname_pred) and not overwrite:
+                        os.path.isfile(fname_pred)
+                        res_dc = basics.load_pkl2obj(fname_pred)
+                        res_dc = dict(res_dc)  # convert to standard dict
+                        incorrect_pred = (len(res_dc) != len(split_dc['valid'])) or (not np.all([k in split_dc['valid'] for k in res_dc]))
+                        if incorrect_pred:
+                            print(f'Wrong prediction stored at: {fname_pred}. Recomputing now.')
+                    if overwrite or not os.path.isfile(fname_pred) or incorrect_pred:
                         res_dc = predict_celltype_gt(ssd_kwargs, mpath=mpath, bs=10,
                                                      nloader=10, device='cuda', seeded=True, ssv_ids=split_dc['valid'],
                                                      npredictor=4, use_test_aug=False,
@@ -303,6 +314,9 @@ if __name__ == '__main__':
                                                                     'use_syntype': use_syntype,
                                                                     'cellshape_only': cellshape_only},
                                                      **loader_kwargs)
+                        incorrect_pred = (len(res_dc) != len(split_dc['valid'])) or (not np.all([k in split_dc['valid'] for k in res_dc]))
+                        if incorrect_pred:
+                            raise ValueError('Incorrect prediction.')
                         basics.write_obj2pkl(fname_pred, res_dc)
                 valid_ids, valid_ls, valid_preds, valid_certainty = [], [], [], []
 
@@ -316,6 +330,8 @@ if __name__ == '__main__':
                     fname_pred = f'{os.path.split(mpath)[0]}/ctgt_v4_splitting_cv{CV}_redun{redundancy}_{run}_10fold_PRED.pkl'
                     res_dc = basics.load_pkl2obj(fname_pred)
                     res_dc = dict(res_dc)  # convert to standard dict
+                    assert len(res_dc) == len(split_dc['valid'])
+                    assert np.all([k in split_dc['valid'] for k in res_dc])
                     valid_ids_local, valid_ls_local, valid_preds_local = [], [], []
                     for ix, curr_id in enumerate(ssv_ids):
                         if curr_id not in split_dc['valid']:

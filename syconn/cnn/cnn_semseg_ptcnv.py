@@ -17,11 +17,6 @@ import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import SegSmall
 from elektronn3.training import Trainer3d, Backup, metrics
-try:
-    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-except ModuleNotFoundError as e:
-    print(e)
-    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -113,14 +108,14 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '~/e3_training_convpoint/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
 model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
-                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -153,9 +148,9 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 
 # mask boarder points with 'num_classes' and set its weight to 0
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx, mask_boarders_with_id=num_classes)
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx)
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
 
 # PREPARE AND START TRAINING #
 
@@ -172,7 +167,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,

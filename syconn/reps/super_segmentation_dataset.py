@@ -97,7 +97,7 @@ class SuperSegmentationDataset(SegmentationBase):
 
             celltypes = ssd.load_numpy_data('celltype_cnn_e3')
             n_synapses = np.array([len(el) for el in ssd.load_numpy_data('syn_ssv')])
-            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(9)}
+            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(np.max(celltypes)}
             print(n_synapes_per_type)
 
     Attributes:
@@ -368,7 +368,7 @@ class SuperSegmentationDataset(SegmentationBase):
             else:
                 paths = glob.glob(self.path + "/so_storage/*/*/*/")
                 self._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
-                                          for p in paths], dtype=np.uint)
+                                          for p in paths], dtype=np.uint64)
         return self._ssv_ids
 
     @property
@@ -535,8 +535,7 @@ class SuperSegmentationDataset(SegmentationBase):
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
                           new_mapping=new_mapping, overwrite=overwrite, use_batchjob=use_batchjob)
 
-    def predict_cell_types_skelbased(self, stride: int = 1000,
-                                     nb_cpus=1):
+    def predict_cell_types_skelbased(self, stride: int = 1000, nb_cpus=1):
         """
         Not used anymore.
         """
@@ -798,13 +797,13 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
                                 voxel_caching=False)
         if sv.voxels_exist:
             box = [np.array(sv.bounding_box[0] - sso.bounding_box[0],
-                            dtype=np.int)]
+                            dtype=np.int32)]
 
             box[0] /= downsampling
             size = np.array(sv.bounding_box[1] -
-                            sv.bounding_box[0], dtype=np.float)
-            size = np.ceil(size.astype(np.float) /
-                           downsampling).astype(np.int)
+                            sv.bounding_box[0], dtype=np.float32)
+            size = np.ceil(size.astype(np.float32) /
+                           downsampling).astype(np.int32)
 
             box.append(box[0] + size)
 
@@ -818,15 +817,15 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
                 box[0][1]: box[1][1],
                 box[0][2]: box[1][2]][sv_voxels] = True
 
-    downsampling = np.array(downsampling, dtype=np.int)
+    downsampling = np.array(downsampling, dtype=np.int32)
 
     if len(sso.sv_ids) == 0:
         return None
 
     voxel_box_size = sso.bounding_box[1] - sso.bounding_box[0]
-    voxel_box_size = voxel_box_size.astype(np.float)
+    voxel_box_size = voxel_box_size.astype(np.float32)
 
-    voxel_box_size = np.ceil(voxel_box_size / downsampling).astype(np.int)
+    voxel_box_size = np.ceil(voxel_box_size / downsampling).astype(np.int32)
 
     voxels = np.zeros(voxel_box_size, dtype=np.bool)
 
@@ -898,7 +897,7 @@ def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
     #  do in order to enable updates on existing SSD (e.g. after adding new SSVs)
     # paths = glob.glob(ssd.path + "/so_storage/*/*/*/")
     # ssd._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
-    #                           for p in paths], dtype=np.uint)
+    #                           for p in paths], dtype=np.uint64)
     if target_wd is None:
         target_wd = global_params.config.working_dir
     scaling = ssvs[0].scaling

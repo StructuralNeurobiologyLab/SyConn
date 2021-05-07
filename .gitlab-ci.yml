@@ -19,8 +19,9 @@ build-full:
     - conda env create -f environment.yml -n pysyintegration_m python --force
     - source ~/.bashrc
     - conda activate pysyintegration_m
-  only:
-    - master
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
 
 test-full:
   stage: test
@@ -29,16 +30,17 @@ test-full:
     - conda activate pysyintegration_m
     - pip install --upgrade --no-deps -v -e .
     - python -m pytest -c tests/full_run.ini
-  only:
-    - master
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
 
 cleanup:
   stage: cleanup
   script:
     - conda remove --yes -n pysyintegration_m --all
-  when: always
-  only:
-    - master
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'
 
 pylint:
   stage: test
@@ -55,5 +57,6 @@ pylint:
       - ./pylint/
     expire_in: 2 yrs
   allow_failure: true
-  only:
-    - master
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"'

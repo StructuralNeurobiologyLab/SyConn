@@ -10,7 +10,7 @@ channels:
   - open3d-admin
 dependencies:
   # From -c pytorch
-  - pytorch =1.3  # (provides backwards compat. to trained models)
+  - pytorch <=1.5  # (provide backwards compat. to trained models)
   - torchvision
 
   # From conda-forge and defaults
@@ -26,36 +26,37 @@ dependencies:
   - matplotlib
   - tqdm
   - scipy
-  # AttributeError: module 'networkx' has no attribute 'connected_component_subgraphs'
-  - networkx <= 2.3
+  - networkx <= 2.5.1
   - m2r
   - lz4
   - flask
   - fasteners
-  - numpy
+  - numpy <= 1.21
   - coloredlogs
   - termcolor
-  - scikit-learn =0.21
+  # fix version due to stored RFC models.
+  - scikit-learn = 0.24.1
   - scikit-image
   - opencv
-  - numba <0.46  # =0.48 led to freeze when importing elektronn3.data
+  - numba >0.48  # =0.48 led to freeze when importing elektronn3.data
   - openmesh-python
   - prompt_toolkit
-  - vtki
   - dill
   - joblib
-  - seaborn
+  - seaborn >= 0.11
   - pyyaml
   - cython
   - colorlog
+  # for pandas xls support
+  - xlrd >= 1.0.0
    # >= 7 raises "cannot import name 'PILLOW_VERSION' from 'PIL'" with torchvision=0.3.0
-  - pillow <7
+  - pillow < 7
 
   # From -c menpo
   - osmesa
 
-  # From -c open3d-admin; 0.10.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
-  - open3d =0.9.0
+  # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
+  - open3d = 0.9.0
 
   # For tests (optional):
   - pytest
@@ -72,19 +73,17 @@ dependencies:
   - pip:
     - zmesh
     - plyfile
-    # For importing the latest cell type model.
-    - adabound
-
-    # For running a tensorboard server (optional):
-    # (Installing these via pip because currently conda packages are broken)
-    # TODO: Move these up to conda once they work again
-    - tensorflow
-    - tensorboard
-    #for skeletonisation
-    - fill-voids
 
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@syconn#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx
     - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
+
+    # training scripts
+    - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
+#    - # PointConv definitions
+#    - git+https://github.com/valeoai/LightConvPoint.git
+
+      #for skeletonisation
+    - fill-voids

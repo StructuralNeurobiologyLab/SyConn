@@ -7,7 +7,6 @@
 import numpy as np
 
 from ..proc import log_proc
-from ..mp.mp_utils import start_multiprocess_imap
 
 __cv2__ = True
 try:
@@ -22,7 +21,11 @@ from sklearn.decomposition import PCA
 from scipy import spatial, sparse, ndimage
 import tqdm
 from typing import List, Optional, Union
-import fill_voids
+# TODO: use mocking (try-except needed for sphinx build)
+try:
+    import fill_voids
+except ImportError:
+    pass
 
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
@@ -59,7 +62,7 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
     if contact_coords_b.ndim == 1:
         contact_coords_b = contact_coords_a[None, :]
     contact_coords = np.concatenate((contact_coords_a, contact_coords_b), axis=0)
-    return np.array(contact_coords).astype(np.uint)
+    return np.array(contact_coords).astype(np.int32)
 
 
 def fast_check_sing_comp(sv, max_dist=5):
@@ -305,11 +308,11 @@ def normalize_vol(sv, edge_size, center_coord):
         np.array
     """
     translation = np.ones(3) * edge_size / 2. - center_coord
-    assert isinstance(edge_size, np.int)
+    assert isinstance(edge_size, np.int32)
     sv = sv.astype(np.float32)
     sv = sv + translation  # center
     sv = remove_outlier(sv, edge_size)
-    return sv.astype(np.uint)
+    return sv.astype(np.int64)
 
 
 def multi_dilation(overlay, n_dilations, use_find_objects=False,
@@ -367,7 +370,7 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     for ix in unique_ixs:
         if ix == 0:
             continue
-        binary_mask = (overlay == ix).astype(np.int)
+        binary_mask = (overlay == ix).astype(np.int32)
         # TODO: use padding
         binary_mask = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
         overlay[binary_mask == 1] = ix
@@ -406,7 +409,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
     if "fill_holes" in mop_func.__name__:
         for ix in unique_ixs:
             sub_vol = overlay[objslices[int(ix - 1)]]
-            binary_mask = (sub_vol == ix).astype(np.int)
+            binary_mask = (sub_vol == ix).astype(np.int32)
             fill_voids.fill(binary_mask, in_place=True)
             proc_mask = sub_vol == 0  # modify only background
             overlay[objslices[int(ix - 1)]][proc_mask] = binary_mask[proc_mask] * ix
@@ -421,7 +424,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
         # pad with zeros to prevent boundary artifacts in the original data array
         if "closing" in mop_func.__name__ or "dilation" in mop_func.__name__:
             sub_vol = np.pad(sub_vol, n_iters)
-        binary_mask = (sub_vol == ix).astype(np.int)
+        binary_mask = (sub_vol == ix).astype(np.int32)
         if verbose:
             nb_occ = np.sum(binary_mask)
         if "fill_holes" in mop_func.__name__:

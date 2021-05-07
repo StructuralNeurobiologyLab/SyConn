@@ -25,7 +25,7 @@ import scipy.special
 import tqdm
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting_kdt
+from morphx.processing.objects import bfs_vertices, context_splitting_kdt, context_splitting_graph_many
 from scipy import spatial
 from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
@@ -394,7 +394,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             ssd = SuperSegmentationDataset(**ssd_kwargs)
             ssv_ids = ssd.ssv_ids
         else:
-            ssv_ids = np.array(ssv_ids, np.uint)
+            ssv_ids = np.array(ssv_ids, np.uint64)
         ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
                                             nb_cpus=None)
         ssv_sizes = np.array(ssv_sizes)
@@ -626,7 +626,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             source_nodes_batch = source_nodes_all[curr_batch_ixs]
             node_ids_batch = node_ids_all[curr_batch_ixs]
             for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
-                node_ids = node_ids.astype(np.int)
+                node_ids = node_ids.astype(np.int32)
                 # This might be slow
                 sn_cnt = 1
                 while True:
@@ -740,7 +740,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+            ixs = np.ones((batchsize,), dtype=np.uint64) * ssv.id
             cnt = 0
             source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
             if draw_local:
@@ -755,7 +755,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         sn_new.append(np.random.randint(0, len(hc.nodes)))
                     else:
                         paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                        neighs = np.array(list(paths.keys()), dtype=np.int)
+                        neighs = np.array(list(paths.keys()), dtype=np.int32)
                         sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
@@ -911,7 +911,7 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
     cls_maj = collections.Counter(cls).most_common(1)[0][0]
 
     sso.save_attributes([pred_key, f"{pred_key}_probas", f"{pred_key}_certainty"],
-                        [cls_maj, logit, certainty_estimate(logit)])
+                        [cls_maj, logit, certainty_estimate(logit, is_logit=True)])
 
     return [sso.id], [True]
 
@@ -1251,7 +1251,7 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
 def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                             npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None,
-                            use_subcell: bool = False, mask_boarders_with_id: Optional[int] = None
+                            use_subcell: bool = False, mask_borders_with_id: Optional[int] = None
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -1265,7 +1265,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         ctx_size:
         transform:
         use_subcell:
-        mask_boarders_with_id:
+        mask_borders_with_id:
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -1279,88 +1279,93 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         del feat_dc['vc']
         del feat_dc['syn_ssv']
 
+    # in 1 out 5 events augment the context size by factor [0.6, 1.4] drawn from a normal distribution with mean 1
+    # and std 0.1
     if np.random.randint(0, 4) == 0:
-        ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
+        fluct = 1
     else:
-        ctx_size_fluct = ctx_size
+        fluct = min(max(np.random.randn(1)[0] * 0.1 + 1, 0.6), 1.4)
+    ctx_size_fluct = fluct * ctx_size
 
     for pkl_f in fnames_pkl:
         hc = load_hc_pkl(pkl_f, 'compartment')
-        npoints_ssv = min(len(hc.vertices), npoints)
         # filter valid skeleton nodes (i.e. which were close to manually annotated nodes)
         source_nodes = np.where(hc.node_labels == 1)[0]
-        source_nodes = np.random.choice(len(source_nodes), batchsize,
-                                        replace=len(source_nodes) < batchsize)
-        n_batches = int(np.ceil(len(source_nodes) / batchsize))
-        if len(source_nodes) % batchsize != 0:
-            source_nodes = np.random.choice(source_nodes, batchsize * n_batches)
-        for ii in range(n_batches):
-            # cell/sv vertices proportional to total npoints
-            n_out_pts = int(np.sum(hc.features == 0) / len(hc.vertices) * npoints_ssv)
-            # add a +-10% fluctuation in the number of input and output points
-            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-            n_out_pts_curr = n_out_pts + npoints_add
-            npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-            npoints_ssv += npoints_add
-            batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.ones((batchsize, npoints_ssv, len(feat_dc)))
-            batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
-            batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
-            cnt = 0
-            for source_node in source_nodes[ii::n_batches]:
-                # create local context
-                # node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                while True:
-                    node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
-                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                    if mask_boarders_with_id is not None:
-                        source_node_c = hc_sub.nodes[hc_sub.relabel_dc[source_node]]
-                        boarder_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
-                                            ctx_size_fluct * 0.8
-                        hc_sub._labels[boarder_vert_mask] = mask_boarders_with_id
-                    sample_feats = hc_sub.features
-                    if len(sample_feats) > 0:
-                        break
-                    source_node = np.random.choice(source_nodes)
-                sample_pts = hc_sub.vertices
-                sample_labels = hc_sub.labels
+        source_nodes = np.random.choice(source_nodes, batchsize)
+        npoints_ssv = min(len(hc.vertices), npoints)
+        if npoints_ssv == 0:
+            raise ValueError(f'No vertices in "{pkl_f}".')
 
-                # sub-sample vertices
-                sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                sample_labels = sample_labels[sample_ixs][:npoints_ssv]
-                # add duplicate points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
+        # add a +-10% fluctuation in the number of input and output points
+        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+        n_out_pts_curr = npoints_ssv + npoints_add
+        batch = np.zeros((batchsize, n_out_pts_curr, 3))
+        batch_f = np.ones((batchsize, n_out_pts_curr, len(feat_dc)))
+        # batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
+        batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
+        cnt = 0
+        for source_node in source_nodes:
+            # create local context
+            while True:
+                if hc.node_labels[source_node] != 1:
+                    raise ValueError(f'Invalid source node in "{pkl_f}".')
+                node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
+                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                # if mask_borders_with_id is not None:
+                #     source_node_c = hc_sub.nodes[hc_sub.relabel_dc[source_node]]
+                #     boarder_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
+                #                         ctx_size_fluct * 0.8
+                #     hc_sub._labels[boarder_vert_mask] = mask_borders_with_id
+                sample_feats = hc_sub.features
+                if len(sample_feats) > 0:
+                    break
+                source_node = np.random.choice(source_nodes)
+            sample_pts = hc_sub.vertices
+            sample_labels = hc_sub.labels
+
+            # sub-sample vertices
+            sample_ixs = np.arange(len(sample_pts))
+            np.random.shuffle(sample_ixs)
+            sample_pts = sample_pts[sample_ixs][:n_out_pts_curr]
+            sample_feats = sample_feats[sample_ixs][:n_out_pts_curr]
+            sample_labels = sample_labels[sample_ixs][:n_out_pts_curr]
+            # add duplicate points before applying the transform if sample_pts
+            # has less points than n_out_pts_curr
+            npoints_add = n_out_pts_curr - len(sample_pts)
+            if npoints_add > 0:
                 idx = np.random.choice(len(sample_pts), npoints_add)
                 sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
                 sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
                 sample_labels = np.concatenate([sample_labels, sample_labels[idx]])
 
-                hc_sub._vertices = sample_pts
-                hc_sub._features = sample_feats
-                hc_sub._labels = sample_labels
-                # apply augmentations
-                if transform is not None:
-                    transform(hc_sub)
-                batch[cnt] = hc_sub.vertices
-                # one hot encoding
-                if use_subcell:
-                    batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
-                # get target locations
-                out_pts_mask = (hc_sub.features == 0).squeeze()
-                n_out_pts_actual = np.sum(out_pts_mask)
-                idx = np.random.choice(n_out_pts_actual, n_out_pts_curr,
-                                       replace=n_out_pts_actual < n_out_pts_curr)
-                batch_out[cnt] = hc_sub.vertices[out_pts_mask][idx]
-                # TODO: currently only supports type(out_point_label) = int
-                batch_out_l[cnt] = hc_sub.labels[out_pts_mask][idx]
-                assert -1 not in batch_out_l[cnt]
-                cnt += 1
-            assert cnt == batchsize
-            yield (batch_f, batch), (batch_out, batch_out_l)
+            hc_sub._vertices = sample_pts
+            hc_sub._features = sample_feats
+            hc_sub._labels = sample_labels
+            # apply augmentations
+            if transform is not None:
+                transform(hc_sub)
+            batch[cnt] = hc_sub.vertices
+            # one hot encoding
+            if use_subcell:
+                batch_f[cnt] = label_binarize(hc_sub.features, classes=np.arange(len(feat_dc)))
+            # get target locations
+            # TODO: Add masking if beneficial - for now just use all input points and their labels
+            # out_pts_mask = (hc_sub.features == 0).squeeze()
+            # n_out_pts_actual = np.sum(out_pts_mask)
+            # idx = np.random.choice(n_out_pts_actual, n_out_pts_curr,
+            #                        replace=n_out_pts_actual < n_out_pts_curr)
+            # batch_out[cnt] = hc_sub.vertices[out_pts_mask][idx]
+            # TODO: currently only supports type(out_point_label) = int
+            # batch_out_l[cnt] = hc_sub.labels[out_pts_mask][idx]
+            batch_out_l[cnt] = hc_sub.labels
+            if -1 in batch_out_l[cnt]:
+                assert mask_borders_with_id is not None
+                batch_out_l[cnt][batch_out_l[cnt] == -1] = mask_borders_with_id
+            cnt += 1
+        assert cnt == batchsize
+        # TODO: Add masking if beneficial - for now just use all input points and their labels
+        # yield (batch_f, batch), (batch_out, batch_out_l)
+        yield batch_f, batch, batch_out_l
 
 
 def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
@@ -1411,8 +1416,15 @@ def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
         if ssd_kwargs is None:
             raise ValueError
         ssv_params = ssd_kwargs
-    if train and np.random.randint(0, 4) == 0:
-        ctx_size_fluct = (np.random.randn(1)[0] * 0.1 + 0.7) * ctx_size
+    if train:
+        # in 1 out 5 events augment the context size by factor [0.6, 1.4] drawn from a normal distribution with mean 1
+        # and std 0.1
+        if np.random.randint(0, 4) == 0:
+            fluct = 1
+        else:
+            fluct = min(max(np.random.randn(1)[0] * 0.1 + 1, 0.6), 1.4)
+        ctx_size_fluct = fluct * ctx_size
+
     else:
         ctx_size_fluct = ctx_size
     for curr_ssv_params in ssv_params:
@@ -2254,8 +2266,8 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
     pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
 
-    ld[pred_key_ax] = ax_pred.astype(np.int)
-    ld[pred_key_sp] = sp_pred.astype(np.int)
+    ld[pred_key_ax] = ax_pred.astype(np.int32)
+    ld[pred_key_sp] = sp_pred.astype(np.int32)
     del ld['dnh']
     del ld['abt']
     del ld['ads']

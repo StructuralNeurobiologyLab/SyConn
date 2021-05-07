@@ -36,7 +36,7 @@ by the user inside the script.
 
 ## Basic parameters
 * `scale` numpy array; voxel size in nano meters
-* `prior_glia_removal` boolean
+* `prior_astrocyte_removal` boolean
 * `chunk_size` touple; size of a cube that is processed by a single worker
 * `n_folders_fs` and `n_folders_fs_sc` number of folders in the folder structure
 to create a hierarchy for storing information about cells and subcellular elements
@@ -47,7 +47,7 @@ To add further parameters to the `config.yml` file, they have to be specified
 in the `key_val_pairs_conf` list of tuples, here:
     * `pyopengl_platform`: string, possible 'egl' ...
     * `batch_proc_system`: string, possible 'SLURM',...
-    * `prior_glia_removal`: boolean
+    * `prior_astrocyte_removal`: boolean
     * `ncores_per_node`, `ngpus_per_node`, `nnodes_total`: intigers
 
 * `bb` numpy array; min and max coordinates of the cube of interest will

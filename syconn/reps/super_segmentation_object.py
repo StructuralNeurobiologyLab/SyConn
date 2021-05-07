@@ -487,7 +487,7 @@ class SuperSegmentationObject(SegmentationBase):
         All synaptic junction (sj) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return np.array(self.lookup_in_attribute_dict("sj"), dtype=np.uint)
+        return np.array(self.lookup_in_attribute_dict("sj"), dtype=np.uint64)
 
     @property
     def mi_ids(self) -> np.ndarray:
@@ -495,7 +495,7 @@ class SuperSegmentationObject(SegmentationBase):
         All mitochondria (mi) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return np.array(self.lookup_in_attribute_dict("mi"), dtype=np.uint)
+        return np.array(self.lookup_in_attribute_dict("mi"), dtype=np.uint64)
 
     @property
     def vc_ids(self) -> np.ndarray:
@@ -503,7 +503,7 @@ class SuperSegmentationObject(SegmentationBase):
         All vesicle cloud (vc) supervoxel IDs which are assigned to this
         cell reconstruction.
         """
-        return np.array(self.lookup_in_attribute_dict("vc"), dtype=np.uint)
+        return np.array(self.lookup_in_attribute_dict("vc"), dtype=np.uint64)
 
     @property
     def dense_kzip_ids(self) -> Dict[str, int]:
@@ -929,7 +929,7 @@ class SuperSegmentationObject(SegmentationBase):
     def sv_graph_uint(self) -> nx.Graph:
         if self._sv_graph_uint is None:
             if os.path.isfile(self.edgelist_path):
-                self._sv_graph_uint = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+                self._sv_graph_uint = nx.read_edgelist(self.edgelist_path, nodetype=np.uint64)
             else:
                 raise ValueError("Could not find graph data for SSV {}.".format(self.id))
         return self._sv_graph_uint
@@ -948,10 +948,9 @@ class SuperSegmentationObject(SegmentationBase):
         G = self.sv_graph_uint
         # # Might be useful as soon as global graph path is available
         # else:
-        #     if os.path.isfile("{}neuron_rag.bz2".format(
-        #             self.working_dir):
-        #         G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
-        #                                   nodetype=np.uint)
+        #     if os.path.isfile(global_params.config.neuron_svgraph_path):
+        #         G_glob = nx.read_edgelist(global_params.config.neuron_svgraph_path,
+        #                                    nodetype=np.uint64)
         #         G = nx.Graph()
         #         cc = nx.node_connected_component(G_glob, self.sv_ids[0])
         #         assert len(set(cc).difference(set(self.sv_ids))) == 0, \
@@ -1011,7 +1010,7 @@ class SuperSegmentationObject(SegmentationBase):
                 mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False, disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
                 mesh_dc.push()
-        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.float32), np.array(normals, dtype=np.float32)
+        return np.array(ind, dtype=np.int32), np.array(vert, dtype=np.float32), np.array(normals, dtype=np.float32)
 
     def _load_obj_mesh_compr(self, obj_type: str = "sv") -> MeshType:
         """
@@ -1159,17 +1158,17 @@ class SuperSegmentationObject(SegmentationBase):
             nb_cpus: Number of CPUs to use for the calculation.
         """
         if len(self.svs) == 0:
-            self._bounding_box = np.zeros((2, 3), dtype=np.int)
+            self._bounding_box = np.zeros((2, 3), dtype=np.int32)
             self._size = 0
             return
 
-        self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
+        self._bounding_box = np.ones((2, 3), dtype=np.int32) * np.inf
         self._size = np.inf
         bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
         self._size = np.sum(sizes)
         self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
         self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
-        self._bounding_box = self._bounding_box.astype(np.int)
+        self._bounding_box = self._bounding_box.astype(np.int32)
 
     def calculate_skeleton(self, force: bool = False, **kwargs):
         """
@@ -1428,7 +1427,7 @@ class SuperSegmentationObject(SegmentationBase):
 
             node_scaled = self.skeleton["nodes"] * self.scaling
 
-            edges = np.array(self.skeleton["edges"], dtype=np.int)
+            edges = np.array(self.skeleton["edges"], dtype=np.int64)
             edge_coords = node_scaled[edges]
             weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1], axis=1)
             self._weighted_graph = nx.Graph()
@@ -2266,9 +2265,9 @@ class SuperSegmentationObject(SegmentationBase):
         cc_labels = np.array(cc_labels)
         cc_coords = np.array(cc_coords)
         np.random.seed(0)
-        neck_c = (cc_coords[cc_labels == 0] / self.scaling).astype(np.uint)
+        neck_c = (cc_coords[cc_labels == 0] / self.scaling).astype(np.uint64)
         neck_s = sizes[cc_labels == 0]
-        head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
+        head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint64)
         head_s = sizes[cc_labels == 1]
         if dest_folder is not None:
             np.save("{}/neck_coords_ssv{}_k{}_{}_ccsize{}.npy".format(
@@ -2680,12 +2679,12 @@ class SuperSegmentationObject(SegmentationBase):
     def gliapred2mesh(self, dest_path=None, thresh=None, pred_key_appendix=""):
         if thresh is None:
             thresh = self.config['glia']['glia_thresh']
-        glia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
-        nonglia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
+        astrocyte_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
+        nonastrocyte_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        mesh = merge_someshes(glia_svs, use_new_subfold=self.config.use_new_subfold)
-        neuron_mesh = merge_someshes(nonglia_svs, use_new_subfold=self.config.use_new_subfold)
+        mesh = merge_someshes(astrocyte_svs, use_new_subfold=self.config.use_new_subfold)
+        neuron_mesh = merge_someshes(nonastrocyte_svs, use_new_subfold=self.config.use_new_subfold)
         write_meshes2kzip(dest_path, [mesh[0], neuron_mesh[0]], [mesh[1], neuron_mesh[1]],
                           [mesh[2], neuron_mesh[2]], [None, None],
                           ["glia_%0.2f.ply" % thresh, "nonglia_%0.2f.ply" % thresh])
@@ -2710,29 +2709,29 @@ class SuperSegmentationObject(SegmentationBase):
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
     def gliasplit(self, recompute=False, thresh=None, verbose=False, pred_key_appendix=""):
-        glia_svs_key = "glia_svs" + pred_key_appendix
-        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
+        astrocyte_svs_key = "astrocyte_svs" + pred_key_appendix
+        neuron_svs_key = "neuron_svs" + pred_key_appendix
         if thresh is None:
             thresh = self.config['glia']['glia_thresh']
-        if recompute or not (self.attr_exists(glia_svs_key) and
-                             self.attr_exists(nonglia_svs_key)):
+        if recompute or not (self.attr_exists(astrocyte_svs_key) and
+                             self.attr_exists(neuron_svs_key)):
             if verbose:
                 log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(
                     self.id, len(self.svs)))
                 start = time.time()
-            nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
-                                               pred_key_appendix=pred_key_appendix)
+            nonglia_ccs, astrocyte_ccs = split_glia(self, thresh=thresh,
+                                                    pred_key_appendix=pred_key_appendix)
             if verbose:
                 log_reps.debug("Splitting glia in SSV %d with %d SV's finished "
                                "after %.4gs." % (self.id, len(self.svs),
                                                  time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
-            glia_ccs_ixs = [[so.id for so in glia] for glia in glia_ccs]
-            self.attr_dict[glia_svs_key] = glia_ccs_ixs
-            self.attr_dict[nonglia_svs_key] = non_glia_ccs_ixs
-            self.save_attributes([glia_svs_key, nonglia_svs_key],
-                                 [glia_ccs_ixs, non_glia_ccs_ixs])
+            astrocyte_ccs_ixs = [[so.id for so in glia] for glia in astrocyte_ccs]
+            self.attr_dict[astrocyte_svs_key] = astrocyte_ccs_ixs
+            self.attr_dict[neuron_svs_key] = non_glia_ccs_ixs
+            self.save_attributes([astrocyte_svs_key, neuron_svs_key],
+                                 [astrocyte_ccs_ixs, non_glia_ccs_ixs])
         else:
             log_reps.critical('Skipping SSO {}, glia splits already exist'
                               '.'.format(self.id))
@@ -2749,18 +2748,18 @@ class SuperSegmentationObject(SegmentationBase):
         """
         # TODO: adapt writemesh2kzip to work with multiple writes
         #  to same file or use write_meshes2kzip here.
-        glia_svs_key = "glia_svs" + pred_key_appendix
-        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
+        astrocyte_svs_key = "astrocyte_svs" + pred_key_appendix
+        neuron_svs_key = "neuron_svs" + pred_key_appendix
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
-        glia_ccs = self.attr_dict[glia_svs_key]
-        for kk, glia in enumerate(glia_ccs):
+        astrocyte_ccs = self.attr_dict[astrocyte_svs_key]
+        for kk, astrocyte in enumerate(astrocyte_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
-                                   glia], use_new_subfold=self.config.use_new_subfold)
+                                   astrocyte], use_new_subfold=self.config.use_new_subfold)
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
-                            "glia_cc%d.ply" % kk)
-        non_glia_ccs = self.attr_dict[nonglia_svs_key]
+                            "astrocyte_cc%d.ply" % kk)
+        non_glia_ccs = self.attr_dict[neuron_svs_key]
         for kk, nonglia in enumerate(non_glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    nonglia], use_new_subfold=self.config.use_new_subfold)
@@ -2914,13 +2913,13 @@ class SuperSegmentationObject(SegmentationBase):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(
                     self.weighted_graph(), i_node, max_dist)
-                neighs = np.array(list(paths.keys()), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int64)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
         pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
                                           max_dist)
-        self.skeleton[pred_key] = np.array(pred, dtype=np.int)
+        self.skeleton[pred_key] = np.array(pred, dtype=np.int32)
         self.skeleton[pred_key + "_proba"] = np.array(probas, dtype=np.float32)
         self.save_skeleton(to_object=True, to_kzip=False)
 
@@ -3150,9 +3149,9 @@ class SuperSegmentationObject(SegmentationBase):
         raise DeprecationWarning('This method is deprecated. Use '
                                  '"predict_nodes" instead!')
 
-    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             onthefly_views=False, overwrite=True, model_props=None,
-                             verbose: bool = False, save_to_attr_dict: bool = True):
+    def predict_celltype_multiview(self, model, pred_key_appendix, model_tnet=None, view_props=None,
+                                   onthefly_views=False, overwrite=True, model_props=None,
+                                   verbose: bool = False, save_to_attr_dict: bool = True):
         """
         Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
         ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
@@ -3218,8 +3217,8 @@ class SuperSegmentationObject(SegmentationBase):
         else:
             return views
 
-    def certainty_celltype(self, proba_key: Optional[str] = None) -> float:
-        """
+    def certainty_celltype(self, pred_key: Optional[str] = None) -> float:
+        """_probas
         Certainty estimate of the celltype prediction:
             1. If `is_logit` is True, Generate pseudo-probabilities from the
                input using softmax.
@@ -3231,30 +3230,30 @@ class SuperSegmentationObject(SegmentationBase):
             See :func:`~syconn.handler.prediction.certainty_estimate`
 
         Args:
-            proba_key: Key of classification results (one C-class probability
-                vector for every N-view sample). Must exist in
+            pred_key: Key of classification results (one C-class probability
+                vector for every multi-view sample). ``pred_key + '_probas'`` must exist in
                 :py:attr:`~attr_dict`.
 
         Returns:
             Certainty measure based on the entropy of the cell type logits.
         """
-        if proba_key is None:
-            proba_key = 'celltype_cnn_e3_probas'
-        logits = self.lookup_in_attribute_dict(proba_key)
+        if pred_key is None:
+            pred_key = 'celltype_cnn_e3'
+        cert = self.lookup_in_attribute_dict(pred_key + '_certainty')
+        if cert is not None:
+            return cert
 
+        logits = self.lookup_in_attribute_dict(pred_key + '_probas')
         return certainty_estimate(logits, is_logit=True)
 
-    def majority_vote(self, prop_key, max_dist):
+    def majority_vote(self, prop_key: str, max_dist: float) -> np.ndarray:
         """
-        Smoothes (average using sliding window of 2 times max_dist and majority
-        vote) property prediction in annotation, whereas for axoness somata are
-        untouched.
+        Smooths (average using sliding window of 2 times max_dist and majority
+        vote) property prediction in annotation.
 
         Args:
-            prop_key: str
-                which property to average
-            max_dist: int
-                maximum distance (in nm) for sliding window used in majority voting
+            prop_key: Property to average.
+            max_dist: Maximum distance (in nm) for sliding window used in majority voting.
 
         Returns:
 
@@ -3266,7 +3265,7 @@ class SuperSegmentationObject(SegmentationBase):
         for ii in range(len(self.skeleton["nodes"])):
             paths = nx.single_source_dijkstra_path(self.weighted_graph(),
                                                    ii, max_dist)
-            neighs = np.array(list(paths.keys()), dtype=np.int)
+            neighs = np.array(list(paths.keys()), dtype=np.int64)
             labels, cnts = np.unique(prop_array[neighs], return_counts=True)
             maj_label = labels[np.argmax(cnts)]
             maj_votes[ii] = maj_label
@@ -3443,8 +3442,8 @@ def celltype_predictor(args) -> Iterable:
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
-            ssv.predict_celltype_cnn(m, pred_key_appendix="", onthefly_views=use_onthefly_views,
-                                     overwrite=True, view_props=view_props, model_props=model_props)
+            ssv.predict_celltype_multiview(m, pred_key_appendix="", onthefly_views=use_onthefly_views,
+                                           overwrite=True, view_props=view_props, model_props=model_props)
         except RuntimeError as e:
             missing_ssvs.append(ssv.id)
             msg = 'ERROR during celltype prediction of SSV {}. {}'.format(ssv.id, repr(e))
@@ -3505,7 +3504,7 @@ def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
         **map_properties)
 
     # perform average only on axon dendrite and soma predictions
-    nodes_ax_den_so = np.array(node_preds, dtype=np.int)
+    nodes_ax_den_so = np.array(node_preds, dtype=np.int32)
     # set en-passant and terminal boutons to axon class for averaging
     # bouton labels are stored in node_preds
     nodes_ax_den_so[nodes_ax_den_so == 3] = 1
@@ -3558,7 +3557,7 @@ def semsegspiness_predictor(args) -> List[int]:
             ssv.load_skeleton()
             if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
                 log_reps.warning(f"Skeleton of SSV {ssv.id} has zero nodes.")
-                node_preds = np.zeros((0, ), dtype=np.int)
+                node_preds = np.zeros((0, ), dtype=np.int32)
             else:
                 # vertex predictions
                 node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],

@@ -10,9 +10,7 @@ import time
 import argparse
 import re
 import networkx as nx
-from knossos_utils import knossosdataset
 import numpy as np
-from knossos_utils import knossosdataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
@@ -22,9 +20,8 @@ from syconn import global_params
 from syconn.exec import exec_syns, exec_render, exec_skeleton, exec_init, exec_inference
 
 
-# TODO add materialize button and store current process in config.ini
-#  -> allows to resume interrupted processes
 if __name__ == '__main__':
+    raise DeprecationWarning('This script is outdated. See earlier commits for functional versions.')
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
@@ -51,7 +48,7 @@ if __name__ == '__main__':
             edges = [int(v) for v in re.findall(r'(\d+)', l)]
             G.add_edge(edges[0], edges[1])
 
-    nx.write_edgelist(G, global_params.config.init_rag_path)
+    nx.write_edgelist(G, global_params.config.init_svgraph_path)
     start = time.time()
     # Checking models
     for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
@@ -74,13 +71,13 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
-    if global_params.config.prior_glia_removal:
-        log.info('Step 1.5/8 - Glia separation')
-        exec_render.run_glia_rendering()
-        exec_inference.run_glia_prediction()
-        exec_inference.run_glia_splitting()
+    if global_params.config.prior_astrocyte_removal:
+        log.info('Step 1.5/8 - Astrocyte separation')
+        exec_render.run_astrocyte_rendering()
+        exec_inference.run_astrocyte_prediction()
+        exec_inference.run_astrocyte_splitting()
         time_stamps.append(time.time())
-        step_idents.append('Glia separation')
+        step_idents.append('Astrocyte separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_init.run_create_neuron_ssd()
