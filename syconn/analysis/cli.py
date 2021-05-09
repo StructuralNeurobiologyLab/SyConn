@@ -13,13 +13,14 @@ from knossos_utils import KnossosDataset
 import neuroglancer
 import neuroglancer.cli
 
-flask_PORT = 8001
+flask_PORT = 8000
 
 def configure_backend():
     """
     Setups SyConnBackend object and logger
     :return SyConnBackend:
     """
+
     global logger
     logger = log_gate
     logger.info('SyConn gate server starting up on working directory '
@@ -33,7 +34,6 @@ def configure_backend():
     backend = SyConnBackend(global_params.config.working_dir, logger)
 
     return backend
-
 
 class SyConnClient(object):
     '''
