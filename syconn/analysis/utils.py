@@ -1,10 +1,11 @@
 from syconn import global_params
 from syconn.analysis.storage import MeshStorage
 from syconn.handler.logger import log_main as logger
+import syconn.analysis.flask_server as fs
 from syconn import global_params
 import json
 import numpy as np
-import os
+import threading as th
 import shutil
 from knossos_utils import KnossosDataset
 from neuroglancer.chunks import encode_npz
@@ -185,3 +186,13 @@ def mesh_task(mesh_dir, backend, lod, obj_type, force=False):
                     f.write(json.dumps({"@type": "neuroglancer_legacy_mesh"}))
                 _dump_encoded_mesh(obj_mesh_path, backend, lod)
                 return
+
+def handle_layer_args(ap):
+    g = ap.add_argument_group(title='SyConn layer options')
+    g.add_argument('--organelles', nargs='+', default=[],
+                        help='Organelle layers to be displayed')
+
+def start_flask_server(flask_PORT, backend, seg_dataset):
+    flask_server = th.Thread(target=fs.createDownloadUrl, args=('127.0.0.1', flask_PORT, backend, seg_dataset.scale, True,))
+    flask_server.start()
+    return flask_server
