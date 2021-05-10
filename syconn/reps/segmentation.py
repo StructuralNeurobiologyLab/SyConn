@@ -1901,10 +1901,10 @@ class SegmentationDataset(SegmentationBase):
         """
         self.enable_property_cache(['size'])
         if source == 'neuron':
-            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'glia':
-            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint)
+            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'total':
             svids = self.ids

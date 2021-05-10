@@ -126,7 +126,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         raise ImportError(msg)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
     if chunk_size is None:
         chunk_size = (512, 512, 512)
     if cube_shape is None:
@@ -757,7 +757,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     # simple edge detector, only works reliably if extra-cellular space is available
     # TODO: switch to C++ loop with 6-neighborhood checks (unequal to center ID) to achieve symmetric
     #  contact sites in the case of zero extra-cellular space.
-    jac = np.zeros([3, 3, 3], dtype=np.int)
+    jac = np.zeros([3, 3, 3], dtype=np.int32)
     jac[1, 1, 1] = -6
     jac[1, 1, 0] = 1
     jac[1, 1, 2] = 1
@@ -765,7 +765,7 @@ def detect_cs(arr: np.ndarray) -> np.ndarray:
     jac[1, 2, 1] = 1
     jac[2, 1, 1] = 1
     jac[0, 1, 1] = 1
-    edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
+    edges = scipy.ndimage.convolve(arr.astype(np.int32), jac) < 0
     edges = edges.astype(np.uint32, copy=False)
     arr = arr.astype(np.uint32, copy=False)
     cs_seg = process_block_nonzero(

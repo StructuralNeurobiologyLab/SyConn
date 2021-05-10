@@ -124,7 +124,8 @@ def split_subcc_join(g: nx.Graph, subgraph_size: int, lo_first_n: int = 1) -> Li
     sub_graphs = []
     for ch in chunks:
         # collect all connected component subgraphs
-        sub_graphs += list(nx.connected_component_subgraphs(g.subgraph(ch)))
+        sg = g.subgraph(ch).copy()
+        sub_graphs += list((sg.subgraph(c) for c in nx.connected_components(sg)))
     # add more context to subgraphs
     subgraphs_withcontext = []
     for sg in sub_graphs:
@@ -696,7 +697,7 @@ def stitch_skel_nx(skel_nx: nx.Graph, n_jobs: int = 1) -> nx.Graph:
     if no_of_seg == 1:
         return skel_nx
 
-    skel_nx_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.int)
+    skel_nx_nodes = np.array([skel_nx.nodes[ix]['position'] for ix in skel_nx.nodes()], dtype=np.int64)
 
     while no_of_seg != 1:
         rest_nodes = []

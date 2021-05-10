@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     # prepare GT
     df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
-    ssv_ids = df[:, 0].astype(np.uint)
+    ssv_ids = df[:, 0].astype(np.uint64)
     if len(np.unique(ssv_ids)) != len(ssv_ids):
         raise ValueError('Multi-usage of IDs!')
     str_labels = df[:, 1]

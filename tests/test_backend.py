@@ -377,10 +377,10 @@ def test_basics_write_txt2kzip():
 
     try:
         txt = 'test'
-        write_txt2kzip(dir_path + '/test6.kzip', txt, "test")
+        write_txt2kzip(dir_path + '/test6.k.zip', txt, "test")
 
-        if os.path.isfile(dir_path + '/test6.kzip'):
-            os.remove(dir_path + '/test6.kzip')
+        if os.path.isfile(dir_path + '/test6.k.zip'):
+            os.remove(dir_path + '/test6.k.zip')
         if os.path.isfile(dir_path + '/test6.txt'):
             os.remove(dir_path + '/test6.txt')
         logging.info('PASSED: test_basics_write_txt2kzip')
@@ -401,13 +401,13 @@ def test_basics_write_data2kzip():
     try:
         test_file = open(dir_path + '/test7.txt', "w+")
         test_file.write('This is line test.')
-        write_data2kzip(dir_path + '/test7.kzip', dir_path + '/test7.txt', fname_in_zip='test')
+        write_data2kzip(dir_path + '/test7.k.zip', dir_path + '/test7.txt', fname_in_zip='test')
         logging.info('PASSED: test_basics_write_data2kzip')
     except Exception as e:
         logging.warning('FAILED: test_basics_write_data2kzip' + str(e))
         raise AssertionError
-    if os.path.isfile(dir_path + '/test7.kzip'):
-        os.remove(dir_path + '/test7.kzip')
+    if os.path.isfile(dir_path + '/test7.k.zip'):
+        os.remove(dir_path + '/test7.k.zip')
     if os.path.isfile(dir_path + '/test7.txt'):
         os.remove(dir_path + '/test7.txt')
 

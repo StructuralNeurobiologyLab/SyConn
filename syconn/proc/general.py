@@ -25,7 +25,7 @@ def dense_matrix(sv, edge_size):
     np.array
 
     """
-    mat = np.zeros([edge_size] * 3, dtype=np.uint)
+    mat = np.zeros([edge_size] * 3, dtype=np.uint64)
     mat[sv[:, 0], sv[:, 1], sv[:, 2]] = 1
     return mat
 

@@ -95,11 +95,11 @@ def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
 
 def test_detect_cs():
     _helpertest_detect_cs(np.array([0, 6, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
     _helpertest_detect_cs(np.array([6, 0, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
     _helpertest_detect_cs(np.array([0, 0, 6]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
 
 
 def test_chunk_weighted():
@@ -144,6 +144,6 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
 if __name__ == '__main__':
     test_chunk_weighted()
     test_colorcode_vertices(5, 50)
-    _helpertest_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    _helpertest_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
-    _helpertest_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int), 5)
+    _helpertest_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
+    _helpertest_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
+    _helpertest_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)

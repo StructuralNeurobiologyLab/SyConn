@@ -176,7 +176,7 @@ class SkelClassifier():
         self.load_splitting_dict()
         multi_params = []
         sso_ids = np.concatenate(list(self.splitting_dict.values())).astype(
-            np.int)
+            np.uint64)
         for fc_block in [feature_contexts_nm[i:i + stride]
                          for i in range(0, len(feature_contexts_nm), stride)]:
 
@@ -215,12 +215,12 @@ class SkelClassifier():
         assert not os.path.isfile(self.splitting_fname), "Splitting file exists."
         print("Creating dataset splits.")
         self.load_label_dict()
-        classes = np.array(self.label_dict.values(), dtype=np.int)
+        classes = np.array(self.label_dict.values(), dtype=np.int32)
         unique_classes = np.unique(classes)
 
         id_bin_dict = {"train": [], "valid": [], "test": []}
         for this_class in unique_classes:
-            sso_ids = np.array(list(self.label_dict.keys()), dtype=np.uint)[classes == this_class]
+            sso_ids = np.array(list(self.label_dict.keys()), dtype=np.uint64)[classes == this_class]
 
             weights = []
             for sso_id in sso_ids:
@@ -266,7 +266,7 @@ class SkelClassifier():
 
         feature_dict = {}
         labels_dict = {}
-        sso_ids = np.concatenate(list(self.splitting_dict.values())).astype(np.int)
+        sso_ids = np.concatenate(list(self.splitting_dict.values())).astype(np.uint64)
         for sso_id in sso_ids:
             if not sso_id in id_bin_dict:
                 continue
@@ -299,13 +299,13 @@ class SkelClassifier():
                 labels_dict[id_bin_dict[sso_id]] += this_labels
             else:
                 labels_dict[id_bin_dict[sso_id]] = this_labels
-        labels_dict["train"] = np.array(labels_dict["train"], dtype=np.int)
-        labels_dict["valid"] = np.array(labels_dict["valid"], dtype=np.int)
+        labels_dict["train"] = np.array(labels_dict["train"], dtype=np.int32)
+        labels_dict["valid"] = np.array(labels_dict["valid"], dtype=np.int32)
         if "test" not in labels_dict:
             labels_dict["test"] = []
         if "test" not in feature_dict:
-            feature_dict["test"] = np.zeros((0, feature_dict["train"].shape[1]), np.float)
-        labels_dict["test"] = np.array(labels_dict["test"], dtype=np.int)
+            feature_dict["test"] = np.zeros((0, feature_dict["train"].shape[1]), np.float32)
+        labels_dict["test"] = np.array(labels_dict["test"], dtype=np.int32)
         print("--------DATASET SUMMARY--------\n\n"
               "train\n%s\n\nvalid\n%s\n\ntest\n%s\n" %
               (Counter(labels_dict["train"]), Counter(labels_dict["valid"]),
@@ -316,17 +316,17 @@ class SkelClassifier():
 
     def score(self, probs, labels, balanced=True):
         pred = np.argmax(probs, axis=1)
-        labels = np.array(labels, dtype=np.int)
+        labels = np.array(labels, dtype=np.int32)
         classes = np.unique(labels)
         if balanced:
             weights = 1.e8 / np.unique(labels, return_counts=True)[1]
             labels = labels.copy()
-            label_weights = np.zeros_like(labels, dtype=np.float)
+            label_weights = np.zeros_like(labels, dtype=np.float32)
             for i_class in range(len(classes)):
                 this_class = classes[i_class]
                 label_weights[labels == this_class] = weights[this_class]
         else:
-            label_weights = np.ones_like(labels, dtype=np.float)
+            label_weights = np.ones_like(labels, dtype=np.float32)
 
         overall_score = np.sum((pred == labels) * label_weights) / \
                         float(np.sum(label_weights))
@@ -408,12 +408,12 @@ class SkelClassifier():
         # tr_labels = np.array(tr_labels)
         # if balanced:
         #     weights = 1.e8/np.unique(tr_labels, return_counts=True)[1]
-        #     label_weights = np.zeros_like(tr_labels, dtype=np.float)
+        #     label_weights = np.zeros_like(tr_labels, dtype=np.float32)
         #     for i_class in range(len(classes)):
         #         this_class = classes[i_class]
         #         label_weights[tr_labels == this_class] = weights[this_class]
         # else:
-        #     label_weights = np.ones_like(tr_labels, dtype=np.float)
+        #     label_weights = np.ones_like(tr_labels, dtype=np.float32)
 
         unique_labels, labels_cnt = np.unique(tr_labels, return_counts=True)
         sample_weights = np.zeros_like(tr_labels, dtype=np.float32)
@@ -539,13 +539,7 @@ class SkelClassifier():
                         prefix=""):
         save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (
             name, feature_context_nm, "_prod" if production else "", prefix)
-        try:
-            clf = joblib.load(save_p)
-        except AttributeError:
-            logger_skel.warning('DeprecationWarning: Use joblib package instead '
-                                'of sklearn.externals.joblib!')
-            from sklearn.externals import joblib as joblib_sklearn  # soon to be deprecated
-            clf = joblib_sklearn.load(save_p)
+        clf = joblib.load(save_p)
         return clf
 
     def plot_lines(self, data, x_label, y_label, path, legend_labels=None):
@@ -592,15 +586,15 @@ class SkelClassifier():
 
     def get_curves(self, probs, labels):
         classes = np.unique(labels)
-        labels = np.array(labels, dtype=np.int)
+        labels = np.array(labels, dtype=np.int32)
         weights = 1.e8 / np.unique(labels, return_counts=True)[1]
         labels = labels.copy()
-        label_weights = np.zeros_like(labels, dtype=np.float)
+        label_weights = np.zeros_like(labels, dtype=np.float32)
         for i_class in range(len(classes)):
             this_class = classes[i_class]
             label_weights[labels == this_class] = weights[this_class]
 
-        labels = np.array(labels, dtype=np.int)
+        labels = np.array(labels, dtype=np.int32)
         curves = []
         for i_class in range(probs.shape[1]):
             # curves.append(precision_recall_curve(labels==i_class, probs[:, i_class], sample_weight=label_weights))
@@ -610,10 +604,10 @@ class SkelClassifier():
             f_score = []
             for t in np.arange(0.0, 1.0, 0.01):
                 pred = probs[:, i_class] >= t
-                false_pos = float(np.sum(pred[labels != i_class].astype(np.float) * label_weights[labels != i_class]))
+                false_pos = float(np.sum(pred[labels != i_class].astype(np.float32) * label_weights[labels != i_class]))
                 false_neg = float(
-                    np.sum(np.invert(pred[labels == i_class]).astype(np.float) * label_weights[labels == i_class]))
-                true_pos = float(np.sum(pred[labels == i_class].astype(np.float) * label_weights[labels == i_class]))
+                    np.sum(np.invert(pred[labels == i_class]).astype(np.float32) * label_weights[labels == i_class]))
+                true_pos = float(np.sum(pred[labels == i_class].astype(np.float32) * label_weights[labels == i_class]))
 
                 if true_pos + false_pos == 0:
                     continue

@@ -347,13 +347,13 @@ class VoxelStorageDyn(CompressedStorage):
         bin_arrs, block_offsets = self[item]
         min_off = np.min(block_offsets, axis=0)
         block_extents = np.array([off + np.array(bin_arr.shape) for bin_arr, off in zip(bin_arrs, block_offsets)],
-                                 dtype=np.int)
+                                 dtype=np.int32)
         max_extent = np.max(block_extents, axis=0)
         size = max_extent - min_off
         block_offsets -= min_off
         voxel_arr = np.zeros(size, dtype=np.bool)
         for bin_arr, off in zip(bin_arrs, block_offsets):
-            sh = off + np.array(bin_arr.shape, dtype=np.int)
+            sh = off + np.array(bin_arr.shape, dtype=np.int32)
             voxel_arr[off[0]:sh[0], off[1]:sh[1], off[2]:sh[2]] = bin_arr
         return voxel_arr, min_off
 

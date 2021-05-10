@@ -41,8 +41,9 @@ cd to `SyConn/examples/` and run
 
     python start.py [--working_dir=..]
 
-The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of sub-cellular structures
-(mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory).
+The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, 
+probability maps of sub-cellular structures (mitochondria, vesicle clouds and synaptic junctions) and synapse type
+(inhibitory, excitatory). For adding further cell organelles to this pipeline see [here](cellorganelle_integration.md).
 
 On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
 finished the following analysis steps for an example cube of shape \[2180 2180 1140] after 02h:16min:52s.
