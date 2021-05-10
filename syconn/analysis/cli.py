@@ -5,7 +5,8 @@ from syconn.handler.logger import log_main as log_gate
 from syconn import global_params
 from syconn.analysis.backend import SyConnBackend
 from syconn.analysis.neuroShaders import rgb, jet
-from syconn.analysis.utils import _upload_individuals, mesh_task, handle_layer_args, start_flask_server
+from syconn.analysis.utils import handle_layer_args
+from syconn.analysis.flask_server import start_flask_server
 import argparse
 import os
 import numpy as np
@@ -77,14 +78,7 @@ class SyConnClient(object):
                          flask_PORT=8000, organelles=[]):
         """
         Configures the Syconn client so it parses the desired data to Neuroglancer
-        Viewer needs to have layers supported by Neuroglancer -> layer_types
-        = { 'image': ImageLayer,
-            'segmentation': SegmentationLayer,
-            'pointAnnotation': PointAnnotationLayer,
-            'annotation': AnnotationLayer,
-            'mesh': SingleMeshLayer}
-        Layer visibility depends on ordering. Last layer overrides the side panel
-        visibility of all layers
+        Viewer. Layer visibility depends on ordering. Last layer overrides the side panel visibility of all layers
         :param backend: SyConnBackend
         :param state: neuroglancer.viewer_state.ViewerState
         :param data: numpy.ndarray (e.g KnossosDataset)
@@ -184,6 +178,7 @@ class SyConnClient(object):
 ############################################################
 # Get Syconn data and transform it to support Neuroglancer #
 ############################################################
+
 if __name__ == '__main__':
     """
     Start the Neuroglancer server with the desired Viewer 
