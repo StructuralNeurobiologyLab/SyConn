@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 import time
 from multiprocessing import Process, Queue
+from syconn import global_params
 from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
     VoxelStorage
 from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
