@@ -1,5 +1,4 @@
 # Tasks
-
 - [x] Skeleton rendering (neuroglancer.SkeletonSource)
 - [x] Simple mesh generation in LocalVolume
 - [x] Mitochondira mesh rendering

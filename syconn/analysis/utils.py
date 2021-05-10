@@ -93,4 +93,3 @@ def handle_layer_args(ap):
     g = ap.add_argument_group(title='SyConn layer options')
     g.add_argument('--organelles', nargs='+', default=[],
                         help='Organelle layers to be displayed')
-
