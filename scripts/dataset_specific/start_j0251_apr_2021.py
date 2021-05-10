@@ -8,7 +8,11 @@
 import os
 import time
 import numpy as np
+import re
+import glob
 import networkx as nx
+import pandas
+import tqdm
 
 from syconn.handler.config import generate_default_conf, initialize_logging
 from syconn import global_params
@@ -18,24 +22,24 @@ from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
+    working_dir = "/ssdscratch/songbird/j0251/j0251_72_seg_20210127/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
-    prior_astrocyte_removal = True
     key_val_pairs_conf = [
         ('min_cc_size_ssv', 5000),  # minimum bounding box diagonal of cell (fragments) in nm
-        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
+        ('glia', {'prior_astrocyte_removal': False}),
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
-        ('use_point_models', False),
+        ('use_point_models', True),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
                    'view_properties': {'nb_views': 3}
                    }),
+        ('slurm', {'exclude_nodes': ['wb08', 'wb09']}),
         ('cell_objects',
          {'sym_label': 1, 'asym_label': 2,
           'min_obj_vx': {'sv': 100},  # flattened RAG contains only on SV per cell
@@ -53,9 +57,9 @@ if __name__ == '__main__':
 
     # ----------------- DATA DIRECTORY ---------------------
     raw_kd_path = '/wholebrain/songbird/j0251/j0251_72_clahe2/'
-    root_dir = '/ssdscratch/songbird/j0251/'
-    seg_kd_path = root_dir + 'segmentation/j0251_72_seg_20210127_base/'
-    init_svgraph_path = root_dir + 'segmentation/j0251_72_seg_20210127_base/init_svgraph.bz2'
+    root_dir = '/ssdscratch/songbird/j0251/segmentation/'
+    seg_kd_path = root_dir + 'j0251_72_seg_20210127_base/'
+    init_svgraph_path = root_dir + 'j0251_72_seg_20210127_base/init_svgraph.bz2'
     kd_asym_path = root_dir + 'j0251_asym_sym/'
     kd_sym_path = root_dir + 'j0251_asym_sym/'
     syntype_avail = (kd_asym_path is not None) and (kd_sym_path is not None)
@@ -111,102 +115,66 @@ if __name__ == '__main__':
     log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
     log.critical('Working directory is set to "{}".'.format(working_dir))
 
-    # log.info('Step 1/9 - Predicting sub-cellular structures')
-    # ftimer.start('Dense predictions')
-    # # myelin is not needed before `run_create_neuron_ssd`
-    # # exec_dense_prediction.predict_myelin(raw_kd_path)
-    # ftimer.stop()
-    #
-    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    # ftimer.start('SD generation')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-    #                                 n_folders_fs=n_folders_fs,
-    #                                 load_cellorganelles_from_kd_overlaycubes=True,
-    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
-    #                                 max_n_jobs=global_params.config.ncore_total * 4)
-    #
-    # generate flattened RAG
-    # from syconn.reps.segmentation import SegmentationDataset
-    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    # rag_sub_g = nx.Graph()
-    # # add SV IDs to graph via self-edges
-    # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
-    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    # filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
-    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # log.info('{} SVs were added to the RAG after applying size filter with bounding box '
-    #          'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['min_cc_size_ssv']))
-    # nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    ftimer.start('SD generation')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+                                    n_folders_fs=n_folders_fs,
+                                    load_cellorganelles_from_kd_overlaycubes=True,
+                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
+                                    max_n_jobs=global_params.config.ncore_total * 4)
+
     # exec_init.run_create_rag()
     # ftimer.stop()
-    log.info('Step 3/9 - Astrocyte separation')
-    if global_params.config.prior_astrocyte_removal:
-        ftimer.start('Astrocyte separation')
-        if not global_params.config.use_point_models:
-            exec_render.run_astrocyte_rendering()
-            exec_inference.run_astrocyte_prediction()
-        else:
-            exec_inference.run_astrocyte_prediction_pts()
-        exec_inference.run_astrocyte_splitting()
-        ftimer.stop()
-    else:
-        log.info('Astrocyte separation disabled. Skipping.')
 
-    log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd()
-    ftimer.stop()
-
-    log.info('Step 5/10 - Creating SuperSegmentationDataset')
-    ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
-    ftimer.stop()
-
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 4.5/9 - Neuron rendering')
-        ftimer.start('Neuron rendering')
-        exec_render.run_neuron_rendering()
-        ftimer.stop()
-
-    log.info('Step 5/9 - Synapse detection')
-    ftimer.start('Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
-    ftimer.stop()
-
-    log.info('Step 6/9 - Compartment prediction')
-    ftimer.start('Compartment predictions')
-    exec_inference.run_semsegaxoness_prediction()
-    if not global_params.config.use_point_models:
-        exec_inference.run_semsegspiness_prediction()
-    ftimer.stop()
+    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    # ftimer.start('SSD generation')
+    # exec_init.run_create_neuron_ssd()
+    # ftimer.stop()
     #
-    # TODO: this step can be launched in parallel with the morphology extraction!
-    ftimer.start('Spine head volume estimation')
-    exec_syns.run_spinehead_volume_calc()
-    ftimer.stop()
-
-    # Used multi-views until here! Now use point models
-    global_params.config['use_point_models'] = True
-    global_params.config.write_config()
-    time.sleep(10)  # wait for changes to apply
-    log.info('Step 7/9 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
-
-    log.info('Step 8/9 - Celltype analysis')
-    ftimer.start('Celltype analysis')
-    exec_inference.run_celltype_prediction()
-    ftimer.stop()
-
-    log.info('Step 9/9 - Matrix export')
-    ftimer.start('Matrix export')
-    exec_syns.run_matrix_export()
-    ftimer.stop()
-
-    time_summary_str = ftimer.prepare_report()
-    log.info(time_summary_str)
-    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-    #          'can be analyzed via the KNOSSOS-SyConn plugin at '
-    #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    # log.info('Step 5/10 - Skeleton generation')
+    # ftimer.start('Skeleton generation')
+    # exec_skeleton.run_skeleton_generation()
+    # ftimer.stop()
+    #
+    # log.info('Step 5/9 - Synapse detection')
+    # ftimer.start('Synapse detection')
+    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    # ftimer.stop()
+    #
+    # # log.info('Step 6/9 - Compartment prediction')
+    # # ftimer.start('Compartment predictions')
+    # # exec_inference.run_semsegaxoness_prediction()
+    # # if not global_params.config.use_point_models:
+    # #     exec_inference.run_semsegspiness_prediction()
+    # # ftimer.stop()
+    # #
+    # # # TODO: this step can be launched in parallel with the morphology extraction!
+    # # ftimer.start('Spine head volume estimation')
+    # # exec_syns.run_spinehead_volume_calc()
+    # # ftimer.stop()
+    # #
+    # # # Used multi-views until here! Now use point models
+    # # global_params.config['use_point_models'] = True
+    # # global_params.config.write_config()
+    # # time.sleep(10)  # wait for changes to apply
+    # # log.info('Step 7/9 - Morphology extraction')
+    # # ftimer.start('Morphology extraction')
+    # # exec_inference.run_morphology_embedding()
+    # # ftimer.stop()
+    # #
+    # # log.info('Step 8/9 - Celltype analysis')
+    # # ftimer.start('Celltype analysis')
+    # # exec_inference.run_celltype_prediction()
+    # # ftimer.stop()
+    # #
+    # # log.info('Step 9/9 - Matrix export')
+    # # ftimer.start('Matrix export')
+    # # exec_syns.run_matrix_export()
+    # # ftimer.stop()
+    # #
+    # # time_summary_str = ftimer.prepare_report()
+    # # log.info(time_summary_str)
+    # # # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+    # # #          'can be analyzed via the KNOSSOS-SyConn plugin at '
+    # # #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # # # os.system(f'syconn.server --working_dir={example_wd} --port=10001')

@@ -8,7 +8,7 @@ import numpy as np
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
 from syconn.reps.rep_helper import colorcode_vertices
-from syconn.reps.connectivity_helper import cs_id_to_partner_ids_vec
+from syconn.reps.connectivity_helper import cs_id_to_partner_ids_vec, cs_id_to_partner_inverse
 from scipy import spatial
 
 # test cube properties
@@ -136,9 +136,14 @@ def test_detect_cs_64bit():
 
 
 def test_find_object_properties_cs():
-    sample, *_ = _gen_sample_seg(np.array([0, 6, 0]), stencil, cube_size)
-    sizes1, bounding_boxes1, rep_coords1 = find_object_properties(sample)
-    sizes2, bounding_boxes2, rep_coords2 = find_object_properties_cs(sample)
+    sample = np.zeros((20, 20, 20), dtype=np.uint64)
+    sample[5, 5, 5] = cs_id_to_partner_inverse([100, 200])
+    sample[19, 15, 5] = cs_id_to_partner_inverse([50, 200])
+    sample[11, 3, 9] = cs_id_to_partner_inverse([1, 50])
+    rep_coords1, bounding_boxes1, sizes1 = find_object_properties(sample)
+    sample = np.array([cs_id_to_partner_ids_vec([k])[0] for k in sample.flatten()],
+                      dtype=np.uint64).reshape((20, 20, 20, 2))
+    rep_coords2, bounding_boxes2, sizes2 = find_object_properties_cs(sample)
     for k in sizes1:  # keys are tuples of IDs
         # get properties from 32 bit extraction method
         s1 = sizes1[k]
@@ -150,8 +155,8 @@ def test_find_object_properties_cs():
         r2 = rep_coords2[id1][id2]
         b2 = bounding_boxes2[id1][id2]
         assert s1 == s2, f'Size mis-match (32 bit vs 64 bit): {s1} vs. {s2}'
-        assert r1 == r2, f'Coordinate mis-match (32 bit vs 64 bit): {r1} vs. {r2}'
-        assert b1 == b2, f'Bounding box mis-match (32 bit vs 64 bit): {b1} vs. {b2}'
+        assert np.all(r1 == r2), f'Coordinate mis-match (32 bit vs 64 bit): {r1} vs. {r2}'
+        assert np.all(b1 == b2), f'Bounding box mis-match (32 bit vs 64 bit): {b1} vs. {b2}'
 
 
 def test_boundary_gen():

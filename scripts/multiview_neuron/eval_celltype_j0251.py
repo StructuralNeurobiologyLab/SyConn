@@ -61,10 +61,12 @@ if __name__ == "__main__":
             ssv_ids = split_dc['valid']
 
             loaded_ssv_ids.extend(ssv_ids)
-            pred_key_appendix2 = 'celltype_CV{}/celltype_cmn_j0251v2_adam_nbviews20_longRUN_2ratios_BIG_bs40_10fold_CV{}_eval0'.format(cv, cv)
-            print('Loading cv-{}-data of model {}'.format(cv, pred_key_appendix2))
-            m_path = base_dir + pred_key_appendix2
-            pred_key_appendix2 += '_cmn'
+            pred_key_appendix = f'celltype_CV' \
+                                f'{cv}/celltype_cmn_j0251v2_adam_nbviews20_longRUN_2ratios_BIG_bs40_10fold_CV' \
+                                f'{cv}_eval{run_ix}'
+            print('Loading cv-{}-data of model {}'.format(cv, pred_key_appendix))
+            m_path = base_dir + pred_key_appendix
+            pred_key_appendix += '_cmn'
             m = InferenceModel(m_path, bs=80)
             for ssv_id in ssv_ids:
                 ssv = ssd.get_super_segmentation_object(ssv_id)
@@ -72,7 +74,7 @@ if __name__ == "__main__":
                 # predict
                 ssv.nb_cpus = 20
                 ssv._view_caching = True
-                ssv.predict_celltype_multiview(model=m, pred_key_appendix=pred_key_appendix2, onthefly_views=True,
+                ssv.predict_celltype_multiview(model=m, pred_key_appendix=pred_key_appendix, onthefly_views=True,
                                                view_props={'use_syntype': True, 'nb_views': 20}, overwrite=False,
                                                save_to_attr_dict=False, verbose=True,
                                                model_props={'n_classes': nclasses, 'da_equals_tan': False})
@@ -81,8 +83,8 @@ if __name__ == "__main__":
                 curr_l = ssv_label_dc[ssv.id]
                 gt_l.append(curr_l)
 
-                pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
-                preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
+                pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix])
+                preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix)]
                 major_dec = np.zeros(preds_small.shape[1])
                 preds_small = np.argmax(preds_small, axis=1)
                 for ii in range(len(major_dec)):
@@ -91,7 +93,7 @@ if __name__ == "__main__":
                 pred_proba.append(major_dec)
                 if pred_l[-1] != gt_l[-1]:
                     print(f'{pred_l[-1]}\t{gt_l[-1]}\t{ssv.id}\t{major_dec}')
-                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}".format(pred_key_appendix2)))
+                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}".format(pred_key_appendix)))
 
         assert len(set(loaded_ssv_ids)) == len(ssv_label_dc)
         # # WRITE OUT COMBINED RESULTS

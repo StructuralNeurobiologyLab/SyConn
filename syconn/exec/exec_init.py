@@ -207,6 +207,12 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
                           overwrite=False):
     """
+    Convert binary class segmentation mask of sub-cellular structure predictions into an isntance segmentation
+    using connected components / watershed.
+    Subsequently, the properties of sub-cellular structures (voxel count, coordinate, bounding box, mesh, ..) and
+    their associations with cell fragments (calculating the overlap between every sub-cellular structure and
+    cell fragment instance) are extracted.
+
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
 
@@ -241,7 +247,6 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
