@@ -1,7 +1,6 @@
 from syconn import global_params
 from syconn.analysis.storage import MeshStorage
 from syconn.handler.logger import log_main as logger
-import syconn.analysis.flask_server as fs
 from syconn import global_params
 import json
 import numpy as np
@@ -191,8 +190,3 @@ def handle_layer_args(ap):
     g = ap.add_argument_group(title='SyConn layer options')
     g.add_argument('--organelles', nargs='+', default=[],
                         help='Organelle layers to be displayed')
-
-def start_flask_server(flask_PORT, backend, seg_dataset):
-    flask_server = th.Thread(target=fs.createDownloadUrl, args=('127.0.0.1', flask_PORT, backend, seg_dataset.scale, True,))
-    flask_server.start()
-    return flask_server

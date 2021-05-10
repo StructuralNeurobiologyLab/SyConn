@@ -15,7 +15,7 @@ import os
 from syconn.reps import connectivity_helper as conn
 from syconn.reps import super_segmentation as ss
 from syconn.handler.logger import log_main as log_gate
-from syconn.handler.prediction import int2str_converter
+from syconn.handler.prediction import int2str_converter, str2int_converter
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
 
@@ -300,6 +300,23 @@ class SyConnBackend(object):
             log_gate.warning("Celltype prediction not present in attribute "
                              "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
         return {'ct': label, 'certainty': certainty}
+
+    def ssvs_of_ct(self, ct: str):
+        """
+        Returns the subset of SSV IDs for a given CT
+        :param ct (str)
+        :return: list
+        """
+        gt_type = 'ctgt'
+        if 'j0251' in self.ssd.working_dir:
+            gt_type = 'ctgt_j0251_v2'
+        print('Gt_type: ', gt_type)
+        ct_label_int = str2int_converter(ct, gt_type)
+        print('Label: ', ct_label_int)
+        print(len(self.ssd.ssv_ids))
+        ct_ssvs = self.ssd.ssv_ids[self.ssd.load_numpy_data('celltype_cnn_e3') == ct_label_int]
+        print(len(ct_ssvs))
+        return ct_ssvs
 
     def svs_of_ssv(self, ssv_id):
         """

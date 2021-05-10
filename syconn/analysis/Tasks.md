@@ -1,5 +1,4 @@
 # Tasks
-
 - [x] Skeleton rendering (neuroglancer.SkeletonSource)
 - [x] Simple mesh generation in LocalVolume
 - [x] Mitochondira mesh rendering
@@ -13,13 +12,24 @@
 - [x] Get colors working with linking segmentation layers
 - [x] Level of detail integration
 - [x] Precomputed skeleton source 
-- [ ] Dynamically generate layers for the obj_types wanted
+- [x] Dynamically generate layers for the obj_types wanted
 - [x] Response in flask json.dumps and binary
 - [x] Integrate flask into cli main
-- [ ] Specify organelle types in the main parameters
+- [x] Specify organelle types in the main parameters
 - [ ] Look into import folders for absolute path
 - [x] Look into the downsampling where it is happening in the frontend or Neuroglancer server
 - [x] Compare highest factor and upsampling with lowest factor and downsampling (runtime)
 - [x] Render differently colored organelle meshes with a mouse click (without the seg query)
 - [ ] Coloring of meshes (diff obj types)
 - [x] Fix rendering of subvolume chunks (gray boxes); check available mags
+- [ ] Property selector list (manually created); Text boxes to select the values of the property (1. select the attribute, 2. select the number of objects to display)
+    1. celltype_cnn_e3 e.g MSN, EA
+    2. number of mitochndria in ssv (check mapping_mi_idss.npy)
+    3. volume count (sizes.npy) e.g min, max
+- [ ] svs.npy (all the supervoxel ids)
+- [ ] Invert cell_ids to supervoxel_ids (mapping_dict and mapping_dict_reversed). Same for rag_flat datasets
+- [ ] Method in syconn server receiving the coords, bounding box and cell type and give back the subset of ids (using numba or cython)
+- [ ] Segment query even for the properties will be huge; return a random subset of the segment query or return a range of segment query based on user input
+- [x] Check deepcopy behaviour (entire viewer state deepcopied or not)
+- [x] Check references of locks (_lock, __lock)
+- [ ] Load a subset of the ssv_ids (random or range-wise) for the given property

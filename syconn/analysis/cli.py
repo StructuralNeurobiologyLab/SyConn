@@ -5,7 +5,8 @@ from syconn.handler.logger import log_main as log_gate
 from syconn import global_params
 from syconn.analysis.backend import SyConnBackend
 from syconn.analysis.neuroShaders import rgb, jet
-from syconn.analysis.utils import _upload_individuals, mesh_task, handle_layer_args, start_flask_server
+from syconn.analysis.utils import _upload_individuals, mesh_task, handle_layer_args
+from syconn.analysis.flask_server import start_flask_server
 import argparse
 import os
 import numpy as np
@@ -20,8 +21,8 @@ def configure_backend():
     Setups SyConnBackend object and logger
     :return SyConnBackend:
     """
-
     global logger
+
     logger = log_gate
     logger.info('SyConn gate server starting up on working directory '
                 '"{}".'.format(global_params.wd))
@@ -42,8 +43,8 @@ class SyConnClient(object):
     One SyConn client = one Neuroglancer viewer
     '''
 
-    def __init__(self, logger, backend, seg_path, organelles):
-        if os.path.basename(os.path.dirname(seg_path)) == 'latest_seg':
+    def __init__(self, backend, seg_path, organelles):
+        if os.path.basename(os.path.dirname(seg_path)) == 'j0251':
             raw_path = '/wholebrain/songbird/j0251/j0251_72_clahe2'
         else:
             raw_path = seg_path
@@ -210,6 +211,6 @@ if __name__ == '__main__':
     # load seg and raw data
     seg_path = global_params.config.kd_seg_path
 
-    client = SyConnClient(logger, backend, seg_path, args.organelles)
+    client = SyConnClient(backend, seg_path, args.organelles)
 
     logger.info('Neuroglancer server running at {}'.format(client.viewer))

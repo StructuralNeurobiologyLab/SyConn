@@ -1252,6 +1252,17 @@ def str2int_converter(comment: str, gt_type: str) -> int:
             return 3
         else:
             return -1
+    elif gt_type == "ctgt":
+        if comment == "EA":
+            return 0
+        elif comment == "MSN":
+            return 1
+        elif comment == "GP":
+            return 2
+        elif comment == "INT":
+            return 3
+        else:
+            return -1
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9)

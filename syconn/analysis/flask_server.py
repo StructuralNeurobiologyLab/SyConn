@@ -1,9 +1,10 @@
 from flask import Flask, abort, make_response
 from flask_cors import CORS, cross_origin
-from syconn.analysis.utils import get_encoded_mesh, get_encoded_skeleton
+from utils import get_encoded_mesh, get_encoded_skeleton
 from syconn.analysis.backend import SyConnBackend
 from knossos_utils import KnossosDataset
 import json
+import threading as th
 
 ATTRIBUTES = ('sv', 'mi', 'sj', 'vc')
 
@@ -126,3 +127,8 @@ def createDownloadUrl(host, port, backend: SyConnBackend, scale, debug):
             abort(404)
 
     app.run(debug=debug, host=host, port=port, use_reloader=False)
+
+def start_flask_server(flask_PORT, backend, seg_dataset):
+    flask_server = th.Thread(target=createDownloadUrl, args=('127.0.0.1', flask_PORT, backend, seg_dataset.scale, True,))
+    flask_server.start()
+    return flask_server

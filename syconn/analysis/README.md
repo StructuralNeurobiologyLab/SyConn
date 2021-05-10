@@ -8,6 +8,9 @@ Currently Neuroglancer can render the following meshes:
 * Synapses ('syn_ssv') and Synaptic Junctions ('sj')
 * Vesticle Clouds ('vc')
 
+The organelle layers are modular, meaning you can add or remove them at the start. 
+Supported organelles:
+ORGANELLES=('mi','sj','vc')
 
 #Input
 
@@ -35,6 +38,10 @@ The client can be run standalone and supports the following input: \
 ```
 
 **For no adress/port input, the default adress where Neuroglancer is found on 127.0.0.1:5000**
+
+```
+--organelles <ORGANELLES separated by space>
+```
 
 #How it works
 
