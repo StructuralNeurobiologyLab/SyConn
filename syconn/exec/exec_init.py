@@ -247,6 +247,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
+
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
@@ -287,7 +288,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
              ''.format(time.time() - start))
 
 
-def run_create_rag():
+def run_create_rag(graph_node_dtype=None):
     """
     If ``global_params.config.prior_astrocyte_removal==True``:
         stores pruned RAG at ``global_params.config.pruned_svgraph_path``, required for all glia
@@ -296,11 +297,16 @@ def run_create_rag():
     else:
         stores pruned SV graph at :attr:`~syconn.handler.config.DynConfig.pruned_svgraph_path`,
         required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
+
+    Args:
+        graph_node_dtype: Defaults to ``np.uint64``.
     """
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=False)
+    if graph_node_dtype is None:
+        graph_node_dtype = np.uint64
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
-    G = nx.read_edgelist(global_params.config.init_svgraph_path, nodetype=np.uint64)
+    G = nx.read_edgelist(global_params.config.init_svgraph_path, nodetype=graph_node_dtype)
     if 0 in G.nodes():
         G.remove_node(0)
         log.warning('Found background node 0 in original graph. Removing.')
@@ -309,10 +315,8 @@ def run_create_rag():
 
     # add single SV connected components to initial graph
     sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir, cache_properties=['size'])
-    diff = np.array(list(set(sd.ids).difference(set(all_sv_ids_in_rag))))
-    log.info('Found {} single-element connected component SVs which were missing'
-             ' in initial RAG.'.format(len(diff)))
-
+    diff = np.setdiff1d(sd.ids, all_sv_ids_in_rag)
+    log.info(f'Found {len(diff)} single-element connected component SVs which were missing in initial RAG.')
     for ix in diff:
         G.add_edge(ix, ix)
 
@@ -324,7 +328,10 @@ def run_create_rag():
     bbs = sd.load_numpy_data('bounding_box') * sd.scaling
     for ii in range(len(sd.ids)):
         sv_size_dict[sd.ids[ii]] = bbs[ii]
-    ccsize_dict = create_ccsize_dict(G, sv_size_dict)
+    try:
+        ccsize_dict = create_ccsize_dict(G, sv_size_dict)
+    except ValueError as e:
+        raise ValueError from e
     log.debug("Finished preparation of SSV size dictionary based "
               "on bounding box diagonal of corresponding SVs.")
     before_cnt = len(G.nodes())

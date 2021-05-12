@@ -1791,6 +1791,7 @@ class SegmentationDataset(SegmentationBase):
 
         Todo:
             * remove 's' appendix in file names.
+            * remove 'celltype' replacement for 'celltype_cnn_e3' as soon as 'celltype_cnn_e3' was renamed package-wide
 
         Args:
             prop_name: Identifier of the requested cache array.
@@ -1799,6 +1800,8 @@ class SegmentationDataset(SegmentationBase):
         Returns:
             numpy array of property `prop_name`.
         """
+        if prop_name == 'celltype':
+            prop_name = 'celltype_cnn_e3'
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:

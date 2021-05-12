@@ -1333,9 +1333,16 @@ class SuperSegmentationObject(SegmentationBase):
                 so_obj.save_kzip(path=dest_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
-    def total_edge_length(self) -> Union[np.ndarray, float]:
+    def total_edge_length(self, compartments_of_interest: Optional[List[int]] = None,
+                          ax_pred_key: str = 'axoness_avg10000') -> Union[np.ndarray, float]:
         """
         Total edge length of the super-supervoxel :py:attr:`~skeleton` in nanometers.
+
+        Args:
+            compartments_of_interest: Which compartments to take into account for calculation.
+                axon: 1, dendrite: 0, soma: 2.
+            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`, only used if
+                `compartments_of_interest` was set.
 
         Returns:
             Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
@@ -1344,8 +1351,16 @@ class SuperSegmentationObject(SegmentationBase):
             self.load_skeleton()
         nodes = self.skeleton["nodes"]
         edges = self.skeleton["edges"]
-        return np.sum([np.linalg.norm(
-            self.scaling * (nodes[e[0]] - nodes[e[1]])) for e in edges])
+        if compartments_of_interest is None:
+            return np.sum([np.linalg.norm(
+                self.scaling * (nodes[e[0]] - nodes[e[1]])) for e in edges])
+        else:
+            node_labels = self.skeleton[ax_pred_key]
+            edge_length = 0
+            for e in edges:
+                if (node_labels[e[0]] in compartments_of_interest) and (node_labels[e[1]] in compartments_of_interest):
+                    edge_length += np.linalg.norm(self.scaling * (nodes[e[0]] - nodes[e[1]]))
+            return edge_length
 
     def save_skeleton(self, to_kzip=False, to_object=True):
         """
@@ -3322,6 +3337,39 @@ class SuperSegmentationObject(SegmentationBase):
             curr_path = np.min([shortest_paths[soma_ix] for soma_ix in soma_ixs])
             shortest_paths_of_interest.append(curr_path)
         return shortest_paths_of_interest
+
+    def path_density_seg_obj(self, obj_type: str, compartments_of_interest: Optional[List[int]] = None,
+                             ax_pred_key: str = 'axoness_avg10000') -> float:
+        """
+
+        Args:
+            obj_type: Key to any available sub-cellular structure.
+            compartments_of_interest: Which compartments to take into account for calculation.
+                axon: 1, dendrite: 0, soma: 2
+            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`, only used if
+                `compartments_of_interest` was set.
+
+        Returns:
+            Average volume per path length (um^3 / um).
+        """
+        objs = np.array(self.get_seg_objects(obj_type))
+        if self.skeleton is None:
+            self.load_skeleton()
+        skel = self.skeleton
+        if compartments_of_interest is not None:
+            node_labels = skel[ax_pred_key]
+            node_labels[node_labels == 3] = 1
+            node_labels[node_labels == 4] = 1
+            tree = spatial.cKDTree(skel['nodes'] * self.scaling)
+            _, ixs = tree.query(np.array([obj.rep_coord for obj in objs]) * self.scaling, k=1, n_jobs=self.nb_cpus)
+            obj_labels = node_labels[ixs]
+            mask = np.zeros(len(objs), dtype=np.bool)
+            for comp_label in compartments_of_interest:
+                mask = mask | (obj_labels == comp_label)
+            objs = objs[mask]
+        obj_vol = np.sum([obj.size for obj in objs]) * np.prod(self.scaling) / 1e9  # in um^3
+        path_length = self.total_edge_length(compartments_of_interest) / 1e3  # in um
+        return obj_vol / path_length
 
 
 # ------------------------------------------------------------------------------

@@ -470,21 +470,21 @@ def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltyp
     sd_syn_ssv = SegmentationDataset('syn_ssv')
     if proba_thresh_celltype is not None:
         ssd = SuperSegmentationDataset()
-        ct_probas = [certainty_estimate(proba) for proba in tqdm.tqdm(ssd.load_cached_data('celltype_cnn_e3_probas'),
+        ct_probas = [certainty_estimate(proba) for proba in tqdm.tqdm(ssd.load_numpy_data('celltype_cnn_e3_probas'),
                                                                       desc='Cells')]
         ct_proba_lookup = {cellid: ct_probas[k] for k, cellid in enumerate(ssd.ssv_ids)}
         del ct_probas
-    ax = sd_syn_ssv.load_cached_data('partner_axoness')
-    ct = sd_syn_ssv.load_cached_data('partner_celltypes')
-    area = sd_syn_ssv.load_cached_data('mesh_area')
-    # size = sd_syn_ssv.load_cached_data('size')
-    # syn_sign = sd_syn_ssv.load_cached_data('syn_sign')
+    ax = sd_syn_ssv.load_numpy_data('partner_axoness')
+    ct = sd_syn_ssv.load_numpy_data('partner_celltypes')
+    area = sd_syn_ssv.load_numpy_data('mesh_area')
+    # size = sd_syn_ssv.load_numpy_data('size')
+    # syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     # area *= syn_sign
-    partners = sd_syn_ssv.load_cached_data('neuron_partners')
+    partners = sd_syn_ssv.load_numpy_data('neuron_partners')
 
-    proba = sd_syn_ssv.load_cached_data('syn_prob')
+    proba = sd_syn_ssv.load_numpy_data('syn_prob')
     m = (proba >= proba_thresh_syn) & (area >= r[0]) & (area <= r[1])
-    print(f'Found {np.sum(m)} synapses after filtering with probaility threshold {proba_thresh_syn} and '
+    print(f'Found {np.sum(m)} synapses after filtering with probability threshold {proba_thresh_syn} and '
           f'size filter (min/max [um^2]: {r}).')
     ax[(ax == 3) | (ax == 4)] = 1  # set boutons to axon class
     ax[(ax == 5) | (ax == 6)] = 0  # set spine head and neck to dendrite class

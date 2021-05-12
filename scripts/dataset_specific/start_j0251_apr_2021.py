@@ -42,7 +42,7 @@ if __name__ == '__main__':
         ('slurm', {'exclude_nodes': ['wb08', 'wb09']}),
         ('cell_objects',
          {'sym_label': 1, 'asym_label': 2,
-          'min_obj_vx': {'sv': 100},  # flattened RAG contains only on SV per cell
+          'min_obj_vx': {'sv': 1},
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
           'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
                                       'binary_erosion'],
@@ -123,7 +123,7 @@ if __name__ == '__main__':
                                     transf_func_kd_overlay=cellorganelle_transf_funcs,
                                     max_n_jobs=global_params.config.ncore_total * 4)
 
-    # exec_init.run_create_rag()
+    # exec_init.run_create_rag(graph_node_dtype=np.uint32)
     # ftimer.stop()
 
     # log.info('Step 4/9 - Creating SuperSegmentationDataset')
