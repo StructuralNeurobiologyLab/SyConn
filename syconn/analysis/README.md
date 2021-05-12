@@ -12,6 +12,11 @@ The organelle layers are modular, meaning you can add or remove them at the star
 Supported organelles:
 ORGANELLES=('mi','sj','vc')
 
+##IMPORTANT
+
+For the visualizer to work properly, you have to have complete access (port-forward if necessary) to
+Neuroglancer port (provided in the command line) and the flask server port (default to 8000).
+
 #Input
 
 The client can be run standalone and supports the following input: \

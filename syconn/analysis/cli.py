@@ -44,7 +44,7 @@ class SyConnClient(object):
     '''
 
     def __init__(self, backend, seg_path, organelles):
-        if os.path.basename(os.path.dirname(seg_path)) == 'j0251':
+        if os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(seg_path)))) == 'j0251':
             raw_path = '/wholebrain/songbird/j0251/j0251_72_clahe2'
         else:
             raw_path = seg_path

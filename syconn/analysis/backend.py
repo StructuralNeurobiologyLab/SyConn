@@ -308,19 +308,14 @@ class SyConnBackend(object):
         :param ct: str
         :return: list
         """
-
         gt_type = 'ctgt'
         if 'j0251' in self.ssd.working_dir:
             gt_type = 'ctgt_j0251_v2'
-        
         ct_label_int = str2int_converter(ct, gt_type)
-
         if ct_label_int == -1:
             raise ValueError('Celltype not present in ground truth type: {}'.format(gt_type))
-            
         ct_ssvs = self.ssd.ssv_ids[self.ssd.load_numpy_data('celltype_cnn_e3') == ct_label_int]
-
-        return ct_ssvs
+        return ct_ssvs 
 
     def cts_in_data(self, gt_type):
         """
