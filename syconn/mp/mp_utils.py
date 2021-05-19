@@ -129,7 +129,7 @@ def start_multiprocess(func: Callable, params: list, debug: bool = False,
 
 def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True,
-                            ignore_cpu_cnt=False):
+                            ignore_cpu_cnt=False, desc: str = None):
     """
 
     Args:
@@ -140,6 +140,7 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
         nb_cpus:
         show_progress:
         ignore_cpu_cnt:
+        desc: Task description. Used for progress bar.
 
     Returns:
         list of function returns.
@@ -150,6 +151,11 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
         cpu_cnt = 999999999
     else:
         cpu_cnt = cpu_count()
+    if desc is None:
+        if hasattr(func, '__name__'):
+            desc = f'{func.__name__}'
+        else:
+            desc = str(func)
     nb_cpus = min(nb_cpus, len(params), cpu_cnt)
 
     if debug:
@@ -166,7 +172,8 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
                              miniters=1, mininterval=1, unit='job',
-                             unit_scale=True, dynamic_ncols=False)
+                             unit_scale=True, dynamic_ncols=False,
+                             desc=desc)
             result = []
             for p in params:
                 result.append(func(p))

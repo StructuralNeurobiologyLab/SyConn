@@ -36,7 +36,7 @@ def qsub_glia_splitting():
 
 def collect_glia_sv():
     """
-    Collect glia super voxels (as returned by glia splitting) from all 'sv'
+    Collect astrocyte super voxels (as returned by astrocyte splitting) from all 'sv'
     SegmentationObjects contained in 'sv' SegmentationDataset (always uses
     default version as defined in config.yml).
     """
@@ -47,16 +47,16 @@ def collect_glia_sv():
 
     # get SSV glia splits
     chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'] * 10)
-    glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
-                                                 nb_cpus=global_params.config['ncores_per_node']))
+    astrocyte_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
+                                                      nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")
     # Missing SVs were sorted out by the size filter
     # TODO: Decide of those should be added to the glia RAG or not
     missing_ids = np.setdiff1d(sds.ids, ids_in_rag)
-    np.save(global_params.config.working_dir + "/glia/glia_svs.npy", glia_svs)
-    neuron_svs = np.array(list(set(sds.ids).difference(set(glia_svs).union(set(missing_ids)))),
+    np.save(global_params.config.working_dir + "/glia/astrocyte_svs.npy", astrocyte_svs)
+    neuron_svs = np.array(list(set(sds.ids).difference(set(astrocyte_svs).union(set(missing_ids)))),
                           dtype=np.uint64)
-    assert len((set(neuron_svs).union(set(glia_svs)).union(set(missing_ids))).difference(set(
+    assert len((set(neuron_svs).union(set(astrocyte_svs)).union(set(missing_ids))).difference(set(
         sds.ids))) == 0
     np.save(global_params.config.working_dir + "/glia/neuron_svs.npy", neuron_svs)
     np.save(global_params.config.working_dir + "/glia/pruned_svs.npy", missing_ids)
@@ -64,26 +64,26 @@ def collect_glia_sv():
 
 
 def collect_gliaSV_helper(cc_ixs):
-    glia_svids = []
+    astrocyte_svs = []
     for cc_ix in cc_ixs:
         sso = SuperSegmentationObject(cc_ix, working_dir=global_params.config.working_dir,
                                       version="gliaremoval")
         sso.load_attr_dict()
         ad = sso.attr_dict
-        glia_svids += list(flatten_list(ad["glia_svs"]))
-    return np.array(glia_svids, dtype=np.uint64)
+        astrocyte_svs += list(flatten_list(ad["astrocyte_svs"]))
+    return np.array(astrocyte_svs, dtype=np.uint64)
 
 
-def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str = "",
-                   log: Optional[Logger] = None):
+def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
+                            log: Optional[Logger] = None):
     """
-    Stores glia and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx edge list and as knossos merge list.
+    Stores astrocyte and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx edge list
+    and as knossos merge list.
 
     Parameters
     ----------
     rag : SV agglomeration
-    min_ssv_size : Bounding box diagonal in NM
-    suffix : Suffix for saved RAGs
+    min_ssv_size : Bounding box diagonal in nm
     log: Logger
     """
     if log is None:
@@ -95,13 +95,13 @@ def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str =
         g = rag
     # create neuron RAG by glia removal
     neuron_g = g.copy()
-    glia_svs = np.load(global_params.config.working_dir + "/glia/glia_svs.npy")
-    for ix in glia_svs:
+    astrocyte_svs = np.load(global_params.config.working_dir + "/glia/astrocyte_svs.npy")
+    for ix in astrocyte_svs:
         neuron_g.remove_node(ix)
-    # create glia rag by removing neuron sv's
-    glia_g = g.copy()
+    # create astrocyte rag by removing neuron sv's
+    astrocyte_g = g.copy()
     for ix in neuron_g.nodes():
-        glia_g.remove_node(ix)
+        astrocyte_g.remove_node(ix)
 
     # create dictionary with CC sizes (BBD)
     log.info("Finished neuron and glia RAG, now preparing CC size dict.")
@@ -119,7 +119,7 @@ def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str =
     # remove small Neuron CCs
     missing_neuron_svs = set(all_neuron_ids).difference(set(neuron_ids))
     if len(missing_neuron_svs) > 0:
-        msg = "Missing %d glia CCs with one SV." % len(missing_neuron_svs)
+        msg = "Missing %d astrocyte CCs with one SV." % len(missing_neuron_svs)
         log.error(msg)
         raise ValueError(msg)
     before_cnt = len(neuron_g.nodes())
@@ -130,36 +130,35 @@ def write_glia_rag(rag: Union[nx.Graph, str], min_ssv_size: float, suffix: str =
     ccs = list(nx.connected_components(neuron_g))
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt, "mergelist.txt")
-    nx.write_edgelist(neuron_g, global_params.config.working_dir + "/glia/neuron_rag%s.bz2" % suffix)
+    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_svgraph_ml.k.zip", txt, "mergelist.txt")
+    nx.write_edgelist(neuron_g, global_params.config.neuron_svgraph_path)
     log.info("Nb neuron CCs: {}".format(len(ccs)))
     log.info("Nb neuron SVs: {}".format(len([n for cc in ccs for n in cc])))
 
     # add glia CCs with single SV
-    glia_ids = list(glia_g.nodes())
-    missing_glia_svs = set(glia_svs).difference(set(glia_ids))
-    if len(missing_glia_svs) > 0:
-        msg = "Missing %d glia CCs with one SV." % len(missing_glia_svs)
+    astrocyte_ids = list(astrocyte_g.nodes())
+    missing_astrocyte_svs = set(astrocyte_svs).difference(set(astrocyte_ids))
+    if len(missing_astrocyte_svs) > 0:
+        msg = "Missing %d astrocyte CCs with one SV." % len(missing_astrocyte_svs)
         log.error(msg)
         raise ValueError(msg)
-    before_cnt = len(glia_g.nodes())
-    for ix in glia_ids:
+    before_cnt = len(astrocyte_g.nodes())
+    for ix in astrocyte_ids:
         if ccsize_dict[ix] < min_ssv_size:
-            glia_g.remove_node(ix)
-    log.info("Removed %d glia CCs because of size." % (before_cnt - len(glia_g.nodes())))
-    ccs = list(nx.connected_components(glia_g))
+            astrocyte_g.remove_node(ix)
+    log.info("Removed %d astrocyte CCs because of size." % (before_cnt - len(astrocyte_g.nodes())))
+    ccs = list(nx.connected_components(astrocyte_g))
     total_size = 0
-    for n in glia_g.nodes():
+    for n in astrocyte_g.nodes():
         total_size += sds.get_segmentation_object(n).size
     total_size_cmm = np.prod(sds.scaling) * total_size / 1e18
     log.info("Glia RAG contains {} SVs in {} CCs ({} mm^3; {} Gvx).".format(
-        glia_g.number_of_nodes(), len(ccs), total_size_cmm, total_size / 1e9))
+        astrocyte_g.number_of_nodes(), len(ccs), total_size_cmm, total_size / 1e9))
 
-    nx.write_edgelist(glia_g, global_params.config.working_dir + "/glia/glia_rag%s.bz2" % suffix)
+    nx.write_edgelist(astrocyte_g, global_params.config.astrocyte_svgraph_path())
     # Added np.min(list(cc)) to have deterministic SSV ID
     txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/glia_rag_ml%s.k.zip" % suffix, txt,
-                   "mergelist.txt")
+    write_txt2kzip(global_params.config.working_dir + "/glia/astrocyte_svgraph_ml.k.zip", txt, "mergelist.txt")
 
 
 def transform_rag_edgelist2pkl(rag):

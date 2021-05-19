@@ -3,7 +3,7 @@ import os
 import pickle as pkl
 from collections import defaultdict
 import time
-
+from syconn import global_params
 from syconn.proc.skeleton import kimimaro_skelgen
 
 path_storage_file = sys.argv[1]
@@ -17,7 +17,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 cube_size, cube_offsets, ds = args
-
+skel_params = global_params.config["skeleton"]['kimimaro_skelgen']
 nb_cpus = os.environ.get('SLURM_CPUS_PER_TASK')
 if nb_cpus is not None:
     nb_cpus = int(nb_cpus)
@@ -25,7 +25,7 @@ if nb_cpus is not None:
 res = defaultdict(list)
 res_ids = []
 for cube_offset in cube_offsets:
-    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus)
+    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus, **skel_params)
     for k, v in skels.items():
         res[k].append(v)
 

@@ -21,7 +21,7 @@ ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
 ctypedef vector[unordered_map[uint64_t, um_uint2uint]] umvec_map
 
 
-def find_object_propertiesC(n_type[:, :, :] chunk):
+def find_object_properties(n_type[:, :, :] chunk):
     cdef unordered_map[uint64_t, int_vec] rep_coords
     cdef unordered_map[uint64_t, int_vec_vec] bounding_box
     cdef unordered_map[uint64_t, int] sizes
@@ -111,7 +111,7 @@ def map_subcell_C(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_chs):
     return subcell_mapping_dicts
 
 
-def map_subcell_extract_propsC(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_chs):
+def map_subcell_extract_props(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_chs):
     """ch and subcell_chs must all have the same shape!
     TODO: check if uint32 and uint64 works with current unordered map definition,
     using n_type instead of uint64 results in an error.
@@ -194,33 +194,3 @@ def map_subcell_extract_propsC(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_ch
                     sizes[key] = 1
                     rep_coords[key] = [x, y, z]  # TODO: could be more representative
     return [rep_coords, bounding_box, sizes], [subcell_rc_dicts, subcell_bb_dicts, subcell_size_dicts], subcell_mapping_dicts
-
-
-def cython_loop(n_type[:, :, :] chunk):
-    cdef unordered_map[uint64_t, int] sizes
-    for x in range(chunk.shape[0]):
-        for y in range(chunk.shape[1]):
-            for z in range(chunk.shape[2]):
-                key = chunk[x, y, z]
-                if key == 0:
-                    continue
-                if sizes.count(key):
-                    sizes[key] += 1
-                else:
-                    sizes[key] = 1
-    return sizes
-
-
-#def extract_bounding_box(n_type[:, :, :] chunk):
-#    box = dict()
-#    for x in range(chunk.shape[0]):
-#        for y in range(chunk.shape[1]):
-#            for z in range(chunk.shape[2]):
-#                key = chunk[x, y, z]
-#                if key in box:
-#                    box[key] = {np.array([min(box[key][0][0], x), min(box[key][0][1], y), min(box[key][0][2], z)]),
-#                                np.array([max(box[key][1][0], x), max(box[key][1][1], y), max(box[key][1][2], z)])}
-#
-#                else:
-#                    box[key] = {np.array([x, y, z]), np.array([x, y, z])}
-#    return box

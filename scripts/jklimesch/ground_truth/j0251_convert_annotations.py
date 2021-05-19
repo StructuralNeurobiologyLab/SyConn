@@ -89,6 +89,8 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
         # set nodes that are ignored or merger to 0
         node_labels[a_node_labels_orig[ixs] == 11] = 0
         node_labels[a_node_labels_orig[ixs] == 12] = 0
+        node_labels[a_node_labels_orig[ixs] == 13] = 0
+        node_labels[a_node_labels_orig[ixs] == 14] = 0
 
         cell = HybridCloud(vertices=cell.vertices, labels=cell.labels, nodes=nodes, edges=edges, encoding=encoding,
                            node_labels=node_labels)

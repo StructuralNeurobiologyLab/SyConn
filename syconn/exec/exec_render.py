@@ -178,7 +178,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
 
 def _run_huge_ssv_render_worker(q: Queue, q_out: Queue):
     """
-    Helper method of :func:`~run_glia_rendering`.
+    Helper method of :func:`~run_astrocyte_rendering`.
 
     Args:
         q: Input queue.
@@ -205,9 +205,9 @@ def _run_huge_ssv_render_worker(q: Queue, q_out: Queue):
         q_out.put(0)
 
 
-def run_glia_rendering(max_n_jobs: Optional[int] = None):
+def run_astrocyte_rendering(max_n_jobs: Optional[int] = None):
     """
-    Uses the pruned RAG at ``global_params.config.pruned_rag_path``
+    Uses the pruned RAG at ``global_params.config.pruned_svgraph_path``
     (stored as edge list .bz2 file) which is computed in
     :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to aggregate the
     rendering context from the underlying supervoxel graph.
@@ -228,7 +228,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     multi_params = chunkify(sds.so_dir_paths, global_params.config.ncore_total * 2)
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
     multi_params = [[par, so_kwargs] for par in multi_params]
-    # TODO: remove comment as soon as glia separation supports on the fly view generation
+    # TODO: remove comment as soon as astrocyte separation supports on the fly view generation
     # if not global_params.config.use_onthefly_views:
     _ = qu.batchjob_script(multi_params, "sample_location_caching", remove_jobfolder=True, log=log)
 
@@ -239,7 +239,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     # glia removal is based on the initial RAG and does not require explicitly stored SSVs
     version = "tmp"
 
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+    G = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
 
     cc_gs = sorted(list((G.subgraph(c) for c in nx.connected_components(G))), key=len, reverse=True)
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint64)
@@ -258,12 +258,12 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
     for g in multi_params:
         if g.number_of_nodes() > global_params.config['glia']['rendering_max_nb_sv']:
             big_ssv.append(g)
-        elif ccsize_dict[list(g.nodes())[0]] < global_params.config['glia']['min_cc_size_ssv']:
+        elif ccsize_dict[list(g.nodes())[0]] < global_params.config['min_cc_size_ssv']:
             pass  # ignore this CC
         else:
             small_ssv.append(g)
 
-    log.info("View rendering for glia separation started.")
+    log.info("View rendering for astrocyte separation started.")
     # # identify huge SSVs and process them on the entire cluster
     if len(big_ssv) > 0:
         n_threads = 2
@@ -306,7 +306,7 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
         additional_flags="--gres=gpu:1", remove_jobfolder=True)
 
     # check completeness
-    log.info('Finished view rendering for glia separation. Checking completeness.')
+    log.info('Finished view rendering for astrocyte separation. Checking completeness.')
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.config['ncores_per_node'])
     missing_not_contained_in_rag = np.setdiff1d(res, all_sv_ids_in_rag)  # TODO: report at least.

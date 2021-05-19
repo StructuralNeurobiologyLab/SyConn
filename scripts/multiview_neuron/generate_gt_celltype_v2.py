@@ -123,11 +123,11 @@ if __name__ == "__main__":
                 # predict
                 ssv.nb_cpus = 20
                 ssv._view_caching = True
-                # ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix1,
+                # ssv.predict_celltype_multiview(model=m_large, pred_key_appendix=pred_key_appendix1,
                 #                          model_tnet=m_tnet)
-                ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix2,
-                                         view_props={"overwrite": False, 'use_syntype': True,
-                                                     'nb_views': 20, 'da_equals_tan': da_equals_tan})
+                ssv.predict_celltype_multiview(model=m, pred_key_appendix=pred_key_appendix2,
+                                               view_props={"overwrite": False, 'use_syntype': True,
+                                                           'nb_views': 20, 'da_equals_tan': da_equals_tan})
                 ssv.load_attr_dict()
                 curr_l = ssv.attr_dict["cellttype_gt"]
                 if da_equals_tan:
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 pred_proba.append(major_dec)
                 if pred_l[-1] != gt_l[-1]:
                     print(f'{pred_l[-1]}\t{gt_l[-1]}\t{ssv.id}\t{major_dec}')
-                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
+                certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}".format(pred_key_appendix2)))
                 # pbar.update(1)
                 # # large FoV
                 # pred_l_large.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix1])
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     #                 major_dec[ii] = np.sum(preds_small == ii)
     #             major_dec /= np.sum(major_dec)
     #             pred_proba.append(major_dec)
-    #             certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}_probas".format(pred_key_appendix2)))
+    #             certainty.append(ssv.certainty_celltype("celltype_cnn_e3{}".format(pred_key_appendix2)))
     #
     #             # # large FoV
     #             # pred_l_large.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix1])
