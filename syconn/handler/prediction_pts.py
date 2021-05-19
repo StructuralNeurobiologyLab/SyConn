@@ -48,7 +48,8 @@ pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2,
 # in nm, should be replaced by Poisson disk sampling
 pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
-                        compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
+                        compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
+                        merger=dict(sv=1))
 
 
 # TODO: move to handler.basics
@@ -1251,7 +1252,8 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
 def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                             npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None,
-                            use_subcell: bool = False, mask_boarders_with_id: Optional[int] = None
+                            use_subcell: bool = False, mask_boarders_with_id: Optional[int] = None,
+                            gt_type: str = 'compartment', source_node_labels: bool = False
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -1266,6 +1268,8 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         transform:
         use_subcell:
         mask_boarders_with_id:
+        gt_type:
+        source_node_labels:
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -1285,10 +1289,16 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         ctx_size_fluct = ctx_size
 
     for pkl_f in fnames_pkl:
-        hc = load_hc_pkl(pkl_f, 'compartment')
+        hc = load_hc_pkl(pkl_f, gt_type)
         npoints_ssv = min(len(hc.vertices), npoints)
         # filter valid skeleton nodes (i.e. which were close to manually annotated nodes)
-        source_nodes = np.where(hc.node_labels == 1)[0]
+
+        # use merger labels
+        if source_node_labels:
+            source_nodes = np.where(hc.node_labels == 0)[0]
+        else:
+            source_nodes = np.where(hc.node_labels == 1)[0]
+
         source_nodes = np.random.choice(len(source_nodes), batchsize,
                                         replace=len(source_nodes) < batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
