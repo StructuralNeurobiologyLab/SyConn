@@ -29,7 +29,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
+def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the SV graph
@@ -40,6 +40,8 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
         apply_ssv_size_threshold: Apply filter with minimum bounding box diagonal. This is usually not needed as the
             filter is applied either in :func:`~run_create_rag` (prior_astrocyte_removal=False) or during the astrocyte
             separation.
+        ncores_per_job: Number of cores per worker for
+            :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
 
     Notes:
         * Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
@@ -93,7 +95,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False):
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
-    ssd.save_dataset_deep()
+    ssd.save_dataset_deep(nb_cpus=ncores_per_job)
 
     max_n_jobs = global_params.config['ncores_per_node'] * 2
     # Write SSV RAGs

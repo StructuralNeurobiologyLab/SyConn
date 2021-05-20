@@ -322,7 +322,7 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def mapping_dict(self) -> Dict[int, np.ndarray]:
         """
-        Dictionary which contains the supervoxel IDs for each super-supervoxel.
+        Dictionary which contains the supervoxel IDs for every super-supervoxel.
         """
         if self._mapping_dict is None:
             if self.mapping_dict_exists:
@@ -398,7 +398,7 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def id_changer(self) -> List[int]:
         """
-        Used to agglomerate of synapse fragments ('syn', supervoxel-level) to whole synapses between cells ('syn_ssv').
+        Used to agglomerate synapse fragments ('syn', supervoxel-level) to whole synapses between cells ('syn_ssv').
         """
         if len(self._id_changer) == 0:
             self.load_id_changer()
@@ -667,7 +667,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
     ssd.save_dataset_shallow()
     if n_jobs is None:
-        n_jobs = ssd.config.ncore_total
+        n_jobs = ssd.config.ncore_total * 4
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir, extract_only, attr_keys,
                      ssd._type, new_mapping) for ssv_id_block in multi_params]
@@ -726,11 +726,14 @@ def _write_super_segmentation_dataset_thread(args):
         mapping_dict_avail = True
         if new_mapping:
             ssd.load_mapping_dict()
+            # save memory in case dataset contains many supervoxels by removing IDs that are not of interest here
+            not_needed_ids = np.setdiff1d(ssd.ssv_ids, ssv_obj_ids)
+            for ssv_id in not_needed_ids:
+                del ssd._mapping_dict[ssv_id]
     else:
         if new_mapping:
             raise Exception(f"No mapping information found for {ssd}.")
         mapping_dict_avail = False
-
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
@@ -740,9 +743,11 @@ def _write_super_segmentation_dataset_thread(args):
             ssv_obj.load_attr_dict()
 
         if not extract_only:
+
             if len(ssv_obj.attr_dict["sv"]) == 0:
-                if mapping_dict_avail:
-                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
+                if mapping_dict_avail and not new_mapping:
+                    # try to come up with a cell agglomeration despite new_mapping=False -> use ssd.mapping_dict
+                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, new_mapping=True)
 
                     if ssv_obj.attr_dict_exists:
                         ssv_obj.load_attr_dict()

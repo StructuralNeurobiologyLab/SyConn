@@ -77,7 +77,18 @@ class SuperSegmentationObject(SegmentationBase):
             # inspect existing attributes
             cell.load_attr_dict()
             print(cell.attr_dict.keys())
-            # get
+
+        To cache SegmentationObject attributes use the ``cache_properties`` argument during initialization of the
+        :class:`~syconn.reps.segmentation.SegmentationDataset` and pass it on to the ``SuperSegmentationDataset``
+        instantiation:
+
+            sd_mi = SegmentationDataset(obj_type='mi', cache_properties=['rep_coord'])
+            ssd = SuperSegmentationDataset(sd_lookup=dict(mi=sd_mi))
+            ssv = ssd.get_super_segmentation_object(ssd.ssv_ids[0])
+            # :class:`~syconn.reps.segmentation.SegmentationObject` from ``mis`` don't require loading ``rep_coord``
+            # from its storage file.
+            for mi in ssv.mis:
+                rc = mi.rep_coord  # normally this requires to load the attribute dict storage file.
 
         Subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) augment the
         cell reconstruction with more properties::
@@ -3367,7 +3378,11 @@ class SuperSegmentationObject(SegmentationBase):
             for comp_label in compartments_of_interest:
                 mask = mask | (obj_labels == comp_label)
             objs = objs[mask]
-        obj_vol = np.sum([obj.size for obj in objs]) * np.prod(self.scaling) / 1e9  # in um^3
+        if len(objs) > 0:
+            vx_count = np.sum([obj.size for obj in objs])
+        else:
+            vx_count = 0
+        obj_vol = vx_count * np.prod(self.scaling) / 1e9  # in um^3
         path_length = self.total_edge_length(compartments_of_interest) / 1e3  # in um
         return obj_vol / path_length
 

@@ -411,7 +411,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                 prune_nodes.append(curr_node)
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
-    # TODO: uncomment, or fix by using alternative method
+
     if nx.number_connected_components(new_nx_g) != 1:
         msg = 'Pruning of SV skeletons failed during "prune_stub_branches' \
               '" with {} connected components. Please check the underlying' \
@@ -420,9 +420,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                                        sso.id)
         new_nx_g = stitch_skel_nx(new_nx_g)
         log_reps.critical(msg)
-    # # Important assert. Please don't remove
-    # assert nx.number_connected_components(new_nx_g) == 1,\
-    #     'Additional connected components created after pruning!'
+        raise ValueError(msg)
 
     for e in new_nx_g.edges:
         w = np.linalg.norm((new_nx_g.nodes[e[0]]['position'] -

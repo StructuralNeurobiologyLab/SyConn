@@ -26,7 +26,7 @@ if __name__ == '__main__':
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     key_val_pairs_conf = [
-        ('min_cc_size_ssv', 5000),  # minimum bounding box diagonal of cell (fragments) in nm
+        ('min_cc_size_ssv', 2000),  # minimum bounding box diagonal of cell (fragments) in nm
         ('glia', {'prior_astrocyte_removal': False}),
         ('pyopengl_platform', 'egl'),
         ('batch_proc_system', 'SLURM'),
@@ -112,69 +112,69 @@ if __name__ == '__main__':
 
     # # Start SyConn
     # # --------------------------------------------------------------------------
-    log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
-    log.critical('Working directory is set to "{}".'.format(working_dir))
-
-    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    ftimer.start('SD generation')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-                                    n_folders_fs=n_folders_fs,
-                                    load_cellorganelles_from_kd_overlaycubes=True,
-                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
-                                    max_n_jobs=global_params.config.ncore_total * 4)
+    # log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
+    # log.critical('Working directory is set to "{}".'.format(working_dir))
+    #
+    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    # ftimer.start('SD generation')
+    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+    #                                 n_folders_fs=n_folders_fs,
+    #                                 load_cellorganelles_from_kd_overlaycubes=True,
+    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
+    #                                 max_n_jobs=global_params.config.ncore_total * 4)
 
     # exec_init.run_create_rag(graph_node_dtype=np.uint32)
     # ftimer.stop()
 
-    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    # ftimer.start('SSD generation')
-    # exec_init.run_create_neuron_ssd()
+    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    ftimer.start('SSD generation')
+    exec_init.run_create_neuron_ssd(ncores_per_job=3)
+    ftimer.stop()
+
+    log.info('Step 5/10 - Skeleton generation')
+    ftimer.start('Skeleton generation')
+    exec_skeleton.run_skeleton_generation()
+    ftimer.stop()
+
+    log.info('Step 5/9 - Synapse detection')
+    ftimer.start('Synapse detection')
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    ftimer.stop()
+
+    # log.info('Step 6/9 - Compartment prediction')
+    # ftimer.start('Compartment predictions')
+    # exec_inference.run_semsegaxoness_prediction()
+    # if not global_params.config.use_point_models:
+    #     exec_inference.run_semsegspiness_prediction()
     # ftimer.stop()
     #
-    # log.info('Step 5/10 - Skeleton generation')
-    # ftimer.start('Skeleton generation')
-    # exec_skeleton.run_skeleton_generation()
+    # # TODO: this step can be launched in parallel with the morphology extraction!
+    # ftimer.start('Spine head volume estimation')
+    # exec_syns.run_spinehead_volume_calc()
     # ftimer.stop()
     #
-    # log.info('Step 5/9 - Synapse detection')
-    # ftimer.start('Synapse detection')
-    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    # # Used multi-views until here! Now use point models
+    # global_params.config['use_point_models'] = True
+    # global_params.config.write_config()
+    # time.sleep(10)  # wait for changes to apply
+    # log.info('Step 7/9 - Morphology extraction')
+    # ftimer.start('Morphology extraction')
+    # exec_inference.run_morphology_embedding()
     # ftimer.stop()
     #
-    # # log.info('Step 6/9 - Compartment prediction')
-    # # ftimer.start('Compartment predictions')
-    # # exec_inference.run_semsegaxoness_prediction()
-    # # if not global_params.config.use_point_models:
-    # #     exec_inference.run_semsegspiness_prediction()
-    # # ftimer.stop()
-    # #
-    # # # TODO: this step can be launched in parallel with the morphology extraction!
-    # # ftimer.start('Spine head volume estimation')
-    # # exec_syns.run_spinehead_volume_calc()
-    # # ftimer.stop()
-    # #
-    # # # Used multi-views until here! Now use point models
-    # # global_params.config['use_point_models'] = True
-    # # global_params.config.write_config()
-    # # time.sleep(10)  # wait for changes to apply
-    # # log.info('Step 7/9 - Morphology extraction')
-    # # ftimer.start('Morphology extraction')
-    # # exec_inference.run_morphology_embedding()
-    # # ftimer.stop()
-    # #
-    # # log.info('Step 8/9 - Celltype analysis')
-    # # ftimer.start('Celltype analysis')
-    # # exec_inference.run_celltype_prediction()
-    # # ftimer.stop()
-    # #
-    # # log.info('Step 9/9 - Matrix export')
-    # # ftimer.start('Matrix export')
-    # # exec_syns.run_matrix_export()
-    # # ftimer.stop()
-    # #
-    # # time_summary_str = ftimer.prepare_report()
-    # # log.info(time_summary_str)
-    # # # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-    # # #          'can be analyzed via the KNOSSOS-SyConn plugin at '
-    # # #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # # # os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    # log.info('Step 8/9 - Celltype analysis')
+    # ftimer.start('Celltype analysis')
+    # exec_inference.run_celltype_prediction()
+    # ftimer.stop()
+    #
+    # log.info('Step 9/9 - Matrix export')
+    # ftimer.start('Matrix export')
+    # exec_syns.run_matrix_export()
+    # ftimer.stop()
+    #
+    # time_summary_str = ftimer.prepare_report()
+    # log.info(time_summary_str)
+    # # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+    # #          'can be analyzed via the KNOSSOS-SyConn plugin at '
+    # #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # # os.system(f'syconn.server --working_dir={example_wd} --port=10001')

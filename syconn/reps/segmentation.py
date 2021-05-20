@@ -606,8 +606,7 @@ class SegmentationObject(SegmentationBase):
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
                 verts = self.mesh[1].reshape(-1, 3)
-                self._mesh_bb = [np.min(verts, axis=0),
-                                 np.max(verts, axis=0)]
+                self._mesh_bb = np.array([np.min(verts, axis=0), np.max(verts, axis=0)], dtype=np.float32)
         return self._mesh_bb
 
     @property
