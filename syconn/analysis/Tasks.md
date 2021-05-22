@@ -32,4 +32,10 @@
 - [x] Segment query even for the properties will be huge; return a random subset of the segment query or return a range of segment query based on user input or show segments page-wise
 - [x] Check deepcopy behaviour (entire viewer state deepcopied or not)
 - [x] Check references of locks (_lock, __lock)
+- [x] Hotkey to show the cell connected to the selected cell by the largest synapse
+- [x] Include the synapse probs in gettign the largest synapse; ignore the soma connections (axon -> dendrite; axon -> soma)
+- [x] Reduce the memory consumption in get_synaptic_partner (combine same dimensional condition checks)
+- [x] Write the status message in the format: <pre-synaptic> -> <post-synaptic>
+- [x] Center the viewport at the point of the synapse (check rep. coords); zoom-in (optional)
+- [x] Include celltypes in status message 
 
