@@ -255,9 +255,9 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
     sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
 
+    # TODO: use mapping_dict_reversed
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids >= len(ssd.id_changer)] = 0
-    # TODO: use mapping_dict_reversed
     mapped_sv_ids = ssd.id_changer[sv_ids]
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]

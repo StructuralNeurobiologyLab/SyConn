@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(ncores_per_job=3)
+    exec_init.run_create_neuron_ssd(ncores_per_job=4)
     ftimer.stop()
 
     log.info('Step 5/10 - Skeleton generation')

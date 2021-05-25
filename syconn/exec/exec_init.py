@@ -89,8 +89,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
 
-    log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
-        g_p, len(cc_dict), len(cc_dict_inv)))
+    log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(g_p, len(cc_dict), len(cc_dict_inv)))
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes

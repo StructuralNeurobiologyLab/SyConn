@@ -1124,58 +1124,46 @@ class SuperSegmentationObject(SegmentationBase):
         else:
             return None
 
-    def load_so_attributes(self, obj_type: str, attr_keys: List[str],
-                           nb_cpus: Optional[int] = None):
+    def load_so_attributes(self, obj_type: str, attr_keys: List[str]):
         """
         Collect attributes from :class:`~syconn.reps.segmentation.SegmentationObject`
         of type `obj_type`.
         The attribute value ordering for each key is the same as :py:attr:`~svs`.
 
-        todo:
-            Replace by :py:func:`~syconn.reps.segmentation_helper.load_so_attr_bulk`
-
         Args:
             obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`.
             attr_keys: Keys of desired properties. Must exist for the requested
              `obj_type`.
-            nb_cpus: Number of CPUs to use for the calculation.
 
         Returns:
             Attribute values for each key in `attr_keys`.
         """
-        if nb_cpus is None:
-            nb_cpus = self.nb_cpus
-        params = [[obj, dict(attr_keys=attr_keys)]
-                  for obj in self.get_seg_objects(obj_type)]
-        attr_values = sm.start_multiprocess_obj('load_attributes', params,
-                                                nb_cpus=nb_cpus)
-        attr_values = [el for sublist in attr_values for el in sublist]
-        return [attr_values[ii::len(attr_keys)] for ii in range(len(attr_keys))]
+        attr_values = [[] for _ in range(len(attr_keys))]
+        for obj in self.get_seg_objects(obj_type):
+            for ii, attr_key in enumerate(attr_keys):
+                # lookup_in_attribute_dict uses attribute caching of the obj itself or, if enabled,
+                # the SegmentationDataset cache in the SSD of this SSO.
+                attr = obj.lookup_in_attribute_dict(attr_key)
+                attr_values[ii].append(attr)
+        return attr_values
 
-    def calculate_size(self, nb_cpus: Optional[int] = None):
+    def calculate_size(self):
         """
         Calculates :py:attr:`size`.
-
-        Args:
-            nb_cpus: Number of CPUs to use for the calculation.
         """
-        self._size = np.sum(self.load_so_attributes('sv', ['size'], nb_cpus=nb_cpus))
+        self._size = np.sum(self.load_so_attributes('sv', ['size']))
 
-    def calculate_bounding_box(self, nb_cpus: Optional[int] = None):
+    def calculate_bounding_box(self):
         """
         Calculates :py:attr:`~bounding_box` (and :py:attr:`size`).
-
-        Args:
-            nb_cpus: Number of CPUs to use for the calculation.
         """
-        if len(self.svs) == 0:
+        if len(self.sv_ids) == 0:
             self._bounding_box = np.zeros((2, 3), dtype=np.int32)
             self._size = 0
             return
-
         self._bounding_box = np.ones((2, 3), dtype=np.int32) * np.inf
         self._size = np.inf
-        bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
+        bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'])
         self._size = np.sum(sizes)
         self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
         self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
@@ -1915,7 +1903,7 @@ class SuperSegmentationObject(SegmentationBase):
             log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
             log_reps.info("Rendering SSO. {} SVs left to process"
-                          ".".format(len(self.svs)))
+                          ".".format(len(self.sv_ids)))
             params = [[so.id for so in el] for el in part]
 
             params = chunkify(params, self.config.ngpu_total * 2)
@@ -2341,7 +2329,7 @@ class SuperSegmentationObject(SegmentationBase):
             dur = time.time() - start
             log_reps.debug("Sampling locations from {} SVs took {:.2f}s."
                            " {.4f}s/SV (incl. read/write)".format(
-                len(self.svs), dur, dur / len(self.svs)))
+                len(self.sv_ids), dur, dur / len(self.sv_ids)))
         return locs
 
     # ------------------------------------------------------------------ EXPORTS
@@ -2743,13 +2731,13 @@ class SuperSegmentationObject(SegmentationBase):
                              self.attr_exists(neuron_svs_key)):
             if verbose:
                 log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(
-                    self.id, len(self.svs)))
+                    self.id, len(self.sv_ids)))
                 start = time.time()
             nonglia_ccs, astrocyte_ccs = split_glia(self, thresh=thresh,
                                                     pred_key_appendix=pred_key_appendix)
             if verbose:
                 log_reps.debug("Splitting glia in SSV %d with %d SV's finished "
-                               "after %.4gs." % (self.id, len(self.svs),
+                               "after %.4gs." % (self.id, len(self.sv_ids),
                                                  time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
@@ -2846,8 +2834,8 @@ class SuperSegmentationObject(SegmentationBase):
                           return_proba=self.version == 'tmp')
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
-                       "%0.4fs/SV" % (len(self.svs), end - start,
-                                      float(end - start) / len(self.svs)))
+                       "%0.4fs/SV" % (len(self.sv_ids), end - start,
+                                      float(end - start) / len(self.sv_ids)))
 
     # ------------------------------------------------------------------ AXONESS
     def _load_skelfeatures(self, key):
@@ -3074,8 +3062,8 @@ class SuperSegmentationObject(SegmentationBase):
                               return_proba=self.version == 'tmp')  # do not write to disk)
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
-                       "%0.4fs/SV" % (len(self.svs), end - start,
-                                      float(end - start) / len(self.svs)))
+                       "%0.4fs/SV" % (len(self.sv_ids), end - start,
+                                      float(end - start) / len(self.sv_ids)))
 
     def predict_views_embedding(self, model, pred_key_appendix="", view_key=None):
         """
