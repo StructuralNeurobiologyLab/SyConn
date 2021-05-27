@@ -2585,17 +2585,19 @@ class SuperSegmentationObject(SegmentationBase):
         write_mesh2kzip(dest_path, sym_syn_mesh[0], sym_syn_mesh[1],
                         sym_syn_mesh[2], color=np.array((50, 50, 240, 255)), ply_fname='11.ply')
 
-    def write_svmeshes2kzip(self, dest_path: Optional[str] = None, **kwargs):
+    def write_svmeshes2kzip(self, dest_path: Optional[str] = None, object_type: Optional[str] = "sv", **kwargs):
         """
         Write individual cell supervoxel ('sv') meshes in ply format to kzip file.
 
         Args:
             dest_path: Target file name.
+            object_type: Type of supervoxel meshes to be written to kzip file. Default "sv" writes supervoxel meshes
+                         of all types to kzip file.
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         inds, verts, norms, cols, ply_fnames = [], [], [], [], []
-        for sv in self.svs:
+        for sv in self.get_seg_objects(object_type):
             inds.append(sv.mesh[0])
             verts.append(sv.mesh[1])
             norms.append(sv.mesh[2])
