@@ -26,7 +26,7 @@ from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
 
 
 def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1):
@@ -48,19 +48,18 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
           optionally :func:`~run_astrocyte_splitting`.
         * Networkx requires a lot of memory for >1e9 edges, graph_tool and igraph are not usable for this either.
           Currently the work-around is to not use the graph information when storing the cell SV graph, but only the
-          connected component as complete graph (edges are not meaningful). [TODO]
+          connected component as a graph with N-1 edges (N nodes). [TODO]
 
     Returns:
 
     """
-    log = initialize_logging('ssd_generation', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
-
+    working_dir = global_params.config.working_dir
+    log = initialize_logging('ssd_generation', working_dir + '/logs/', overwrite=False)
     cc_dict = {}
     if apply_ssv_size_threshold:
         g_p = global_params.config.neuron_svgraph_path
         sv_g = nx.read_edgelist(global_params.config.neuron_svgraph_path, nodetype=np.uint64)
-        sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+        sd = SegmentationDataset("sv", working_dir=working_dir)
 
         sv_size_dict = {}
         bbs = sd.load_numpy_data('bounding_box') * sd.scaling
@@ -84,19 +83,20 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
                 cc = [int(el) for el in line.split(',')]
                 cc = np.array(cc, dtype=np.uint64)
                 cc_dict[np.min(cc)] = cc
+
     cc_dict_inv = {}
     for ssv_id, cc in cc_dict.items():
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
 
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(g_p, len(cc_dict), len(cc_dict_inv)))
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
     ssd.save_dataset_deep(nb_cpus=ncores_per_job)
 
-    max_n_jobs = global_params.config['ncores_per_node'] * 2
+    max_n_jobs = global_params.config['ncores_per_node'] * 3
     # Write SSV RAGs
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     # split all cells into chunks within upper half and lower half (sorted by size)
@@ -106,25 +106,31 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
     multi_params = chunkify(multi_params[:half_ix], njobs_per_half) + \
                    chunkify(multi_params[half_ix:], njobs_per_half)
 
-    multi_params = [(g_p, ssv_ids, [cc_dict[ssv_id] for ssv_id in ssv_ids]) for ssv_ids in multi_params]
-    start_multiprocess_imap(_ssv_svgraph_writer, multi_params,
+    multi_params = [(ssv_ids, [cc_dict[ssv_id] for ssv_id in ssv_ids]) for ssv_ids in multi_params]
+    start_multiprocess_imap(_ssv_svgraph_writer, multi_params, debug=False,
                             nb_cpus=global_params.config['ncores_per_node'])
     log.info('Finished saving cell SV graphs.')
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
-    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'], nb_cpus=2)
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'],
+                                                    nb_cpus=ncores_per_job)
     ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
     log.info('Finished mapping of cellular organelles to SSVs.')
 
 
 def _ssv_svgraph_writer(args):
-    g_p, ssv_ids, sv_lists = args
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0', ssd_type="ssv")
-    for ssv, sv_list in zip(ssd.get_super_segmentation_object(ssv_ids), sv_lists):
-        # create "dummy" graph with all-to-all edges
-        ssv_rag = nx.complete_graph(sv_list)
-        nx.write_edgelist(ssv_rag, ssv.edgelist_path)
+    ssv_ids, sv_lists = args
+    config = global_params.config
+    for ssv_id, sv_list in zip(ssv_ids, sv_lists):
+        ssv = SuperSegmentationObject(ssv_id, config=config)
+        # create "dummy" graph
+        if len(sv_list) == 1:
+            sv_list = [sv_list[0], sv_list[0]]  # this will add an edge between the single supervoxel..
+        sv_graph = nx.from_edgelist([(sv_list[ii], sv_list[ii+1]) for ii in range(len(sv_list) - 1)])
+        if not nx.is_connected(sv_graph):
+            print(f'WARNING: SV graph of SSO with ID={ssv_id} is not connected.')
+        nx.write_edgelist(sv_graph, ssv.edgelist_path)
 
 
 def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):

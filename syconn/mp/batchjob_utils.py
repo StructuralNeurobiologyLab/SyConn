@@ -330,7 +330,7 @@ def batchjob_script(params: list, name: str,
             del slurm2job_dc[slurm_id_orig]
             job2slurm_dc[j] = slurm_id
             slurm2job_dc[slurm_id] = j
-            log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
+            log_batchjob.info(f'Requeued job {j} ({requeue_dc[j]}/{max_iterations}). SLURM IDs: {slurm_id} (new), '
                               f'{slurm_id_orig} (old).')
             if err_msg is not None:
                 log_batchjob.warning(f'Job {j} failed with: {err_msg}')

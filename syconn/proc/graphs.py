@@ -216,7 +216,7 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g: nx.Graph, bbs: np.ndarray, is_connected_components: bool = False) -> dict:
+def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = False) -> dict:
     """
     Calculate bounding box size of connected components.
 

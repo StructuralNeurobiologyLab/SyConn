@@ -351,10 +351,11 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         if self._ssv_ids is None:
             # do not change the order of the if statements as it is crucial
-            # for the resulting ordering of self.ssv_ids (only ids.npy matches
+            # for the resulting ordering of self.ssv_ids (only id.npy matches
             # with all the other cached numpy arrays).
-            if os.path.exists(self.path + "/ids.npy"):
-                self._ssv_ids = np.load(self.path + "/ids.npy")
+            self._ssv_ids = self.load_numpy_data('id')
+            if self._ssv_ids is not None:
+                pass
             elif len(self.mapping_dict) > 0:
                 self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif self.mapping_dict_exists:
@@ -415,7 +416,8 @@ class SuperSegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + ".npy"):
             return np.load(self.path + prop_name + ".npy", allow_pickle=True)
         elif os.path.exists(self.path + prop_name + "s.npy"):
-            log_reps.warn('Using "s" appendix in numpy files, this is deprecated.')
+            log_reps.warn(f'Using "s" appendix in numpy cache file '
+                          f'"{self.path + prop_name + "s.npy"}", this is deprecated.')
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
             msg = f'Requested data cache "{prop_name}" did not exist.'
@@ -640,13 +642,13 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
                       new_mapping: bool = True, overwrite=False):
     """
     Saves attributes of all SSVs within the given SSD and computes properties like size and representative
-    coordinate. `ids.npy` order may change after repeated runs.
+    coordinate. `id.npy` order may change after repeated runs.
 
     Todo:
         * extract_only requires refactoring as it stores cache arrays under a
           different filename.
         * allow partial updates of a subset of attributes (e.g. use already
-          existing `ids.npy` in case of updating, aka `extract_only=True`).
+          existing `id.npy` in case of updating, aka `extract_only=True`).
         * Check consistency of ordering for different runs.
 
     Args:
@@ -736,7 +738,12 @@ def _write_super_segmentation_dataset_thread(args):
     ssd_type = args[6]
     mapping_dict = args[7]
     if not extract_only:
-        sd_sv = SegmentationDataset(obj_type='sv', cache_properties=['size', 'bounding_box'])
+        # TODO: use prepare_so_attr_cache to reduce memory consumption - only works if mapping_dict is not None
+        #  needs to be built in downstream in ssv_obj... or overwrite sd_sv cache dict.
+        # from syconn.reps.segmentation_helper import prepare_so_attr_cache
+        # attr_cache = prepare_so_attr_cache(segmentation.SegmentationDataset('sv', working_dir=working_dir),
+        #     np.concatenate(list(mapping_dict.values())), ['size', 'bounding_box'])
+        sd_sv = SegmentationDataset(working_dir=working_dir, obj_type='sv', cache_properties=['size', 'bounding_box'])
         sd_lookup = dict(sv=sd_sv)
     else:
         sd_lookup = None
