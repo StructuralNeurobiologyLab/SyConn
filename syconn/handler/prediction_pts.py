@@ -25,7 +25,7 @@ import scipy.special
 import tqdm
 from morphx.classes.hybridcloud import HybridCloud
 from morphx.processing.hybrids import extract_subset
-from morphx.processing.objects import bfs_vertices, context_splitting_kdt, context_splitting_kdt_many
+from morphx.processing.objects import bfs_vertices, context_splitting_kdt
 from scipy import spatial
 from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
@@ -394,7 +394,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             ssd = SuperSegmentationDataset(**ssd_kwargs)
             ssv_ids = ssd.ssv_ids
         else:
-            ssv_ids = np.array(ssv_ids, np.uint)
+            ssv_ids = np.array(ssv_ids, np.uint64)
         ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
                                             nb_cpus=None)
         ssv_sizes = np.array(ssv_sizes)
@@ -611,7 +611,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         if npoints_ssv == 0:
             log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
         if use_ctx_sampling:
-            node_ids_all = np.array(context_splitting_kdt_many(hc, source_nodes_all, ctx_size), dtype=object)
+            node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
         else:
             node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all], dtype=object)
         for ii in range(n_batches):
@@ -626,7 +626,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             source_nodes_batch = source_nodes_all[curr_batch_ixs]
             node_ids_batch = node_ids_all[curr_batch_ixs]
             for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
-                node_ids = node_ids.astype(np.int)
+                node_ids = node_ids.astype(np.int32)
                 # This might be slow
                 sn_cnt = 1
                 while True:
@@ -641,7 +641,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                         raise ValueError(msg)
                     source_node = source_nodes_all[sn_cnt]
                     if use_ctx_sampling:
-                        node_ids = context_splitting_kdt_many(hc, [source_node], ctx_size)[0]
+                        node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
                     else:
                         node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                     sn_cnt += 1
@@ -740,7 +740,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint) * ssv.id
+            ixs = np.ones((batchsize,), dtype=np.uint64) * ssv.id
             cnt = 0
             source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
             if draw_local:
@@ -755,7 +755,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         sn_new.append(np.random.randint(0, len(hc.nodes)))
                     else:
                         paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                        neighs = np.array(list(paths.keys()), dtype=np.int)
+                        neighs = np.array(list(paths.keys()), dtype=np.int32)
                         sn_new.append(np.random.choice(neighs, 1)[0])
                 source_nodes = sn_new
             for source_node in source_nodes:
@@ -2067,7 +2067,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             if len(source_nodes) % bs != 0:
                 source_nodes = np.concatenate([np.random.choice(source_nodes, bs - len(source_nodes) % bs),
                                                source_nodes])
-            node_arrs = context_splitting_kdt_many(hc, source_nodes, ctx)
+            node_arrs = context_splitting_kdt(hc, source_nodes, ctx)
             # collect contexts into batches (each batch contains every n_batches contexts
             # (e.g. every 4th if n_batches = 4)
             for ii in range(n_batches):
@@ -2254,8 +2254,8 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
     pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
 
-    ld[pred_key_ax] = ax_pred.astype(np.int)
-    ld[pred_key_sp] = sp_pred.astype(np.int)
+    ld[pred_key_ax] = ax_pred.astype(np.int32)
+    ld[pred_key_sp] = sp_pred.astype(np.int32)
     del ld['dnh']
     del ld['abt']
     del ld['ads']

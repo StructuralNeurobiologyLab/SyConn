@@ -107,7 +107,8 @@ def get_glia_coverage(seg, neuron_ids, glia_ids, max_dist, scale):
     int, float
         Number and fraction of neuron boundary voxels close to glia boundary
     """
-    seg = np.array(seg, np.int)
+    # TODO: Revisit and check compliance with uint64 SV IDs
+    seg = np.array(seg, np.int64)
     for ix in neuron_ids:
         seg[seg == ix] = -1
     for ix in glia_ids:

@@ -57,7 +57,7 @@ def labels2mesh(args):
 
     # extract node coordinates and labels and remove nodes with label -1
     a_node_coords = np.array([n.getCoordinate() * sso.scaling for n in a_nodes])
-    a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
+    a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int32)
     a_node_coords = a_node_coords[(a_node_labels != -1)]
     a_node_labels = a_node_labels[(a_node_labels != -1)]
 

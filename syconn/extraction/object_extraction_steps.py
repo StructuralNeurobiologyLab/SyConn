@@ -172,7 +172,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             v = np.array(v)
             # factor 2: erodes both sides; aniso: morphology operation kernel is laterally increased by this factor
             n_erosions = max(n_erosions, 2 * aniso * np.sum(v == 'binary_erosion'))
-        overlap = np.max([overlap, [n_erosions, n_erosions, n_erosions // aniso]], axis=0).astype(np.int)
+        overlap = np.max([overlap, [n_erosions, n_erosions, n_erosions // aniso]], axis=0).astype(np.int32)
 
     stitch_overlap = np.max([overlap.copy(), [1, 1, 1]], axis=0)
 
@@ -299,7 +299,7 @@ def _object_segmentation_thread(args):
             tmp_data_shape = tmp_data.shape
             offset = (np.array(tmp_data_shape) - np.array(chunk.size) -
                       2 * np.array(overlap)) / 2
-            offset = offset.astype(np.int)
+            offset = offset.astype(np.int32)
             if np.any(offset < 0):
                 offset = np.array([0, 0, 0])
             tmp_data = tmp_data[offset[0]: tmp_data_shape[0] - offset[0],
@@ -908,10 +908,10 @@ def _extract_voxels_thread(args):
                     continue
                 sv_coords = uniqueID_coords_dict[sv_id]
                 id_mask_offset = np.min(sv_coords, axis=0)
-                abs_offset = (chunk.coordinates + id_mask_offset).astype(np.int)
+                abs_offset = (chunk.coordinates + id_mask_offset).astype(np.int32)
                 id_mask_coords = sv_coords - id_mask_offset
                 size = np.max(sv_coords, axis=0) - id_mask_offset + \
-                       np.array([1, 1, 1], dtype=np.int)
+                       np.array([1, 1, 1], dtype=np.int32)
                 id_mask_coords = np.transpose(id_mask_coords)
                 id_mask = np.zeros(tuple(size), dtype=bool)
                 id_mask[id_mask_coords[0, :], id_mask_coords[1, :], id_mask_coords[2, :]] = True
@@ -1184,7 +1184,7 @@ def _extract_voxels_combined_thread_NEW(args):
                 voxel_dc = VoxelStorageDyn(seg_obj.voxel_path,
                                            voxel_mode=False, voxeldata_path=overlaydataset_path,
                                            read_only=False, disable_locking=False)
-                offset = chunk.coordinates.astype(np.int)
+                offset = chunk.coordinates.astype(np.int32)
                 bb += offset
                 rep_coord = rep_coords[sv_id] + offset
                 if sv_id in voxel_dc:
@@ -1251,10 +1251,10 @@ def _extract_voxels_combined_thread_OLD(args):
                     continue
                 sv_coords = uniqueID_coords_dict[sv_id]
                 id_mask_offset = np.min(sv_coords, axis=0)
-                abs_offset = (chunk.coordinates + id_mask_offset).astype(np.int)
+                abs_offset = (chunk.coordinates + id_mask_offset).astype(np.int32)
                 id_mask_coords = sv_coords - id_mask_offset
                 size = np.max(sv_coords, axis=0) - id_mask_offset + np.array([1, 1, 1],
-                                                                             dtype=np.int)
+                                                                             dtype=np.int32)
                 id_mask_coords = np.transpose(id_mask_coords)
                 id_mask = np.zeros(tuple(size), dtype=bool)
                 id_mask[id_mask_coords[0, :], id_mask_coords[1, :], id_mask_coords[2, :]] = True
@@ -1319,7 +1319,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
             "KnossosDataset boundaries differ."
 
     if offset is None or size is None:
-        offset = np.zeros(3, dtype=np.int)
+        offset = np.zeros(3, dtype=np.int32)
         # use any KD to infere the boundary
         size = np.copy(target_kds[hdf5names[0]].boundary)
 

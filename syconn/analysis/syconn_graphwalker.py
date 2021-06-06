@@ -1305,7 +1305,7 @@ class main_class(QtGui.QDialog):
         # split rec graph and perform cc
         self.rec_graph.remove_nodes_from(ids_to_remove)
 
-        sgraphs = nx.connected_component_subgraphs(self.rec_graph)
+        sgraphs = (self.rec_graph.subgraph(c) for c in nx.connected_components(self.rec_graph))
         # find sub graph that contains the root, this is the new rec_graph
         for g in sgraphs:
             if self.sv_rec_start_id in g.nodes():

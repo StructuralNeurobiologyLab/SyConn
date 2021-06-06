@@ -53,7 +53,7 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.Supe
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
     node_labels = np.array([str2int_converter(n.getComment(), gt_type)
-                            for n in skel_nodes], dtype=np.int)
+                            for n in skel_nodes], dtype=np.int32)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
 

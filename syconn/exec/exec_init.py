@@ -50,7 +50,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: Optional[bool] = None):
                              overwrite=False)
     g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
 
-    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+    rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
 
     # if rag was not created by glia splitting procedure this filtering is required
     if apply_ssv_size_threshold is None:
@@ -118,7 +118,7 @@ def _ssv_rag_writer(args):
     g_p, ssv_ids = args
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir,
                                    version='0', ssd_type="ssv")
-    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+    rag_g = nx.read_edgelist(g_p, nodetype=np.uint64)
     ccs = nx.connected_components(rag_g)
     cc_dict = {}
     for cc in ccs:
@@ -251,7 +251,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
 
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
@@ -306,11 +306,11 @@ def run_create_rag():
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=False)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
-    G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint)
+    G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint64)
     if 0 in G.nodes():
         G.remove_node(0)
         log.warning('Found background node 0 in original graph. Removing.')
-    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
+    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint64)
     log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
@@ -341,7 +341,7 @@ def run_create_rag():
     for n in G.nodes():
         total_size += sd.get_segmentation_object(n).size
     total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
-    cc_gs = list(nx.connected_component_subgraphs(G))
+    cc_gs = list((G.subgraph(c) for c in nx.connected_components(G)))
     log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
              f"{global_params.config['glia']['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
              f"{len(cc_gs)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")

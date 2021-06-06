@@ -234,8 +234,9 @@ def run_glia_prediction_pts(max_n_jobs_gpu: Optional[int] = None):
     pred_key = "glia_probas"
 
     log.info("Preparing RAG.")
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
-    cc_gs = sorted(list(nx.connected_component_subgraphs(G)), key=len, reverse=True)
+    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+
+    cc_gs = sorted(list((G.subgraph(c) for c in nx.connected_components(G))), key=len, reverse=True)
 
     # generate parameter for view rendering of individual SSV
     sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
@@ -300,8 +301,8 @@ def run_glia_prediction():
     pred_key = "glia_probas"
 
     # Load initial RAG from  Knossos mergelist text file.
-    g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
-    all_sv_ids_in_rag = np.array(list(g.nodes()), dtype=np.uint)
+    g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
+    all_sv_ids_in_rag = np.array(list(g.nodes()), dtype=np.uint64)
 
     log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
         nx.number_connected_components(g), g.number_of_nodes()))
@@ -356,7 +357,7 @@ def run_glia_splitting():
     """
     log = initialize_logging('glia_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint64)
     log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
         nx.number_connected_components(G), G.number_of_nodes()))
 

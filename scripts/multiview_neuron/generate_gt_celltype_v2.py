@@ -27,7 +27,7 @@ if __name__ == "__main__":
     str2int_label["GP "] = 5  # typo
     csv_p = '/wholebrain/songbird/j0126/GT/celltype_gt/j0126_cell_type_gt_areax_fs6_v3.csv'
     df = pandas.io.parsers.read_csv(csv_p, header=None, names=['ID', 'type']).values
-    ssv_ids = df[:, 0].astype(np.uint)
+    ssv_ids = df[:, 0].astype(np.uint64)
     if len(np.unique(ssv_ids)) != len(ssv_ids):
         raise ValueError('Multi-usage of IDs!')
     str_labels = df[:, 1]

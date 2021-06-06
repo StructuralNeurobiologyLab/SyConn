@@ -42,10 +42,10 @@ if __name__ == '__main__':
     ngpus_per_node = node_state['gres']
     shape_j0251 = np.array([27119, 27350, 15494])
     # 10.5* for 4.9, *9 for 3.13, *7.5 for 1.81, *6 for 0.927, *4.5 for 0.391, *3 for 0.115 TVx
-    cube_size = (np.array([2048, 2048, 1024]) * 9).astype(np.int)
+    cube_size = (np.array([2048, 2048, 1024]) * 9).astype(np.int32)
     # all for 10 TVx
-    cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int)
-    cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int)
+    cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int32)
+    cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int32)
     # cube_of_interest_bb = None  # process the entire cube!
     prior_glia_removal = True
     use_point_models = True

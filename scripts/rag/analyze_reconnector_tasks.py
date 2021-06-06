@@ -108,7 +108,7 @@ def analyze_all_j0126_reconnector_tasks():
     # convert to dataframe and write to excel
     df = pd.DataFrame(all_recon_tasks)
 
-    writer = pd.ExcelWriter('D:/j0126_analysis/reconnect_stats.xlsx')
+    writer = pd.ExcelWriter('D:/j0126_analysis/reconnect_stats.xls')
     df.to_excel(writer, 'reconnects')
     workbook = writer.book
     worksheet = writer.sheets['reconnects']

@@ -227,7 +227,6 @@ if __name__ == "__main__":
         lr=lr,
         amsgrad=True
     )
-    # optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have
