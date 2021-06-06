@@ -182,6 +182,11 @@ if __name__ == '__main__':
     # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
+
+    # exec_dense_prediction.predict_er()
+    # exec_dense_prediction.predict_golgi()
+
+    exec_dense_prediction.predict_golgi_er_mixed()
     ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
