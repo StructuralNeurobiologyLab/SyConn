@@ -26,6 +26,7 @@ from .super_segmentation_object import SuperSegmentationObject
 from .. import global_params
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
+from ..backend.storage import BinarySearchStore
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 
@@ -138,6 +139,7 @@ class SuperSegmentationDataset(SegmentationBase):
         self.sso_caching = sso_caching
         self.sso_locking = sso_locking
         self._mapping_dict_reversed = None
+        self._mapping_lookup_reverse = None
 
         self._type = ssd_type
         self._id_changer = []
@@ -288,6 +290,13 @@ class SuperSegmentationDataset(SegmentationBase):
         return self.path + "/mapping_dict.pkl"
 
     @property
+    def mapping_lookup_reverse_path(self) -> str:
+        """
+        Path to data structure that stores the lookup from supervoxel ID to cell ID.
+        """
+        return self.path + "/mapping_lookup_reverse.h5"
+
+    @property
     def mapping_dict_reversed_path(self) -> str:
         """
         Path to the inverse mapping dictionary pkl file.
@@ -342,6 +351,34 @@ class SuperSegmentationDataset(SegmentationBase):
                         self._mapping_dict_reversed[ix] = k
                 self.save_mapping_dict_reversed()
         return self._mapping_dict_reversed
+
+    def mapping_lookup_reverse(self, ids: np.ndarray) -> Dict[int, int]:
+        """
+        Create lookup dictionary with supervoxel ID as key and cell ID as value. IDs in `ids` that are not in
+        :attr:`~sv_ids` will not be added to the output dict.
+
+        Args:
+            ids: IDs to find the corresponding cell ID.
+
+        Returns:
+            Dictionary with supervoxel ID as key and cell ID as value.
+        """
+        if self._mapping_lookup_reverse is None:
+            self._mapping_lookup_reverse = BinarySearchStore(self.mapping_lookup_reverse_path)
+        lookup = dict()
+        queries = np.intersect1d(ids, self.sv_ids)
+        for sv_id, ssv_id in zip(queries, self._mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
+            lookup[sv_id] = ssv_id
+        return lookup
+
+    def create_mapping_lookup_reverse(self):
+        """Create data structure for efficient look-ups from supervoxel ID to cell ID,
+        see :py:class:`syconn.backend.storage.BinarySearchStore`.
+        """
+        # TODO: use mapping dict instead of mapping dict reversed -> then remove mapping dict reversed code
+        ids = np.array(list(self.mapping_dict_reversed.keys()), dtype=np.uint64)
+        ssv_ids = np.array(list(self.mapping_dict_reversed.values()), dtype=np.uint64)
+        BinarySearchStore(self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids))
 
     @property
     def ssv_ids(self) -> np.ndarray:
@@ -666,7 +703,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
         overwrite: Remove existing SSD folder, if False and a folder already exists it raises FileExistsError.
     """
     # check if ssv storages already exists
-    if os.path.exists(ssd.path) and len(glob.glob(ssd.path + '/so_storage/*')) > 1:
+    if new_mapping and os.path.exists(ssd.path) and len(glob.glob(ssd.path + '/so_storage/*')) > 1:
         if not overwrite:
             msg = f'{ssd} already exists and overwrite is False.'
             log_reps.error(msg)

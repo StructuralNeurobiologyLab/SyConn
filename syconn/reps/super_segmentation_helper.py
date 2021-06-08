@@ -27,7 +27,7 @@ from ..extraction.in_bounding_boxC import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import super_segmentation
-    from ..reps.super_segmentation import SuperSegmentationObject
+    from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
     from ..reps.segmentation import SegmentationObject
 
 from collections.abc import Iterable
@@ -2014,7 +2014,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         log_reps.debug('Finished mapping of vertex predictions to mesh.')
 
 
-def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
+def assemble_from_mergelist(ssd: 'SuperSegmentationDataset', mergelist: Union[Dict[int, int], str]):
     """
     Creates
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.mapping_dict` and
@@ -2024,8 +2024,8 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
     Will overwrite existing mapping dict, id changer and version files.
 
     Args:
-        ssd: SuperSegmentationDataset
-        mergelist: Definition of supervoxel agglomeration.
+        ssd: SuperSegmentationDataset.
+        mergelist: Supervoxel agglomeration.
 
     """
     if mergelist is not None:
@@ -2054,6 +2054,7 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
         ssd._id_changer[sv_id] = mergelist[sv_id]
 
     ssd._mapping_dict = mapping_dict
+    ssd.create_mapping_lookup_reverse()
     ssd.save_dataset_shallow(overwrite=True)
 
 

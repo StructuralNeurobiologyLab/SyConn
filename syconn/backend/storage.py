@@ -535,14 +535,15 @@ class BinarySearchStore:
         """
 
         Args:
-            fname (): File name.
-            id_array (): ID array.
-            attr_arrays (): Attribute arrays, must have same ordering as ID array.
-            overwrite (): Overwrite existing array files.
+            fname: File name.
+            id_array: (Unsorted) ID array.
+            attr_arrays: (Unsorted) attribute arrays, must have the same ordering as ID array.
+            overwrite: Overwrite existing array files.
             n_shards: Number of shards/chunks the ID and attribute arrays are split into. Defaults to 5.
             rdcc_nbytes: Size of h5 chunks in bytes. Default is 5 MiB.
         """
         self.fname = fname
+        self._h5_file = None
         if id_array is not None:
             if attr_arrays is None:
                 raise ValueError('ID array is given, but no attribute array(s).')
@@ -558,7 +559,7 @@ class BinarySearchStore:
             ixs = np.argsort(id_array)
             id_array = id_array[ixs]
             bucket_ranges = []
-            h5_file = h5py.File(fname, 'w', libver='latest')
+            h5_file = h5py.File(fname, 'w', libver='latest', rdcc_nbytes=rdcc_nbytes)
             grp = h5_file.create_group("ids")
             for ii, id_sub in enumerate(np.array_split(id_array, n_shards)):
                 bucket_ranges.append((id_sub[0], id_sub[-1]))
@@ -576,11 +577,12 @@ class BinarySearchStore:
         else:
             if isinstance(fname, str) and not os.path.isfile(fname):
                 raise FileNotFoundError(f'Could not find BinarySearchStore at "{self.fname}".')
-        self._h5_file = h5py.File(fname, 'r', libver='latest')
 
     @property
     def n_shards(self) -> int:
-        return len(self._h5_file.attrs['bucket_ranges'])
+        with h5py.File(self.fname, 'r', libver='latest') as f:
+            n_shards = len(f.attrs['bucket_ranges'])
+        return n_shards
 
     def _get_bucket_ids(self, obj_ids: np.ndarray) -> np.ndarray:
         bucket_ids = np.ones(obj_ids.shape, dtype=np.int32) * -1
@@ -591,6 +593,18 @@ class BinarySearchStore:
         return bucket_ids
 
     def get_attributes(self, obj_ids: np.ndarray, attr_key: str) -> np.ndarray:
+        """
+        Query attributes of given `obj_ids`. Note that this will not raise an Exception if a ID does not exist in the
+        store, as the lookup uses binary search.
+
+        Args:
+            obj_ids: Object IDs to query.
+            attr_key: Value type obtained from the store.
+
+        Returns:
+            Value array.
+        """
+        self._h5_file = h5py.File(self.fname, 'r', libver='latest')
         if attr_key not in self._h5_file.keys():
             raise KeyError(f'Key "{attr_key}" does not exist.')
         bucket_ids = self._get_bucket_ids(obj_ids)
@@ -608,4 +622,6 @@ class BinarySearchStore:
             d = grp[f'{bucket_id}'][indices]
             # undo sorting using argsort of argsort to match slicing mask on the left
             data[bucket_mask] = d[np.argsort(ixs_sort)]
+        self._h5_file.close()
+        self._h5_file = None
         return data

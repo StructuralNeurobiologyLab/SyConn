@@ -30,14 +30,14 @@ def _setup_testfile(fname):
 
 def test_BinarySearchStore():
     n_shards = 5
-    n_elements = int(1e7)
+    n_elements = int(1e6)
     ids = np.random.randint(1, 1e10, n_elements).astype(np.uint64)
-    attr = dict(rep_coord=np.random.randn(n_elements, ))
+    attr = dict(ssv_ids=np.random.randn(n_elements, ))
     tf = tempfile.TemporaryFile()
     bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
     ixs_sample = np.random.permutation(len(ids))[:1000]
-    attrs = bss.get_attributes(ids[ixs_sample], 'rep_coord')
-    np.array_equal(attr['rep_coord'][ixs_sample], attrs)
+    attrs = bss.get_attributes(ids[ixs_sample], 'ssv_ids')
+    assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
     assert bss.n_shards == n_shards
 
 

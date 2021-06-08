@@ -42,7 +42,8 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None, ssd:
     # transform SV IDs to agglomerated SV (SSV) IDs
     if ssd is None:
         ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    relabel_vol_nonexist2zero(seg, ssd.mapping_dict_reversed)
+    local_ids = np.unique(seg)
+    relabel_vol_nonexist2zero(seg, ssd.mapping_lookup_reverse(local_ids))
     # kimimaro code
     skels = kimimaro.skeletonize(
         seg,
