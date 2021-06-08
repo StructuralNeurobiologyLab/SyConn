@@ -97,7 +97,7 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 
 * [Mesh](meshes.md) generation and representation of supervoxels
 
-* Multi-view representation of neurpn reconstructions for [glia](glia_removal.md) and
+* Multi-view representation of neuron reconstructions for [glia](glia_removal.md) and
  [neuron](neuron_analysis.md) analysis (published in [Nature Communications](https://www.nature.com/articles/s41467-019-10836-3))
 
 
