@@ -1,16 +1,18 @@
-import pytest
-import numpy as np
-import time
-from multiprocessing import Process, Queue
-from syconn import global_params
-from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
-    VoxelStorage
-from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
-     read_txt_from_zip, remove_from_zip
 import os
 import logging
 import zipfile
 import sys
+import time
+import pytest
+import tempfile
+
+import numpy as np
+from multiprocessing import Process, Queue
+from syconn import global_params
+from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
+    VoxelStorage, BinarySearchStore
+from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
+     read_txt_from_zip, remove_from_zip
 
 # TODO: use tempfile
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -26,6 +28,19 @@ def _setup_testfile(fname):
     return test_p
 
 
+def test_BinarySearchStore():
+    n_shards = 5
+    n_elements = int(1e7)
+    ids = np.random.randint(1, 1e10, n_elements).astype(np.uint64)
+    attr = dict(rep_coord=np.random.randn(n_elements, ))
+    tf = tempfile.TemporaryFile()
+    bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
+    ixs_sample = np.random.permutation(len(ids))[:1000]
+    attrs = bss.get_attributes(ids[ixs_sample], 'rep_coord')
+    np.array_equal(attr['rep_coord'][ixs_sample], attrs)
+    assert bss.n_shards == n_shards
+
+
 # TODO: requires revision
 @pytest.mark.xfail(strict=False)
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
@@ -34,10 +49,6 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
       First one after 1s , 2nd after 2 seconds and the third one after 3s.
       The first two creations are EXPECTED to fail. The last one is expected to be
       successful.
-
-      Parameters
-      ----------
-      None
 
       Returns
       -------

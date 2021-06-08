@@ -65,7 +65,7 @@ max_steps = 300000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = True
+cellshape_only = False
 use_syntype = False
 dr = 0.2
 track_running_stats = False
@@ -108,7 +108,7 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251_June2021/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
@@ -215,7 +215,8 @@ trainer = Trainer3d(
     num_classes=num_classes + 1,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=5
+    nbatch_avg=5,
+    tqdm_kwargs=dict(disable=False),
 )
 
 # Archiving training script, src folder, env info

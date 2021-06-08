@@ -44,6 +44,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
             :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
 
     Notes:
+        * This is a memory intensiv step, consider increasing `ncores_per_job`.
         * Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
           optionally :func:`~run_astrocyte_splitting`.
         * Networkx requires a lot of memory for >1e9 edges, graph_tool and igraph are not usable for this either.
@@ -115,7 +116,8 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
     # map cellular organelles to SSVs
     ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'],
                                                     nb_cpus=ncores_per_job)
-    ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'])
+    ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'],
+                                     nb_cpus=ncores_per_job)
     log.info('Finished mapping of cellular organelles to SSVs.')
 
 

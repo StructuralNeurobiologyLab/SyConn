@@ -492,6 +492,7 @@ class SuperSegmentationDataset(SegmentationBase):
                 sso.attr_dict[k] = v[self._ssoid2ix[obj_id]]
             sso._ssd = self
         else:
+            # TODO: use generator
             sso = []
             for ix in obj_id:
                 # call it with scalar input recursively

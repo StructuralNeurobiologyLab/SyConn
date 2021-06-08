@@ -11,6 +11,7 @@ import shutil
 import time
 from collections import Counter, defaultdict
 from typing import Optional, Dict, List, Tuple, Union, Iterable, Any, TYPE_CHECKING
+import pickle as pkl
 
 import networkx as nx
 import numpy as np
@@ -933,7 +934,9 @@ class SuperSegmentationObject(SegmentationBase):
         try:
             self.attr_dict = load_pkl2obj(self.attr_dict_path)
             return 0
-        except (IOError, EOFError):
+        except (IOError, EOFError, pkl.UnpicklingError) as e:
+            if '[Errno 2] No such file or' not in str(e):
+                log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to '{e}'.")
             return -1
 
     @property
@@ -1047,9 +1050,9 @@ class SuperSegmentationObject(SegmentationBase):
             return
         try:
             orig_dc = load_pkl2obj(self.attr_dict_path)
-        except (IOError, EOFError, FileNotFoundError) as e:
+        except (IOError, EOFError, FileNotFoundError, pkl.UnpicklingError) as e:
             if '[Errno 2] No such file or' not in str(e):
-                log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to {e}.")
+                log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to '{e}'. Overwriting")
             orig_dc = {}
         orig_dc.update(self.attr_dict)
         write_obj2pkl(self.attr_dict_path, orig_dc)

@@ -4,21 +4,23 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+import os.path
+import shutil
+from collections import defaultdict
+from typing import Any, Tuple, Optional, Union, List, Iterator, Dict
 
 from ..backend import StorageClass
 from ..backend import log_backend
 from ..handler.basics import kd_factory
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
 
+import h5py
+import numpy as np
+
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-
-from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, List, Iterator
-
-import numpy as np
 
 
 class AttributeDict(StorageClass):
@@ -524,3 +526,86 @@ class SkeletonStorage(StorageClass):
                     continue
                 entry[3][k] = v
         self._dc_intern[key] = entry
+
+
+class BinarySearchStore:
+    def __init__(self, fname: str, id_array: Optional[np.ndarray] = None,
+                 attr_arrays: Optional[Dict[str, np.ndarray]] = None, overwrite: bool = False,
+                 n_shards: Optional[int] = None, rdcc_nbytes: int = 5*2**20):
+        """
+
+        Args:
+            fname (): File name.
+            id_array (): ID array.
+            attr_arrays (): Attribute arrays, must have same ordering as ID array.
+            overwrite (): Overwrite existing array files.
+            n_shards: Number of shards/chunks the ID and attribute arrays are split into. Defaults to 5.
+            rdcc_nbytes: Size of h5 chunks in bytes. Default is 5 MiB.
+        """
+        self.fname = fname
+        if id_array is not None:
+            if attr_arrays is None:
+                raise ValueError('ID array is given, but no attribute array(s).')
+            if isinstance(fname, str) and os.path.isfile(fname):
+                if not overwrite:
+                    raise FileExistsError(f'BinarySearchStore at "{fname}" already exists."')
+                else:
+                    os.remove(fname)
+            if n_shards is None:
+                n_shards = 5
+            if isinstance(fname, str):
+                os.makedirs(os.path.split(self.fname)[0], exist_ok=True)
+            ixs = np.argsort(id_array)
+            id_array = id_array[ixs]
+            bucket_ranges = []
+            h5_file = h5py.File(fname, 'w', libver='latest')
+            grp = h5_file.create_group("ids")
+            for ii, id_sub in enumerate(np.array_split(id_array, n_shards)):
+                bucket_ranges.append((id_sub[0], id_sub[-1]))
+                grp.create_dataset(f'{ii}', data=id_sub)
+            for k, v in attr_arrays.items():
+                v_sorted = v[ixs]
+                grp = h5_file.create_group(k)
+                grp.attrs['shape'] = v_sorted.shape
+                grp.attrs['dtype'] = np.dtype(v_sorted.dtype).str
+                for ii, attr_sub in enumerate(np.array_split(v_sorted, n_shards)):
+                    grp.create_dataset(f'{ii}', data=attr_sub)
+            del ixs
+            h5_file.attrs['bucket_ranges'] = bucket_ranges
+            h5_file.close()
+        else:
+            if isinstance(fname, str) and not os.path.isfile(fname):
+                raise FileNotFoundError(f'Could not find BinarySearchStore at "{self.fname}".')
+        self._h5_file = h5py.File(fname, 'r', libver='latest')
+
+    @property
+    def n_shards(self) -> int:
+        return len(self._h5_file.attrs['bucket_ranges'])
+
+    def _get_bucket_ids(self, obj_ids: np.ndarray) -> np.ndarray:
+        bucket_ids = np.ones(obj_ids.shape, dtype=np.int32) * -1
+        for ii, bucket_range in enumerate(self._h5_file.attrs['bucket_ranges']):
+            bucket_ids[(bucket_range[0] <= obj_ids) & (obj_ids <= bucket_range[1])] = ii
+        if -1 in bucket_ids:
+            raise ValueError(f'IDs {obj_ids[bucket_ids == -1]} not in {self.fname}.')
+        return bucket_ids
+
+    def get_attributes(self, obj_ids: np.ndarray, attr_key: str) -> np.ndarray:
+        if attr_key not in self._h5_file.keys():
+            raise KeyError(f'Key "{attr_key}" does not exist.')
+        bucket_ids = self._get_bucket_ids(obj_ids)
+        grp = self._h5_file[f'{attr_key}']
+        sh = [len(obj_ids)]
+        if len(grp.attrs['shape']) > 1:
+            sh += list(grp.attrs['shape'])[1:]
+        data = np.zeros(sh, dtype=grp.attrs['dtype'])
+        for bucket_id in np.unique(bucket_ids):
+            ids = self._h5_file[f'ids/{bucket_id}'][()]
+            bucket_mask = bucket_ids == bucket_id
+            queries = obj_ids[bucket_mask]
+            ixs_sort = np.argsort(queries)
+            indices = np.searchsorted(ids, queries[ixs_sort])
+            d = grp[f'{bucket_id}'][indices]
+            # undo sorting using argsort of argsort to match slicing mask on the left
+            data[bucket_mask] = d[np.argsort(ixs_sort)]
+        return data
