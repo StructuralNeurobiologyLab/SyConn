@@ -580,9 +580,27 @@ class BinarySearchStore:
 
     @property
     def n_shards(self) -> int:
+        """
+        Number of shards/chunks the ID and attribute arrays are split into.
+        Returns:
+
+        """
         with h5py.File(self.fname, 'r', libver='latest') as f:
             n_shards = len(f.attrs['bucket_ranges'])
         return n_shards
+
+    @property
+    def id_array(self) -> np.ndarray:
+        """
+
+        Returns:
+            Flat ID array.
+        """
+        ids = []
+        with h5py.File(self.fname, 'r', libver='latest') as f:
+            for bucket_id in range(len(f.attrs['bucket_ranges'])):
+                ids.append(f[f'ids/{bucket_id}'][()])
+        return np.concatenate(ids)
 
     def _get_bucket_ids(self, obj_ids: np.ndarray) -> np.ndarray:
         bucket_ids = np.ones(obj_ids.shape, dtype=np.int32) * -1

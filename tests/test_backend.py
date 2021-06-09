@@ -32,13 +32,15 @@ def test_BinarySearchStore():
     n_shards = 5
     n_elements = int(1e6)
     ids = np.random.randint(1, 1e10, n_elements).astype(np.uint64)
-    attr = dict(ssv_ids=np.random.randn(n_elements, ))
+    attr = dict(ssv_ids=np.random.randint(1, 1e10, n_elements, ))
     tf = tempfile.TemporaryFile()
     bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
     ixs_sample = np.random.permutation(len(ids))[:1000]
     attrs = bss.get_attributes(ids[ixs_sample], 'ssv_ids')
     assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
-    assert bss.n_shards == n_shards
+    assert bss.n_shards == n_shards, "Number of shards differ."
+    assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
+    assert np.array_equal(bss.id_array, np.sort(ids)), "Sort failed."
 
 
 # TODO: requires revision

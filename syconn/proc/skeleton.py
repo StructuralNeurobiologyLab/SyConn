@@ -33,7 +33,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None, ssd:
         nb_cpus = 1
 
     kd = kd_factory(global_params.config.kd_seg_path)
-    # TODO: uint32 conversion should be controlled externally
+    # TODO: uint32 conversion has to be controlled externally
     seg = kd.load_seg(size=cube_size, offset=cube_offset, mag=1).swapaxes(0, 2).astype(np.uint32)
     if ds is not None:
         seg = ndimage.zoom(seg, 1 / ds, order=0)
@@ -42,8 +42,10 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None, ssd:
     # transform SV IDs to agglomerated SV (SSV) IDs
     if ssd is None:
         ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+
     local_ids = np.unique(seg)
-    relabel_vol_nonexist2zero(seg, ssd.mapping_lookup_reverse(local_ids))
+    lookup_dict = ssd.sv2ssv_ids(local_ids)
+    relabel_vol_nonexist2zero(seg, lookup_dict)
     # kimimaro code
     skels = kimimaro.skeletonize(
         seg,

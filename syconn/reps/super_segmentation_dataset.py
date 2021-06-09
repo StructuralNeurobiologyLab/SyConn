@@ -352,10 +352,10 @@ class SuperSegmentationDataset(SegmentationBase):
                 self.save_mapping_dict_reversed()
         return self._mapping_dict_reversed
 
-    def mapping_lookup_reverse(self, ids: np.ndarray) -> Dict[int, int]:
+    def sv2ssv_ids(self, ids: np.ndarray) -> Dict[int, int]:
         """
-        Create lookup dictionary with supervoxel ID as key and cell ID as value. IDs in `ids` that are not in
-        :attr:`~sv_ids` will not be added to the output dict.
+        Use :attr:`~mapping_lookup_reverse` to query the cell ID for a given array of supervoxel IDs.
+        IDs that are not in :attr:`~sv_ids` will not be added to the output dict.
 
         Args:
             ids: IDs to find the corresponding cell ID.
@@ -363,13 +363,17 @@ class SuperSegmentationDataset(SegmentationBase):
         Returns:
             Dictionary with supervoxel ID as key and cell ID as value.
         """
-        if self._mapping_lookup_reverse is None:
-            self._mapping_lookup_reverse = BinarySearchStore(self.mapping_lookup_reverse_path)
         lookup = dict()
         queries = np.intersect1d(ids, self.sv_ids)
-        for sv_id, ssv_id in zip(queries, self._mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
+        for sv_id, ssv_id in zip(queries, self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
             lookup[sv_id] = ssv_id
         return lookup
+
+    @property
+    def mapping_lookup_reverse(self):
+        if self._mapping_lookup_reverse is None:
+            self._mapping_lookup_reverse = BinarySearchStore(self.mapping_lookup_reverse_path)
+        return self._mapping_lookup_reverse
 
     def create_mapping_lookup_reverse(self):
         """Create data structure for efficient look-ups from supervoxel ID to cell ID,
@@ -390,7 +394,7 @@ class SuperSegmentationDataset(SegmentationBase):
             # do not change the order of the if statements as it is crucial
             # for the resulting ordering of self.ssv_ids (only id.npy matches
             # with all the other cached numpy arrays).
-            self._ssv_ids = self.load_numpy_data('id')
+            self._ssv_ids = self.load_numpy_data('id', suppress_warning=True)
             if self._ssv_ids is not None:
                 pass
             elif len(self.mapping_dict) > 0:
@@ -422,11 +426,10 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def sv_ids(self) -> np.ndarray:
         """
-        Flat array of supervoxels which are part of all super-supervoxels in this
+        Flat array of supervoxel IDs which are part of the cells (:attr:`~.ssv_ids`) in this
         :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
         """
-        self.load_mapping_dict()
-        return np.concatenate(list(self.mapping_dict.values()))
+        return self.mapping_lookup_reverse.id_array
 
     @property
     def id_changer(self) -> List[int]:
@@ -437,7 +440,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.load_id_changer()
         return self._id_changer
 
-    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True):
+    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False):
         """
         Todo:
             * remove 's' appendix in file names.
@@ -446,7 +449,7 @@ class SuperSegmentationDataset(SegmentationBase):
             prop_name: Identifier for requested cache array. Ordering of the
                 array is the same as :py:attr:`~ssv_ids`.
             allow_nonexisting: If False, will fail for missing numpy files.
-
+            suppress_warning: Do not print a warning if property does not exist.
         Returns:
             Numpy array of cached property.
         """
@@ -457,11 +460,12 @@ class SuperSegmentationDataset(SegmentationBase):
                           f'"{self.path + prop_name + "s.npy"}", this is deprecated.')
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
-            msg = f'Requested data cache "{prop_name}" did not exist.'
+            msg = f'Requested data cache "{prop_name}" did not exist in {self}.'
             if not allow_nonexisting:
                 log_reps.error(msg)
                 raise FileNotFoundError(msg)
-            log_reps.warning(msg)
+            if not suppress_warning:
+                log_reps.warning(msg)
 
     def sv_id_to_ssv_id(self, sv_id: int) -> int:
         """
