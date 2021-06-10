@@ -606,8 +606,7 @@ class SegmentationObject(SegmentationBase):
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
                 verts = self.mesh[1].reshape(-1, 3)
-                self._mesh_bb = [np.min(verts, axis=0),
-                                 np.max(verts, axis=0)]
+                self._mesh_bb = np.array([np.min(verts, axis=0), np.max(verts, axis=0)], dtype=np.float32)
         return self._mesh_bb
 
     @property
@@ -1791,6 +1790,7 @@ class SegmentationDataset(SegmentationBase):
 
         Todo:
             * remove 's' appendix in file names.
+            * remove 'celltype' replacement for 'celltype_cnn_e3' as soon as 'celltype_cnn_e3' was renamed package-wide
 
         Args:
             prop_name: Identifier of the requested cache array.
@@ -1799,10 +1799,12 @@ class SegmentationDataset(SegmentationBase):
         Returns:
             numpy array of property `prop_name`.
         """
+        if prop_name == 'celltype':
+            prop_name = 'celltype_cnn_e3'
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
-            msg = f'Requested data cache "{prop_name}" did not exist.'
+            msg = f'Requested data cache "{prop_name}" did not exist in {self}.'
             if not allow_nonexisting:
                 log_reps.error(msg)
                 raise FileNotFoundError(msg)

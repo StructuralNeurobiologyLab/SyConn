@@ -12,7 +12,7 @@ from syconn.handler.basics import load_pkl2obj, kd_factory
 from syconn import global_params
 
 
-def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
+def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None, ssd: SuperSegmentationDataset = None,
                      ds: Optional[np.ndarray] = None, dust_threshold: float = 1000) -> Dict[int, cloudvolume.Skeleton]:
     """
     code from https://pypi.org/project/kimimaro/
@@ -21,6 +21,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
         cube_size: size of processed cube in mag 1 voxels.
         cube_offset: starting point of cubes (in mag 1 voxel coordinates)
         nb_cpus: Number of cpus used by kimimaro.
+        ssd: SuperSegmentationDataset
         ds: Downsampling.
         dust_threshold: Remove connected components with fewer than this number of voxels.
 
@@ -31,17 +32,20 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None,
     if nb_cpus is None:
         nb_cpus = 1
 
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     kd = kd_factory(global_params.config.kd_seg_path)
-    # TODO: uint32 conversion should be controlled externally
+    # TODO: uint32 conversion has to be controlled externally
     seg = kd.load_seg(size=cube_size, offset=cube_offset, mag=1).swapaxes(0, 2).astype(np.uint32)
     if ds is not None:
         seg = ndimage.zoom(seg, 1 / ds, order=0)
     else:
         ds = np.ones(3)
     # transform SV IDs to agglomerated SV (SSV) IDs
-    relabel_vol_nonexist2zero(seg, ssd.mapping_dict_reversed)
+    if ssd is None:
+        ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
+    local_ids = np.unique(seg)
+    lookup_dict = ssd.sv2ssv_ids(local_ids)
+    relabel_vol_nonexist2zero(seg, lookup_dict)
     # kimimaro code
     skels = kimimaro.skeletonize(
         seg,

@@ -1,15 +1,18 @@
-import pytest
-import numpy as np
-import time
-from multiprocessing import Process, Queue
-from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
-    VoxelStorage
-from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
-     read_txt_from_zip, remove_from_zip
 import os
 import logging
 import zipfile
 import sys
+import time
+import pytest
+import tempfile
+
+import numpy as np
+from multiprocessing import Process, Queue
+from syconn import global_params
+from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
+    VoxelStorage, BinarySearchStore
+from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
+     read_txt_from_zip, remove_from_zip
 
 # TODO: use tempfile
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -25,6 +28,21 @@ def _setup_testfile(fname):
     return test_p
 
 
+def test_BinarySearchStore():
+    n_shards = 5
+    n_elements = int(1e6)
+    ids = np.random.randint(1, 1e10, n_elements).astype(np.uint64)
+    attr = dict(ssv_ids=np.random.randint(1, 1e10, n_elements, ))
+    tf = tempfile.TemporaryFile()
+    bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
+    ixs_sample = np.random.permutation(len(ids))[:1000]
+    attrs = bss.get_attributes(ids[ixs_sample], 'ssv_ids')
+    assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
+    assert bss.n_shards == n_shards, "Number of shards differ."
+    assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
+    assert np.array_equal(bss.id_array, np.sort(ids)), "Sort failed."
+
+
 # TODO: requires revision
 @pytest.mark.xfail(strict=False)
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
@@ -33,10 +51,6 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
       First one after 1s , 2nd after 2 seconds and the third one after 3s.
       The first two creations are EXPECTED to fail. The last one is expected to be
       successful.
-
-      Parameters
-      ----------
-      None
 
       Returns
       -------
@@ -150,29 +164,30 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 def test_compression_and_decompression_for_mesh_dict():
     test_p = _setup_testfile('test3')
 
-    try:
-        md = MeshStorage(test_p, read_only=False, disable_locking=False)
-        md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
-                 np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
+    if not global_params.config['disable_locking']:
+        try:
+            md = MeshStorage(test_p, read_only=False, disable_locking=False)
+            md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
+                     np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
 
-        logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
-        logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))
+            logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
+            logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))
 
-        md.push()
+            md.push()
 
-    except Exception as e:
-        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 1 ' + str(e))
-        raise AssertionError
+        except Exception as e:
+            logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 1 ' + str(e))
+            raise AssertionError
 
-    # checks if lock release after saving works by saving a second time without acquiring lock
-    try:
-        md.push()
-        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ')
-        raise AssertionError
-    except Exception as e:
-        assert str(e) == "Unable to release an unacquired lock"
+        # checks if lock release after saving works by saving a second time without acquiring lock
+        try:
+            md.push()
+            logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ')
+            raise AssertionError
+        except Exception as e:
+            assert str(e) == "Unable to release an unacquired lock"
 
-    logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
+        logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 
     # checks mesh dict compression with highest entropy data
     md = MeshStorage(test_p, read_only=False)

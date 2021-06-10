@@ -136,10 +136,10 @@ def _dataset_analysis_collect(args):
     attribute, out_files, n_ids, sd_path = args
     # start_multiprocess_imap obeys parameter order and therefore the
     # collected attributes will share the same ordering.
-    params = list(basics.chunkify([(p, attribute) for p in out_files],
-                                  global_params.config['ncores_per_node'] * 2))
+    n_jobs = min(len(out_files), global_params.config['ncores_per_node'] * 4)
+    params = list(basics.chunkify([(p, attribute) for p in out_files], n_jobs))
     tmp_res = sm.start_multiprocess_imap(
-        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'], debug=False)
+        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
     if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
                      'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
         tmp_res = [el for lst in tmp_res for el in lst]  # flatten lists
@@ -555,7 +555,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
+        n_cores = 1 if np.prod(size) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
@@ -1209,7 +1209,7 @@ def _write_props_to_sv_thread(args):
                 start = time.time()
                 verts = mesh[1].reshape(-1, 3)
                 if len(verts) > 0:
-                    mesh_bb = [np.min(verts, axis=0), np.max(verts, axis=0)]
+                    mesh_bb = np.array([np.min(verts, axis=0), np.max(verts, axis=0)], dtype=np.float32)
                     del verts
                     this_attr_dc[sv_id]["mesh_bb"] = mesh_bb
                     this_attr_dc[sv_id]["mesh_area"] = mesh_area_calc(mesh)

@@ -725,8 +725,8 @@ class main_class(QtGui.QDialog):
 
 
 
-        # id_changer returns -1 for a supervoxel that is unconnected, add support for single svs
-        ssv_ids_selected = [ssv_id for ssv_id in ssv_ids_selected if ssv_id != -1]
+        # id_changer returns 0 for a supervoxel that is unconnected, add support for single svs
+        ssv_ids_selected = [ssv_id for ssv_id in ssv_ids_selected if ssv_id != 0]
 
         #print('ssv_ids_selected {0}'.format(ssv_ids_selected))
 

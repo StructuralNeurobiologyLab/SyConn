@@ -83,9 +83,8 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
     Assembles id list by iterating over all voxel / attribute dicts,
     otherwise (very slow).
     """
-    if os.path.exists(sd.path_ids):
-        sd._ids = np.load(sd.path_ids)
-    else:
+    sd._ids = sd.load_numpy_data('id')
+    if sd._ids is None:
         paths = glob.glob(sd.so_storage_path + "/*/*/*/") + \
                 glob.glob(sd.so_storage_path + "/*/*/") + \
                 glob.glob(sd.so_storage_path + "/*/")

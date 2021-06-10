@@ -14,6 +14,7 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 from scipy import spatial
 
 from .. import global_params
+from . import log_proc
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 
 
@@ -215,8 +216,9 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g: nx.Graph, bbs: np.ndarray, is_connected_components: bool = False) -> dict:
+def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = False) -> dict:
     """
+    Calculate bounding box size of connected components.
 
     Args:
         g: Supervoxel graph.
@@ -225,7 +227,7 @@ def create_ccsize_dict(g: nx.Graph, bbs: np.ndarray, is_connected_components: bo
             ``nx.connected_components`` is applied.
 
     Returns:
-
+        Look-up which stores the connected component bounding box for every single node in the input Graph `g`.
     """
     if not is_connected_components:
         ccs = nx.connected_components(g)
@@ -237,9 +239,13 @@ def create_ccsize_dict(g: nx.Graph, bbs: np.ndarray, is_connected_components: bo
         curr_bbs = [bbs[n] for n in cc if n in bbs]
         if len(curr_bbs) == 0:
             raise ValueError(f'Could not find a single bounding box for connected component with IDs: {cc}.')
-        curr_bbs = np.concatenate(curr_bbs)
-        cc_size = np.linalg.norm(np.max(curr_bbs, axis=0) -
-                                 np.min(curr_bbs, axis=0), ord=2)
+            # log_proc.warn(f'Could not find a single bounding box for connected component with IDs: {cc}. '
+            #               f'Setting size to zero')
+            # cc_size = 0
+        else:
+            curr_bbs = np.concatenate(curr_bbs)
+            cc_size = np.linalg.norm(np.max(curr_bbs, axis=0) -
+                                     np.min(curr_bbs, axis=0), ord=2)
         for n in cc:
             node2cssize_dict[n] = cc_size
     return node2cssize_dict

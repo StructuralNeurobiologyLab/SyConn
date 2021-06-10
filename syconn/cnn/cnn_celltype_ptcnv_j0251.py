@@ -17,7 +17,7 @@ import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3d, Backup, metrics
-import distutils
+import distutils.util
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')

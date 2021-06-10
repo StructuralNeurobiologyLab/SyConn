@@ -1,10 +1,13 @@
+import time
 import sys
 import os
 import pickle as pkl
 from collections import defaultdict
-import time
+import tqdm
+
 from syconn import global_params
 from syconn.proc.skeleton import kimimaro_skelgen
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,8 +27,11 @@ if nb_cpus is not None:
 
 res = defaultdict(list)
 res_ids = []
-for cube_offset in cube_offsets:
-    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus, **skel_params)
+ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+
+for cube_offset in tqdm.tqdm(cube_offsets, total=len(cube_offsets), disable=True):
+    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus, ssd=ssd,
+                             **skel_params)
     for k, v in skels.items():
         res[k].append(v)
 

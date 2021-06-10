@@ -15,7 +15,8 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall
+from elektronn3.models.lcp_adapt import ConvAdaptSeg
+from lightconvpoint.utils.network import get_search, get_conv
 from elektronn3.training import Trainer3d, Backup, metrics
 
 # PARSE PARAMETERS #
@@ -28,7 +29,6 @@ parser.add_argument('--sp', type=int, default=15000, help='Number of sample poin
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
@@ -56,7 +56,6 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
-use_bias = args.use_bias
 
 lr = 2e-3
 lr_stepsize = 100
@@ -67,20 +66,16 @@ max_steps = 300000
 eval_nr = random_seed  # number of repetition
 cellshape_only = False
 use_syntype = False
-dr = 0.2
-track_running_stats = False
-use_norm = 'gn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
 if cellshape_only:
     use_subcell = False
     use_syntype = False
-act = 'relu'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall_boarderMask'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_nclass' \
+           f'{num_classes}_lcp_borderMask'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -89,20 +84,11 @@ if not cellshape_only and use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
-if use_norm is False:
-    name += '_noBN'
-else:
-    name += f'_{use_norm}'
-if track_running_stats:
-    name += '_trackRunStats'
 
 if use_cuda:
     device = torch.device('cuda')
 else:
     device = torch.device('cpu')
-
-if not use_bias:
-    name += '_noBias'
 
 print(f'Running on device: {device}')
 
@@ -114,8 +100,11 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+search = 'SearchQuantized'
+conv = dict(layer='ConvPoint', kernel_separation=False)
+act = nn.ReLU
+model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
+                     architecture=None, activation=act, norm='bn')
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -140,7 +129,7 @@ elif args.jit == 'train':
 # Transformations to be applied to samples before feeding them to the network
 train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='normal'),  # in nm
                                   clouds.Center(),
-                                  clouds.Normalization(scale_norm),
+                                  # clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
@@ -178,8 +167,8 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # )
 # set weight of the masking label at context boarders to 0
 # class_weights = torch.tensor([1, 0, 0, 0, 0, 1, 1] + [0], dtype=torch.float32, device=device)
-class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
-criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
+class_weights = torch.tensor([1] * num_classes, dtype=torch.float32, device=device)
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
 
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
@@ -212,11 +201,12 @@ trainer = Trainer3d(
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
-    num_classes=num_classes + 1,
+    num_classes=num_classes,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
     nbatch_avg=5,
     tqdm_kwargs=dict(disable=False),
+    lcp_flag=True
 )
 
 # Archiving training script, src folder, env info
