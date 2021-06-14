@@ -29,7 +29,7 @@ res = defaultdict(list)
 res_ids = []
 ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
-for cube_offset in tqdm.tqdm(cube_offsets, total=len(cube_offsets), disable=True):
+for cube_offset in tqdm.tqdm(cube_offsets, total=len(cube_offsets), disable=False):
     skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus, ssd=ssd,
                              **skel_params)
     for k, v in skels.items():

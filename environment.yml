@@ -10,7 +10,7 @@ channels:
   - open3d-admin
 dependencies:
   # From -c pytorch
-  - pytorch <=1.5  # (provide backwards compat. to trained models)
+  - pytorch <=1.5.1  # (provide backwards compat. to trained models)
   - torchvision
 
   # From conda-forge and defaults

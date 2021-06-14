@@ -1284,7 +1284,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
     if np.random.randint(0, 4) == 0:
         fluct = 1
     else:
-        fluct = min(max(np.random.randn(1)[0] * 0.1 + 1, 0.6), 1.4)
+        fluct = min(max(np.random.randn(1)[0] * 0.1 + 1, 0.8), 1.2)
     ctx_size_fluct = fluct * ctx_size
 
     for pkl_f in fnames_pkl:

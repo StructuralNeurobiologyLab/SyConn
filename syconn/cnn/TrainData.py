@@ -488,9 +488,9 @@ if elektronn3_avail:
 
         def __len__(self):
             if self.train:
-                return len(self.fnames) * 50
+                return len(self.fnames) * 100
             else:
-                return max(len(self.fnames), 1)
+                return len(self.fnames) * 10
 
         def load_sample(self, item):
             """
