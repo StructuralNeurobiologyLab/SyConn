@@ -22,7 +22,7 @@ from syconn.reps.segmentation import SegmentationDataset
 
 
 class SyConnBackend(object):
-    def __init__(self, syconn_path: str = '', logger=None, synthresh=0.5,
+    def __init__(self, syconn_path: str = '', logger=None, synthresh=0.9,
                  axodend_only=True):
         """
         Initializes a SyConn backend for operation.

@@ -67,20 +67,20 @@ class PropertyFilter(SyConnClient):
             self.gt_type = "ctgt_j0251_v2"
 
         self.CTs = backend.cts_in_data(self.gt_type)
-        logger.info(f"Found [{self.CTs}] cell types in the dataset")
+       # logger.info(f"Found [{self.CTs}] cell types in the dataset")
 
         self.ssd = ss.SuperSegmentationDataset(global_params.config.working_dir, sso_locking=False, sso_caching=True)
-        sd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=global_params.config.working_dir)
+        # sd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=global_params.config.working_dir)
         
         self.ssv_ids = self.ssd.ssv_ids
         self.cur_message = None
 
-        self.neuron_partners = sd.load_numpy_data('neuron_partners')
-        self.axoness_partners = sd.load_numpy_data('partner_axoness')
-        self.syn_probs = sd.load_numpy_data('syn_prob')
-        self.syn_areas = sd.load_numpy_data('mesh_area')
-        self.partner_celltypes = sd.load_numpy_data('partner_celltypes')
-        self.rep_coords = sd.load_numpy_data('rep_coord')
+        self.neuron_partners = np.load('neuron_partnerss.npy', allow_pickle=True)
+        self.axoness_partners = np.load('partner_axonesss.npy', allow_pickle=True)
+        self.syn_probs = np.load('syn_probs.npy', allow_pickle=True)
+        self.syn_areas = np.load('mesh_areas.npy', allow_pickle=True)
+        self.partner_celltypes = np.load('partner_celltypess.npy', allow_pickle=True)
+        self.rep_coords = np.load('rep_coords.npy', allow_pickle=True)
 
         # dict of CT indices in the ssv_ids array
         self.CTmask = {ct: [] for ct in self.CTs}
@@ -212,7 +212,7 @@ class PropertyFilter(SyConnClient):
                     logger.info(f"Storing ids mask of celltype {celltype} in memory")
                     start = timer()
                     self.CTmask[celltype] = np.where(
-                        self.__class__.ssd.load_numpy_data('celltype_cnn_e3') == str2int_converter(celltype, self.gt_type))[0]
+                        np.load('celltype_cnn_e3s.npy', allow_pickle=True) == str2int_converter(celltype, self.gt_type))[0]
                     end = timer()
                     logger.info(f"Loaded celltype ids mask after {(end - start):.3f} seconds")
 
@@ -288,7 +288,7 @@ class PropertyFilter(SyConnClient):
         logger.info(f"Indices  {indices}")
 
         for prop, op, thresh in filter_list:
-            prop_array = self.ssd.load_numpy_data(prop)[indices]
+            prop_array = np.load(prop+"s.npy", allow_pickle=True)[indices]
 
             # check for mito
             if prop == 'mi':
@@ -353,6 +353,6 @@ if __name__ == "__main__":
     backend = configure_backend()
     
     # load seg and raw data
-    seg_path = global_params.config.kd_seg_path
+    seg_path = "/media/wb01" + global_params.config.kd_seg_path
     pf = PropertyFilter(backend, seg_path, args.organelles)
     print(pf.viewer)
