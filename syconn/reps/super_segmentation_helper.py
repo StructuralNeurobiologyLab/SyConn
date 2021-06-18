@@ -27,7 +27,7 @@ from ..extraction.in_bounding_boxC import in_bounding_box
 from typing import Dict, List, Union, Optional, Tuple, TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from . import super_segmentation
-    from ..reps.super_segmentation import SuperSegmentationObject
+    from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
     from ..reps.segmentation import SegmentationObject
 
 from collections.abc import Iterable
@@ -411,7 +411,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                 prune_nodes.append(curr_node)
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
-    # TODO: uncomment, or fix by using alternative method
+
     if nx.number_connected_components(new_nx_g) != 1:
         msg = 'Pruning of SV skeletons failed during "prune_stub_branches' \
               '" with {} connected components. Please check the underlying' \
@@ -420,9 +420,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                                        sso.id)
         new_nx_g = stitch_skel_nx(new_nx_g)
         log_reps.critical(msg)
-    # # Important assert. Please don't remove
-    # assert nx.number_connected_components(new_nx_g) == 1,\
-    #     'Additional connected components created after pruning!'
+        raise ValueError(msg)
 
     for e in new_nx_g.edges:
         w = np.linalg.norm((new_nx_g.nodes[e[0]]['position'] -
@@ -2016,17 +2014,18 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         log_reps.debug('Finished mapping of vertex predictions to mesh.')
 
 
-# TODO: figure out how to enable type hinting without explicitly importing the classes.
-def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
+def assemble_from_mergelist(ssd: 'SuperSegmentationDataset', mergelist: Union[Dict[int, int], str]):
     """
-    Creates,
+    Creates
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.mapping_dict` and
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.id_changer` and finally calls
     :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.save_dataset_shallow`.
 
+    Will overwrite existing mapping dict, id changer and version files.
+
     Args:
-        ssd: SuperSegmentationDataset
-        mergelist: Definition of supervoxel agglomeration.
+        ssd: SuperSegmentationDataset.
+        mergelist: Supervoxel agglomeration.
 
     """
     if mergelist is not None:
@@ -2040,21 +2039,23 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
         else:
             raise Exception("sv_mapping has unknown type")
 
-    for sv_id in mergelist.values():
-        ssd.mapping_dict[sv_id] = []
-
+    # TODO: change to mapping_dict, remove id_changer
     # Changed -1 defaults to 0
     # ssd._id_changer = np.zeros(np.max(list(mergelist.keys())) + 1,
     #                           dtype=np.uint64)
-    # TODO: check if np.int might be a problem for big datasets
     ssd._id_changer = np.ones(int(np.max(list(mergelist.keys())) + 1),
                               dtype=int) * (-1)
+    mapping_dict = dict()
+    for sv_id in mergelist.values():
+        mapping_dict[sv_id] = []
 
     for sv_id in mergelist.keys():
-        ssd.mapping_dict[mergelist[sv_id]].append(sv_id)
+        mapping_dict[mergelist[sv_id]].append(sv_id)
         ssd._id_changer[sv_id] = mergelist[sv_id]
 
-    ssd.save_dataset_shallow()
+    ssd._mapping_dict = mapping_dict
+    ssd.create_mapping_lookup_reverse()
+    ssd.save_dataset_shallow(overwrite=True)
 
 
 def compartments_graph(ssv: 'super_segmentation.SuperSegmentationObject',

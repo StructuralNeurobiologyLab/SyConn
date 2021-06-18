@@ -7,10 +7,7 @@
 
 import sys
 from syconn.proc.sd_proc import _dataset_analysis_collect
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

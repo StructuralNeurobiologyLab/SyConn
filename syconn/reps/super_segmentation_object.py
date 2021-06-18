@@ -11,6 +11,7 @@ import shutil
 import time
 from collections import Counter, defaultdict
 from typing import Optional, Dict, List, Tuple, Union, Iterable, Any, TYPE_CHECKING
+import pickle as pkl
 
 import networkx as nx
 import numpy as np
@@ -77,7 +78,18 @@ class SuperSegmentationObject(SegmentationBase):
             # inspect existing attributes
             cell.load_attr_dict()
             print(cell.attr_dict.keys())
-            # get
+
+        To cache SegmentationObject attributes use the ``cache_properties`` argument during initialization of the
+        :class:`~syconn.reps.segmentation.SegmentationDataset` and pass it on to the ``SuperSegmentationDataset``
+        instantiation:
+
+            sd_mi = SegmentationDataset(obj_type='mi', cache_properties=['rep_coord'])
+            ssd = SuperSegmentationDataset(sd_lookup=dict(mi=sd_mi))
+            ssv = ssd.get_super_segmentation_object(ssd.ssv_ids[0])
+            # :class:`~syconn.reps.segmentation.SegmentationObject` from ``mis`` don't require loading ``rep_coord``
+            # from its storage file.
+            for mi in ssv.mis:
+                rc = mi.rep_coord  # normally this requires to load the attribute dict storage file.
 
         Subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) augment the
         cell reconstruction with more properties::
@@ -922,7 +934,9 @@ class SuperSegmentationObject(SegmentationBase):
         try:
             self.attr_dict = load_pkl2obj(self.attr_dict_path)
             return 0
-        except (IOError, EOFError):
+        except (IOError, EOFError, pkl.UnpicklingError) as e:
+            if '[Errno 2] No such file or' not in str(e):
+                log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to '{e}'.")
             return -1
 
     @property
@@ -1036,9 +1050,9 @@ class SuperSegmentationObject(SegmentationBase):
             return
         try:
             orig_dc = load_pkl2obj(self.attr_dict_path)
-        except (IOError, EOFError, FileNotFoundError) as e:
+        except (IOError, EOFError, FileNotFoundError, pkl.UnpicklingError) as e:
             if '[Errno 2] No such file or' not in str(e):
-                log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to {e}.")
+                log_reps.critical(f"Could not load SSO attributes from {self.attr_dict_path} due to '{e}'. Overwriting")
             orig_dc = {}
         orig_dc.update(self.attr_dict)
         write_obj2pkl(self.attr_dict_path, orig_dc)
@@ -1113,58 +1127,46 @@ class SuperSegmentationObject(SegmentationBase):
         else:
             return None
 
-    def load_so_attributes(self, obj_type: str, attr_keys: List[str],
-                           nb_cpus: Optional[int] = None):
+    def load_so_attributes(self, obj_type: str, attr_keys: List[str]):
         """
         Collect attributes from :class:`~syconn.reps.segmentation.SegmentationObject`
         of type `obj_type`.
         The attribute value ordering for each key is the same as :py:attr:`~svs`.
 
-        todo:
-            Replace by :py:func:`~syconn.reps.segmentation_helper.load_so_attr_bulk`
-
         Args:
             obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`.
             attr_keys: Keys of desired properties. Must exist for the requested
              `obj_type`.
-            nb_cpus: Number of CPUs to use for the calculation.
 
         Returns:
             Attribute values for each key in `attr_keys`.
         """
-        if nb_cpus is None:
-            nb_cpus = self.nb_cpus
-        params = [[obj, dict(attr_keys=attr_keys)]
-                  for obj in self.get_seg_objects(obj_type)]
-        attr_values = sm.start_multiprocess_obj('load_attributes', params,
-                                                nb_cpus=nb_cpus)
-        attr_values = [el for sublist in attr_values for el in sublist]
-        return [attr_values[ii::len(attr_keys)] for ii in range(len(attr_keys))]
+        attr_values = [[] for _ in range(len(attr_keys))]
+        for obj in self.get_seg_objects(obj_type):
+            for ii, attr_key in enumerate(attr_keys):
+                # lookup_in_attribute_dict uses attribute caching of the obj itself or, if enabled,
+                # the SegmentationDataset cache in the SSD of this SSO.
+                attr = obj.lookup_in_attribute_dict(attr_key)
+                attr_values[ii].append(attr)
+        return attr_values
 
-    def calculate_size(self, nb_cpus: Optional[int] = None):
+    def calculate_size(self):
         """
         Calculates :py:attr:`size`.
-
-        Args:
-            nb_cpus: Number of CPUs to use for the calculation.
         """
-        self._size = np.sum(self.load_so_attributes('sv', ['size'], nb_cpus=nb_cpus))
+        self._size = np.sum(self.load_so_attributes('sv', ['size']))
 
-    def calculate_bounding_box(self, nb_cpus: Optional[int] = None):
+    def calculate_bounding_box(self):
         """
         Calculates :py:attr:`~bounding_box` (and :py:attr:`size`).
-
-        Args:
-            nb_cpus: Number of CPUs to use for the calculation.
         """
-        if len(self.svs) == 0:
+        if len(self.sv_ids) == 0:
             self._bounding_box = np.zeros((2, 3), dtype=np.int32)
             self._size = 0
             return
-
         self._bounding_box = np.ones((2, 3), dtype=np.int32) * np.inf
         self._size = np.inf
-        bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
+        bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'])
         self._size = np.sum(sizes)
         self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
         self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
@@ -1904,7 +1906,7 @@ class SuperSegmentationObject(SegmentationBase):
             log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
             log_reps.info("Rendering SSO. {} SVs left to process"
-                          ".".format(len(self.svs)))
+                          ".".format(len(self.sv_ids)))
             params = [[so.id for so in el] for el in part]
 
             params = chunkify(params, self.config.ngpu_total * 2)
@@ -2330,7 +2332,7 @@ class SuperSegmentationObject(SegmentationBase):
             dur = time.time() - start
             log_reps.debug("Sampling locations from {} SVs took {:.2f}s."
                            " {.4f}s/SV (incl. read/write)".format(
-                len(self.svs), dur, dur / len(self.svs)))
+                len(self.sv_ids), dur, dur / len(self.sv_ids)))
         return locs
 
     # ------------------------------------------------------------------ EXPORTS
@@ -2732,13 +2734,13 @@ class SuperSegmentationObject(SegmentationBase):
                              self.attr_exists(neuron_svs_key)):
             if verbose:
                 log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(
-                    self.id, len(self.svs)))
+                    self.id, len(self.sv_ids)))
                 start = time.time()
             nonglia_ccs, astrocyte_ccs = split_glia(self, thresh=thresh,
                                                     pred_key_appendix=pred_key_appendix)
             if verbose:
                 log_reps.debug("Splitting glia in SSV %d with %d SV's finished "
-                               "after %.4gs." % (self.id, len(self.svs),
+                               "after %.4gs." % (self.id, len(self.sv_ids),
                                                  time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
@@ -2835,8 +2837,8 @@ class SuperSegmentationObject(SegmentationBase):
                           return_proba=self.version == 'tmp')
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
-                       "%0.4fs/SV" % (len(self.svs), end - start,
-                                      float(end - start) / len(self.svs)))
+                       "%0.4fs/SV" % (len(self.sv_ids), end - start,
+                                      float(end - start) / len(self.sv_ids)))
 
     # ------------------------------------------------------------------ AXONESS
     def _load_skelfeatures(self, key):
@@ -3063,8 +3065,8 @@ class SuperSegmentationObject(SegmentationBase):
                               return_proba=self.version == 'tmp')  # do not write to disk)
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
-                       "%0.4fs/SV" % (len(self.svs), end - start,
-                                      float(end - start) / len(self.svs)))
+                       "%0.4fs/SV" % (len(self.sv_ids), end - start,
+                                      float(end - start) / len(self.sv_ids)))
 
     def predict_views_embedding(self, model, pred_key_appendix="", view_key=None):
         """
@@ -3367,7 +3369,11 @@ class SuperSegmentationObject(SegmentationBase):
             for comp_label in compartments_of_interest:
                 mask = mask | (obj_labels == comp_label)
             objs = objs[mask]
-        obj_vol = np.sum([obj.size for obj in objs]) * np.prod(self.scaling) / 1e9  # in um^3
+        if len(objs) > 0:
+            vx_count = np.sum([obj.size for obj in objs])
+        else:
+            vx_count = 0
+        obj_vol = vx_count * np.prod(self.scaling) / 1e9  # in um^3
         path_length = self.total_edge_length(compartments_of_interest) / 1e3  # in um
         return obj_vol / path_length
 
