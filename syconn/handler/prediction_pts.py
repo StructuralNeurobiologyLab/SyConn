@@ -49,7 +49,7 @@ pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2,
 pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
-                        merger=dict(sv=1))
+                        merger=dict(sv=70))
 
 
 # TODO: move to handler.basics
@@ -1253,7 +1253,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                             npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None,
                             use_subcell: bool = False, mask_borders_with_id: Optional[int] = None,
-                            gt_type: str = 'compartment', source_node_labels: bool = False
+                            gt_type: str = 'compartment', source_node_labels: tuple = (1,)
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -1295,11 +1295,13 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         hc = load_hc_pkl(pkl_f, gt_type)
         # filter valid skeleton nodes (i.e. which were close to manually annotated nodes)
         # use merger labels
-        if source_node_labels:
-            source_nodes = np.where(hc.node_labels == 0)[0]
-        else:
-            source_nodes = np.where(hc.node_labels == 1)[0]
-
+        # iterate over labels
+        source_nodes = np.array([])
+        for label in source_node_labels:
+            if source_nodes.size == 0:
+                source_nodes = np.where(hc.node_labels == label)[0]
+            else:
+                source_nodes = np.concatenate((source_nodes, np.where(hc.node_labels == label)[0]))
         source_nodes = np.random.choice(source_nodes, batchsize)
         npoints_ssv = min(len(hc.vertices), npoints)
         if npoints_ssv == 0:
@@ -1316,7 +1318,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         for source_node in source_nodes:
             # create local context
             while True:
-                if hc.node_labels[source_node] != 1:
+                if hc.node_labels[source_node] not in source_node_labels:
                     raise ValueError(f'Invalid source node in "{pkl_f}".')
                 node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
@@ -1607,8 +1609,6 @@ def pts_postproc_semseg(ssv_id: int, d_in: dict, working_dir: Optional[str] = No
     assert np.sum(node_pred == -1) == 0, "Unpredicted skeleton node."
     return [ssv_id], [True]
 
-
-@functools.lru_cache(maxsize=128)
 def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> HybridCloud:
     """
     TODO: move pts_feat_dict and pts_feat_ds_dict to config.
@@ -1644,8 +1644,11 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
         pcd = o3d.geometry.PointCloud()
         m = (hc.features == feat_id).squeeze()
         if np.sum(m) == 0:
-            continue
-        verts = hc.vertices[m]
+            if not (feat_id == 0 and len(hc.features) == 0 and len(hc.vertices) != 0):
+                continue
+            m = np.ones(shape=(len(hc.vertices),), dtype=np.bool)
+
+        verts = hc.vertices[m]          # (N,3)
         labels = hc.labels[m]
         feats = hc.features[m]
         pcd.points = o3d.utility.Vector3dVector(verts)
@@ -2065,7 +2068,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
         if ssd_kwargs is None:
             raise ValueError
         ssv_params = ssd_kwargs
-    for curr_ssv_params in ssv_params:
+    for curr_ssv_params in ssv_params:                          # TODO gehe uber filename
         ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
         # transform ssv into a HybridCloud. voxel_dict will be forwarded to postprocessing function to perform
         # final mapping between hc and ssv.
@@ -2073,7 +2076,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
                                 myelin=use_myelin)
         ssv.clear_cache()
         # pred_types with the same ctx_size use the same chunks (possibly with different sampling)
-        for ctx in ctx_size:
+        for ctx in ctx_size:                                # TODO brauch ich nicht
             # choose base nodes with context overlap
             base_node_dst = ctx / ctx_dst_fac
             # select source nodes for context extraction

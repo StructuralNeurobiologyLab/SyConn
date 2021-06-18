@@ -399,8 +399,11 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
 
 # WORK IN PROGRESS
 def merge_ssv(cell_obj1, cell_obj2):
-    """
-        Merge two cells into one
+    """python -c "import torch; print(torch.version.cuda)"
+        Merge two cell objects into onepython -c "import torch; print(torch.version.cuda)"
+
+        Notes:
+            Skeleton is in voxel coordinates
 
         Parameters
         ----------
@@ -408,7 +411,7 @@ def merge_ssv(cell_obj1, cell_obj2):
             Two cells to be merged.
     """
     merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
-    for mesh_type in ['sv', 'syn_ssv', 'vc', 'mi']:                                     # 'sj' fails for current dataset (Not Found)
+    for mesh_type in ['sv']: #, 'syn_ssv', 'vc', 'mi']:                                     # 'sj' fails for current dataset (Not Found)
         mesh1 = cell_obj1.load_mesh(mesh_type)
         mesh2 = cell_obj2.load_mesh(mesh_type)
         ind_lst = [mesh1[0], mesh2[0]]
@@ -428,11 +431,12 @@ def merge_ssv(cell_obj1, cell_obj2):
     skeleton1 = cell_obj1.skeleton['nodes']
     skeleton2 = cell_obj2.skeleton['nodes']
 
+    # TODO KDTree
     min_distance = 10e10
     node_pair = [0, 0]
     for i, node1 in enumerate(skeleton1):
         for j, node2 in enumerate(skeleton2):
-            dist = np.linalg.norm(node1 - node2)
+            dist = np.linalg.norm((node1 - node2) * merged_cell.scaling)
             if dist < min_distance:
                 node_pair = np.array([i, j+len(skeleton1)], dtype=np.uint64)
                 min_distance = dist

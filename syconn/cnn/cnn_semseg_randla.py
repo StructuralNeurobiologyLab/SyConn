@@ -28,7 +28,7 @@ parser.add_argument('--sp', type=int, default=12000, help='Number of sample poin
 parser.add_argument('--scale_norm', type=int, default=8000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=8000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
