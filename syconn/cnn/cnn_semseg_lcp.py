@@ -76,7 +76,7 @@ if cellshape_only:
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_nclass' \
-           f'{num_classes}_lcp2_noScale'
+           f'{num_classes}_fkaconv_noScale'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -102,7 +102,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 search = 'SearchQuantized'
-conv = dict(layer='ConvPoint', kernel_separation=False)
+conv = dict(layer='FKAConv', kernel_separation=False)
 act = nn.ReLU
 model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=32,
                      architecture=None, activation=act, norm='gn')

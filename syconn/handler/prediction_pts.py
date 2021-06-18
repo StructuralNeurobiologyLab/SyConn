@@ -1313,9 +1313,9 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 # if mask_borders_with_id is not None:
                 #     source_node_c = hc_sub.nodes[hc_sub.relabel_dc[source_node]]
-                #     boarder_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
+                #     border_vert_mask = np.linalg.norm(hc_sub.vertices - source_node_c, axis=1) > \
                 #                         ctx_size_fluct * 0.8
-                #     hc_sub._labels[boarder_vert_mask] = mask_borders_with_id
+                #     hc_sub._labels[border_vert_mask] = mask_borders_with_id
                 sample_feats = hc_sub.features
                 if len(sample_feats) > 0:
                     break

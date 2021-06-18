@@ -54,11 +54,11 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None, ssd:
             'const': 500,  # physical units
             'pdrf_exponent': 4,
             'pdrf_scale': 100000,
-            'soma_detection_threshold': 1100,  # physical units
-            'soma_acceptance_threshold': 3500,  # physical units
+            'soma_detection_threshold': 1000,  # physical units
+            'soma_acceptance_threshold': 3000,  # physical units
             'soma_invalidation_scale': 1.0,
             'soma_invalidation_const': 2000,  # physical units
-            'max_paths': None,  # default None
+            'max_paths': 100,  # default None
         },
         dust_threshold=dust_threshold,  # skip connected components with fewer than this many voxels
         anisotropy=kd.scales[0] * ds,  # index 0 is mag 1
