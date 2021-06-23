@@ -15,5 +15,5 @@ warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDatas
 warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")
 # ignore "OpenGL/images.py:142: DeprecationWarning: tostring() is deprecated. Use tobytes() instead"
 warnings.filterwarnings('ignore', message=".*tostring() is deprecated.*")
-wd = None
+wd = "/media/wb01/ssdscratch/songbird/j0251/rag_flat_Jan2019_v3"
 config = DynConfig()
