@@ -62,8 +62,15 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+/analysis.ipynb
+/syconn/Untitled.ipynb
+/synaptic_connections.ipynb
 
 # PyCharm
 .idea/
 /.gitignore
 /syconn/version.py
+
+# VS Code
+/.vscode
+/syconn/.vscode
