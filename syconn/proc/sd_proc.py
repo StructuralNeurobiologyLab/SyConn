@@ -1266,13 +1266,13 @@ def merge_prop_dicts(prop_dicts: List[List[dict]],
         if offset is not None:
             # update chunk offset  # TODO: could be done at the end of the map_extract cython code
             for k in el[0]:
-                el[0][k] = (el[0][k] + offset).astype(np.int32)
+                el[0][k] = [el[0][k][ii] + offset[ii] for ii in range(3)]
         tot_rc.update(el[0])  # just overwrite existing elements
         for k, v in el[1].items():
             if offset is None:
-                bb = np.array(v, dtype=np.int32)
+                bb = v
             else:
-                bb = (v + offset).astype(np.int32)
+                bb = [[v[0][ii] + offset[ii] for ii in range(3)], [v[1][ii] + offset[ii] for ii in range(3)]]
             # collect all bounding boxes to enable efficient data loading
             tot_bb[k].append(bb)
         for k, v in el[2].items():

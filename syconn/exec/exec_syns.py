@@ -84,9 +84,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         cube_of_interest_bb: Defines the bounding box of the cube to process.
             By default this is set to (np.zoers(3); kd.boundary).
     """
-    if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
-
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
 

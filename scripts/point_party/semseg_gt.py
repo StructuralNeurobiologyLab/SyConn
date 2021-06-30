@@ -325,7 +325,7 @@ if __name__ == "__main__":
     # j0251 GT refined
     global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
 
-    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2/"
+    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2_/"
     destination = data_path + '/hc_out_2021_04/'
     os.makedirs(destination, exist_ok=True)
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)

@@ -102,7 +102,7 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 search = 'SearchQuantized'
-conv = dict(layer='FKAConv', kernel_separation=False)
+conv = dict(layer='PointConv', kernel_separation=False)
 act = nn.ReLU
 model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=32,
                      architecture=None, activation=act, norm='gn')

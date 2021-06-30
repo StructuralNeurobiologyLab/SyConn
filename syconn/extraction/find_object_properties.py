@@ -105,16 +105,16 @@ def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.n
                         key_type=types.uint64,
                         value_type=types.int64,
                     )
-                    bounding_box_local[key[1]] = np.array([(x, y, z), (x + 1, y + 1, z + 1)], dtype=np.int64)
+                    bounding_box_local[key[1]] = [(x, y, z), (x + 1, y + 1, z + 1)]
                     sizes_local[key[1]] = 1
-                    rep_coords_local[key[1]] = np.array([x, y, z], dtype=np.int64)
+                    rep_coords_local[key[1]] = [x, y, z]
                     bounding_box[key[0]] = bounding_box_local
                     sizes[key[0]] = sizes_local
                     rep_coords[key[0]] = rep_coords_local
                 elif dc_local_bb.get(key[1]) is None:
-                    bounding_box[key[0]][key[1]] = np.array([(x, y, z), (x+1, y+1, z+1)], dtype=np.int64)
+                    bounding_box[key[0]][key[1]] = [(x, y, z), (x+1, y+1, z+1)]
                     sizes[key[0]][key[1]] = 1
-                    rep_coords[key[0]][key[1]] = np.array([x, y, z], dtype=np.int64)
+                    rep_coords[key[0]][key[1]] = [x, y, z]
                 else:
                     local_bb = dc_local_bb.get(key[1])
                     local_bb[0][0] = min(local_bb[0][0], x)
@@ -143,16 +143,16 @@ def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.n
                         key_type=types.uint64,
                         value_type=types.int64,
                     )
-                    bounding_box_local[key[1]] = np.array([(x, y, z), (x + 1, y + 1, z + 1)], dtype=np.int64)
+                    bounding_box_local[key[1]] = [(x, y, z), (x + 1, y + 1, z + 1)]
                     sizes_local[key[1]] = 1
-                    rep_coords_local[key[1]] = np.array([x, y, z], dtype=np.int64)
+                    rep_coords_local[key[1]] = [x, y, z]
                     bounding_box_syn[key[0]] = bounding_box_local
                     sizes_syn[key[0]] = sizes_local
                     rep_coords_syn[key[0]] = rep_coords_local
                 elif dc_local_bb.get(key[1]) is None:
-                    bounding_box_syn[key[0]][key[1]] = np.array([(x, y, z), (x+1, y+1, z+1)], dtype=np.int64)
+                    bounding_box_syn[key[0]][key[1]] = [(x, y, z), (x+1, y+1, z+1)]
                     sizes_syn[key[0]][key[1]] = 1
-                    rep_coords_syn[key[0]][key[1]] = np.array([x, y, z], dtype=np.int64)
+                    rep_coords_syn[key[0]][key[1]] = [x, y, z]
                 else:
                     local_bb = dc_local_bb.get(key[1])
                     local_bb[0][0] = min(local_bb[0][0], x)

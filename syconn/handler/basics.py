@@ -497,13 +497,13 @@ def write_obj2pkl(path, objects):
     gc.disable()
     if isinstance(path, str):
         with open(path + ".tmp", 'wb') as output:
-            pkl.dump(objects, output, -1)
+            pkl.dump(objects, output, protocol=pkl.HIGHEST_PROTOCOL)
         shutil.move(path + ".tmp", path)
     else:
         log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
                          "'objects' (python object).")
         with open(objects + ".tmp", 'wb') as output:
-            pkl.dump(path, output, -1)
+            pkl.dump(path, output, protocol=pkl.HIGHEST_PROTOCOL)
         shutil.move(objects + ".tmp", objects)
     gc.enable()
 

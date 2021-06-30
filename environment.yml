@@ -22,7 +22,7 @@ dependencies:
   - pyopengl-accelerate
   - python-snappy
   - ipython
-  - h5py
+  - h5py > 3
   - matplotlib
   - tqdm
   - scipy
