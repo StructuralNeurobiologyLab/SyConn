@@ -2,14 +2,18 @@ from syconn.handler.logger import log_main as logger
 import numpy as np
 
 def get_encoded_skeleton(backend, ssv_id, scales):
-    """
-    Gets encoded skeleton for ssv_id.
+    """Gets encoded skeleton for ssv_id.
 
-    :param backend: SyConnBackend object initialized with 'global_params.config.working_dir'
-    :param ssv_id: int
-    :param scales: np.array (KnossosDataset.scale)
-    :return: bytes
+    :param backend: 
+    :type backend: SyConnBackend
+    :param ssv_id: 
+    :type ssv_id: int
+    :param scales: KnossosDataset.scale
+    :type scales: numpy.array
+    :return encoded_skeleton:
+    :rtype encoded_skeleton: bytes, -1 (skeleton not available)
     """
+
     logger.info('Getting binary encoded skeleton for ssv_id {}'.format(ssv_id))
     
     skeleton = {}
@@ -19,10 +23,7 @@ def get_encoded_skeleton(backend, ssv_id, scales):
         nodes = np.array(skeleton["nodes"], dtype=np.float32).reshape(-1, 3)
 
     except:
-        logger.error('Skeleton not available for ssv_id: {}'.format(ssv_id))
-
-    if not skeleton: # check if skeleton dict is not set
-        logger.error('Skeleton could not be retrieved for ssv_id: {}'.format(ssv_id))
+        return -1
         
     # accomodate dimension scaling
     nodes[:, 0] *= scales[0] # z
@@ -45,13 +46,18 @@ def get_encoded_skeleton(backend, ssv_id, scales):
     return encoded_skeleton
 
 def get_encoded_mesh(backend, ssv_id, obj_type):
-    """
-    Gets encoded mesh of a specific obj type for ssv_id.
+    """Gets encoded mesh of a specific obj type for ssv_id.
 
-    :param ssv_id: int
-    :param obj_type: str
-    :return: bytes
+    :param backend: 
+    :type backend: SyConnBackend
+    :param ssv_id: 
+    :type ssv_id: int
+    :param obj_type: 'sv', 'mi', 'vc', 'sj'
+    :type obj_type: str
+    :return encoded_mesh: 
+    :rtype encoded_mesh: bytes, -1 (mesh not available)
     """
+
     logger.info('Getting binary encoded {} mesh for ssv_id {}'.format(obj_type, ssv_id))
 
     mesh = {}
@@ -61,7 +67,8 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
             mesh = backend.ssv_mesh(ssv_id)
 
         except:
-            logger.error('Segmentation mesh not available for ssv_id: {}'.format(obj_type, ssv_id))
+            # logger.error('{} mesh not available for ssv_id: {}'.format(obj_type, ssv_id))
+            return -1
     else:
         try:
             object_vert = backend.ssv_obj_vert(ssv_id, obj_type)
@@ -70,10 +77,8 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
             mesh['indices'] = object_ind['ind']
 
         except:
-            logger.error('{} mesh not available for ssv_id: {}'.format(obj_type, ssv_id))
-        
-    if not mesh: # check if mesh dict is not set
-        logger.error('Mesh could not be retrieved for ssv_id: {}'.format(ssv_id))
+            # logger.error('{} mesh not available for ssv_id: {}'.format(obj_type, ssv_id))
+            return -1
 
     vertices = np.array(mesh['vertices'], dtype=np.float32).reshape(-1, 3)
     indices = np.array(mesh['indices'], dtype=np.uint32).reshape(-1, 3)

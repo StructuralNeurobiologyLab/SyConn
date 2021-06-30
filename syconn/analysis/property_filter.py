@@ -22,28 +22,47 @@ def get_segmentation_layer(layers):
             return i, layer
 
 class PropertyFilter(SyConnClient):
-    """Filters ssv_id(s) based on the property (cell type, mitochondria count, ssv size, largest synapse)
+    """Invokes SyConnClient with ssv_ids filtering based on the properties 
+    -- cell type, mitochondria count, ssv size, synapse.
 
-    The properties (cell type, mitochondria count and ssv size) are provided as a segment query in the 'seg.' tab of Neuroglancer viewer that triggers a state change. This state change is captured to retrieve a new set of ssv_ids. Finally a new viewer state is created with the segment query set to the retrieved ssv_ids. Following are the query formats:
+    Cell type, mitochondria count and ssv size are provided as a segment query
+    in the 'seg.' tab of Neuroglancer viewer that triggers a state change. 
+    This is captured to retrieve a new set of ssv_ids. Finally a new viewer
+    state is created with the segment query set to the new ssv_ids. 
+    Following are the query formats:
 
-    1. [celltype]_pg[page_num] -> filters by the cell type and divides the resulting ssv_ids across pages (if required) 
-    2. [celltype]_[>|<][mito_count]_[>|<][ssv_size]_pg[page_num] -> filters by the cell type, mitochondria count and ssv size, and divides the resulting ssv_ids across pages (if required)  
+    - [celltype]_pg[page_num] -> filters by the cell type and divides the
+        resulting ssv_ids across pages (cached)
+    - [celltype]_[>|<][mito_count]_[>|<][ssv_size]_pg[page_num] -> filters
+        by the cell type, mitochondria count and ssv size, and divides the
+        resulting ssv_ids across pages (if required)  
     
-    To get the largest synaptic partner, select a segment and press key 'p'.
+    To filter with the synapse property, select a segment (ssv_id) and press
+    key 'p'. This will render the synaptic partner in terms of synapse area, 
+    probability and axon -> dendrite and axon -> soma connections, and
+    center the viewer at the synapse position (representation coordinates).
 
-    Attributes:
-        properties (tuple): 
-        master_pattern (str): query format for specifying all the properties
-        ct_pattern (re.Pattern): cell type format
-        property_filter (re.Pattern): properties format with operator and value
-        page_pattern (re.Pattern): page format 
-        PAGE_SIZE (int): max number of ssv_ids displayed in the side panel
-        syn_type (dict): maps compartment to pre- or post-synaptic
+    :cvar properties: properties with operator-operand pair
+    :type properties: tuple
+    :cvar master_pattern: query format for specifying all the properties
+    :type master_pattern: str
+    :cvar ct_pattern: cell type format
+    :type ct_pattern: re.Pattern
+    :cvar property_filter: properties format with operator and value
+    :type property_filter: re.Pattern
+    :cvar page_pattern: page format
+    :type page_pattern: re.Pattern
+    :cvar PAGE_SIZE: max number of ssv_ids displayed in the side panel
+    :type PAGE_SIZE: int
+    :cvar syn_type: maps compartment to pre- or post-synaptic
+    :type syn_type: dict
 
-    Args:
-        backend (SyConnBackend): used for retrieving the skeleton, mesh and cell types
-        seg_dataset (KnossosDataset): segmentation data for neuroglancer.LocalVolume
-        organelles (list): command line argument for cell organelles (mi, vc, sj)
+    :param backend: to retrieve the skeleton, mesh and cell types
+    :type backend: SyConnBackend
+    :param seg_dataset: segmentation data for neuroglancer.LocalVolume
+    :type seg_dataset: KnossosDataset
+    :param organelles: command line argument; supported organelles (mi, vc, sj)
+    :type organelles: list
     """
 
     properties = ('mi', 'size')
@@ -59,15 +78,15 @@ class PropertyFilter(SyConnClient):
         "soma": "post-synaptic",
     }
 
-    def __init__(self, backend, seg_path, organelles):
-        super().__init__(backend, seg_path, organelles)
+    def __init__(self, backend, seg_path, organelles, clargs: dict):
+        super().__init__(backend, seg_path, organelles, clargs)
 
         self.gt_type = "ctgt"
         if 'j0251' in global_params.config.working_dir:
             self.gt_type = "ctgt_j0251_v2"
 
         self.CTs = backend.cts_in_data(self.gt_type)
-       # logger.info(f"Found [{self.CTs}] cell types in the dataset")
+        logger.info(f"Found [{self.CTs}] cell types in the dataset")
 
         self.ssd = ss.SuperSegmentationDataset(global_params.config.working_dir, sso_locking=False, sso_caching=True)
         # sd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=global_params.config.working_dir)
@@ -99,12 +118,13 @@ class PropertyFilter(SyConnClient):
         )
 
     def _handle_select(self, action_state):
-        """
-        Action handler for selected ssv [keyp]
+        """Action handler for synaptic filtering [keyp]
         
-        :param action_state: neuroglancer.viewer_config_state.ActionState
+        :param action_state: current state of the viewer
+        :type action_state: neuroglancer.viewer_config_state.ActionState
         :return:
         """
+
         segment_id = action_state.selected_values.get(self.seg_name) # super().seg_name
 
         if segment_id is None: 
@@ -127,7 +147,7 @@ class PropertyFilter(SyConnClient):
                     
                     return
 
-                partner_ssv_id = result["partner_ssv"],
+                partner_ssv_id = result["partner_ssv"]
                 ssv_comp = int2str_converter(result["ssv_comp"], "axgt").split('_')[1]
                 partner_ssv_comp = int2str_converter(result["partner_ssv_comp"], "axgt").split('_')[1]
                 ssv_ct = int2str_converter(result["ssv_ct"], self.gt_type)
@@ -136,6 +156,8 @@ class PropertyFilter(SyConnClient):
 
                 segments.add(partner_ssv_id)
                 s.position = np.flip(rep_coords)
+
+                print(type(partner_ssv_id))
                 
                 # pre-synaptic -> post-synaptic
                 if self.__class__.syn_type[ssv_comp] == "pre-synaptic":
@@ -161,15 +183,17 @@ class PropertyFilter(SyConnClient):
                 return
 
     def get_synaptic_partner(self, ssv_id):
-        """
-        Gets synaptic partner ssv_id, compartment predictions, cell type of 
-        synaptic partners and representative coordinates of synapse
+        """Gets synaptic partner ssv_id, compartment predictions and cell type
+        of synaptic partners and rep. coords of synapse.
 
-        :param ssv_id: int
-        :return: dict or -1 
+        :param ssv_id: segment id
+        :type ssv_id: int
+        :return result: info about the synaptic partners
+        :rtype result: dict, -1
         """
+
         mask = np.any(self.neuron_partners == ssv_id, axis=1) # synaptic partners
-        mask = mask & np.where(self.syn_probs > 0.5, True, False) 
+        mask = mask & np.where(self.syn_probs > 0.9, True, False) 
         mask_axon_den = np.where((self.axoness_partners[:,0] == 1) | (self.axoness_partners[:,1] == 1), True, False) & np.where((self.axoness_partners[:,0] == 0) | (self.axoness_partners[:,1] == 0), True, False) # axon -> dendrite connections
         mask_axon_soma = np.where((self.axoness_partners[:,0] == 1) | (self.axoness_partners[:,1] == 1), True, False) & np.where((self.axoness_partners[:,0] == 2) | (self.axoness_partners[:,1] == 2), True, False) # axon -> soma connections
         mask = mask & (mask_axon_den | mask_axon_soma) 
@@ -198,6 +222,7 @@ class PropertyFilter(SyConnClient):
 
     def on_state_changed(self):
         """Captures a state change and updates state."""
+
         ix, segmentation_layer = get_segmentation_layer(self.viewer.state.layers)
         segment_query = segmentation_layer.segment_query
         
@@ -277,12 +302,16 @@ class PropertyFilter(SyConnClient):
             self.viewer.set_state(new_state)
 
     def get_state_segment_ids(self, celltype, filter_list):
-        """
-        Retrieves a subset of ssv_ids based on the query.
+        """Retrieves a subset of ssv_ids based on the query.
         
-        :param celltype: str
-        :param filter_list: list of tuple ([(<property>, <operator>, <value>),...])
+        :param celltype: queried cell type
+        :type celltype: str
+        :param filter_list: [(<property>, <operator>, <value>),...]
+        :type filter_list: list of tuple
+        :return ssv_ids_of_interest: 
+        :rtype ssv_ids_of_interest: numpy.ndarray 
         """
+
         indices = self.CTmask[celltype]
         mask = np.ones(shape=(len(indices),), dtype=np.bool)
         logger.info(f"Indices  {indices}")
@@ -318,12 +347,14 @@ class PropertyFilter(SyConnClient):
             return ssv_ids_of_interest
 
     def _split_pages(self, ssv_ids):
-        """
-        Splits filtered ssv_ids across multiple pages if required.
+        """Splits filtered ssv_ids across multiple pages (if required).
 
-        :param ssv_ids: np.ndarray
-        :return: list of np.ndarray
+        :param ssv_ids: 
+        :type ssv_ids: numpy.ndarray
+        :return pages: 
+        :rtype pages: list of numpy.ndarray
         """
+
         pages = np.array_split(ssv_ids, len(ssv_ids) // self.__class__.PAGE_SIZE)
         num_pages = len(pages)
 
@@ -353,6 +384,7 @@ if __name__ == "__main__":
     backend = configure_backend()
     
     # load seg and raw data
-    seg_path = "/media/wb01" + global_params.config.kd_seg_path
-    pf = PropertyFilter(backend, seg_path, args.organelles)
+    seg_path = global_params.config.kd_seg_path
+    
+    pf = PropertyFilter(backend, seg_path, args.organelles, dict(host=args.host, port=args.port))
     print(pf.viewer)
