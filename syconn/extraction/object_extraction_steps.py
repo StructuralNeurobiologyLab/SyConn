@@ -170,7 +170,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         n_erosions = 0
         for k, v in morph_ops.items():
             v = np.array(v)
-            # factor 2: erodes both sides; aniso: morphology operation kernel is laterally increased by this factor
+            # factor 2: erodes both sides; aniso: morphological operation kernel is laterally increased by this factor
             n_erosions = max(n_erosions, 2 * aniso * np.sum(v == 'binary_erosion'))
         overlap = np.max([overlap, [n_erosions, n_erosions, n_erosions // aniso]], axis=0).astype(np.int32)
 
@@ -328,11 +328,15 @@ def _object_segmentation_thread(args):
             if thresholds[nb_hdf5_name] != 0 and not load_from_kd_overlaycubes:
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
-            if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
+            if hdf5_name in morph_ops:
+                # returns identity if len(morph_ops) == 0
                 mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
                                                           mop_kwargs=dict(structure=struct))
-                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1]:
-                    # combine remaining fragments
+                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1:]:
+                    # TODO: currently morphological operations are not applied to the segmentation if binary_erosion
+                    #  triggers watershed. Desired behavior: Apply mops on segmentation up to first binary_erosion which
+                    #  is solely used to produce watershed seeds.
+                    # combine remaining fragments, TODO: this seems unnecessary
                     markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0],
                                                              ['binary_closing']).astype(np.uint32)
                     # remove small fragments and 0; this will also delete objects bigger than min_size as
@@ -1363,7 +1367,8 @@ def _export_cset_as_kds_thread(args):
     nb_threads = args[8]
     orig_dtype = args[9]
     fast_downsampling = args[10]
-    compresslevel = args[11]
+    overwrite = args[11]
+    compresslevel = args[12]
 
     cset = chunky.load_dataset(cset_path, update_paths=True)
 

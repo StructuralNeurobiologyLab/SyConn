@@ -232,7 +232,7 @@ def batchjob_script(params: list, name: str,
                     pkl.dump(param, f)
 
         os.chmod(this_sh_path, 0o744)
-        cmd_exec = "{0} --output={1} --error={2} --time=2-0 --job-name={3} {4}".format(
+        cmd_exec = "{0} --output={1} --error={2} --time=4-0 --job-name={3} {4}".format(
             additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
         if job_id == 0:
             log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')

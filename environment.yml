@@ -10,7 +10,7 @@ channels:
   - open3d-admin
 dependencies:
   # From -c pytorch
-  - pytorch <=1.5  # (provide backwards compat. to trained models)
+  - pytorch <=1.5.1  # (provide backwards compat. to trained models)
   - torchvision
 
   # From conda-forge and defaults
@@ -22,7 +22,7 @@ dependencies:
   - pyopengl-accelerate
   - python-snappy
   - ipython
-  - h5py
+  - h5py > 3
   - matplotlib
   - tqdm
   - scipy
@@ -78,6 +78,8 @@ dependencies:
     - git+https://github.com/ELEKTRONN/elektronn3.git@syconn#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx
+    -
+    # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
     - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
 
     # training scripts

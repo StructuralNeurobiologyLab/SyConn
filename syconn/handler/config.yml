@@ -111,9 +111,9 @@ cell_objects:
     golgi: 0.5 # arbitrary placeholder, to be adjusted
 
   # if object segmentation is generated from probability map or a binary mask and extract_morph_op (see below) contains
-  # binary_erosion, then the segmentation is computed via watershed. The seeds are computed via connected compontents
+  # binary_erosion, then the segmentation is computed via watershed. The seeds are computed via connected components
   # on the eroded binary mask (as many erosion as defined in extract_morph_op).
-  # The thresholds below will also delete objects bigger than min_seed_vx as it is performed on segmentation seeds.
+  # The thresholds below will also delete objects bigger than min_seed_vx as it is performed on the eroded segmentation.
   min_seed_vx:
     mi: 50
     sj: 10

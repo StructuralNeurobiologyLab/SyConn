@@ -5,7 +5,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
+import gc
 import glob
 import os
 import pickle as pkl
@@ -286,7 +286,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
                             f'code {p.exitcode}.')
         p.close()
 
-    # create folders for existing (sub-)cell supervoxels to prevent concurrent makedirs
+    # create folders for existing (sub-)cell supervoxels to prevent collisions using makedirs
     for ii, struct in enumerate(['cs', 'syn']):
         sc_sd = segmentation.SegmentationDataset(
             working_dir=global_params.config.working_dir, obj_type=struct,
@@ -305,13 +305,15 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props)
+    n_cores = 2
+    # slightly increase ncores per worker to compensate IO related downtime
+    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread, multi_params)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=1, remove_jobfolder=True)
+                           n_cores=n_cores, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
@@ -492,6 +494,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects
         # and the asym and sym voxels, do not use overlap here!
+        # TODO: use numba implementation of extract_cs_syntype - then conversion to lists is not required anymore
+        # TODO: use python lists instead of numpy arrays as dictionary values in curr_cs_p and curr_syn_p
         curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
@@ -530,16 +534,16 @@ def _write_props_to_syn_thread(args):
     knossos_path = args[2]
     knossos_path_cs = args[3]
     dir_props = args[4]
+    if len(args) < 6:
+        nb_cores = 4
+    else:
+        nb_cores = args[5]
     min_obj_vx_dc = global_params.config['cell_objects']['min_obj_vx']
     tmp_path = global_params.config.temp_path
     if global_params.config.use_new_subfold:
         target_dir_func = rep_helper.subfold_from_ix_new
     else:
         target_dir_func = rep_helper.subfold_from_ix_OLD
-
-    # get cached worker lookup
-    with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
-        cs_workers_tmp = pkl.load(f)
 
     for obj_id_mod in cs_ids_ch:
         # get destination paths for the current objects
@@ -561,50 +565,28 @@ def _write_props_to_syn_thread(args):
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
         cs_asym_cnt = {}
-        for worker_id, obj_ids in cs_workers_tmp.items():
-            intersec = set(obj_ids).intersection(obj_keys)
-            load_worker = len(intersec) > 0
-            if load_worker:
-                worker_dir_props = f"{dir_props}/{worker_id}/"
-                # cs
-                fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
-                dc = basics.load_pkl2obj(fname)
-                tmp_dcs = [dict(), defaultdict(list), dict()]
-                for k in intersec:
-                    tmp_dcs[0][k] = dc[0][k]
-                    tmp_dcs[1][k] = dc[1][k]
-                    tmp_dcs[2][k] = dc[2][k]
-                del dc
-                merge_prop_dicts([cs_props, tmp_dcs])
-                del tmp_dcs
 
-                # syn
-                fname = f'{worker_dir_props}/syn_props_{worker_id}.pkl'
-                dc = basics.load_pkl2obj(fname)
-                fname = f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl'
-                curr_sym_cnt = basics.load_pkl2obj(fname)
-                fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
-                curr_asym_cnt = basics.load_pkl2obj(fname)
-                tmp_dcs = [dict(), defaultdict(list), dict()]
-                tmp_sym_dc = dict()
-                tmp_asym_dc = dict()
-                for k in intersec:
-                    if k not in dc[0]:
-                        continue
-                    tmp_dcs[0][k] = dc[0][k]
-                    tmp_dcs[1][k] = dc[1][k]
-                    tmp_dcs[2][k] = dc[2][k]
-                    if k in curr_sym_cnt:
-                        tmp_sym_dc[k] = curr_sym_cnt[k]
-                    if k in curr_asym_cnt:
-                        tmp_asym_dc[k] = curr_asym_cnt[k]
-                del dc, curr_sym_cnt, curr_asym_cnt
-                merge_prop_dicts([syn_props, tmp_dcs])
-                del tmp_dcs
-                merge_type_dicts([cs_asym_cnt, tmp_asym_dc])
-                del tmp_asym_dc
-                merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
-                del tmp_sym_dc
+        # get cached worker lookup
+        with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
+            cs_workers_tmp = pkl.load(f)
+        params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in cs_workers_tmp.items()]
+        del cs_workers_tmp
+
+        res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False)
+        for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc in res:
+            if len(tmp_dcs_cs) == 0:
+                continue
+            # cs
+            merge_prop_dicts([cs_props, tmp_dcs_cs])
+            del tmp_dcs_cs
+            # syn
+            merge_prop_dicts([syn_props, tmp_dcs_syn])
+            del tmp_dcs_syn
+            merge_type_dicts([cs_asym_cnt, tmp_asym_dc])
+            del tmp_asym_dc
+            merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
+            del tmp_sym_dc
+
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
         attr_p = dummy_so.attr_dict_path
@@ -622,7 +604,7 @@ def _write_props_to_syn_thread(args):
         this_attr_dc_cs = AttributeDict(attr_p_cs, read_only=False, disable_locking=True)
         voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, voxeldata_path=knossos_path_cs,
                                       read_only=False, disable_locking=True)
-
+        ids_to_load_voxels = []
         for cs_id in obj_keys:
             # write cs to dict
             if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
@@ -670,12 +652,59 @@ def _write_props_to_syn_thread(args):
             voxel_dc[cs_id] = bbs
             voxel_dc.increase_object_size(cs_id, size)
             voxel_dc.set_object_repcoord(cs_id, rp)
-            # write voxels explicitly - this assumes reasonably sized synapses
+            ids_to_load_voxels.append(cs_id)
+            # # write voxels explicitly - this assumes reasonably sized synapses
             voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
+
         voxel_dc_store.push()
         voxel_dc_cs.push()
         this_attr_dc.push()
         this_attr_dc_cs.push()
+
+
+def _write_props_collect_helper(args):
+    dir_props, worker_id, intersec = args
+    if len(intersec) == 0:
+        return {}, {}, {}, {}
+    worker_dir_props = f"{dir_props}/{worker_id}/"
+    # cs
+    fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
+    dc = basics.load_pkl2obj(fname)
+
+    for k in dc[0].keys():
+        dc[0][k] = np.array(dc[0][k], dtype=np.int32)
+        dc[1][k] = [np.array(dc[1][k][0], dtype=np.int32)]
+
+    # convert lists to numpy arrays
+    tmp_dcs_cs = [dict(), defaultdict(list), dict()]
+    for k in intersec:
+        tmp_dcs_cs[0][k] = dc[0][k]
+        tmp_dcs_cs[1][k] = dc[1][k]
+        tmp_dcs_cs[2][k] = dc[2][k]
+    del dc
+
+    # syn
+    fname = f'{worker_dir_props}/syn_props_{worker_id}.pkl'
+    dc = basics.load_pkl2obj(fname)
+    fname = f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl'
+    curr_sym_cnt = basics.load_pkl2obj(fname)
+    fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
+    curr_asym_cnt = basics.load_pkl2obj(fname)
+
+    tmp_dcs_syn = [dict(), defaultdict(list), dict()]
+    tmp_sym_dc = dict()
+    tmp_asym_dc = dict()
+    for k in intersec:
+        if k not in dc[0]:
+            continue
+        tmp_dcs_syn[0][k] = dc[0][k]
+        tmp_dcs_syn[1][k] = dc[1][k]
+        tmp_dcs_syn[2][k] = dc[2][k]
+        if k in curr_sym_cnt:
+            tmp_sym_dc[k] = curr_sym_cnt[k]
+        if k in curr_asym_cnt:
+            tmp_asym_dc[k] = curr_asym_cnt[k]
+    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc
 
 
 def _generate_storage_lookup(args):

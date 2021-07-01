@@ -181,9 +181,9 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
                   box_coords=cube_of_interest_bb[0], fit_box_size=True)
     multi_params = [(cube_size, offs, ds) for offs in chunkify_successive(
         list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
-    # high memory load
+
     out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
-                                 n_cores=ncores_skelgen, max_iterations=10)
+                                 n_cores=ncores_skelgen)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -204,8 +204,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     # create SSV skeletons, requires SV skeletons!
     log.info('Merging cube-wise skeletons of {} SSVs.'.format(len(ssd.ssv_ids)))
     # high memory load
-    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=1,
-                       max_iterations=10)
+    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=1)
 
     if map_myelin:
         map_myelin_global()

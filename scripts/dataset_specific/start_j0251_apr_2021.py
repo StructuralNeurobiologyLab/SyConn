@@ -125,16 +125,16 @@ if __name__ == '__main__':
 
     # exec_init.run_create_rag(graph_node_dtype=np.uint32)
     # ftimer.stop()
+    #
+    # log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    # ftimer.start('SSD generation')
+    # exec_init.run_create_neuron_ssd(ncores_per_job=4)
+    # ftimer.stop()
 
-    log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(ncores_per_job=4)
-    ftimer.stop()
-
-    log.info('Step 5/10 - Skeleton generation')
-    ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
-    ftimer.stop()
+    # log.info('Step 5/10 - Skeleton generation')
+    # ftimer.start('Skeleton generation')
+    # exec_skeleton.run_skeleton_generation()
+    # ftimer.stop()
 
     log.info('Step 5/9 - Synapse detection')
     ftimer.start('Synapse detection')

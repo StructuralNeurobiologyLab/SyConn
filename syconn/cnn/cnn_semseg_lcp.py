@@ -19,17 +19,18 @@ from elektronn3.models.lcp_adapt import ConvAdaptSeg
 from lightconvpoint.utils.network import get_search, get_conv
 from elektronn3.training import Trainer3d, Backup, metrics
 
+torch.backends.cudnn.enabled = True
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=4, help='Batch size')
-parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
+parser.add_argument('--bs', type=int, default=1, help='Batch size')
+parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -75,7 +76,7 @@ if cellshape_only:
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_nclass' \
-           f'{num_classes}_lcp_borderMask'
+           f'{num_classes}_fkaconv_noScale'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -101,10 +102,10 @@ save_root = os.path.expanduser(save_root)
 
 # Model selection
 search = 'SearchQuantized'
-conv = dict(layer='ConvPoint', kernel_separation=False)
+conv = dict(layer='PointConv', kernel_separation=False)
 act = nn.ReLU
-model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
-                     architecture=None, activation=act, norm='bn')
+model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=32,
+                     architecture=None, activation=act, norm='gn')
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
@@ -166,7 +167,6 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 #     gamma=0.99994,
 # )
 # set weight of the masking label at context boarders to 0
-# class_weights = torch.tensor([1, 0, 0, 0, 0, 1, 1] + [0], dtype=torch.float32, device=device)
 class_weights = torch.tensor([1] * num_classes, dtype=torch.float32, device=device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
 

@@ -64,6 +64,9 @@ def anno_skeleton2np(a_obj, scaling, verbose=False):
     g.add_edges_from(a_edges)
     a_edges = np.array(g.edges)
     a_node_labels_orig = np.array(a_node_labels)
+    # use a_end and d_end as axon and dendrite label, but to not use them as starting locations
+    a_node_labels[a_node_labels == 13] = 0  # convert to dendrite
+    a_node_labels[a_node_labels == 14] = 1  # convert to axon
     # remove labels on branches that are only at the soma
 
     # propagate labels, nodes with no label get label from nearest node with label
@@ -225,7 +228,7 @@ def labels2mesh(args):
     hc.save2pkl(path2pkl)
 
 
-def comment2int(comment: str, convert_to_morphx: bool = False):
+def comment2int(comment: str, convert_to_morphx: bool = True):
     """ Map comments used during annotation to respective label.
 
      encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3,
@@ -322,7 +325,7 @@ if __name__ == "__main__":
     # j0251 GT refined
     global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
 
-    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2/"
+    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2_/"
     destination = data_path + '/hc_out_2021_04/'
     os.makedirs(destination, exist_ok=True)
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)

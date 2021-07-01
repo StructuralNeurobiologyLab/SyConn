@@ -10,6 +10,8 @@ import torch
 import argparse
 import random
 import numpy as np
+import zipfile
+import logging
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
@@ -24,12 +26,12 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=4, help='Batch size')
-parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
-parser.add_argument('--ctx', default=10000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -38,7 +40,12 @@ parser.add_argument(
 "onsave": Use regular Python model for training, but trace it on-demand for saving training state;
 "train": Use traced model for training and serialize it on disk"""
 )
-
+parser.add_argument(
+    '-r', '--resume', metavar='PATH',
+    help='Path to pretrained model state dict or a compiled and saved '
+         'ScriptModule from which to resume training.'
+)
+logger = logging.getLogger('elektronn3log')
 args = parser.parse_args()
 
 # SET UP ENVIRONMENT #
@@ -69,7 +76,7 @@ cellshape_only = False
 use_syntype = False
 dr = 0.2
 track_running_stats = False
-use_norm = 'gn'
+use_norm = 'bn'
 # 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
 num_classes = 7
 use_subcell = True
@@ -80,7 +87,7 @@ act = 'relu'
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall_boarderMask'
+           f'{num_classes}_SegSmall_noScale_resume'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -104,7 +111,7 @@ else:
 if not use_bias:
     name += '_noBias'
 
-print(f'Running on device: {device}')
+logger.info(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
@@ -114,7 +121,7 @@ save_root = os.path.expanduser(save_root)
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
+model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
@@ -137,10 +144,34 @@ elif args.jit == 'train':
     tracedmodel = torch.jit.trace(model, example_input)
     model = tracedmodel
 
+optimizer_state_dict = None
+lr_sched_state_dict = None
+if args.resume is not None:  # Load pretrained network
+    pretrained = os.path.expanduser(args.resume)
+    _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+    if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+        logger.warning(_warning_str)
+        model = torch.jit.load(pretrained, map_location=device)
+    else:  # Either state dict or pickled model
+        state = torch.load(pretrained)
+        if isinstance(state, dict):
+            model.load_state_dict(state['model_state_dict'])
+            optimizer_state_dict = state.get('optimizer_state_dict')
+            lr_sched_state_dict = state.get('lr_sched_state_dict')
+            if optimizer_state_dict is None:
+                logger.warning('optimizer_state_dict not found.')
+            if lr_sched_state_dict is None:
+                logger.warning('lr_sched_state_dict not found.')
+        elif isinstance(state, nn.Module):
+            logger.warning(_warning_str)
+            model = state
+        else:
+            raise ValueError(f'Can\'t load {pretrained}.')
+
 # Transformations to be applied to samples before feeding them to the network
 train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='normal'),  # in nm
                                   clouds.Center(),
-                                  clouds.Normalization(scale_norm),
+                                  # clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
@@ -178,8 +209,14 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # )
 # set weight of the masking label at context boarders to 0
 # class_weights = torch.tensor([1, 0, 0, 0, 0, 1, 1] + [0], dtype=torch.float32, device=device)
-class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
-criterion = torch.nn.CrossEntropyLoss(weight=class_weights).to(device)
+class_weights = torch.tensor([1] * num_classes, dtype=torch.float32, device=device)
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
+
+if optimizer_state_dict is not None:
+    optimizer.load_state_dict(optimizer_state_dict)
+if lr_sched_state_dict is not None:
+    lr_sched.load_state_dict(lr_sched_state_dict)
+
 
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
@@ -212,10 +249,10 @@ trainer = Trainer3d(
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
-    num_classes=num_classes + 1,
+    num_classes=num_classes,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=5,
+    nbatch_avg=2,
     tqdm_kwargs=dict(disable=False),
 )
 
