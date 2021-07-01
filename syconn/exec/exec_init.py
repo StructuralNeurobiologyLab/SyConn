@@ -29,7 +29,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1):
+def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1, overwrite: bool = False):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the SV graph
@@ -92,7 +92,8 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
 
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(g_p, len(cc_dict), len(cc_dict_inv)))
     ssd = SuperSegmentationDataset(working_dir=working_dir, version='0',
-                                   ssd_type="ssv", sv_mapping=cc_dict_inv)
+                                   ssd_type="ssv", sv_mapping=cc_dict_inv, create=True,
+                                   overwrite=overwrite)
     # create cache-arrays for frequently used attributes
     # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
     ssd.save_dataset_deep(nb_cpus=ncores_per_job)

@@ -553,7 +553,7 @@ class BinarySearchStore:
                 raise ValueError('ID array is given, but no attribute array(s).')
             if isinstance(fname, str) and os.path.isfile(fname):
                 if not overwrite:
-                    raise FileExistsError(f'BinarySearchStore at "{fname}" already exists."')
+                    raise FileExistsError(f'BinarySearchStore at "{fname}" already exists and overwrite is False."')
                 else:
                     os.remove(fname)
             if n_shards is None:

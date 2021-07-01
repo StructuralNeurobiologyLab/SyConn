@@ -28,6 +28,9 @@ if __name__ == '__main__':
                              'or "2" (1100, 1100, 600).')
     parser.add_argument('--log_level', type=str, default='INFO',
                         help='Level of logging (INFO, DEBUG).')
+    parser.add_argument('--overwrite', dest='overwrite', action='store_true',
+                        help='Overwrite generated data.')
+    parser.set_defaults(overwrite=False)
     args = parser.parse_args()
     example_cube_id = int(args.example_cube)
     log_level = args.log_level
@@ -197,7 +200,7 @@ if __name__ == '__main__':
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     ftimer.start('SD generation')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc)
+                                    n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite)
     exec_init.run_create_rag()
     ftimer.stop()
 
@@ -216,7 +219,7 @@ if __name__ == '__main__':
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd()
+    exec_init.run_create_neuron_ssd(overwrite=args.overwrite)
     ftimer.stop()
 
     log.info('Step 5/9 - Skeleton generation')
@@ -232,13 +235,13 @@ if __name__ == '__main__':
 
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
     ftimer.stop()
 
     log.info('Step 6.5/9 - Contact detection')
     ftimer.start('Contact detection')
     if global_params.config['generate_cs_ssv']:
-        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
     else:
         log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
