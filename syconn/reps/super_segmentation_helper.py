@@ -1422,39 +1422,48 @@ def majorityvote_skeleton_property(sso: 'super_segmentation.SuperSegmentationObj
     sso.skeleton["%s_avg%d" % (prop_key, max_dist)] = avg_prop
 
 
-def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.config['ncores_per_node']):
+def find_incomplete_ssv_views(ssd: 'SuperSegmentationDataset', woglia: bool, n_cores: Optional[int] = None):
+    if n_cores is None:
+        n_cores = global_params.config['ncores_per_node']
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
     missing_ssv_ids = set()
+    incomplete_ssv_ids = ssd.sv2ssv_ids(incomplete_sv_ids)
     for sv_id in incomplete_sv_ids:
         try:
-            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            ssv_id = incomplete_ssv_ids[sv_id]
             missing_ssv_ids.add(ssv_id)
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
 
 
-def find_incomplete_ssv_skeletons(ssd, n_cores=global_params.config['ncores_per_node']):
+def find_incomplete_ssv_skeletons(ssd, n_cores: Optional[int] = None):
+    if n_cores is None:
+        n_cores = global_params.config['ncores_per_node']
     svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
     incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
     missing_ssv_ids = set()
+    incomplete_ssv_ids = ssd.sv2ssv_ids(incomplete_sv_ids)
     for sv_id in incomplete_sv_ids:
         try:
-            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            ssv_id = incomplete_ssv_ids[sv_id]
             missing_ssv_ids.add(ssv_id)
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
 
 
-def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.config['ncores_per_node']):
+def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores: Optional[int] = None):
+    if n_cores is None:
+        n_cores = global_params.config['ncores_per_node']
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_attributes(sd, attr_key, n_cores)
     missing_ssv_ids = set()
+    incomplete_ssv_ids = ssd.sv2ssv_ids(incomplete_sv_ids)
     for sv_id in incomplete_sv_ids:
         try:
-            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            ssv_id = incomplete_ssv_ids[sv_id]
             missing_ssv_ids.add(ssv_id)
         except KeyError:
             pass  # sv does not exist in this SSD
@@ -2018,7 +2027,6 @@ def assemble_from_mergelist(ssd: 'SuperSegmentationDataset', mergelist: Union[Di
     """
     Creates
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.mapping_dict` and
-    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.id_changer` and finally calls
     :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.save_dataset_shallow`.
 
     Will overwrite existing mapping dict, id changer and version files.
@@ -2039,19 +2047,12 @@ def assemble_from_mergelist(ssd: 'SuperSegmentationDataset', mergelist: Union[Di
         else:
             raise Exception("sv_mapping has unknown type")
 
-    # TODO: change to mapping_dict, remove id_changer
-    # Changed -1 defaults to 0
-    # ssd._id_changer = np.zeros(np.max(list(mergelist.keys())) + 1,
-    #                           dtype=np.uint64)
-    ssd._id_changer = np.ones(int(np.max(list(mergelist.keys())) + 1),
-                              dtype=int) * (-1)
     mapping_dict = dict()
     for sv_id in mergelist.values():
         mapping_dict[sv_id] = []
 
     for sv_id in mergelist.keys():
         mapping_dict[mergelist[sv_id]].append(sv_id)
-        ssd._id_changer[sv_id] = mergelist[sv_id]
 
     ssd._mapping_dict = mapping_dict
     ssd.create_mapping_lookup_reverse()

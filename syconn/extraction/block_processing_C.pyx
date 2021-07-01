@@ -50,33 +50,6 @@ def kernel(uint32_t[:, :, :] chunk, uint32_t center_id):
 
 
 
-def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
-    cdef int stencil[3]
-    cdef int x, y, z
-    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
-    assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
-    cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1],
-                                                  arr.shape[2]), itemsize = sizeof(uint64_t), format = 'Q')
-    out [:, :, :] = 0
-    cdef int offset[3]
-    offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2] ### check what type do you need
-    cdef uint32_t center_id
-    cdef uint32_t[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2),
-                                           itemsize=sizeof(uint32_t), format='i')
-
-    for x in range(offset[0], arr.shape[0] - offset[0]):
-        for y in range(offset[1], arr.shape[1] - offset[1]):
-            for z in range(offset[2], arr.shape[2] - offset[2]):
-                if edges[x, y, z] == 0:
-                    continue
-
-                center_id = arr[x, y, z]
-                chunk = arr[x - offset[0]: x + offset[0] + 1, y - offset[1]: y + offset[1], z - offset[2]: z + offset[2]]
-                out[x, y, z] = kernel(chunk, center_id)
-
-    return out
-
-
 def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
     cdef int stencil[3]
     cdef int x, y, z
@@ -105,7 +78,6 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
 def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
     uint8_t[:, :, :] asym_mask, uint8_t[:, :, :] sym_mask):
     """cs_seg, syn_mask, sym_mask and asym_mask  must all have the same shape!
-    TODO: check if uint32 and uint64 works with current unordered map definition, using n_type instead of uint64 results in an error.
     Returns synaptic properties for every contact site ID inside `cs_seg`.
     Dict, Dict
     Count of synaptic foreground voxel and if voxel is foreground also sums the number of symmetric

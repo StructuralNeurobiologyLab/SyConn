@@ -138,11 +138,9 @@ class SuperSegmentationDataset(SegmentationBase):
         self._mapping_dict = None
         self.sso_caching = sso_caching
         self.sso_locking = sso_locking
-        self._mapping_dict_reversed = None
         self._mapping_lookup_reverse = None
 
         self._type = ssd_type
-        self._id_changer = []
         self._ssv_ids = None
         # cache mechanism
         self._ssoid2ix = None
@@ -275,14 +273,6 @@ class SuperSegmentationDataset(SegmentationBase):
         return os.path.exists(self.mapping_dict_path)
 
     @property
-    def mapping_dict_reversed_exists(self) -> bool:
-        """
-        Checks if the inverse mapping dictionary exists (supervoxel ID to
-        super-supervoxel ID).
-        """
-        return os.path.exists(self.mapping_dict_reversed_path)
-
-    @property
     def mapping_dict_path(self) -> str:
         """
         Path to the mapping dictionary pkl file.
@@ -297,32 +287,11 @@ class SuperSegmentationDataset(SegmentationBase):
         return self.path + "/mapping_lookup_reverse.h5"
 
     @property
-    def mapping_dict_reversed_path(self) -> str:
-        """
-        Path to the inverse mapping dictionary pkl file.
-        """
-        return self.path + "/mapping_dict_reversed.pkl"
-
-    @property
-    def id_changer_path(self) -> str:
-        """
-        Path to the ID change array.
-        """
-        return self.path + "/id_changer.npy"
-
-    @property
     def version_dict_exists(self) -> bool:
         """
         Checks whether the version dictionary exists at :py:attr:`~version_dict_path`.
         """
         return os.path.exists(self.version_dict_path)
-
-    @property
-    def id_changer_exists(self) -> bool:
-        """
-        Checks whether the version dictionary exists at :py:attr:`~id_changer_path`.
-        """
-        return os.path.exists(self.id_changer_path)
 
     @property
     def mapping_dict(self) -> Dict[int, np.ndarray]:
@@ -335,22 +304,6 @@ class SuperSegmentationDataset(SegmentationBase):
             else:
                 self._mapping_dict = {}
         return self._mapping_dict
-
-    @property
-    def mapping_dict_reversed(self) -> Dict[int, int]:
-        """
-        Dictionary which contains the super-supervoxel ID for every supervoxel.
-        """
-        if self._mapping_dict_reversed is None:
-            if self.mapping_dict_reversed_exists:
-                self.load_mapping_dict_reversed()
-            else:
-                self._mapping_dict_reversed = {}
-                for k, v in self.mapping_dict.items():
-                    for ix in v:
-                        self._mapping_dict_reversed[ix] = k
-                self.save_mapping_dict_reversed()
-        return self._mapping_dict_reversed
 
     def sv2ssv_ids(self, ids: np.ndarray) -> Dict[int, int]:
         """
@@ -379,9 +332,12 @@ class SuperSegmentationDataset(SegmentationBase):
         """Create data structure for efficient look-ups from supervoxel ID to cell ID,
         see :py:class:`syconn.backend.storage.BinarySearchStore`.
         """
-        # TODO: use mapping dict instead of mapping dict reversed -> then remove mapping dict reversed code
-        ids = np.array(list(self.mapping_dict_reversed.keys()), dtype=np.uint64)
-        ssv_ids = np.array(list(self.mapping_dict_reversed.values()), dtype=np.uint64)
+        ids, ssv_ids = [], []
+        for ssv_id, sv_ids in self.mapping_dict.items():
+            ssv_ids.extend([ssv_id] * len(sv_ids))
+            ids.extend(list(sv_ids))
+        ids = np.array(ids, dtype=np.uint64)
+        ssv_ids = np.array(ssv_ids, dtype=np.uint64)
         BinarySearchStore(self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids))
 
     @property
@@ -431,15 +387,6 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         return self.mapping_lookup_reverse.id_array
 
-    @property
-    def id_changer(self) -> List[int]:
-        """
-        Used to agglomerate synapse fragments ('syn', supervoxel-level) to whole synapses between cells ('syn_ssv').
-        """
-        if len(self._id_changer) == 0:
-            self.load_id_changer()
-        return self._id_changer
-
     def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False):
         """
         Todo:
@@ -466,16 +413,6 @@ class SuperSegmentationDataset(SegmentationBase):
                 raise FileNotFoundError(msg)
             if not suppress_warning:
                 log_reps.warning(msg)
-
-    def sv_id_to_ssv_id(self, sv_id: int) -> int:
-        """
-        Args:
-            sv_id: Supervoxel ID.
-
-        Returns:
-            The super-supervoxel ID which `sv_id` is part of.
-        """
-        return self.id_changer[sv_id]
 
     def get_segmentationdataset(self, obj_type: str) -> SegmentationDataset:
         assert obj_type in self.version_dict
@@ -543,7 +480,7 @@ class SuperSegmentationDataset(SegmentationBase):
 
     def save_dataset_shallow(self, overwrite: bool = False):
         """
-        Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict` and :py:attr:`~id_changer`.
+        Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict`.
 
         Args:
             overwrite: Do not replace existing files.
@@ -552,10 +489,6 @@ class SuperSegmentationDataset(SegmentationBase):
             self.save_version_dict()
         if not self.mapping_dict_exists or overwrite:
             self.save_mapping_dict()
-        if not self.mapping_dict_reversed_exists or overwrite:
-            self.save_mapping_dict_reversed()
-        if not self.id_changer_exists or overwrite:
-            self.save_id_changer()
 
     def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
                           nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True, overwrite=False):
@@ -626,43 +559,12 @@ class SuperSegmentationDataset(SegmentationBase):
         else:
             log_reps.warn(f'No entries in mapping dict of {self}.')
 
-    def save_mapping_dict_reversed(self):
-        """
-        Save the reversed mapping dictionary to a `.pkl` file.
-        """
-        if len(self.mapping_dict_reversed) > 0:
-            write_obj2pkl(self.mapping_dict_reversed_path,
-                          self._mapping_dict_reversed)
-        else:
-            log_reps.warn(f'No entries in reverse mapping dict of {self}.')
-
     def load_mapping_dict(self):
         """
         Load the mapping dictionary from the `.pkl` file.
         """
         assert self.mapping_dict_exists
         self._mapping_dict = load_pkl2obj(self.mapping_dict_path)
-
-    def load_mapping_dict_reversed(self):
-        """
-        Load the reversed mapping dictionary from the `.pkl` file.
-        """
-        assert self.mapping_dict_reversed_exists
-        self._mapping_dict_reversed = load_pkl2obj(self.mapping_dict_reversed_path)
-
-    def save_id_changer(self):
-        """
-        Save the ID changer as `.npy` file.
-        """
-        if len(self._id_changer) > 0:
-            np.save(self.id_changer_path, self._id_changer)
-
-    def load_id_changer(self):
-        """
-        Load the ID changer from the `.npy` file.
-        """
-        assert self.id_changer_exists
-        self._id_changer = np.load(self.id_changer_path)
 
     def enable_property_cache(self, property_keys: List[str]):
         """

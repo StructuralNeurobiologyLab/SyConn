@@ -371,7 +371,12 @@ class SyConnBackend(object):
         :param sv_id:
         :return:
         """
-        return {'ssv': self.ssd.id_changer[int(sv_id)]}
+        try:
+            ssv_id = self.ssd.sv2ssv_ids(sv_id)[sv_id]
+        except KeyError:
+            # sv_id is not in sv2ssv_ids output (dict) -> ssv ID is not part of ssd.ssv_ids
+            ssv_id = 0
+        return {'ssv': ssv_id}
 
     def ct_of_ssv(self, ssv_id):
         """

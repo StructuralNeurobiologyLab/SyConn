@@ -106,39 +106,39 @@ if __name__ == '__main__':
                              'directory "{}".'.format(mpath, working_dir))
     ftimer.stop()
 
-    # # Start SyConn
-    # # --------------------------------------------------------------------------
+    # Start SyConn
+    # --------------------------------------------------------------------------
     log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
     log.critical('Working directory is set to "{}".'.format(working_dir))
 
-    # log.info('Step 1/9 - Predicting sub-cellular structures')
-    # ftimer.start('Dense predictions')
-    # # myelin is not needed before `run_create_neuron_ssd`
-    # # exec_dense_prediction.predict_myelin(raw_kd_path)
-    # ftimer.stop()
-    #
-    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    # ftimer.start('SD generation')
-    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-    #                                 n_folders_fs=n_folders_fs,
-    #                                 load_cellorganelles_from_kd_overlaycubes=True,
-    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
-    #                                 max_n_jobs=global_params.config.ncore_total * 4)
-    #
+    log.info('Step 1/9 - Predicting sub-cellular structures')
+    ftimer.start('Dense predictions')
+    # myelin is not needed before `run_create_neuron_ssd`
+    # exec_dense_prediction.predict_myelin(raw_kd_path)
+    ftimer.stop()
+
+    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    ftimer.start('SD generation')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+                                    n_folders_fs=n_folders_fs,
+                                    load_cellorganelles_from_kd_overlaycubes=True,
+                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
+                                    max_n_jobs=global_params.config.ncore_total * 4)
+
     # generate flattened RAG
-    # from syconn.reps.segmentation import SegmentationDataset
-    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    # rag_sub_g = nx.Graph()
-    # # add SV IDs to graph via self-edges
-    # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
-    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    # filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
-    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # log.info('{} SVs were added to the RAG after applying size filter with bounding box '
-    #          'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['min_cc_size_ssv']))
-    # nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
-    # exec_init.run_create_rag()
-    # ftimer.stop()
+    from syconn.reps.segmentation import SegmentationDataset
+    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    rag_sub_g = nx.Graph()
+    # add SV IDs to graph via self-edges
+    mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
+    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
+    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    log.info('{} SVs were added to the RAG after applying size filter with bounding box '
+             'diagonal > {} nm.'.format(len(filtered_ids), global_params.config['min_cc_size_ssv']))
+    nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
+    exec_init.run_create_rag()
+    ftimer.stop()
     log.info('Step 3/9 - Astrocyte separation')
     if global_params.config.prior_astrocyte_removal:
         ftimer.start('Astrocyte separation')

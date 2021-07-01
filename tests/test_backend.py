@@ -40,6 +40,7 @@ def test_BinarySearchStore():
     assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
     assert bss.n_shards == n_shards, "Number of shards differ."
     assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
+    assert np.max(ids) == bss.id_array[-1], 'Maxima do not match.'  # captured by test below, but important detail
     assert np.array_equal(bss.id_array, np.sort(ids)), "Sort failed."
 
 

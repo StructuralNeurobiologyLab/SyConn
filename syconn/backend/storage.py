@@ -533,6 +533,10 @@ class BinarySearchStore:
                  attr_arrays: Optional[Dict[str, np.ndarray]] = None, overwrite: bool = False,
                  n_shards: Optional[int] = None, rdcc_nbytes: int = 5*2**20):
         """
+        Data structure to store properties (values) of a corresponding ID array (keys). Internally a binary search
+        is used that uses a sorted representation of keys and values to enable sparse look-ups with a much lower
+        memory complexity than python dictionaries.
+        Maximum ID is the last element of :attr:`~id_array`.
 
         Args:
             fname: File name.
@@ -556,6 +560,7 @@ class BinarySearchStore:
                 n_shards = 5
             if isinstance(fname, str):
                 os.makedirs(os.path.split(self.fname)[0], exist_ok=True)
+            # sort keys / ID array
             ixs = np.argsort(id_array)
             id_array = id_array[ixs]
             bucket_ranges = []

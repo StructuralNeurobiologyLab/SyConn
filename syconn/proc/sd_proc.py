@@ -397,7 +397,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         with open(c_prop_worker_dc, 'wb') as f:
             pkl.dump(cell_prop_worker, f, protocol=4)
 
-        all_ids['sv'] = np.unique(all_ids['sv']).astype(np.uint32)
+        all_ids['sv'] = np.unique(all_ids['sv'])
         del cell_prop_worker
 
         # Collect organelle worker info
@@ -414,7 +414,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     organelle].values()))
                 all_ids[organelle].extend(subcell_prop_workers[ii][worker_nr])
         for ii, organelle in enumerate(kd_organelle_paths):
-            all_ids[organelle] = np.unique(all_ids[organelle]).astype(np.uint32)
+            all_ids[organelle] = np.unique(all_ids[organelle])
             sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
                 global_params.config.temp_path, organelle)
             with open(sc_mesh_worker_dc, 'wb') as f:
@@ -453,10 +453,10 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         with open(c_prop_worker_dc, 'wb') as f:
             pkl.dump(cell_prop_worker, f, protocol=4)
         del cell_prop_worker
-        all_ids['sv'] = np.unique(all_ids['sv']).astype(np.uint32)
+        all_ids['sv'] = np.unique(all_ids['sv'])
 
         for ii, organelle in enumerate(kd_organelle_paths):
-            all_ids[organelle] = np.unique(all_ids[organelle]).astype(np.uint32)
+            all_ids[organelle] = np.unique(all_ids[organelle])
             sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
                 global_params.config.temp_path, organelle)
             with open(sc_mesh_worker_dc, 'wb') as f:

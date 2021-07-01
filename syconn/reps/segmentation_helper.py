@@ -417,8 +417,7 @@ def find_missing_sv_attributes(sd: 'SegmentationDataset', attr_key: str, n_cores
     """
     multi_params = chunkify(sd.so_dir_paths, 100)
     params = [(ps, attr_key) for ps in multi_params]
-    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
-                                  debug=False)
+    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores, debug=False)
     return np.concatenate(res)
 
 
