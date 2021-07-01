@@ -490,8 +490,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         All cell supervoxel IDs which are assigned to this cell reconstruction.
         """
-        # must be <= uint32
-        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint32)
+        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint64)
 
     @property
     def sj_ids(self) -> np.ndarray:
@@ -2365,7 +2364,8 @@ class SuperSegmentationObject(SegmentationBase):
         write_skeleton_kzip(dest_path, [new_anno])
 
     def mergelist2kzip(self, dest_path: Optional[str] = None):
-        self.load_attr_dict()
+        if len(self.attr_dict) == 0:
+            self.load_attr_dict()
         kml = knossos_ml_from_sso(self)
         if dest_path is None:
             dest_path = self.skeleton_kzip_path

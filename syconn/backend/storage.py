@@ -186,10 +186,9 @@ def VoxelStorage(inp, **kwargs):
     obj = VoxelStorageClass(inp, **kwargs)
     if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
         obj = VoxelStorageDyn(inp, **kwargs)
-    # # TODO: activate as soon as synapse-detection pipelines is refactored.
-    # else:
-    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
-    #                         ' VoxelStorageDyn.')
+    else:
+        log_backend.error('VoxelStorage is deprecated. Please switch to'
+                          ' VoxelStorageDyn.')
     return obj
 
 
@@ -253,6 +252,8 @@ class VoxelStorageDyn(CompressedStorage):
             self._dc_intern['size'] = defaultdict(int)
         if 'rep_coord' not in self._dc_intern:
             self._dc_intern['rep_coord'] = dict()
+        if 'voxel_cache' not in self._dc_intern:
+            self._dc_intern['voxel_cache'] = dict()
         if voxeldata_path is not None:
             old_p = self._dc_intern['meta']['voxeldata_path']
             new_p = voxeldata_path
@@ -322,6 +323,30 @@ class VoxelStorageDyn(CompressedStorage):
         if self.voxel_mode:
             log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
         self._dc_intern['rep_coord'][item] = value
+
+    def set_voxel_cache(self, key: int, voxel_coords: np.ndarray):
+        """
+        This is only used to store the voxels during the synapse extraction step. This method operates independent of
+        :func:`~__setitem__`.
+
+        Args:
+            key: Segment ID.
+            voxel_coords: Voxel coordinates.
+        """
+        self._dc_intern['voxel_cache'][key] = voxel_coords
+
+    def get_voxel_cache(self, key: int):
+        """
+        Voxels corresponding to item `key` must have been added to store via :func:`~set_voxel_cache`.
+        This implementation operates independent of :func:`~get_voxeldata`.
+
+        Args:
+            key: Segment ID.
+
+        Returns:
+            Voxel coordinates.
+        """
+        return self._dc_intern['voxel_cache'][key]
 
     def get_voxeldata(self, item: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """

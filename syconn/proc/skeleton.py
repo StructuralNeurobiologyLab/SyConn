@@ -33,8 +33,7 @@ def kimimaro_skelgen(cube_size, cube_offset, nb_cpus: Optional[int] = None, ssd:
         nb_cpus = 1
 
     kd = kd_factory(global_params.config.kd_seg_path)
-    # TODO: uint32 conversion has to be controlled externally
-    seg = kd.load_seg(size=cube_size, offset=cube_offset, mag=1).swapaxes(0, 2).astype(np.uint32)
+    seg = kd.load_seg(size=cube_size, offset=cube_offset, mag=1).swapaxes(0, 2)
     if ds is not None:
         seg = ndimage.zoom(seg, 1 / ds, order=0)
     else:

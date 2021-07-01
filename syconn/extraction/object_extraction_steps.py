@@ -448,13 +448,11 @@ def _make_unique_labels_thread(func_args):
 
         for nb_hdf5_name in range(len(hdf5names)):
             hdf5_name = hdf5names[nb_hdf5_name]
+            cc_data_list[nb_hdf5_name] = cc_data_list[nb_hdf5_name].astype(np.uint64)
             matrix = cc_data_list[nb_hdf5_name]
             matrix[matrix > 0] += this_max_nb_dict[hdf5_name]
 
-        compression.save_to_h5py(cc_data_list,
-                                 chunk.folder + filename +
-                                 "_unique_components%s.h5"
-                                 % suffix, hdf5names)
+        compression.save_to_h5py(cc_data_list, chunk.folder + filename + "_unique_components%s.h5" % suffix, hdf5names)
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
@@ -746,7 +744,7 @@ def _apply_merge_list_thread(args):
                       offset[1]: this_shape[1] - offset[1],
                       offset[2]: this_shape[2] - offset[2]]
             this_cc = id_changer[this_cc]
-            cc_data_list[nb_hdf5_name] = np.array(this_cc, dtype=np.uint32)
+            cc_data_list[nb_hdf5_name] = this_cc
 
         compression.save_to_h5py(cc_data_list,
                                  chunk.folder + filename +
@@ -892,7 +890,9 @@ def _extract_voxels_thread(args):
                 try:
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
-                except:
+                except Exception as e:
+                    log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                      f' precision: {str(e)}')
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 
@@ -1177,7 +1177,9 @@ def _extract_voxels_combined_thread_NEW(args):
             try:
                 this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                 mag=1).swapaxes(0, 2)
-            except:
+            except Exception as e:
+                log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                  f' precision: {str(e)}')
                 this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                 datatype=np.uint32, mag=1).swapaxes(0, 2)
             # returns 3 dicts: rep coord, bounding box, size
@@ -1240,7 +1242,9 @@ def _extract_voxels_combined_thread_OLD(args):
                 try:
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
-                except:
+                except Exception as e:
+                    log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                      f' precision: {str(e)}')
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 

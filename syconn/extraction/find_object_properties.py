@@ -3,7 +3,7 @@ import scipy.ndimage
 from numba import typed
 from numba import types
 import numpy as np
-from typing import Tuple
+from typing import Tuple, List
 
 from syconn import global_params
 from syconn.extraction.block_processing_C import process_block_nonzero
@@ -20,7 +20,7 @@ uint64_int64_dict = types.DictType(types.uint64, types.int64)
 
 
 @numba.jit(nopython=True)
-def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.ndarray, sym_mask: np.ndarray)\
+def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.ndarray, sym_mask: np.ndarray)\
         -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray],
                  np.ndarray, np.ndarray]:
     """
@@ -195,7 +195,7 @@ def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.n
 
 
 @numba.jit(nopython=True)
-def find_object_properties_cs(cs_seg: np.ndarray):
+def find_object_properties_cs_64bit(cs_seg: np.ndarray):
     """
     Extract contact properties for every contact site ID tuple inside `cs_seg`.
 
@@ -299,7 +299,7 @@ def convert_nvox2ratio_syntype(syn_cnts, sym_cnts, asym_cnts):
     return asym_ratio, sym_ratio
 
 
-def merge_type_dicts(type_dicts):
+def merge_type_dicts(type_dicts: List[dict]):
     """
     Merge map dictionaries in-place. Values will be stored in first dictionary
 
@@ -318,6 +318,28 @@ def merge_type_dicts(type_dicts):
                 tot_map[cs_id] += cnt
             else:
                 tot_map[cs_id] = cnt
+
+
+def merge_voxel_dicts(voxel_dicts: List[dict]):
+    """
+    Merge map dictionaries in-place. Values will be stored in first dictionary
+
+    Args:
+        voxel_dicts:
+        offset:
+
+    Returns:
+
+    """
+    tot_map = voxel_dicts[0]
+    for el in voxel_dicts[1:]:
+        # iterate over subcell. ids with dictionaries as values which store
+        # voxel coordinates
+        for cs_id, vxs in el.items():
+            if cs_id in tot_map:
+                tot_map[cs_id].extend(vxs)
+            else:
+                tot_map[cs_id] = vxs
 
 
 def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:

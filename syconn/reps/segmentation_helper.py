@@ -16,7 +16,7 @@ from . import rep_helper as rh
 from .rep_helper import surface_samples
 from .. import global_params
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
-    VoxelStorage, SkeletonStorage
+    VoxelStorage, SkeletonStorage, VoxelStorageDyn
 from ..handler.basics import chunkify
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_imap
@@ -90,9 +90,7 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
                 glob.glob(sd.so_storage_path + "/*/")
         sd._ids = []
         for path in paths:
-            if os.path.exists(path + "voxel.pkl"):
-                this_ids = list(VoxelStorage(path + "voxel.pkl", read_only=True).keys())
-            elif os.path.exists(path + "attr_dict.pkl"):
+            if os.path.exists(path + "attr_dict.pkl"):
                 this_ids = list(AttributeDict(path + "attr_dict.pkl", read_only=True).keys())
             else:
                 this_ids = []
@@ -203,8 +201,11 @@ def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
+    elif so.type in ['syn_ssv', 'syn', 'cs', 'cs_ssv']:
+        voxel_dc = VoxelStorageDyn(so.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
+        voxel_list = voxel_dc.get_voxel_cache(so.id)
     else:
-        voxel_dc = VoxelStorage(so.voxel_path, read_only=True, disable_locking=True)
+        voxel_dc = VoxelStorageDyn(so.voxel_path, read_only=True, disable_locking=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
         voxel_list = []

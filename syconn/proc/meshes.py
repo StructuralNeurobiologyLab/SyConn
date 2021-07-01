@@ -1182,7 +1182,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
 
 
 def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
-                          voxel_dc: Optional[VoxelStorage] = None, **gen_kwgs):
+                          voxel_dc: Optional[VoxelStorageDyn] = None, **gen_kwgs):
     """
 
     Args:
@@ -1193,17 +1193,15 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
     Returns:
 
     """
-    assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
+    assert segobj.type in ['cs', 'syn', 'syn_ssv', 'cs_ssv'], 'Object type not supported'
     if voxel_dc is None:
-        voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
-    if isinstance(voxel_dc, VoxelStorageDyn):
-        voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
-        return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1, **gen_kwgs)
-    else:
-        # no overlap possible, stored as a single mask anyway.
-        bin_arrs, block_offsets = voxel_dc[segobj.id]
-        assert len(bin_arrs) == 1, 'Multiple mask cubes are not expected.'
-        return gen_mesh_voxelmask(zip(bin_arrs, block_offsets), segobj.scaling, overlap=0, **gen_kwgs)
+        voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
+    voxels = voxel_dc.get_voxel_cache(segobj.id)
+    abs_offset = np.min(voxels, axis=0)
+    voxels -= abs_offset
+    id_mask = np.zeros(np.max(voxels, axis=0) + 1, dtype=np.bool)
+    id_mask[voxels[:, 0], voxels[:, 1], voxels[:, 2]] = True
+    return gen_mesh_voxelmask(zip([id_mask], [abs_offset]), segobj.scaling, overlap=0, **gen_kwgs)
 
 
 def calc_cell_mesh_from_points(segobj: 'segmentation.SegmentationObject', **gen_kwgs):

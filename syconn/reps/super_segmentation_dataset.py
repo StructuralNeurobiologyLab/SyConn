@@ -316,14 +316,15 @@ class SuperSegmentationDataset(SegmentationBase):
         Returns:
             Dictionary with supervoxel ID as key and cell ID as value.
         """
+        assert np.ndim(ids) == 1
         lookup = dict()
         queries = np.intersect1d(ids, self.sv_ids)
         for sv_id, ssv_id in zip(queries, self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
             lookup[sv_id] = ssv_id
         return lookup
-
+    
     @property
-    def mapping_lookup_reverse(self):
+    def mapping_lookup_reverse(self) -> BinarySearchStore:
         if self._mapping_lookup_reverse is None:
             self._mapping_lookup_reverse = BinarySearchStore(self.mapping_lookup_reverse_path)
         return self._mapping_lookup_reverse

@@ -36,7 +36,8 @@ from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from ..reps import rep_helper
 from ..reps import segmentation
-from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties
+from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties, \
+find_object_properties_cs_64bit, merge_voxel_dicts
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
@@ -181,10 +182,8 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     os.makedirs(cset.path_head_folder)
 
     multi_params = []
-    if max_n_jobs > len(chunk_list) // 50:
-        iter_params = basics.chunkify(chunk_list, max_n_jobs)
-    else:
-        iter_params = basics.chunkify_successive(chunk_list, 50)
+    iter_params = basics.chunkify(chunk_list, max_n_jobs)
+
     for ii, chunk_k in enumerate(iter_params):
         multi_params.append([[cset.chunk_dict[k] for k in chunk_k],
                              global_params.config.kd_seg_path, ii, dir_props])
@@ -210,7 +209,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             cs_worker_mapping[worker_nr] = cs_ids_curr
     else:
         results = start_multiprocess_imap(_contact_site_extraction_thread,
-                                          multi_params, verbose=False)
+                                          multi_params, verbose=False, debug=False)
         for worker_nr, worker_res in tqdm.tqdm(results, leave=False):
             syn_ids_curr = np.array(worker_res['syn'], dtype=np.uint64)
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)
@@ -310,7 +309,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
-        start_multiprocess_imap(_write_props_to_syn_thread, multi_params)
+        start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
                            n_cores=n_cores, remove_jobfolder=True)
@@ -391,11 +390,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         kd_syntype_sym, kd_syntype_asym = None, None
     cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
+    syn_voxels = {}
     tot_sym_cnt = {}
     tot_asym_cnt = {}
-    cum_dt_data = 0
-    cum_dt_proc = 0
-    cum_dt_proc2 = 0
     cs_filtersize = np.array(global_params.config['cell_objects']['cs_filtersize'])
     cs_dilation = global_params.config['cell_objects']['cs_dilation']
     # stencil_offset is used to load more data as these will be cropped when performing detect_cs(_64bit)
@@ -405,13 +402,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     for chunk in chunks:
         offset = np.array(chunk.coordinates - overlap)  # also used for loading synapse data
         size = 2 * overlap + np.array(chunk.size)  # also used for loading synapse data
-        start = time.time()
-
         data = kd.load_seg(size=size + 2 * stencil_offset,
                            offset=offset - stencil_offset,
                            mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
-        cum_dt_data += time.time() - start
-        start = time.time()
 
         # contacts has size as given with `size`, because detect_cs performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
@@ -425,9 +418,6 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
         # contacts = res
 
-        cum_dt_proc += time.time() - start
-
-        start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
         # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
@@ -463,14 +453,12 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         else:
             sym_d = np.zeros_like(sj_d)
             asym_d = np.zeros_like(sj_d)
-        cum_dt_data += time.time() - start
 
         # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
-        start = time.time()
+
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
-        _, bb_dc, _ = find_object_properties(contacts)  # TODO: change to find_object_properties_cs from
-        # find_object_properties_numba
+        _, bb_dc, _ = find_object_properties(contacts)  # TODO: change to find_object_properties_cs_64bit
         n_closings = overlap
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
@@ -489,19 +477,17 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             # only update background or the objects itself and do not remove object voxels (res == 1), e.g. at boundary
             proc_mask = ((binary_mask == 1) | (sub_vol == 0)) & (res == 1)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
-        cum_dt_proc2 += time.time() - start
 
-        start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects
         # and the asym and sym voxels, do not use overlap here!
-        # TODO: use numba implementation of extract_cs_syntype - then conversion to lists is not required anymore
-        # TODO: use python lists instead of numpy arrays as dictionary values in curr_cs_p and curr_syn_p
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(
+        # TODO: use extract_cs_syntype_64bit - then conversion to lists is not required anymore
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = extract_cs_syntype(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             asym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
-            sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap])
-        cum_dt_proc += time.time() - start
+            # overlap was removed; use correct offset for the analysis of the object properties
+            sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap], offset=offset + overlap)
+
         os.makedirs(chunk.folder, exist_ok=True)
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "cs.h5",
@@ -514,16 +500,16 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)
+        merge_voxel_dicts([syn_voxels, curr_syn_vx])
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
     basics.write_obj2pkl(f'{worker_dir_props}/cs_props_{worker_nr}.pkl', cs_props)
     basics.write_obj2pkl(f'{worker_dir_props}/syn_props_{worker_nr}.pkl', syn_props)
+    basics.write_obj2pkl(f'{worker_dir_props}/syn_voxels_{worker_nr}.pkl', syn_voxels)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_asym_cnt_{worker_nr}.pkl', tot_asym_cnt)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_sym_cnt_{worker_nr}.pkl', tot_sym_cnt)
-    # log_extraction.error("Cum. time for loading data: {:.2f} s; for processing: {:.2f} "
-    #                      "s for processing2: {:.2f} s. {} cs and {} syn.".format(
-    #     cum_dt_data, cum_dt_proc, cum_dt_proc2, len(cs_props[0]), len(syn_props[0])))
+
     return worker_nr, dict(cs=list(cs_props[0].keys()), syn=list(syn_props[0].keys()))
 
 
@@ -565,6 +551,7 @@ def _write_props_to_syn_thread(args):
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
         cs_asym_cnt = {}
+        syn_voxels = {}
 
         # get cached worker lookup
         with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
@@ -573,7 +560,7 @@ def _write_props_to_syn_thread(args):
         del cs_workers_tmp
 
         res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False)
-        for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc in res:
+        for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
             if len(tmp_dcs_cs) == 0:
                 continue
             # cs
@@ -586,6 +573,8 @@ def _write_props_to_syn_thread(args):
             del tmp_asym_dc
             merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
             del tmp_sym_dc
+            merge_voxel_dicts([syn_voxels, tmp_syn_vxs])
+            del tmp_syn_vxs
 
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
@@ -595,7 +584,6 @@ def _write_props_to_syn_thread(args):
         # this class is only used to query the voxel data
         voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
                                    read_only=False, disable_locking=True)
-        voxel_dc_store = VoxelStorage(vx_p, read_only=False, disable_locking=True)
 
         # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
@@ -654,18 +642,19 @@ def _write_props_to_syn_thread(args):
             voxel_dc.set_object_repcoord(cs_id, rp)
             ids_to_load_voxels.append(cs_id)
             # # write voxels explicitly - this assumes reasonably sized synapses
-            voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
+            voxel_dc.set_voxel_cache(cs_id, np.array(syn_voxels[cs_id], dtype=np.uint32))
+            del syn_voxels[cs_id]
 
-        voxel_dc_store.push()
+        voxel_dc.push()
         voxel_dc_cs.push()
         this_attr_dc.push()
         this_attr_dc_cs.push()
 
 
-def _write_props_collect_helper(args):
+def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dict, dict]:
     dir_props, worker_id, intersec = args
     if len(intersec) == 0:
-        return {}, {}, {}, {}
+        return [{}, {}, {}], [{}, {}, {}], {}, {}, {}
     worker_dir_props = f"{dir_props}/{worker_id}/"
     # cs
     fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
@@ -690,6 +679,8 @@ def _write_props_collect_helper(args):
     curr_sym_cnt = basics.load_pkl2obj(fname)
     fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
     curr_asym_cnt = basics.load_pkl2obj(fname)
+    fname = f'{worker_dir_props}/syn_voxels_{worker_id}.pkl'
+    curr_syn_vxs = basics.load_pkl2obj(fname)
 
     tmp_dcs_syn = [dict(), defaultdict(list), dict()]
     tmp_sym_dc = dict()
@@ -704,7 +695,7 @@ def _write_props_collect_helper(args):
             tmp_sym_dc[k] = curr_sym_cnt[k]
         if k in curr_asym_cnt:
             tmp_asym_dc[k] = curr_asym_cnt[k]
-    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc
+    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, curr_syn_vxs
 
 
 def _generate_storage_lookup(args):
