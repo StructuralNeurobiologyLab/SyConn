@@ -108,7 +108,7 @@ class SuperSegmentationDataset(SegmentationBase):
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
                  sso_caching: bool = False, sso_locking: bool = False, create: bool = False,
                  sd_lookup: Optional[Dict[str, SegmentationDataset]] = None,
-                 cache_properties: Optional[List[str]] = None):
+                 cache_properties: Optional[List[str]] = None, overwrite: bool = False):
         """
         Args:
             working_dir: Path to the working directory.
@@ -139,6 +139,7 @@ class SuperSegmentationDataset(SegmentationBase):
         self.sso_caching = sso_caching
         self.sso_locking = sso_locking
         self._mapping_lookup_reverse = None
+        self.overwrite = overwrite
 
         self._type = ssd_type
         self._ssv_ids = None
@@ -339,7 +340,8 @@ class SuperSegmentationDataset(SegmentationBase):
             ids.extend(list(sv_ids))
         ids = np.array(ids, dtype=np.uint64)
         ssv_ids = np.array(ssv_ids, dtype=np.uint64)
-        BinarySearchStore(self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids))
+        BinarySearchStore(
+            self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids), overwrite=self.overwrite)
 
     @property
     def ssv_ids(self) -> np.ndarray:
@@ -492,7 +494,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.save_mapping_dict()
 
     def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
-                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True, overwrite=False):
+                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
@@ -509,14 +511,12 @@ class SuperSegmentationDataset(SegmentationBase):
             nb_cpus: CPUs per worker.
             use_batchjob: Use batchjob processing instead of local multiprocessing.
             new_mapping: Whether to apply new mapping (see :func:`~mapping_dict`).
-            overwrite: Remove existing SSD folder, if False and a folder already
-                exists it raises FileExistsError.
 
         Returns:
 
         """
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
-                          new_mapping=new_mapping, overwrite=overwrite, use_batchjob=use_batchjob)
+                          new_mapping=new_mapping, overwrite=self.overwrite, use_batchjob=use_batchjob)
 
     def predict_cell_types_skelbased(self, stride: int = 1000, nb_cpus=1):
         """
@@ -609,6 +609,20 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
         overwrite: Remove existing SSD folder, if False and a folder already exists it raises FileExistsError.
     """
+
+    # This is to only remove files for overwriting that are actually generated here; e.g. mapping_lookup_reverse
+    # is not written here and thus should not be deleted here if overwrite = True.
+    deep_ssd_storage_pths = [
+        ssd.mapping_dict_path,
+        ssd.mapping_dict_path,
+        ssd.version_dict_path,
+        f'{ssd.path}/id.npy',
+        f'{ssd.path}/size.npy',
+        f'{ssd.path}/sv.npy',
+        f'{ssd.path}/rep_coord.npy',
+        f'{ssd.path}/bounding_box.npy',
+    ]
+
     # check if ssv storages already exists
     if new_mapping and os.path.exists(ssd.path) and len(glob.glob(ssd.path + '/so_storage/*')) > 1:
         if not overwrite:
@@ -616,7 +630,13 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             log_reps.error(msg)
             raise FileExistsError(msg)
         else:
-            shutil.rmtree(ssd.path)
+            for cur_pth in deep_ssd_storage_pths:
+                if not os.path.exists(cur_pth):
+                    continue
+                if os.path.isdir(cur_pth):
+                    shutil.rmtree(cur_pth)
+                else:
+                    os.remove(cur_pth)
 
     ssd.save_dataset_shallow(overwrite=overwrite)
     if n_jobs is None:
