@@ -7,6 +7,7 @@ from syconn.handler.logger import log_main as log_gate
 from syconn.handler.prediction import str2int_converter, int2str_converter
 from syconn import global_params
 from timeit import default_timer as timer
+# from neuroglancer.server import global_server
 import neuroglancer
 import argparse
 import os
@@ -78,8 +79,8 @@ class PropertyFilter(SyConnClient):
         "soma": "post-synaptic",
     }
 
-    def __init__(self, backend, seg_path, organelles, clargs: dict):
-        super().__init__(backend, seg_path, organelles, clargs)
+    def __init__(self, backend, seg_path, organelles, clargs: dict, token=None):
+        super().__init__(backend, seg_path, organelles, clargs, token)
 
         self.gt_type = "ctgt"
         if 'j0251' in global_params.config.working_dir:
@@ -94,12 +95,12 @@ class PropertyFilter(SyConnClient):
         self.ssv_ids = self.ssd.ssv_ids
         self.cur_message = None
 
-        self.neuron_partners = np.load('neuron_partnerss.npy', allow_pickle=True)
-        self.axoness_partners = np.load('partner_axonesss.npy', allow_pickle=True)
-        self.syn_probs = np.load('syn_probs.npy', allow_pickle=True)
-        self.syn_areas = np.load('mesh_areas.npy', allow_pickle=True)
-        self.partner_celltypes = np.load('partner_celltypess.npy', allow_pickle=True)
-        self.rep_coords = np.load('rep_coords.npy', allow_pickle=True)
+        self.neuron_partners = np.load('/home/hashir/SyConn/syconn/analysis/neuron_partnerss.npy', allow_pickle=True)
+        self.axoness_partners = np.load('/home/hashir/SyConn/syconn/analysis/partner_axonesss.npy', allow_pickle=True)
+        self.syn_probs = np.load('/home/hashir/SyConn/syconn/analysis/syn_probs.npy', allow_pickle=True)
+        self.syn_areas = np.load('/home/hashir/SyConn/syconn/analysis/mesh_areas.npy', allow_pickle=True)
+        self.partner_celltypes = np.load('/home/hashir/SyConn/syconn/analysis/partner_celltypess.npy', allow_pickle=True)
+        self.rep_coords = np.load('/home/hashir/SyConn/syconn/analysis/rep_coords.npy', allow_pickle=True)
 
         # dict of CT indices in the ssv_ids array
         self.CTmask = {ct: [] for ct in self.CTs}
@@ -133,6 +134,7 @@ class PropertyFilter(SyConnClient):
         ssv_id = segment_id.value
 
         with self.viewer.txn() as s:
+            print(self.viewer.state.cross_section_scale)
             segments = get_segmentation_layer(s.layers)[1].segments
             if ssv_id in segments:
                 # print('Clicked segment')

@@ -38,4 +38,9 @@
 - [x] Write the status message in the format: <pre-synaptic> -> <post-synaptic>
 - [x] Center the viewport at the point of the synapse (check rep. coords); zoom-in (optional)
 - [x] Include celltypes in status message 
+- [x] remove ngrok; directly serve with http behind port 80 
+- [x] multiple independent users without accidental synchronization
+- [ ] Resolve the magnification when zooming out; Use the crossSectionScale from the viewer state and trace back to the downsample factor in the server
+- [ ] Modify the index page (include a background maybe)
+
 

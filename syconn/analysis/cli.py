@@ -1,17 +1,19 @@
 from __future__ import print_function
 from logging import log
 from neuroglancer.local_volume import LocalVolume
-from syconn.handler.logger import log_main as log_gate
+from syconn.handler.logger import log_main as logger
 from syconn import global_params
 from syconn.analysis.backend import SyConnBackend
 from syconn.analysis.utils import handle_layer_args
-from syconn.analysis.flask_server import start_flask_server
+# from syconn.analysis.flask_server import start_flask_server
 import argparse
 import os
 import numpy as np
 from knossos_utils import KnossosDataset
 import neuroglancer
 import neuroglancer.cli
+import neuroglancer.server as srv
+import neuroglancer.settings as st
 
 flask_PORT = 8000 # for development environment
 
@@ -22,9 +24,6 @@ def configure_backend():
     :rtype backend: SyConnBackend
     """
 
-    global logger
-
-    logger = log_gate
     logger.info('SyConn gate server starting up on working directory '
                 '"{}".'.format(global_params.wd))
 
@@ -54,7 +53,7 @@ class SyConnClient(object):
     .. note:: One client instance corresponds to one neuroglancer viewer.
     """
 
-    def __init__(self, backend, seg_path, organelles, clargs):
+    def __init__(self, backend, seg_path, organelles, clargs, token):
         
         self.backend = backend
         self._seg_path = seg_path
@@ -76,10 +75,10 @@ class SyConnClient(object):
         if organelles == []:
             logger.info('No organelles selected')
 
-        self.host = clargs['host']
-        self.port = clargs['port']
-
-        viewer = self.viewer = neuroglancer.Viewer(token='syconn-neuroglancer')
+        # self.host = clargs['host']
+        # self.port = clargs['port']
+        
+        viewer = self.viewer = neuroglancer.Viewer(token=token, global_srv=st.global_server)
         logger.info('Neuroglancer viewer object initialized')
 
         # start flask server with desired seg_dataset
