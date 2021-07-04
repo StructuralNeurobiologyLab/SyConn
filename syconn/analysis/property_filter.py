@@ -95,12 +95,12 @@ class PropertyFilter(SyConnClient):
         self.ssv_ids = self.ssd.ssv_ids
         self.cur_message = None
 
-        self.neuron_partners = np.load('/home/hashir/SyConn/syconn/analysis/neuron_partnerss.npy', allow_pickle=True)
-        self.axoness_partners = np.load('/home/hashir/SyConn/syconn/analysis/partner_axonesss.npy', allow_pickle=True)
-        self.syn_probs = np.load('/home/hashir/SyConn/syconn/analysis/syn_probs.npy', allow_pickle=True)
-        self.syn_areas = np.load('/home/hashir/SyConn/syconn/analysis/mesh_areas.npy', allow_pickle=True)
-        self.partner_celltypes = np.load('/home/hashir/SyConn/syconn/analysis/partner_celltypess.npy', allow_pickle=True)
-        self.rep_coords = np.load('/home/hashir/SyConn/syconn/analysis/rep_coords.npy', allow_pickle=True)
+        self.neuron_partners = np.load('/home/shared/neuron_partnerss.npy', allow_pickle=True)
+        self.axoness_partners = np.load('/home/shared/partner_axonesss.npy', allow_pickle=True)
+        self.syn_probs = np.load('/home/shared/syn_probs.npy', allow_pickle=True)
+        self.syn_areas = np.load('/home/shared/mesh_areas.npy', allow_pickle=True)
+        self.partner_celltypes = np.load('/home/shared/partner_celltypess.npy', allow_pickle=True)
+        self.rep_coords = np.load('/home/shared/rep_coords.npy', allow_pickle=True)
 
         # dict of CT indices in the ssv_ids array
         self.CTmask = {ct: [] for ct in self.CTs}
