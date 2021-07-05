@@ -439,7 +439,7 @@ class SegmentationObject(SegmentationBase):
         """
         if self._size is None and 'size' in self.attr_dict:
             self._size = self.attr_dict['size']
-        if self._size is None and self.attr_dict_exists:
+        elif self._size is None and self.attr_dict_exists:
             self._size = self.lookup_in_attribute_dict("size")
         if self._size is None:
             self.calculate_size()
@@ -460,7 +460,7 @@ class SegmentationObject(SegmentationBase):
     def bounding_box(self) -> np.ndarray:
         if self._bounding_box is None and 'bounding_box' in self.attr_dict:
             self._bounding_box = self.attr_dict['bounding_box']
-        if self._bounding_box is None and self.attr_dict_exists:
+        elif self._bounding_box is None and self.attr_dict_exists:
             self._bounding_box = self.lookup_in_attribute_dict('bounding_box')
         if self._bounding_box is None:
             self.calculate_bounding_box()
@@ -478,7 +478,7 @@ class SegmentationObject(SegmentationBase):
         """
         if self._rep_coord is None and 'rep_coord' in self.attr_dict:
             self._rep_coord = self.attr_dict['rep_coord']
-        if self._rep_coord is None and self.attr_dict_exists:
+        elif self._rep_coord is None and self.attr_dict_exists:
             self._rep_coord = self.lookup_in_attribute_dict("rep_coord")
         if self._rep_coord is None:
             self.calculate_rep_coord()

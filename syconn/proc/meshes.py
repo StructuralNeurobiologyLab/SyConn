@@ -1194,9 +1194,12 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
 
     """
     assert segobj.type in ['cs', 'syn', 'syn_ssv', 'cs_ssv'], 'Object type not supported'
-    if voxel_dc is None:
-        voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
-    voxels = voxel_dc.get_voxel_cache(segobj.id)
+    if segobj._voxels is None:
+        if voxel_dc is None:
+            voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
+        voxels = np.array(voxel_dc.get_voxel_cache(segobj.id), dtype=np.uint32)
+    else:
+        voxels = np.array(segobj._voxels, dtype=np.uint32)
     abs_offset = np.min(voxels, axis=0)
     voxels -= abs_offset
     id_mask = np.zeros(np.max(voxels, axis=0) + 1, dtype=np.bool)
