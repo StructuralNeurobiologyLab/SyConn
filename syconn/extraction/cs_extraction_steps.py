@@ -37,7 +37,7 @@ from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
 from ..reps import rep_helper
 from ..reps import segmentation
 from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties, \
-find_object_properties_cs_64bit, merge_voxel_dicts
+    find_object_properties_cs_64bit, merge_voxel_dicts, extract_cs_syntype_64bit
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
@@ -408,15 +408,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # contacts has size as given with `size`, because detect_cs performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
-
-        # TODO: use new detect_cs after verification
-        contacts = np.asarray(detect_cs(data))
-        # contacts = np.asarray(detect_cs_64bit(data))
-        # contacts_new = np.array(contacts)
-        # res = np.zeros(contacts.shape[:3], dtype=np.uint64)
-        # mask = contacts[..., 0] != 0
-        # res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
-        # contacts = res
+        contacts = np.asarray(detect_cs_64bit(data))
 
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
@@ -458,7 +450,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
-        _, bb_dc, _ = find_object_properties(contacts)  # TODO: change to find_object_properties_cs_64bit
+        _, bb_dc, _ = find_object_properties_cs_64bit(contacts)
+        bb_dc = {(k1, k2): v2 for k1, v1 in bb_dc.items() for k2, v2 in v1.items()}
         n_closings = overlap
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
@@ -480,14 +473,15 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # this counts SJ foreground voxels overlapping with the CS objects
         # and the asym and sym voxels, do not use overlap here!
-        # TODO: use extract_cs_syntype_64bit - then conversion to lists is not required anymore
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = extract_cs_syntype(
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = extract_cs_syntype_64bit(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             asym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             # overlap was removed; use correct offset for the analysis of the object properties
             sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap], offset=offset + overlap)
-
+        # change nested dicts to dict with tuple keys: dict[tuple(id1, id2)] = ...
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = \
+            _nested_dicts_to_tuple_dicts(curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx)
         os.makedirs(chunk.folder, exist_ok=True)
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "cs.h5",
@@ -511,6 +505,30 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     basics.write_obj2pkl(f'{worker_dir_props}/tot_sym_cnt_{worker_nr}.pkl', tot_sym_cnt)
 
     return worker_nr, dict(cs=list(cs_props[0].keys()), syn=list(syn_props[0].keys()))
+
+
+def _nested_dicts_to_tuple_dicts(cs_dicts, syn_dicts, asym_dict, sym_dict, syn_voxel_dict):
+    cs_dicts_ = [dict(), dict(), dict()]
+    syn_dicts_ = [dict(), dict(), dict()]
+    asym_dict_ = dict()
+    sym_dict_ = dict()
+    syn_voxel_dict_ = dict()
+    for k1, v1 in cs_dicts[0].items():
+        for k2 in v1.items():
+            key = (k1, k2)
+            cs_dicts_[0][key] = cs_dicts[0][k1][k2]
+            cs_dicts_[1][key] = cs_dicts[1][k1][k2]
+            cs_dicts_[2][key] = cs_dicts[2][k1][k2]
+    for k1, v1 in syn_dicts[0].items():
+        for k2 in v1.items():
+            key = (k1, k2)
+            syn_dicts_[0][key] = syn_dicts[0][k1][k2]
+            syn_dicts_[1][key] = syn_dicts[1][k1][k2]
+            syn_dicts_[2][key] = syn_dicts[2][k1][k2]
+            asym_dict_[key] = asym_dict[k1][k2]
+            sym_dict_[key] = sym_dict[k1][k2]
+            syn_voxel_dict_[key] = syn_voxel_dict[k1][k2]
+    return cs_dicts_, syn_dicts_, asym_dict_, sym_dict_, syn_voxel_dict_
 
 
 # iterate over the subcellular SV ID chunks
@@ -556,6 +574,7 @@ def _write_props_to_syn_thread(args):
         # get cached worker lookup
         with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
             cs_workers_tmp = pkl.load(f)
+        # TODO 64bit refactoring - obj_ids are now tuple -> adapt given obj_ids upstream accordingly
         params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in cs_workers_tmp.items()]
         del cs_workers_tmp
 

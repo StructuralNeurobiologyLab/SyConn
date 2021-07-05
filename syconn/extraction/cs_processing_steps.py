@@ -233,6 +233,7 @@ def _delete_all_cache_dc(args):
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
 def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
                         ssd: super_segmentation.SuperSegmentationDataset) -> Dict[int, list]:
+    # TODO 64bit refactoring
     """
     This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs) that do not need to be agglomerated.
 
@@ -253,6 +254,8 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     # -> not necessary to load the cs_ids.
     syn_ids = sd_syn.ids.copy()
 
+    # TODO 64bit refactoring - might not even be needed anymore
+    #  as the cs ID / syn ID could just be a tuple
     sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
@@ -385,6 +388,8 @@ def _combine_and_split_syn_thread(args):
 
     for ssvpartners_enc, syn_ids in rel_ssv_with_syn_ids_items:
         n_items_for_path += 1
+        # TODO 64bit refactoring - do not call this method with a single element - might not even be needed anymore
+        #  as the cs ID / syn ID could just be a tuple
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
         syn = sd_syn.get_segmentation_object(syn_ids[0])
 
@@ -430,7 +435,7 @@ def _combine_and_split_syn_thread(args):
                 raise ValueError(f'Path mis-match!')
             synssv_attr_dc = dict(neuron_partners=ssv_ids)
             voxel_dc.set_voxel_cache(syn_ssv_id, this_vx)
-            synssv_attr_dc["rep_coord"] = this_vx[0]  # any rep coord
+            synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
             synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
             synssv_attr_dc["size"] = len(this_vx)
             # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
@@ -653,6 +658,8 @@ def _combine_and_split_cs_thread(args):
     # of the partner cells)
     for ssvpartners_enc, cs_ids in rel_ssv_with_cs_ids_items:
         n_items_for_path += 1
+        # TODO 64bit refactoring - do not call this method with a single element - might not even be needed anymore
+        #  as the cs ID / syn ID could just be a tuple
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
 
         # verify ssv_partner_ids

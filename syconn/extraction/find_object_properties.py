@@ -16,13 +16,14 @@ int64_arr1d = types.int64[:]
 uint64_tuple = types.UniTuple(numba.uint64, 2)
 uint64_arr1d_dict = types.DictType(types.uint64, int64_arr1d)
 uint64_arr2d_dict = types.DictType(types.uint64, int64_arr2d)
+uint64_list_dict = types.DictType(types.uint64, types.ListType)
 uint64_int64_dict = types.DictType(types.uint64, types.int64)
 
 
 @numba.jit(nopython=True)
-def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.ndarray, sym_mask: np.ndarray)\
-        -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray],
-                 np.ndarray, np.ndarray]:
+def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.ndarray, sym_mask: np.ndarray,
+                             offset: np.ndarray)\
+        -> Tuple[Tuple[dict, dict, dict], Tuple[dict, dict, dict], dict, dict, dict]:
     """
     Extract synaptic properties for every contact site ID tuple inside `cs_seg`.
 
@@ -40,10 +41,12 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
         syn_mask: Synapse prediction (binary foreground mask, synapse=1, background=0).
         asym_mask: Asymmetric type prediction (binary foreground mask, asym=1, background=0).
         sym_mask: Symmetric type prediction (binary foreground mask, sym=1, background=0).
+        offset: Offset applied to store correct voxel coordinates in voxel dict.
 
     Returns:
         Representative coordinate, bounding box and size for contact sites, representative coordinate, bounding box
-        and size for synapses (for voxels with ``syn_mask=1``), counts for asymmetric and symmetric voxels. All objects
+        and size for synapses (for voxels with ``syn_mask=1``), counts for asymmetric and symmetric voxels, voxel dict
+        . All objects
         are nested dictionaries with contact site/synapse partner IDs as keys.
     """
 
@@ -67,6 +70,10 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
     bounding_box_syn = typed.Dict.empty(
         key_type=types.uint64,
         value_type=uint64_arr2d_dict,
+    )
+    voxels_syn = typed.Dict.empty(
+        key_type=types.uint64,
+        value_type=uint64_list_dict,
     )
     sizes_syn = typed.Dict.empty(
         key_type=types.uint64,
@@ -135,6 +142,10 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                         key_type=types.uint64,
                         value_type=int64_arr1d,
                     )
+                    voxels_syn_local = typed.Dict.empty(
+                        key_type=types.uint64,
+                        value_type=types.ListType,
+                    )
                     bounding_box_local = typed.Dict.empty(
                         key_type=types.uint64,
                         value_type=int64_arr2d,
@@ -144,13 +155,16 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                         value_type=types.int64,
                     )
                     bounding_box_local[key[1]] = [(x, y, z), (x + 1, y + 1, z + 1)]
+                    voxels_syn_local[key[1]] = [[x + offset[0], y + offset[1], z + offset[2]], ]
                     sizes_local[key[1]] = 1
                     rep_coords_local[key[1]] = [x, y, z]
                     bounding_box_syn[key[0]] = bounding_box_local
+                    voxels_syn[key[0]] = voxels_syn_local
                     sizes_syn[key[0]] = sizes_local
                     rep_coords_syn[key[0]] = rep_coords_local
                 elif dc_local_bb.get(key[1]) is None:
                     bounding_box_syn[key[0]][key[1]] = [(x, y, z), (x+1, y+1, z+1)]
+                    voxels_syn[key[0]][key[1]] = [[x + offset[0], y + offset[1], z + offset[2]], ]
                     sizes_syn[key[0]][key[1]] = 1
                     rep_coords_syn[key[0]][key[1]] = [x, y, z]
                 else:
@@ -161,6 +175,8 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                     local_bb[1][0] = max(local_bb[1][0], x + 1)
                     local_bb[1][1] = max(local_bb[1][1], y + 1)
                     local_bb[1][2] = max(local_bb[1][2], z + 1)
+                    local_voxels = voxels_syn.get(key[0]).get(key[1])
+                    local_voxels.append([x + offset[0], y + offset[1], z + offset[2]])
                     sizes_syn[key[0]][key[1]] += 1
 
                 # store sym. and asym. voxels counts
@@ -191,7 +207,7 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                     else:
                         cs_sym[key[0]][key[1]] += 1
     return (rep_coords, bounding_box, sizes), \
-           (rep_coords_syn, bounding_box_syn, sizes_syn), cs_asym, cs_sym
+           (rep_coords_syn, bounding_box_syn, sizes_syn), cs_asym, cs_sym, voxels_syn
 
 
 @numba.jit(nopython=True)
@@ -205,7 +221,7 @@ def find_object_properties_cs_64bit(cs_seg: np.ndarray):
         *  cs_seg, syn_mask, sym_mask and asym_mask  must all have the same spatial shape.
 
     Args:
-        cs_seg: Contact site segmentation (XYZC, with C=2).
+        cs_seg: Contact site segmentation (XYZC, with C=2). Channel axis containg partner IDs must be sorted.
 
     Returns:
         Representative coordinate, bounding box and size for contact sites. All objects
@@ -350,7 +366,7 @@ def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:
         arr: 3D segmentation array
 
     Returns:
-        4D contact site segmentation array (XYZC; with C=2).
+        4D contact site segmentation array (XYZC; with C=2). C axis contains sorted (ascending) "partner" IDs.
     """
     # first identify boundary voxels
     bdry = detect_seg_boundaries(arr)
@@ -378,7 +394,8 @@ def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: n
             will check a 3x3x3 cube around every voxel.
 
     Returns:
-        Boundary mask. Axes will be ``2*offset`` smaller.
+        Boundary tuple mask. Each tuple contains adjacent IDs (ascending, i.e. sorted). Shape will be ``2*offset``
+        smaller in each  dimension.
     """
     nx, ny, nz = seg_arr.shape[:3]
     contact_partners = np.zeros((nx+offset[0, 0]-offset[0, 1],

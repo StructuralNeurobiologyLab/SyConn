@@ -1,6 +1,7 @@
 # SyConn
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
+from typing import Union
 
 from syconn.extraction.find_object_properties import detect_cs, detect_cs_64bit, detect_seg_boundaries, \
     find_object_properties, find_object_properties_cs_64bit
@@ -8,7 +9,7 @@ import numpy as np
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
 from syconn.reps.rep_helper import colorcode_vertices
-from syconn.reps.connectivity_helper import cs_id_to_partner_ids_vec, cs_id_to_partner_inverse
+from syconn.reps.connectivity_helper import cs_id_to_partner_ids_vec
 from scipy import spatial
 
 # test cube properties
@@ -206,6 +207,22 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
     output1 = colorcode_vertices(vertices, rep_coords, rep_values, colors=colors, return_color=True)     #output from colorcode_vertices() with color enabled
     assert np.array_equal(output1, colors[ixs]), \
         "colorcode_vertices() function might have some problem with input colors"    #check 2
+
+
+def cs_id_to_partner_inverse(partner_ids: Union[np.ndarray, list]) -> int:
+    # TODO 64bit refactoring - use numpy arrays that store the partner IDs for the look-up
+    """
+    Input permutation invariant transformation to bit-shift-based ID, which is used for `syn` and `cs`
+    :class:`~syconn.reps.segmentation.SegmentationObject`.
+
+    Args:
+        partner_ids: :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` IDs.
+
+    Returns:
+        Contact site or synapse fragment ID.
+    """
+    partner_ids = np.sort(partner_ids).astype(np.uint32)
+    return (partner_ids[0] << 32) + partner_ids[1]
 
 
 if __name__ == '__main__':
