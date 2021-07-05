@@ -142,7 +142,7 @@ if __name__ == '__main__':
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
 
-    ftimer = FileTimer(example_wd + '/.timing.pkl')
+    ftimer = FileTimer(example_wd + '/.timing.pkl', overwrite=True)
     if 'preparation' in todo:
         log.info(f'Step 0/12 - Preparation')
         ftimer.start('Preparation')
