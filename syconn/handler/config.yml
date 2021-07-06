@@ -22,6 +22,8 @@ mem_per_node: 249500  # in MB
 ncores_per_node: 20
 ngpus_per_node: 2
 nnodes_total: 17
+batchjob_max_time: '4-0'
+batchjob_additional_params: ''
 # slurm specific
 slurm:
   exclude_nodes:
