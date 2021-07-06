@@ -28,6 +28,8 @@ if __name__ == '__main__':
                              'or "2" (1100, 1100, 600).')
     parser.add_argument('--log_level', type=str, default='INFO',
                         help='Level of logging (INFO, DEBUG).')
+    parser.add_argument('--steps', type=str, default='all',
+                        help='Which steps to run: comma-separated list of ints (0-13) or "all"')
     parser.add_argument('--overwrite', dest='overwrite', action='store_true',
                         help='Overwrite generated data.')
     parser.set_defaults(overwrite=False)
@@ -37,6 +39,30 @@ if __name__ == '__main__':
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir) + "/"
+
+    steps = {
+        0: 'preparation',
+        1: 'dense_predictions',
+        2: 'sd_generation',
+        3: 'astrocyte_separation',
+        4: 'ssd_generation',
+        5: 'skeleton_generation',
+        6: 'neuron_rendering',
+        7: 'synapse_detection',
+        8: 'contact_detection',
+        9: 'compartment_predictions',
+        10: 'morphology_extraction',
+        11: 'celltype_analysis',
+        12: 'matrix_export',
+        13: 'start_server', }
+
+    if args.steps == 'all':
+        todo = [steps[xx] for xx in range(14)]
+    else:
+        todo = [steps[int(xx)] for xx in args.steps.split(',')]
+
+    todo_str = '\n\t'.join(todo)
+    print(f'Will run the following steps (specified: "{args.steps}"):\n\n\t{todo_str}')
 
     # set up basic parameter, log, working directory and config file
     experiment_name = 'j0126_example'
@@ -116,162 +142,177 @@ if __name__ == '__main__':
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
 
-    log.info(f'Step 0/9 - Preparation')
-    ftimer = FileTimer(example_wd + '/.timing.pkl')
-    ftimer.start('Preparation')
+    ftimer = FileTimer(example_wd + '/.timing.pkl', overwrite=True)
+    if 'preparation' in todo:
+        log.info(f'Step 0/12 - Preparation')
+        ftimer.start('Preparation')
 
-    # copy models to working directory
-    if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
-        shutil.copytree(curr_dir + '/models', example_wd + '/models/')
-    os.makedirs(example_wd + '/glia/', exist_ok=True)
+        # copy models to working directory
+        if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
+            shutil.copytree(curr_dir + '/models', example_wd + '/models/')
+        os.makedirs(example_wd + '/glia/', exist_ok=True)
 
-    # check model existence
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
-                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
-                      'mpath_tnet']:
-        mpath = getattr(global_params.config, mpath_key)
-        if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
-            raise ValueError('Could not find model "{}". Make sure to copy the'
-                             ' "models" folder into the current working '
-                             'directory "{}".'.format(mpath, example_wd))
+        # check model existence
+        for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+                          'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+                          'mpath_tnet']:
+            mpath = getattr(global_params.config, mpath_key)
+            if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
+                raise ValueError('Could not find model "{}". Make sure to copy the'
+                                 ' "models" folder into the current working '
+                                 'directory "{}".'.format(mpath, example_wd))
 
-    if not prior_astrocyte_removal:
-        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
-    else:
-        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
+        if not prior_astrocyte_removal:
+            shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
+        else:
+            shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
 
-    tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
-    offset = np.array([0, 0, 0])
-    bd = np.array(tmp.shape)
-    del tmp
+        tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
+        offset = np.array([0, 0, 0])
+        bd = np.array(tmp.shape)
+        del tmp
 
-    # INITIALIZE DATA
-    # TODO: switch to streaming confs instead of h5 files
-    if not os.path.isdir(global_params.config.kd_sj_path):
-        kd = knossosdataset.KnossosDataset()
-        kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
-                                  offset=offset, boundary=bd, fast_downsampling=True,
-                                  data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
-
-        seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0].swapaxes(0, 2)  # xyz -> zyx
-        kd.save_seg(offset=offset, mags=[1, 2, 4], data=seg_d, data_mag=1)
-        del kd, seg_d
-        kd_sym = knossosdataset.KnossosDataset()
-        kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
+        # INITIALIZE DATA
+        # TODO: switch to streaming confs instead of h5 files
+        if not os.path.isdir(global_params.config.kd_sj_path):
+            kd = knossosdataset.KnossosDataset()
+            kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                                       offset=offset, boundary=bd, fast_downsampling=True,
-                                      data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
-        del kd_sym
-        kd_asym = knossosdataset.KnossosDataset()
-        kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
-                                       experiment_name, offset=offset, boundary=bd,
-                                       fast_downsampling=True, data_path=h5_dir + 'asym.h5',
-                                       mags=[1, 2], hdf5_names=['asym'])
-        del kd_asym
-        kd_mi = knossosdataset.KnossosDataset()
-        kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
-                                     offset=offset, boundary=bd, fast_downsampling=True,
-                                     data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
-        del kd_mi
-        kd_vc = knossosdataset.KnossosDataset()
-        kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
-                                     offset=offset, boundary=bd, fast_downsampling=True,
-                                     data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
-        del kd_vc
-        kd_sj = knossosdataset.KnossosDataset()
-        kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
-                                     offset=offset, boundary=bd, fast_downsampling=True,
-                                     data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
-        del kd_sj
-    ftimer.stop()
+                                      data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
-    log.info(f'Finished example cube initialization (shape: {bd}). Starting SyConn pipeline.')
-    log.info('Example data will be processed in "{}".'.format(example_wd))
+            seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0].swapaxes(0, 2)  # xyz -> zyx
+            kd.save_seg(offset=offset, mags=[1, 2, 4], data=seg_d, data_mag=1)
+            del kd, seg_d
+            kd_sym = knossosdataset.KnossosDataset()
+            kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
+                                          offset=offset, boundary=bd, fast_downsampling=True,
+                                          data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
+            del kd_sym
+            kd_asym = knossosdataset.KnossosDataset()
+            kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
+                                           experiment_name, offset=offset, boundary=bd,
+                                           fast_downsampling=True, data_path=h5_dir + 'asym.h5',
+                                           mags=[1, 2], hdf5_names=['asym'])
+            del kd_asym
+            kd_mi = knossosdataset.KnossosDataset()
+            kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
+                                         offset=offset, boundary=bd, fast_downsampling=True,
+                                         data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
+            del kd_mi
+            kd_vc = knossosdataset.KnossosDataset()
+            kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
+                                         offset=offset, boundary=bd, fast_downsampling=True,
+                                         data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+            del kd_vc
+            kd_sj = knossosdataset.KnossosDataset()
+            kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
+                                         offset=offset, boundary=bd, fast_downsampling=True,
+                                         data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+            del kd_sj
+        ftimer.stop()
+
+        log.info(f'Finished example cube initialization (shape: {bd}). Starting SyConn pipeline.')
+        log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
-    log.info('Step 1/9 - Predicting sub-cellular structures')
-    ftimer.start('Dense predictions')
-    # exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
-    # exec_dense_prediction.predict_cellorganelles()
-    # exec_dense_prediction.predict_synapsetype()
-    ftimer.stop()
+    if 'dense_predictions' in todo:
+        log.info('Step 1/12 - Predicting sub-cellular structures')
+        ftimer.start('Dense predictions')
+        # exec_dense_prediction.predict_myelin()
+        # TODO: if performed, work-in paths of the resulting KDs to the config
+        # TODO: might also require adaptions in init_cell_subcell_sds
+        # exec_dense_prediction.predict_cellorganelles()
+        # exec_dense_prediction.predict_synapsetype()
+        ftimer.stop()
 
-    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    ftimer.start('SD generation')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite)
-    exec_init.run_create_rag()
-    ftimer.stop()
+    if 'sd_generation' in todo:
+        log.info('Step 2/12 - Creating SegmentationDatasets (incl. SV meshes)')
+        ftimer.start('SD generation')
+        exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                        n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite)
+        exec_init.run_create_rag()
+        ftimer.stop()
 
-    log.info('Step 3/9 - Astrocyte separation')
-    if global_params.config.prior_astrocyte_removal:
-        ftimer.start('Astrocyte separation')
-        if not global_params.config.use_point_models:
-            exec_render.run_astrocyte_rendering()
-            exec_inference.run_astrocyte_prediction()
+    if 'astrocyte_separation' in todo:
+        log.info('Step 3/12 - Astrocyte separation')
+        if global_params.config.prior_astrocyte_removal:
+            ftimer.start('Astrocyte separation')
+            if not global_params.config.use_point_models:
+                exec_render.run_astrocyte_rendering()
+                exec_inference.run_astrocyte_prediction()
+            else:
+                exec_inference.run_astrocyte_prediction_pts()
+            exec_inference.run_astrocyte_splitting()
+            ftimer.stop()
         else:
-            exec_inference.run_astrocyte_prediction_pts()
-        exec_inference.run_astrocyte_splitting()
-        ftimer.stop()
-    else:
-        log.info('Astrocyte separation disabled. Skipping.')
+            log.info('Astrocyte separation disabled. Skipping.')
 
-    log.info('Step 4/9 - Creating SuperSegmentationDataset')
-    ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(overwrite=args.overwrite)
-    ftimer.stop()
-
-    log.info('Step 5/9 - Skeleton generation')
-    ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
-    ftimer.stop()
-
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 5.5/9 - Neuron rendering')
-        ftimer.start('Neuron rendering')
-        exec_render.run_neuron_rendering()
+    if 'ssd_generation' in todo:
+        log.info('Step 4/12 - Creating SuperSegmentationDataset')
+        ftimer.start('SSD generation')
+        exec_init.run_create_neuron_ssd(overwrite=args.overwrite)
         ftimer.stop()
 
-    log.info('Step 6/9 - Synapse detection')
-    ftimer.start('Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
-    ftimer.stop()
+    if 'skeleton_generation' in todo:
+        log.info('Step 5/12 - Skeleton generation')
+        ftimer.start('Skeleton generation')
+        exec_skeleton.run_skeleton_generation()
+        ftimer.stop()
 
-    log.info('Step 6.5/9 - Contact detection')
-    ftimer.start('Contact detection')
-    if global_params.config['generate_cs_ssv']:
-        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
-    else:
-        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
-    ftimer.stop()
+    if 'neuron_rendering' in todo:
+        if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+            log.info('Step 6/12 - Neuron rendering')
+            ftimer.start('Neuron rendering')
+            exec_render.run_neuron_rendering()
+            ftimer.stop()
 
-    log.info('Step 7/9 - Compartment prediction')
-    ftimer.start('Compartment predictions')
-    exec_inference.run_semsegaxoness_prediction()
-    if not global_params.config.use_point_models:
-        exec_inference.run_semsegspiness_prediction()
-    exec_syns.run_spinehead_volume_calc()
-    ftimer.stop()
+    if 'synapse_detection' in todo:
+        log.info('Step 7/12 - Synapse detection')
+        ftimer.start('Synapse detection')
+        exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
+        ftimer.stop()
 
-    log.info('Step 8/9 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
+    if 'contact_detection' in todo:
+        log.info('Step 8/12 - Contact detection')
+        ftimer.start('Contact detection')
+        if global_params.config['generate_cs_ssv']:
+            exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
+        else:
+            log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
+        ftimer.stop()
 
-    log.info('Step 9/9 - Celltype analysis')
-    ftimer.start('Celltype analysis')
-    exec_inference.run_celltype_prediction()
-    ftimer.stop()
+    if 'compartment_predictions' in todo:
+        log.info('Step 9/12 - Compartment prediction')
+        ftimer.start('Compartment predictions')
+        exec_inference.run_semsegaxoness_prediction()
+        if not global_params.config.use_point_models:
+            exec_inference.run_semsegspiness_prediction()
+        exec_syns.run_spinehead_volume_calc()
+        ftimer.stop()
 
-    log.info('Step - Matrix export')
-    ftimer.start('Matrix export')
-    exec_syns.run_matrix_export()
-    ftimer.stop()
+    if 'morphology_extraction' in todo:
+        log.info('Step 10/12 - Morphology extraction')
+        ftimer.start('Morphology extraction')
+        exec_inference.run_morphology_embedding()
+        ftimer.stop()
+
+    if 'celltype_analysis' in todo:
+        log.info('Step 11/12 - Celltype analysis')
+        ftimer.start('Celltype analysis')
+        exec_inference.run_celltype_prediction()
+        ftimer.stop()
+
+    if 'matrix_export' in todo:
+        log.info('Step 12/12 - Matrix export')
+        ftimer.start('Matrix export')
+        exec_syns.run_matrix_export()
+        ftimer.stop()
 
     time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-             'can be analyzed via the KNOSSOS-SyConn plugin at '
-             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+
+    if 'start_server' in todo:
+        log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+                 'can be analyzed via the KNOSSOS-SyConn plugin at '
+                 '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+        os.system(f'syconn.server --working_dir={example_wd} --port=10001')
