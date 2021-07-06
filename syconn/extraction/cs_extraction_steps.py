@@ -113,7 +113,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         cube_of_interest_bb: Sub-volume of the data set which is processed.
             Default: Entire data set.
         n_folders_fs: Number of folders used for organizing supervoxel data.
-        cube_shape: Cube shape used within contact site KnossosDataset.
+        cube_shape: Cube shape used within 'syn' and 'cs' KnossosDataset.
         overwrite: Overwrite existing cache.
 
     """
@@ -125,10 +125,10 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     kd = basics.kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-    if chunk_size is None:
-        chunk_size = (512, 512, 512)
     if cube_shape is None:
         cube_shape = (256, 256, 256)
+    if np.any(np.array(chunk_size) % np.array(cube_shape)):
+        raise ValueError('Chunk size must be divisible by cube shape.')
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
@@ -169,21 +169,23 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             raise FileExistsError(msg)
         log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
         shutil.rmtree(dir_props)
-    if os.path.isdir(cset.path_head_folder):
-        if not overwrite:
-            msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already exist at "{cset.path_head_folder}" ' \
-                  f'and overwrite was set to False.'
-            log.error(msg)
-            raise FileExistsError(msg)
-        log.debug(f'Found existing cache folder at {cset.path_head_folder}. Removing it now.')
-        shutil.rmtree(cset.path_head_folder)
     os.makedirs(dir_props)
-    os.makedirs(cset.path_head_folder)
+
+    # init KD for syn and cs
+    for ot in ['cs', 'syn']:
+        path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_seg/"
+        if os.path.isdir(path_kd):
+            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+            shutil.rmtree(path_kd)
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape
+        scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
+        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
 
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
-
     for ii, chunk_k in enumerate(iter_params):
         multi_params.append([[cset.chunk_dict[k] for k in chunk_k],
                              global_params.config.kd_seg_path, ii, dir_props])
@@ -191,7 +193,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     # reduce step
     start = time.time()
     cs_worker_dc_fname = f'{global_params.config.temp_path}/cs_worker_dict.pkl'
-    dict_paths_tmp += [cs_worker_dc_fname, dir_props, cset.path_head_folder]
+    dict_paths_tmp += [cs_worker_dc_fname, dir_props]
     syn_ids = []
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
@@ -220,7 +222,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     log_extraction.debug(f'Collected partial results from {len(cs_worker_mapping)} workers.')
     with open(cs_worker_dc_fname, 'wb') as f:
         pkl.dump(cs_worker_mapping, f, protocol=4)
-    del cs_worker_mapping
+    del cs_worker_mapping, cset
 
     syn_ids = np.unique(np.concatenate(syn_ids)).astype(np.uint64)
     n_syn = len(syn_ids)
@@ -239,51 +241,10 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     step_names.append("extract objects and collect properties of cs and syn.")
     all_times.append(time.time() - start)
 
-    # reduce step
-    start = time.time()
-
-    all_times.append(time.time() - start)
-    step_names.append("conversion of results")
-
     log.info(f'Finished extraction of initial contact sites (#objects: {n_cs}) and synapses'
              f' (#objects: {n_syn}).')
     if n_syn == 0:
         log.critical('WARNING: Did not find any synapses during extraction step.')
-
-    # write cs and syn segmentation to KD and SD
-    chunky.save_dataset(cset)
-    kd = basics.kd_factory(global_params.config.kd_seg_path)
-
-    # convert Chunkdataset to syn and cs KD
-    def _convert_cd_to_kd(ot):
-        path_kd = "{}/knossosdatasets/{}_seg/".format(
-            global_params.config.working_dir, ot)
-        if os.path.isdir(path_kd):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
-            shutil.rmtree(path_kd)
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd._cube_shape = cube_shape
-        scale = np.array(global_params.config['scaling'])
-        target_kd.scales = [scale, ]
-        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
-        target_kd = basics.kd_factory(path_kd)  # test if init is possible
-        export_cset_to_kd_batchjob({ot: path_kd}, cset, ot, [ot],  offset=offset, size=size,
-                                   stride=chunk_size, as_raw=False,
-                                   orig_dtype=np.uint64, unified_labels=False, log=log)
-        log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
-                  ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
-
-    procs = [Process(target=_convert_cd_to_kd, args=('cs',)),
-             Process(target=_convert_cd_to_kd, args=('syn',))]
-    for p in procs:
-        p.start()
-    for p in procs:
-        p.join()
-        if p.exitcode != 0:
-            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
-                            f'code {p.exitcode}.')
-        p.close()
 
     # create folders for existing (sub-)cell supervoxels to prevent collisions using makedirs
     for ii, struct in enumerate(['cs', 'syn']):
@@ -379,7 +340,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                          'asymmetric synapses are identical. Either one '
                          'must differ.')
 
-    kd = basics.kd_factory(knossos_path)
+    # init target KD for cs and syn segmentation
+    kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
+    kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
+
     # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
     #  see below.
     kd_sj = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
@@ -388,6 +352,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         kd_syntype_asym = basics.kd_factory(global_params.config.kd_asym_path)
     else:
         kd_syntype_sym, kd_syntype_asym = None, None
+
+    # cell segmentation
+    kd = basics.kd_factory(knossos_path)
+
     cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
     syn_voxels = {}
@@ -408,19 +376,11 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # contacts has size as given with `size`, because detect_cs performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
-
-        # TODO: use new detect_cs after verification
         contacts = np.asarray(detect_cs(data))
-        # contacts = np.asarray(detect_cs_64bit(data))
-        # contacts_new = np.array(contacts)
-        # res = np.zeros(contacts.shape[:3], dtype=np.uint64)
-        # mask = contacts[..., 0] != 0
-        # res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
-        # contacts = res
 
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
-        # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
+        # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8, copy=False).swapaxes(0, 2)
         sj_d = (kd_sj.load_seg(size=size, offset=offset, mag=1,
                                datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
@@ -458,7 +418,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
-        _, bb_dc, _ = find_object_properties(contacts)  # TODO: change to find_object_properties_cs_64bit
+        _, bb_dc, _ = find_object_properties(contacts)
         n_closings = overlap
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
@@ -480,7 +440,6 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # this counts SJ foreground voxels overlapping with the CS objects
         # and the asym and sym voxels, do not use overlap here!
-        # TODO: use extract_cs_syntype_64bit - then conversion to lists is not required anymore
         curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = extract_cs_syntype(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
@@ -488,15 +447,15 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             # overlap was removed; use correct offset for the analysis of the object properties
             sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap], offset=offset + overlap)
 
-        os.makedirs(chunk.folder, exist_ok=True)
-        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
-                                  overlap:-overlap]], chunk.folder + "cs.h5",
-                                 ['cs'], overwrite=True)
+        kd_cs.save_seg(offset=offset + overlap, mags=[1, ],
+                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
+                       data_mag=1)
         # syn segmentation contains the intersecting voxels between SJ and CS
         contacts[sj_d == 0] = 0
-        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
-                                  overlap:-overlap]], chunk.folder + "syn.h5",
-                                 ['syn'], overwrite=True)
+        kd_syn.save_seg(offset=offset + overlap, mags=[1, ],
+                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
+                        data_mag=1)
+
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)

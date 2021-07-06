@@ -62,7 +62,8 @@ def run_matrix_export():
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
-                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None, overwrite: bool = False):
+                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
+                       overwrite: bool = False):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -83,6 +84,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         max_n_jobs: Number of parallel jobs.
         cube_of_interest_bb: Defines the bounding box of the cube to process.
             By default this is set to (np.zoers(3); kd.boundary).
+        overwrite:
     """
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)

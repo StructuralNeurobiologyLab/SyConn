@@ -430,7 +430,7 @@ def _combine_and_split_syn_thread(args):
                 raise ValueError(f'Path mis-match!')
             synssv_attr_dc = dict(neuron_partners=ssv_ids)
             voxel_dc.set_voxel_cache(syn_ssv_id, this_vx)
-            synssv_attr_dc["rep_coord"] = this_vx[0]  # any rep coord
+            synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
             synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
             synssv_attr_dc["size"] = len(this_vx)
             # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
