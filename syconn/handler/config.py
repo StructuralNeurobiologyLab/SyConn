@@ -788,6 +788,14 @@ class DynConfig(Config):
             return False
 
     @property
+    def batchjob_max_time(self) -> str:
+        return self['batchjob_max_time']
+
+    @property
+    def batchjob_additional_params(self) -> str:
+        return self['batchjob_additional_params']
+
+    @property
     def batchjob_script_folder(self) -> str:
         return os.path.abspath(os.path.dirname(os.path.abspath(__file__)) +
                                "/../batchjob_scripts/")
@@ -836,7 +844,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     Writes the file ``config.yml`` to `working_dir` after adapting the
     attributes as given by the method input. This file can also only contain
     the values of attributes which should differ from the default config
-    at ``SyConn/syconn/handlers/config.yml``. SyConn refers to the latter in
+    at ``SyConn/syconn/handler/config.yml``. SyConn refers to the latter in
     a parameter cannot be found in the config file inside the currently active
     working directory.
 

@@ -169,6 +169,7 @@ def batchjob_script(params: list, name: str,
     cpus_per_node = global_params.config['ncores_per_node']
     mem_lim = int(global_params.config['mem_per_node'] /
                   cpus_per_node)
+
     if '--mem' not in additional_flags:
         additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
 
@@ -177,6 +178,9 @@ def batchjob_script(params: list, name: str,
     if exclude_nodes is not None:
         additional_flags += f' --exclude={",".join(exclude_nodes)}'
         log_batchjob.debug(f'Excluding slurm nodes: {",".join(exclude_nodes)}')
+
+    if global_params.config.batchjob_additional_params:
+        additional_flags += f' {global_params.config.batchjob_additional_params}'
 
     # Start SLURM job
     if len(job_name) > 8:
@@ -232,8 +236,9 @@ def batchjob_script(params: list, name: str,
                     pkl.dump(param, f)
 
         os.chmod(this_sh_path, 0o744)
-        cmd_exec = "{0} --output={1} --error={2} --time=4-0 --job-name={3} {4}".format(
-            additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
+        cmd_exec = "{0} --output={1} --error={2} --time={3} --job-name={4} {5}".format(
+            additional_flags, job_log_path, job_err_path, global_params.config.batchjob_max_time, job_name,
+            this_sh_path)
         if job_id == 0:
             log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
         job_exec_dc[job_id] = cmd_exec
