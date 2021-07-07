@@ -224,12 +224,12 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         pkl.dump(cs_worker_mapping, f, protocol=4)
     del cs_worker_mapping
 
-    syn_ids = np.unique(np.concatenate(syn_ids)).astype(np.uint64)
-    n_syn = len(syn_ids)
+    syn_ids = np.unique(np.concatenate([xx for xx in syn_ids if xx.size > 0])).astype(np.uint64)
+    n_syn = syn_ids.shape[0]
     del syn_ids
 
-    cs_ids = np.unique(np.concatenate(cs_ids)).astype(np.uint64)
-    n_cs = len(cs_ids)
+    cs_ids = np.unique(np.concatenate([xx for xx in cs_ids if xx.size > 0])).astype(np.uint64)
+    n_cs = cs_ids.shape[0]
 
     # only required as syn is a subset of cs!
     dest_p = f'{global_params.config.temp_path}/storage_targets_cs.pkl'
