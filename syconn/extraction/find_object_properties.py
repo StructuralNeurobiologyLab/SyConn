@@ -11,12 +11,14 @@ from syconn.extraction.block_processing_C import process_block_nonzero
 from syconn.extraction.find_object_properties_C import find_object_properties, map_subcell_extract_props
 
 
+# These types must be defined outside of jitted functions
 int64_arr2d = types.int64[:, :]
 int64_arr1d = types.int64[:]
 uint64_tuple = types.UniTuple(numba.uint64, 2)
 uint64_arr1d_dict = types.DictType(types.uint64, int64_arr1d)
 uint64_arr2d_dict = types.DictType(types.uint64, int64_arr2d)
-uint64_voxels_list_dict = types.DictType(types.uint64, types.ListType(types.ListType(types.uint64)))
+list_list_uint64 = types.ListType(types.ListType(types.uint64))
+uint64_voxels_list_dict = types.DictType(types.uint64, list_list_uint64)
 uint64_int64_dict = types.DictType(types.uint64, types.int64)
 
 
@@ -115,16 +117,16 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                         key_type=types.uint64,
                         value_type=types.int64,
                     )
-                    bounding_box_local[key[1]] = [(x, y, z), (x + 1, y + 1, z + 1)]
+                    bounding_box_local[key[1]] = np.array([[x, y, z], [x + 1, y + 1, z + 1]])
                     sizes_local[key[1]] = 1
-                    rep_coords_local[key[1]] = [x, y, z]
+                    rep_coords_local[key[1]] = np.array([x, y, z])
                     bounding_box[key[0]] = bounding_box_local
                     sizes[key[0]] = sizes_local
                     rep_coords[key[0]] = rep_coords_local
                 elif dc_local_bb.get(key[1]) is None:
-                    bounding_box[key[0]][key[1]] = [(x, y, z), (x+1, y+1, z+1)]
+                    bounding_box[key[0]][key[1]] = np.array([[x, y, z], [x + 1, y + 1, z + 1]])
                     sizes[key[0]][key[1]] = 1
-                    rep_coords[key[0]][key[1]] = [x, y, z]
+                    rep_coords[key[0]][key[1]] = np.array([x, y, z])
                 else:
                     local_bb = dc_local_bb.get(key[1])
                     local_bb[0][0] = min(local_bb[0][0], x)
@@ -147,7 +149,7 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                     )
                     voxels_syn_local = typed.Dict.empty(
                         key_type=types.uint64,
-                        value_type=types.ListType,
+                        value_type=list_list_uint64,
                     )
                     bounding_box_local = typed.Dict.empty(
                         key_type=types.uint64,
@@ -157,19 +159,27 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                         key_type=types.uint64,
                         value_type=types.int64,
                     )
-                    bounding_box_local[key[1]] = [(x, y, z), (x + 1, y + 1, z + 1)]
-                    voxels_syn_local[key[1]] = [[x + offset[0], y + offset[1], z + offset[2]], ]
+                    bounding_box_local[key[1]] = np.array([[x, y, z], [x + 1, y + 1, z + 1]])
+                    voxels_syn_local[key[1]] = typed.List([typed.List([
+                        numba.uint64(x + offset[0]),
+                        numba.uint64(y + offset[1]),
+                        numba.uint64(z + offset[2])]),
+                    ])
                     sizes_local[key[1]] = 1
-                    rep_coords_local[key[1]] = [x, y, z]
+                    rep_coords_local[key[1]] = np.array([x, y, z])
                     bounding_box_syn[key[0]] = bounding_box_local
                     voxels_syn[key[0]] = voxels_syn_local
                     sizes_syn[key[0]] = sizes_local
                     rep_coords_syn[key[0]] = rep_coords_local
                 elif dc_local_bb.get(key[1]) is None:
-                    bounding_box_syn[key[0]][key[1]] = [(x, y, z), (x+1, y+1, z+1)]
-                    voxels_syn[key[0]][key[1]] = [[x + offset[0], y + offset[1], z + offset[2]], ]
+                    bounding_box_syn[key[0]][key[1]] = np.array([[x, y, z], [x + 1, y + 1, z + 1]])
+                    voxels_syn[key[0]][key[1]] = typed.List([typed.List([
+                        numba.uint64(x + offset[0]),
+                        numba.uint64(y + offset[1]),
+                        numba.uint64(z + offset[2])]),
+                    ])
                     sizes_syn[key[0]][key[1]] = 1
-                    rep_coords_syn[key[0]][key[1]] = [x, y, z]
+                    rep_coords_syn[key[0]][key[1]] = np.array([x, y, z])
                 else:
                     local_bb = dc_local_bb.get(key[1])
                     local_bb[0][0] = min(local_bb[0][0], x)
@@ -179,7 +189,11 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
                     local_bb[1][1] = max(local_bb[1][1], y + 1)
                     local_bb[1][2] = max(local_bb[1][2], z + 1)
                     local_voxels = voxels_syn.get(key[0]).get(key[1])
-                    local_voxels.append([x + offset[0], y + offset[1], z + offset[2]])
+                    local_voxels.append(typed.List([
+                        numba.uint64(x + offset[0]),
+                        numba.uint64(y + offset[1]),
+                        numba.uint64(z + offset[2])
+                    ]))
                     sizes_syn[key[0]][key[1]] += 1
 
                 # store sym. and asym. voxels counts

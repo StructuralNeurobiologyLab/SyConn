@@ -5,6 +5,8 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from typing import Iterable, Dict, List, Sequence
+
 import gc
 import glob
 import os
@@ -480,8 +482,14 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             # overlap was removed; use correct offset for the analysis of the object properties
             sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap], offset=offset + overlap)
         # change nested dicts to dict with tuple keys: dict[tuple(id1, id2)] = ...
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = \
-            _nested_dicts_to_tuple_dicts(curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx)
+        tuple_dicts = _nested_dicts_to_tuple_dicts((*curr_cs_p, *curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx))
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = (
+            tuple_dicts[0:3],
+            tuple_dicts[3:6],
+            tuple_dicts[6],
+            tuple_dicts[7],
+            tuple_dicts[8])
+
         os.makedirs(chunk.folder, exist_ok=True)
         compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
                                   overlap:-overlap]], chunk.folder + "cs.h5",
@@ -498,6 +506,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
+
+    # Ugly - the numba typed.List(s) in this dict can't be pickled, so converting them to pure python here
+    syn_voxels = {k: [[i for i in vv] for vv in v] for k, v in syn_voxels.items()}
     basics.write_obj2pkl(f'{worker_dir_props}/cs_props_{worker_nr}.pkl', cs_props)
     basics.write_obj2pkl(f'{worker_dir_props}/syn_props_{worker_nr}.pkl', syn_props)
     basics.write_obj2pkl(f'{worker_dir_props}/syn_voxels_{worker_nr}.pkl', syn_voxels)
@@ -507,28 +518,21 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     return worker_nr, dict(cs=list(cs_props[0].keys()), syn=list(syn_props[0].keys()))
 
 
-def _nested_dicts_to_tuple_dicts(cs_dicts, syn_dicts, asym_dict, sym_dict, syn_voxel_dict):
-    cs_dicts_ = [dict(), dict(), dict()]
-    syn_dicts_ = [dict(), dict(), dict()]
-    asym_dict_ = dict()
-    sym_dict_ = dict()
-    syn_voxel_dict_ = dict()
-    for k1, v1 in cs_dicts[0].items():
-        for k2 in v1.items():
-            key = (k1, k2)
-            cs_dicts_[0][key] = cs_dicts[0][k1][k2]
-            cs_dicts_[1][key] = cs_dicts[1][k1][k2]
-            cs_dicts_[2][key] = cs_dicts[2][k1][k2]
-    for k1, v1 in syn_dicts[0].items():
-        for k2 in v1.items():
-            key = (k1, k2)
-            syn_dicts_[0][key] = syn_dicts[0][k1][k2]
-            syn_dicts_[1][key] = syn_dicts[1][k1][k2]
-            syn_dicts_[2][key] = syn_dicts[2][k1][k2]
-            asym_dict_[key] = asym_dict[k1][k2]
-            sym_dict_[key] = sym_dict[k1][k2]
-            syn_voxel_dict_[key] = syn_voxel_dict[k1][k2]
-    return cs_dicts_, syn_dicts_, asym_dict_, sym_dict_, syn_voxel_dict_
+def _nested_dicts_to_tuple_dicts(in_dicts: Sequence[Dict]) -> Tuple[Dict, ...]:
+    """
+    Re-pack Sequence of dictionaries of the form Dict[k1, Dict[k2, ...]] into Tuple of dictionaries of the form
+    Dict[(k1, k2), ...].
+    """
+
+    out_dicts = tuple(dict() for _ in range(len(in_dicts)))
+
+    for cur_out_dict, cur_in_dict in zip(out_dicts, in_dicts):
+        for k_1, v_1 in cur_in_dict.items():
+            for k_2 in v_1.keys():
+                tuple_key = (k_1, k_2)
+                cur_out_dict[tuple_key] = cur_in_dict[k_1][k_2]
+
+    return out_dicts
 
 
 # iterate over the subcellular SV ID chunks
