@@ -13,7 +13,7 @@ import shutil
 import time
 from collections import defaultdict
 from logging import Logger
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List, Tuple, Union, Callable
 
 from multiprocessing import Process
 
@@ -42,7 +42,8 @@ find_object_properties_cs_64bit, merge_voxel_dicts
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None,
-                          n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False):
+                          n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
+                          transf_func_sj_seg: Optional[Callable] = None):
     """
     Extracts contact sites and their overlap with ``sj`` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
@@ -94,13 +95,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
                 generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
                           key_value_pairs=key_val_pairs_conf)
 
-    Todo:
-        * using the prob. maps of the initial synaptic junction prediction,
-          the object extraction of ``sj`` objects can be removed.
-        * Replace sj_0 Segmentation dataset by the overlapping CS<->
-          sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
-          syn_0. Do not extract sj objects in general.
-
     Notes:
         * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
         * Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
@@ -115,6 +109,8 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         n_folders_fs: Number of folders used for organizing supervoxel data.
         cube_shape: Cube shape used within 'syn' and 'cs' KnossosDataset.
         overwrite: Overwrite existing cache.
+        transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
+            sj foreground.
 
     """
     if extract_cs_syntype is None:
@@ -188,7 +184,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
     for ii, chunk_k in enumerate(iter_params):
         multi_params.append([[cset.chunk_dict[k] for k in chunk_k],
-                             global_params.config.kd_seg_path, ii, dir_props])
+                             global_params.config.kd_seg_path, ii, dir_props, transf_func_sj_seg])
 
     # reduce step
     start = time.time()
@@ -318,8 +314,6 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
     Todo:
         * Get rid of the second argument -> use config parameter instead.
-        * using the prob. maps of the initial synaptic junction prediction
-          the object extraction of ``sj`` objects can be removed.
 
     Returns:
         Two lists of dictionaries (representative coordinates, bounding box and
@@ -330,6 +324,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     knossos_path = args[1]
     worker_nr = args[2]
     dir_props = args[3]
+    transf_func_sj_seg = args[4]
     worker_dir_props = f"{dir_props}/{worker_nr}/"
     os.makedirs(worker_dir_props, exist_ok=True)
 
@@ -344,9 +339,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
     kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
 
-    # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
-    #  see below.
-    kd_sj = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
+    # init. synaptic junction (sj) KD
+    kd_sj = basics.kd_factory(global_params.config.kd_sj_path)
+    # init synapse type KD if available
     if global_params.config.syntype_available:
         kd_syntype_sym = basics.kd_factory(global_params.config.kd_sym_path)
         kd_syntype_asym = basics.kd_factory(global_params.config.kd_asym_path)
@@ -378,11 +373,12 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # -> contacts result is cropped by stencil_offset on each side
         contacts = np.asarray(detect_cs(data))
 
-        # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
-        # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
-        # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8, copy=False).swapaxes(0, 2)
-        sj_d = (kd_sj.load_seg(size=size, offset=offset, mag=1,
-                               datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
+        if transf_func_sj_seg is None:
+            sj_d = (kd_sj.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2) >
+                    255 * global_params.config['cell_objects']["probathresholds"]['sj']).astype(np.uint8, copy=False)
+        else:
+            sj_d = transf_func_sj_seg(
+                kd_sj.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)).astype(np.uint8, copy=False)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:

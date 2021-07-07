@@ -358,16 +358,16 @@ class DynConfig(Config):
         return self.entries['paths']['kd_golgi']
 
     @property
-    def kd_organells_paths(self) -> Dict[str, str]:
+    def kd_organelles_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle probability maps
 
         Returns:
-            Dictionary containg the paths to ``KnossosDataset`` of available
-            cellular containing ``global_params.config['existing_cell_organelles']``.
+            Dictionary containing the paths to ``KnossosDataset`` of available
+            cellular containing ``global_params.config['process_cell_organelles']``.
         """
         path_dict = {k: self.entries['paths']['kd_{}'.format(k)] for k in
-                     self['existing_cell_organelles']}
+                     self['process_cell_organelles']}
         return path_dict
 
     @property
@@ -377,10 +377,10 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containing the paths to ``KnossosDataset`` of available
-            cellular organelles ``global_params.config['existing_cell_organelles']``.
+            cellular organelles ``global_params.config['process_cell_organelles']``.
         """
         path_dict = {k: "{}/knossosdatasets/{}_seg/".format(
-            self.working_dir, k) for k in self['existing_cell_organelles']}
+            self.working_dir, k) for k in self['process_cell_organelles']}
         return path_dict
 
     @property

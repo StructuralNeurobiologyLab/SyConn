@@ -407,7 +407,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                 worker_nr, ref_mesh_dc = pkl.load(f)
             # iterate over each subcellular structure
             for ii, organelle in enumerate(kd_organelle_paths):
-                organelle = global_params.config['existing_cell_organelles'][ii]
+                organelle = global_params.config['process_cell_organelles'][ii]
                 for chunk_id, subcell_ids in ref_mesh_dc[organelle].items():
                     subcell_mesh_workers[ii][chunk_id] = (worker_nr, subcell_ids)
                 subcell_prop_workers[ii][worker_nr] = list(set().union(*ref_mesh_dc[

@@ -1404,7 +1404,7 @@ class SegmentationDataset(SegmentationBase):
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
         organelles (e.g. 'mi', 'vc', etc.; see
-        :py:attr:`~syconn.global_params.config['existing_cell_organelles']`).
+        :py:attr:`~syconn.global_params.config['process_cell_organelles']`).
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following

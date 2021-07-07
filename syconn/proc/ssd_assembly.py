@@ -73,7 +73,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     sso._view_caching = True
 
     # meshes
-    for obj_type in global_params.config['existing_cell_organelles'] + ["sv", "syn_ssv"]:
+    for obj_type in global_params.config['process_cell_organelles'] + ["sv", "syn_ssv"]:
         ply_name = "{}.ply".format(obj_type)
         if ply_name in files:
             sso._meshes[obj_type] = read_mesh_from_zip(path, ply_name)

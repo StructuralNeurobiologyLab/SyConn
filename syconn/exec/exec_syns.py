@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, Callable
 
 import numpy as np
 
@@ -63,7 +63,7 @@ def run_matrix_export():
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
                        cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
-                       overwrite: bool = False):
+                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -85,6 +85,8 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         cube_of_interest_bb: Defines the bounding box of the cube to process.
             By default this is set to (np.zoers(3); kd.boundary).
         overwrite:
+        transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
+            sj foreground.
     """
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
@@ -98,7 +100,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
-                              n_folders_fs=n_folders_fs)
+                              n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
     # create SD of type 'syn_ssv' -> cell-cell synapses

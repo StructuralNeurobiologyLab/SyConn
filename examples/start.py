@@ -227,12 +227,6 @@ if __name__ == '__main__':
     exec_skeleton.run_skeleton_generation()
     ftimer.stop()
 
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 5.5/9 - Neuron rendering')
-        ftimer.start('Neuron rendering')
-        exec_render.run_neuron_rendering()
-        ftimer.stop()
-
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
@@ -245,6 +239,12 @@ if __name__ == '__main__':
     else:
         log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
+
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Extra step - Neuron rendering')
+        ftimer.start('Neuron rendering')
+        exec_render.run_neuron_rendering()
+        ftimer.stop()
 
     log.info('Step 7/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
