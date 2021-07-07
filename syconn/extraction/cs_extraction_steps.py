@@ -404,7 +404,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         size = 2 * overlap + np.array(chunk.size)  # also used for loading synapse data
         data = kd.load_seg(size=size + 2 * stencil_offset,
                            offset=offset - stencil_offset,
-                           mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
+                           mag=1, datatype=np.uint64).swapaxes(0, 2)
 
         # contacts has size as given with `size`, because detect_cs performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
@@ -462,14 +462,14 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
-            binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
+            binary_mask = (sub_vol == ix)[..., 0].astype(np.int8, copy=False)
             res = scipy.ndimage.binary_closing(
                 binary_mask, iterations=n_closings)
             # reduce fragmenting of contact sites
             res = scipy.ndimage.binary_dilation(res, iterations=cs_dilation)
-            # only update background or the objects itself and do not remove object voxels (res == 1), e.g. at boundary
-            proc_mask = ((binary_mask == 1) | (sub_vol == 0)) & (res == 1)
-            contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
+            # only update background or the object itself and do not remove object voxels (res == 1), e.g. at boundary
+            proc_mask = ((binary_mask == 1) | (sub_vol[..., 0] == 0)) & (res == 1)
+            contacts[new_obj_slices][proc_mask] = res[proc_mask, np.newaxis] * ix
 
         # this counts SJ foreground voxels overlapping with the CS objects
         # and the asym and sym voxels, do not use overlap here!
