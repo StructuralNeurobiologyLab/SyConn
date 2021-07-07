@@ -16,7 +16,7 @@ int64_arr1d = types.int64[:]
 uint64_tuple = types.UniTuple(numba.uint64, 2)
 uint64_arr1d_dict = types.DictType(types.uint64, int64_arr1d)
 uint64_arr2d_dict = types.DictType(types.uint64, int64_arr2d)
-uint64_list_dict = types.DictType(types.uint64, types.ListType)
+uint64_voxels_list_dict = types.DictType(types.uint64, types.ListType(types.ListType(types.uint64)))
 uint64_int64_dict = types.DictType(types.uint64, types.int64)
 
 
@@ -44,10 +44,13 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
         offset: Offset applied to store correct voxel coordinates in voxel dict.
 
     Returns:
-        Representative coordinate, bounding box and size for contact sites, representative coordinate, bounding box
-        and size for synapses (for voxels with ``syn_mask=1``), counts for asymmetric and symmetric voxels, voxel dict
-        . All objects
-        are nested dictionaries with contact site/synapse partner IDs as keys.
+        - representative coordinate, bounding box and size for contact sites
+        - representative coordinate, bounding box and size for synapses (for voxels with ``syn_mask=1``)
+        - counts for asymmetric voxel
+        - counts for symmetric voxels
+        - voxel dict
+
+        All objects are nested dictionaries with contact site/synapse partner IDs as keys.
     """
 
     rep_coords = typed.Dict.empty(
@@ -73,7 +76,7 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
     )
     voxels_syn = typed.Dict.empty(
         key_type=types.uint64,
-        value_type=uint64_list_dict,
+        value_type=uint64_voxels_list_dict,
     )
     sizes_syn = typed.Dict.empty(
         key_type=types.uint64,
@@ -419,10 +422,11 @@ def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: n
                             neigh_id = seg_arr[xx + neigh_x, yy + neigh_y, zz + neigh_z]
                             if (neigh_id == 0) or (neigh_id == center_id):
                                 continue
+                            # todo there is a warning here about a cast to int64 - wtf?
                             if neigh_id in d:
-                                d[neigh_id] += 1
+                                d[neigh_id] += numba.uint64(1)
                             else:
-                                d[neigh_id] = 1
+                                d[neigh_id] = numba.uint64(1)
                 if len(d) != 0:
                     # get most common ID
                     most_comm = 0
