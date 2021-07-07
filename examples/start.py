@@ -37,7 +37,7 @@ if __name__ == '__main__':
     example_cube_id = int(args.example_cube)
     log_level = args.log_level
     if args.working_dir == "":  # by default use cube dependent working dir
-        args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
+        args.working_dir = "~/SyConn/wd_example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir) + "/"
 
     steps = {
@@ -107,23 +107,32 @@ if __name__ == '__main__':
         chunk_size = (512, 512, 256)
     n_folders_fs = 100
     n_folders_fs_sc = 100
-    for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
-                     os.path.abspath(os.path.curdir) + '/',
-                     os.path.abspath(os.path.curdir) + '/SyConnData',
-                     os.path.abspath(os.path.curdir) + '/SyConn',
-                     os.path.expanduser('~/SyConnData/'),
-                     os.path.expanduser('~/SyConn/')]:
-        h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+
+    possible_data_locations = [
+        os.path.dirname(os.path.realpath(__file__)) + '/',
+        os.path.abspath(os.path.curdir) + '/',
+        os.path.abspath(os.path.curdir) + '/SyConnData',
+        os.path.abspath(os.path.curdir) + '/SyConn',
+        os.path.expanduser('~/SyConnData/'),
+        os.path.expanduser('~/SyConn/')
+    ]
+    data_folder_name = f'/data{example_cube_id}/'
+    h5_dir, curr_dir = None, None
+    for curr_dir in possible_data_locations:
+        h5_dir = curr_dir + data_folder_name
         if os.path.isdir(h5_dir):
             break
     if not os.path.isdir(h5_dir):
-        raise FileNotFoundError(f'Example data folder could not be found'
-                                f' at "{curr_dir}".')
+        raise FileNotFoundError(f'Example data folder {data_folder_name} could not be found in any of '
+                                f'{possible_data_locations}')
+
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError(f'Incomplete example data in folder "{h5_dir}".')
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
+
+    print(f'Found data in {curr_dir}')
 
     # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
     # system is None
