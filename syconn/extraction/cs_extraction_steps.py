@@ -128,7 +128,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     if cube_shape is None:
         cube_shape = (256, 256, 256)
     if np.any(np.array(chunk_size) % np.array(cube_shape)):
-        raise ValueError('Chunk size must be divisible by cube shape.')
+        raise ValueError(f'Chunk size ({chunk_size}) must be divisible by cube shape ({cube_shape}).')
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
