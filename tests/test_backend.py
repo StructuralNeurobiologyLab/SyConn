@@ -29,14 +29,19 @@ def _setup_testfile(fname):
 
 
 def test_BinarySearchStore():
+    np.random.seed(0)
     n_shards = 5
     n_elements = int(1e6)
-    ids = np.random.randint(1, 1e10, n_elements).astype(np.uint64)
-    attr = dict(ssv_ids=np.random.randint(1, 1e10, n_elements, ))
+    max_int = int(2e6)  # choice becomes slow for large max values
+    ids = np.random.choice(max_int, n_elements, replace=False).astype(np.uint64)
+    attr = dict(ssv_ids=np.random.choice(max_int, n_elements, replace=False).astype(np.uint64))
     tf = tempfile.TemporaryFile()
     bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
     ixs_sample = np.random.permutation(len(ids))[:1000]
     attrs = bss.get_attributes(ids[ixs_sample], 'ssv_ids')
+    if not np.array_equal(attr['ssv_ids'][ixs_sample], attrs):
+        not_equal = attr['ssv_ids'][ixs_sample] != attrs
+        print(attrs[not_equal], attr['ssv_ids'][ixs_sample][not_equal])
     assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
     assert bss.n_shards == n_shards, "Number of shards differ."
     assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
@@ -483,3 +488,5 @@ def remove_files_after_test(file_name):
         os.remove(str(dir_path) + '/' + file_name)
 
 
+if __name__ == '__main__':
+    test_BinarySearchStore()
