@@ -5,6 +5,7 @@ import torch
 import os
 from torch import nn
 from tqdm import tqdm
+import pandas as pd
 from morphx.classes.hybridcloud import HybridCloud
 import morphx.processing.clouds as clouds
 from morphx.processing.hybrids import extract_subset
@@ -106,11 +107,10 @@ if __name__ == '__main__':
             model.eval()
 
             hc = HybridCloud()
-            fscores = []
-            aucs = []
+            result_dc = collections.defaultdict(list)
 
             # for each whole cells
-            for i in tqdm(len(pred_files)):
+            for i in tqdm(range(len(pred_files))):
                 path = pred_files[i]
                 hc.load_from_pkl(path)
 
@@ -151,18 +151,22 @@ if __name__ == '__main__':
                 # print(np.unique(pred))
                 # evaluate result
                 precision = precision_score(sample_labels, pred, average='binary', zero_division=0)
+
                 # print(precision)
                 recall = recall_score(sample_labels, pred, average='binary', zero_division=0)
                 # print(recall)
                 fscore = f1_score(sample_labels, pred, average='binary', zero_division=0)
-                fscores.append(fscore)
                 # print(fscore)
 
                 lr_precision, lr_recall, _ = precision_recall_curve(sample_labels, probs)
                 # print(f'Normal precision {precision} and recall {recall}')
                 # print(f'Alternative precision {lr_precision} and recall {lr_recall}')
                 aucc = auc(lr_recall, lr_precision)
-                aucs.append(aucc)
+
+                result_dc['precision'].append(precision)
+                result_dc['recall'].append(recall)
+                result_dc['fscore'].append(fscore)
+                result_dc['auc'].append(auc)
 
                 # print(f'Fscore: {fscore} and auc: {aucc} for cell merger {os.path.basename(pred_files[i])}')
 
@@ -192,10 +196,14 @@ if __name__ == '__main__':
                 #     f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/{radius}/Adam_stepLR/' + os.path.basename(pred_files[i]) + f'_prediction.ply'),
                 #     [np.array([]), hc.vertices, np.array([])], colors)
 
-            print(f'Fscores: {fscores}')
-            print(f'Mean fscores: {np.mean(fscores)}')
-            print(f'Aucs: {aucs}')
-            print(f'Mean aucs: {np.mean(aucs)}')
+            print(f'Number zero Fscores: {len(np.where(result_dc.fscore==0.0))}')
+            print(f'Mean fscores: {np.mean(result_dc.fscore)}')
+            # print(f'Aucs: {aucs}')
+            print(f'Mean aucs: {np.mean(result_dc.auc)}')
+
+            df = pd.DataFrame()
+
+            # proceed to save this to dict
 
 
 
