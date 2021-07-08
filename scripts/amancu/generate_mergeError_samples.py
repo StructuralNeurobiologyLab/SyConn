@@ -17,7 +17,6 @@ import multiprocessing as mp
 import threading as th
 from concurrent.futures import ThreadPoolExecutor
 from scipy.spatial import cKDTree
-
 from syconn import global_params
 from syconn.handler.config import initialize_logging
 from syconn.handler.basics import write_obj2pkl, load_pkl2obj
