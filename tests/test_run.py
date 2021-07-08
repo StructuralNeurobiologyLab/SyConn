@@ -43,7 +43,7 @@ def test_full_run():
           }),
     ]
     if example_cube_id == 1:
-        chunk_size = (256, 256, 128)
+        chunk_size = (256, 256, 256)
     elif example_cube_id == 2:
         chunk_size = (256, 256, 256)
     else:

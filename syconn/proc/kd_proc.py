@@ -8,6 +8,7 @@ import numpy as np
 from knossos_utils import KnossosDataset
 from syconn.handler import basics
 from syconn.mp.mp_utils import start_multiprocess_imap
+from . import log_proc
 
 
 def convert_cube_size_kd(source_kd: str, target_kd_path: str, cube_size: np.ndarray,
@@ -43,7 +44,7 @@ def convert_cube_size_kd(source_kd: str, target_kd_path: str, cube_size: np.ndar
         njobs = max(nb_threads, int(np.ceil(len(chunk_coords) / 4)))
         multi_params = [(source_kd, target_kd_path, coords, do_raw, mag, cs, compresslevel) for coords in
                         basics.chunkify(chunk_coords, njobs)]
-        start_multiprocess_imap(_convert_cube_size_kd_thread, multi_params, nb_cpus=nb_threads)
+        start_multiprocess_imap(_convert_cube_size_kd_thread, multi_params, nb_cpus=nb_threads, desc=f'mag={mag}')
 
 
 def _convert_cube_size_kd_thread(args):
@@ -57,4 +58,6 @@ def _convert_cube_size_kd_thread(args):
             kd_target.save_raw(offset=coord, mags=[mag], data=data, data_mag=mag)
         else:
             data = kd_source.load_seg(size=cube_size, offset=coord, mag=mag)
+            if np.sum(data) == 0:
+                log_proc.warn(f'Empty cube in kd={kd_source.conf_path} at {coord}, mag={mag}.')
             kd_target.save_seg(offset=coord, mags=[mag], data=data, data_mag=mag, compresslevel=compresslevel)
