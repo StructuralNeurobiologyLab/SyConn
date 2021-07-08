@@ -25,7 +25,6 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.proc.meshes import calc_contact_syn_mesh, mesh2obj_file_colors
 from syconn.proc.ssd_proc import merge_ssv
-from syconn.mp.mp_utils import start_multiprocess_imap
 from morphx.classes.hybridmesh import HybridCloud
 
 # paths
@@ -45,7 +44,7 @@ skelmerger_radius = 2e3
 # CHANGE
 nr_samples = 30000
 # colors for labels
-RED = np.array([255., 125., 125., 255.])
+RED = np.array([255., 50., 50., 255.])
 GREY = np.array([180., 180., 180., 255.])
 
 
@@ -73,10 +72,15 @@ def find_vertNearestNeighbor(merged_cell, cs_verts: np.ndarray):
     one = np.uint(1)
     vertex_labels = np.zeros(shape=(len(cell_vertices),), dtype=np.uint)
     np.put(vertex_labels, vert_neighbors, one)
+    # print(f'what labels does it contain {np.unique(vertex_labels, axis=0)}')
 
-    # colors = np.full(shape=(len(cell_vertices),4, ), fill_value=GREY)
-    # np.put(colors, vert_neighbors, RED)
-    colors=[]
+    colors = np.full(shape=(len(cell_vertices),4,), fill_value=GREY)
+    # print(f'shapes {cell_vertices.shape} and colors {colors.shape}')
+    vert_neighbors = np.array([[x] for x in vert_neighbors])
+    np.put_along_axis(colors, vert_neighbors, RED, axis=0)
+
+    # print(f'what colors does it contain {np.unique(colors, axis=0)}')
+    # colors=[]
 
     return cell_vertices, vertex_labels, colors
 
@@ -169,6 +173,9 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
                 log.info('HybridCloud not written')
         # mesh2obj_file_colors(os.path.expanduser(
         #     f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/Verts/csMergePts_{cell1}_{cell2}.ply'),
+        #     [np.array([]), merged_cell.mesh[1], np.array([])], colors)
+        # mesh2obj_file_colors(os.path.expanduser(
+        #     f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/csMergePts_{cell1}_{cell2}.ply'),
         #     [np.array([]), merged_cell.mesh[1], np.array([])], colors)
         del hc
         gc.collect()
