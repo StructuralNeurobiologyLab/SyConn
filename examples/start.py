@@ -47,8 +47,8 @@ if __name__ == '__main__':
         3: 'astrocyte_separation',
         4: 'ssd_generation',
         5: 'skeleton_generation',
-        6: 'neuron_rendering',
-        7: 'synapse_detection',
+        6: 'synapse_detection',
+        7: 'neuron_rendering',
         8: 'contact_detection',
         9: 'compartment_predictions',
         10: 'morphology_extraction',
@@ -268,18 +268,18 @@ if __name__ == '__main__':
         exec_skeleton.run_skeleton_generation()
         ftimer.stop()
 
-    if 'neuron_rendering' in todo:
-        if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-            log.info('Step 6/12 - Neuron rendering')
-            ftimer.start('Neuron rendering')
-            exec_render.run_neuron_rendering()
-            ftimer.stop()
-
     if 'synapse_detection' in todo:
-        log.info('Step 7/12 - Synapse detection')
+        log.info('Step 6/12 - Synapse detection')
         ftimer.start('Synapse detection')
         exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
         ftimer.stop()
+
+    if 'neuron_rendering' in todo:
+        if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+            log.info('Step 7/12 - Neuron rendering')
+            ftimer.start('Neuron rendering')
+            exec_render.run_neuron_rendering()
+            ftimer.stop()
 
     if 'contact_detection' in todo:
         log.info('Step 8/12 - Contact detection')
