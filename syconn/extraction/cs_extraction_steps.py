@@ -529,6 +529,8 @@ def _write_props_to_syn_thread(args):
         sd_cs = segmentation.SegmentationDataset(
             n_folders_fs=n_folders_fs, obj_type='cs',working_dir=global_params.config.working_dir, version=0)
 
+        # The bbox dicts (cs_props[1] and syn_props[1]) here will be Dict[List[List[np.ndarray]]]. Note the
+        # nested lists.
         cs_props = [{}, defaultdict(list), {}]
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
@@ -588,12 +590,12 @@ def _write_props_to_syn_thread(args):
             if size_cs < min_obj_vx_dc['cs']:
                 continue
             rp_cs = cs_props[0][cs_id]
-            bbs_cs = np.concatenate(cs_props[1][cs_id])
-
+            # Note the nested list here, this is why the concatenate and min/max goes along the right dimension to find
+            # the min / max corners.
+            bboxes = cs_props[1][cs_id]  # type: List[List[np.ndarray]]
+            bbs_cs = np.concatenate(bboxes)
             this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
             cur_bbox = np.array([bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
-            print(f'hamu {cs_props[1][cs_id]}')
-            print(f'hamy {cur_bbox}')
             this_attr_dc_cs[cs_id]["bounding_box"] = cur_bbox
             this_attr_dc_cs[cs_id]["size"] = size_cs
             voxel_dc_cs[cs_id] = bbs_cs
@@ -607,11 +609,8 @@ def _write_props_to_syn_thread(args):
             bbs = np.concatenate(syn_props[1][cs_id])
             size = syn_props[2][cs_id]
             this_attr_dc[cs_id]["rep_coord"] = rp
-            bb = np.array(
-                [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+            bb = np.array([bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
             this_attr_dc[cs_id]["bounding_box"] = bb
-            print(f'hami {syn_props[1][cs_id]}')
-            print(f'hamz {bb}')
             this_attr_dc[cs_id]["size"] = size
             try:
                 sym_prop = cs_sym_cnt[cs_id] / size

@@ -54,7 +54,7 @@ class SegmentationObject(SegmentationBase):
 
     """
 
-    def __init__(self, obj_id: int, obj_type: str = "sv",
+    def __init__(self, obj_id: Union[Tuple[int, int], int], obj_type: str = "sv",
                  version: Optional[str] = None, working_dir: Optional[str] = None,
                  rep_coord: Optional[np.ndarray] = None, size: Optional[int] = None,
                  scaling: Optional[np.ndarray] = None, create: bool = False,
@@ -68,7 +68,7 @@ class SegmentationObject(SegmentationBase):
         object available in :attr:`~syconn.global_params.config`.
 
         Args:
-            obj_id: Unique supervoxel ID.
+            obj_id: Unique supervoxel ID or ID tuple.
             obj_type: Type of the supervoxel, keys used currently are:
                 * 'mi': Mitochondria
                 * 'vc': Vesicle clouds
@@ -96,7 +96,7 @@ class SegmentationObject(SegmentationBase):
             enable_locking:  If True, enables file locking.
             mesh: Mesh data as flat arrays: (indices, vertices, ) or (indices, vertices, normals)
         """
-        self._id = int(obj_id)
+        self._id = obj_id
         self._type = obj_type
         self._rep_coord = rep_coord
         self._size = size

@@ -196,9 +196,9 @@ def _dataset_analysis_thread(args):
             if recompute:
                 this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
                                           disable_locking=True)
-                so_ids = list(this_vx_dc.keys())
+                so_ids = list(this_vx_dc.keys())  # type: List[Tuple[int, int]]
             else:
-                so_ids = list(this_attr_dc.keys())
+                so_ids = list(this_attr_dc.keys())  # type: List[Tuple[int, int]]
             if compute_meshprops:
                 this_mesh_dc = MeshStorage(p + "/mesh.pkl", read_only=True, disable_locking=True)
             for so_id in so_ids:
