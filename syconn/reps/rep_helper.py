@@ -142,18 +142,10 @@ def subfold_from_ix(ix, n_folders, old_version=False):
         return subfold_from_ix_new(ix, n_folders)
 
 
-def subfold_from_ix_new(ix, n_folders):
+def subfold_from_ix_new(ix: int, n_folders: int) -> str:
+    """
     """
 
-    Parameters
-    ----------
-    ix : int
-    n_folders: int
-
-    Returns
-    -------
-    str
-    """
     assert n_folders % 10 == 0
     order = int(np.log10(n_folders))
     subfold = "/"

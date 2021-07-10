@@ -5,7 +5,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from typing import Iterable, Dict, List, Sequence
+from typing import Iterable, Dict, List, Sequence, Any
 
 import gc
 import glob
@@ -173,19 +173,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
 
-    # init KD for syn and cs
-    for ot in ['cs', 'syn']:
-        path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_seg/"
-        if os.path.isdir(path_kd):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
-            shutil.rmtree(path_kd)
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd._cube_shape = cube_shape
-        scale = np.array(global_params.config['scaling'])
-        target_kd.scales = [scale, ]
-        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
-
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
     for ii, chunk_k in enumerate(iter_params):
@@ -198,7 +185,9 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     dict_paths_tmp += [cs_worker_dc_fname, dir_props]
     syn_ids = []
     cs_ids = []
-    cs_worker_mapping = dict()  # cs include syns
+    # Contact sites cs are a superset of synaptic contacts syn.
+    # Maps worker IDs to contact sites encountered by the respective worker (Nx2 ndarray, or empty ndarray)
+    cs_worker_mapping = dict()  # type: Dict[int, np.ndarray]
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log)
         out_files = glob.glob(path_to_out + "/*")
@@ -226,18 +215,20 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         pkl.dump(cs_worker_mapping, f, protocol=4)
     del cs_worker_mapping, cset
 
-    syn_ids = np.unique(np.concatenate([xx for xx in syn_ids if xx.size > 0])).astype(np.uint64)
+    syn_ids = np.unique(
+        np.concatenate([xx for xx in syn_ids if xx.size > 0]), axis=0)  # type: np.ndarray[[Any, 2], np.uint64]
     n_syn = syn_ids.shape[0]
     del syn_ids
 
-    cs_ids = np.unique(np.concatenate([xx for xx in cs_ids if xx.size > 0])).astype(np.uint64)
+    cs_ids = np.unique(
+        np.concatenate([xx for xx in cs_ids if xx.size > 0]), axis=0)  # type: np.ndarray[[Any, 2], np.uint64]
     n_cs = cs_ids.shape[0]
 
     # only required as syn is a subset of cs!
     dest_p = f'{global_params.config.temp_path}/storage_targets_cs.pkl'
     dict_paths_tmp.append(dest_p)
 
-    _ = _cache_storage_paths((dest_p, cs_ids, n_folders_fs))
+    _cache_storage_paths((dest_p, cs_ids, n_folders_fs))
     del cs_ids
 
     step_names.append("extract objects and collect properties of cs and syn.")
@@ -263,19 +254,17 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             os.makedirs(curr_dir, exist_ok=True)
 
     # Write SD
-    path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
-    path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
     n_cores = 2
     # slightly increase ncores per worker to compensate IO related downtime
-    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
+    multi_params = [(sv_id_block, n_folders_fs, dir_props, int(n_cores * 1.5))
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=n_cores, remove_jobfolder=True)
+                           n_cores=n_cores)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
@@ -421,7 +410,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
         _, bb_dc, _ = find_object_properties_cs_64bit(contacts)
-        bb_dc = {(k1, k2): v2 for k1, v1 in bb_dc.items() for k2, v2 in v1.items()}
+        (bb_dc, ) = _nested_dicts_to_tuple_dicts((bb_dc, ))
         n_closings = overlap
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
@@ -457,15 +446,6 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             tuple_dicts[6],
             tuple_dicts[7],
             tuple_dicts[8])
-
-        kd_cs.save_seg(offset=offset + overlap, mags=[1, ],
-                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
-                       data_mag=1)
-        # syn segmentation contains the intersecting voxels between SJ and CS
-        contacts[sj_d == 0] = 0
-        kd_syn.save_seg(offset=offset + overlap, mags=[1, ],
-                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
-                        data_mag=1)
 
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
@@ -503,17 +483,30 @@ def _nested_dicts_to_tuple_dicts(in_dicts: Sequence[Dict]) -> Tuple[Dict, ...]:
     return out_dicts
 
 
+def _row_wise_intersect(A: np.ndarray, B: np.ndarray) -> np.ndarray:
+    # Credit for this trick to Joe Kington
+    # https://stackoverflow.com/questions/8317022/get-intersecting-rows-across-two-2d-numpy-arrays
+    #
+
+    _, ncols = A.shape
+    dtype = {'names': ['f{}'.format(i) for i in range(ncols)],
+             'formats': ncols * [A.dtype]}
+
+    C = np.intersect1d(A.view(dtype), B.view(dtype))
+    C = C.view(A.dtype).reshape(-1, ncols)
+
+    return C
+
+
 # iterate over the subcellular SV ID chunks
 def _write_props_to_syn_thread(args):
-    cs_ids_ch = args[0]
-    n_folders_fs = args[1]
-    knossos_path = args[2]
-    knossos_path_cs = args[3]
-    dir_props = args[4]
-    if len(args) < 6:
+    cs_ids_ch = args[0]  # type: List[int]
+    n_folders_fs = args[1]  # type: int
+    dir_props = args[2]  #type: str
+    if len(args) < 4:
         nb_cores = 4
     else:
-        nb_cores = args[5]
+        nb_cores = args[3]
     min_obj_vx_dc = global_params.config['cell_objects']['min_obj_vx']
     tmp_path = global_params.config.temp_path
     if global_params.config.use_new_subfold:
@@ -527,16 +520,15 @@ def _write_props_to_syn_thread(args):
         k = target_dir_func(obj_id_mod, n_folders_fs)
         if k not in dest_dc_tmp or len(dest_dc_tmp[k]) == 0:
             continue
-        obj_keys = dest_dc_tmp[k]
+
+        obj_keys = dest_dc_tmp[k]  # type: np.ndarray[[Any, 2], np.uint64]
         del dest_dc_tmp
 
-        sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='syn',
-                                              working_dir=global_params.config.working_dir,
-                                              version=0)
+        sd = segmentation.SegmentationDataset(
+            n_folders_fs=n_folders_fs, obj_type='syn', working_dir=global_params.config.working_dir, version=0)
+        sd_cs = segmentation.SegmentationDataset(
+            n_folders_fs=n_folders_fs, obj_type='cs',working_dir=global_params.config.working_dir, version=0)
 
-        sd_cs = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='cs',
-                                                 working_dir=global_params.config.working_dir,
-                                                 version=0)
         cs_props = [{}, defaultdict(list), {}]
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
@@ -545,9 +537,16 @@ def _write_props_to_syn_thread(args):
 
         # get cached worker lookup
         with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
-            cs_workers_tmp = pkl.load(f)
-        # TODO 64bit refactoring - obj_ids are now tuple -> adapt given obj_ids upstream accordingly
-        params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in cs_workers_tmp.items()]
+            cs_workers_tmp = pkl.load(f)  # type: Dict[int, np.ndarray[[Any, 2], np.uint64]]
+
+        params = []
+        for worker_id, obj_ids in cs_workers_tmp.items():
+            # CS IDs of interest - found by worker worker_id, and belonging to current storage folder (in other words,
+            # we're mapping from a chunking in voxel space to a chunking in ID space).
+            current_chunk_relevant_ids = [tuple(xx) for xx in _row_wise_intersect(obj_ids, obj_keys)]
+            if current_chunk_relevant_ids:
+                params.append([dir_props, worker_id, current_chunk_relevant_ids])
+
         del cs_workers_tmp
 
         res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False)
@@ -573,27 +572,29 @@ def _write_props_to_syn_thread(args):
         vx_p = dummy_so.voxel_path
         this_attr_dc = AttributeDict(attr_p, read_only=False, disable_locking=True)
         # this class is only used to query the voxel data
-        voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
-                                   read_only=False, disable_locking=True)
+        voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, read_only=False, disable_locking=True)
 
         # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
         attr_p_cs = dummy_so_cs.attr_dict_path
         vx_p_cs = dummy_so_cs.voxel_path
         this_attr_dc_cs = AttributeDict(attr_p_cs, read_only=False, disable_locking=True)
-        voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, voxeldata_path=knossos_path_cs,
-                                      read_only=False, disable_locking=True)
+        voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, read_only=False, disable_locking=True)
         ids_to_load_voxels = []
         for cs_id in obj_keys:
+            cs_id = tuple(cs_id)
             # write cs to dict
-            if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
+            size_cs = cs_props[2][cs_id]
+            if size_cs < min_obj_vx_dc['cs']:
                 continue
             rp_cs = cs_props[0][cs_id]
             bbs_cs = np.concatenate(cs_props[1][cs_id])
-            size_cs = cs_props[2][cs_id]
+
             this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
-            this_attr_dc_cs[cs_id]["bounding_box"] = np.array(
-                [bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
+            cur_bbox = np.array([bbs_cs[:, 0].min(axis=0), bbs_cs[:, 1].max(axis=0)])
+            print(f'hamu {cs_props[1][cs_id]}')
+            print(f'hamy {cur_bbox}')
+            this_attr_dc_cs[cs_id]["bounding_box"] = cur_bbox
             this_attr_dc_cs[cs_id]["size"] = size_cs
             voxel_dc_cs[cs_id] = bbs_cs
             voxel_dc_cs.increase_object_size(cs_id, size_cs)
@@ -609,6 +610,8 @@ def _write_props_to_syn_thread(args):
             bb = np.array(
                 [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
             this_attr_dc[cs_id]["bounding_box"] = bb
+            print(f'hami {syn_props[1][cs_id]}')
+            print(f'hamz {bb}')
             this_attr_dc[cs_id]["size"] = size
             try:
                 sym_prop = cs_sym_cnt[cs_id] / size
@@ -643,50 +646,59 @@ def _write_props_to_syn_thread(args):
 
 
 def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dict, dict]:
-    dir_props, worker_id, intersec = args
+    dir_props = args[0]  # type: str
+    worker_id = args[1]  # type: int
+    intersec = args[2]  # type: List[Tuple[int, int]]
+
     if len(intersec) == 0:
         return [{}, {}, {}], [{}, {}, {}], {}, {}, {}
-    worker_dir_props = f"{dir_props}/{worker_id}/"
-    # cs
-    fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
-    dc = basics.load_pkl2obj(fname)
+    worker_dir_props = f'{dir_props}/{worker_id}/'
 
-    for k in dc[0].keys():
-        dc[0][k] = np.array(dc[0][k], dtype=np.int32)
-        dc[1][k] = [np.array(dc[1][k][0], dtype=np.int32)]
+    # Contact Sites (cs)
+    dc = basics.load_pkl2obj(f'{worker_dir_props}/cs_props_{worker_id}.pkl')
 
-    # convert lists to numpy arrays
-    tmp_dcs_cs = [dict(), defaultdict(list), dict()]
+    cs_rep_coord = dc[0]  # type: Dict[Tuple[int, int], np.ndarray]
+    cs_bbox = dc[1]  # type: Dict[Tuple[int, int], List[np.ndarray]]
+    cs_size = dc[2]  # type: Dict[Tuple[int, int], int]
+
+    cs_rep_coord_filtered, cs_bbox_filtered, cs_size_filtered = dict(), defaultdict(list), dict()
+    cs_filtered = [cs_rep_coord_filtered, cs_bbox_filtered, cs_size_filtered]
     for k in intersec:
-        tmp_dcs_cs[0][k] = dc[0][k]
-        tmp_dcs_cs[1][k] = dc[1][k]
-        tmp_dcs_cs[2][k] = dc[2][k]
+        cs_rep_coord_filtered[k] = cs_rep_coord[k]
+        cs_bbox_filtered[k] = cs_bbox[k]
+        cs_size_filtered[k] = cs_size[k]
     del dc
 
-    # syn
-    fname = f'{worker_dir_props}/syn_props_{worker_id}.pkl'
-    dc = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl'
-    curr_sym_cnt = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
-    curr_asym_cnt = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/syn_voxels_{worker_id}.pkl'
-    curr_syn_vxs = basics.load_pkl2obj(fname)
+    # Synapses (syn)
+    dc_syn = basics.load_pkl2obj(
+        f'{worker_dir_props}/syn_props_{worker_id}.pkl')
+    curr_sym_cnt = basics.load_pkl2obj(
+        f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl')
+    curr_asym_cnt = basics.load_pkl2obj(
+        f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl')
+    curr_syn_vxs = basics.load_pkl2obj(
+        f'{worker_dir_props}/syn_voxels_{worker_id}.pkl')
 
-    tmp_dcs_syn = [dict(), defaultdict(list), dict()]
-    tmp_sym_dc = dict()
-    tmp_asym_dc = dict()
+    syn_rep_coord = dc_syn[0]  # type: Dict[Tuple[int, int], np.ndarray]
+    syn_bbox = dc_syn[1]  # type: Dict[Tuple[int, int], List[np.ndarray]]
+    syn_size = dc_syn[2]  # type: Dict[Tuple[int, int], int]
+
+    syn_rep_coord_filtered, syn_bbox_filtered, syn_size_filtered = dict(), defaultdict(list), dict()
+    syn_filtered = [syn_rep_coord_filtered, syn_bbox_filtered, syn_size_filtered]
+
+    filtered_sym_dc = dict()
+    filtered_asym_dc = dict()
     for k in intersec:
-        if k not in dc[0]:
+        if k not in syn_rep_coord:
             continue
-        tmp_dcs_syn[0][k] = dc[0][k]
-        tmp_dcs_syn[1][k] = dc[1][k]
-        tmp_dcs_syn[2][k] = dc[2][k]
+        syn_rep_coord_filtered[k] = syn_rep_coord[k]
+        syn_bbox_filtered[k] = syn_bbox[k]
+        syn_size_filtered[k] = syn_size[k]
         if k in curr_sym_cnt:
-            tmp_sym_dc[k] = curr_sym_cnt[k]
+            filtered_sym_dc[k] = curr_sym_cnt[k]
         if k in curr_asym_cnt:
-            tmp_asym_dc[k] = curr_asym_cnt[k]
-    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, curr_syn_vxs
+            filtered_asym_dc[k] = curr_asym_cnt[k]
+    return cs_filtered, syn_filtered, filtered_sym_dc, filtered_asym_dc, curr_syn_vxs
 
 
 def _generate_storage_lookup(args):

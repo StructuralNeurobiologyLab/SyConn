@@ -5,6 +5,8 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
+from typing import Sequence, Any, List, Optional, Union, Tuple
+
 import gc
 import glob
 import os
@@ -34,7 +36,6 @@ from logging import Logger
 import shutil
 from collections import defaultdict
 from knossos_utils import chunky
-from typing import Optional, List, Union
 
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
@@ -252,8 +253,11 @@ def _dataset_analysis_thread(args):
     return global_attr_dict
 
 
-def _cache_storage_paths(args):
-    target_p, all_ids, n_folders_fs = args
+def _cache_storage_paths(args) -> None:
+    target_p = args[0]  # type: str
+    all_ids = args[1]  # type: np.ndarray
+    n_folders_fs = args[2]  # type: int
+
     # outputs target folder hierarchy for object storage
     if global_params.config.use_new_subfold:
         target_dir_func = rep_helper.subfold_from_ix_new
@@ -261,12 +265,19 @@ def _cache_storage_paths(args):
         target_dir_func = rep_helper.subfold_from_ix_OLD
     dest_dc_tmp = defaultdict(list)
     for obj_id in all_ids:
-        dest_dc_tmp[target_dir_func(
-            obj_id, n_folders_fs)].append(obj_id)
-    del all_ids
+        if isinstance(obj_id, int):
+            tdir = target_dir_func(obj_id, n_folders_fs)
+        else:
+            tdir = target_dir_func(obj_id.item(0), n_folders_fs)
+
+        dest_dc_tmp[tdir].append(obj_id)
+
+    del all_ids, args
+
     cd = CompressedStorage(target_p, disable_locking=True)
-    for k, v in dest_dc_tmp.items():
-        cd[k] = np.array(v, dtype=np.uint64)  # TODO: dtype needs to be configurable
+    for target_dir, vals in dest_dc_tmp.items():
+        cd[target_dir] = np.array(vals, dtype=np.uint64)  # TODO: dtype needs to be configurable
+
     cd.push()
 
 

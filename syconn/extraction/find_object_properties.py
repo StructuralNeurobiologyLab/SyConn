@@ -285,11 +285,9 @@ def find_object_properties_cs_64bit(cs_seg: np.ndarray):
                     sizes[key[0]] = sizes_local
                     rep_coords[key[0]] = rep_coords_local
                 elif dc_local_bb.get(key[1]) is None:
-                    print(key)
                     bounding_box[key[0]][key[1]] = np.array([(x, y, z), (x+1, y+1, z+1)], dtype=np.int64)
                     sizes[key[0]][key[1]] = 1
                     rep_coords[key[0]][key[1]] = np.array([x, y, z], dtype=np.int64)  # TODO: could be more representative
-                    print(rep_coords)
                 else:
                     local_bb = dc_local_bb.get(key[1])
                     local_bb[0][0] = min(local_bb[0][0], x)
