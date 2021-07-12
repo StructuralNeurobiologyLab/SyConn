@@ -42,5 +42,15 @@
 - [x] multiple independent users without accidental synchronization
 - [ ] Resolve the magnification when zooming out; Use the crossSectionScale from the viewer state and trace back to the downsample factor in the server
 - [ ] Modify the index page (include a background maybe)
+- [x] Viewer modifications:
+    * Fix type in synaptic partner status message (synpatic)
+    * Add 'Loading synaptic partner for selected ssv' when `action_handler` is invoked
+    * Implicitly load page 1 in the property filter without having to type '_pg1'
+    * Celltype query support in lower and upper
+    * Replace placeholder text in segment query
+- [x] Time fetching and computation operations (synaptic filtering, skeleton/mesh retrieval, page splitting)
+- [ ] Optimize synaptic partner property
+- [ ] Tutorial page (refer on the index page of server)
+- [ ] See ChunkLayoutPreference, computeNearIsotropicDownsamplingLevels, LinkedZoomState, LinkedViewerNavigationState, TrackableCrossSectionZoom, TrackableProjectionZoom (why stopping at 4?)
 
 
