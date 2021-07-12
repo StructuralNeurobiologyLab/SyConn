@@ -78,7 +78,7 @@ class SyConnClient(object):
         # self.host = clargs['host']
         # self.port = clargs['port']
         
-        viewer = self.viewer = neuroglancer.Viewer(token=token, global_srv=st.global_server)
+        viewer = self.viewer = neuroglancer.Viewer(token=token)
         logger.info('Neuroglancer viewer object initialized')
 
         # start flask server with desired seg_dataset
@@ -183,7 +183,7 @@ class SyConnClient(object):
                         downsampling='3d',
                         task_type='lowest_then_downsample'
                     ),
-                ],
+                ]
             )
         )
 
@@ -215,6 +215,7 @@ class SyConnClient(object):
 
         state.selected_layer.layer = self.seg_name
         state.selected_layer.visible = True
+        # state.selected_layer.keys()
 
         # Configure skeleton layer
         # Adjust the skeleton rendering options
