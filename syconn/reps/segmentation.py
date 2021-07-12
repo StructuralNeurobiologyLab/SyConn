@@ -4,9 +4,11 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from typing import Union, Tuple, List, Optional, Dict, Generator, Any, Iterator
+from collections.abc import Iterable
+
 import copy
 import re
-from typing import Union, Tuple, List, Optional, Dict, Generator, Any, Iterator
 
 import networkx as nx
 from knossos_utils import knossosdataset
@@ -227,7 +229,7 @@ class SegmentationObject(SegmentationBase):
         return self._n_folders_fs
 
     @property
-    def id(self) -> int:
+    def id(self) -> Union[Tuple[int, int], int]:
         """
         Returns:
             Globally unique identifier of this object.
@@ -1736,8 +1738,10 @@ class SegmentationDataset(SegmentationBase):
     def ids(self) -> np.ndarray:
         """
         Returns:
-            All supervoxel IDs which are part of this dataset.
+            All supervoxel IDs which are part of this dataset. Nx2 array in the case of synapses and contact sites,
+            otherwise just N.
         """
+
         if self._ids is None:
             acquire_obj_ids(self)
         return self._ids
@@ -1809,8 +1813,9 @@ class SegmentationDataset(SegmentationBase):
                              '{}.'.format(obj_type, self.version_dict))
         return SegmentationDataset(obj_type, version=self.version_dict[obj_type], working_dir=self.working_dir)
 
-    def get_segmentation_object(self, obj_id: Union[int, List[int]],
-                                create: bool = False, **kwargs) -> Union[SegmentationObject, List[SegmentationObject]]:
+    def get_segmentation_object(
+            self, obj_id: Union[int, Tuple[int, int]],
+            create: bool = False, **kwargs) -> Union[SegmentationObject, List[SegmentationObject]]:
         """
         Factory method for :class:`~syconn.reps.segmentation.SegmentationObject` which are
         part of this dataset.
@@ -1822,16 +1827,19 @@ class SegmentationDataset(SegmentationBase):
         Returns:
             The requested :class:`~syconn.reps.segmentation.SegmentationObject` object.
         """
-        if np.isscalar(obj_id):
-            return self._get_segmentation_object(obj_id, create, **kwargs)
-        else:
-            res = []
-            for ix in obj_id:
-                obj = self._get_segmentation_object(ix, create, **kwargs)
-                res.append(obj)
-            return res
 
-    def _get_segmentation_object(self, obj_id: int, create: bool, **kwargs) -> SegmentationObject:
+        return self._get_segmentation_object(obj_id, create, **kwargs)
+
+    def get_segmentation_objects(
+            self, obj_ids: Union[Iterable[int], Iterable[Tuple[int, int]]],
+            create: bool = False, **kwargs) -> List[SegmentationObject]:
+        res = []
+        for ix in obj_ids:
+            obj = self._get_segmentation_object(ix, create, **kwargs)
+            res.append(obj)
+        return res
+
+    def _get_segmentation_object(self, obj_id: Union[int, Tuple[int, int]], create: bool, **kwargs) -> SegmentationObject:
         """
         Initialize :py:class:`~SegmentationObject`.
 

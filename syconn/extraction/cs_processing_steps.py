@@ -4,13 +4,14 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from typing import Any, Optional, Dict, List, Tuple
+
 import datetime
 import os
 import shutil
 import time
 from collections import defaultdict
 from logging import Logger
-from typing import Optional, Dict, List, Tuple, TYPE_CHECKING
 from itertools import chain
 
 import joblib
@@ -232,10 +233,10 @@ def _delete_all_cache_dc(args):
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
 def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
-                        ssd: super_segmentation.SuperSegmentationDataset) -> Dict[int, list]:
-    # TODO 64bit refactoring
+                        ssd: super_segmentation.SuperSegmentationDataset) -> Dict[Tuple[int, int], List[Tuple[int, int]]]:
     """
-    This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs) that do not need to be agglomerated.
+    This function removes the intra-SSV synaptic contact sites (synaptic contacts detected between the same SSV, not
+    between different SSVs) that do not need to be agglomerated.
 
     Notes:
         * Also applicable to cs.
@@ -245,43 +246,32 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
         ssd:
 
     Returns:
-        Lookup from encoded SSV partner IDs (see :py:func:`~syconn.reps.connectivity_helper.sv_id_to_partner_ids_vec`
-        for decoding into SSV IDs) to SV syn. object IDs, keys: encoded SSV syn IDs; values: List of SV syn IDs.
-
+        Dict mapping SSV partner IDs to underlying SV partner IDs for synaptic contacts, without any intra-SSV
+        contacts.
     """
-    # get all cs IDs belonging to syn objects and then retrieve corresponding SVs IDs via bit shift
-    # syn objects are just a subset of contact site objects (which originally store the partner IDs) with the same IDs
-    # -> not necessary to load the cs_ids.
-    syn_ids = sd_syn.ids.copy()
 
-    # TODO 64bit refactoring - might not even be needed anymore
-    #  as the cs ID / syn ID could just be a tuple
-    sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
+    # syn objects are just a subset of contact site objects and are defined by the IDs of the two supervoxels
+    # involved in the contact
+    syn_ids = sd_syn.ids.copy()  # type: np.ndarray[(Any, 2), np.uint64]
 
-    # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
-    sv_ids[sv_ids > ssd.mapping_lookup_reverse.id_array[-1]] = 0
-    mapping_dc = ssd.sv2ssv_ids(np.unique(sv_ids.flatten()))
-    def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
+    sv_to_ssv = ssd.sv2ssv_ids(np.unique(syn_ids))
     # np.vectorize is not efficient, just a more convenient "map"
-    mapped_sv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
-    mask = np.all(mapped_sv_ids > 0, axis=1)
+    ssv_ids = np.vectorize(lambda x: sv_to_ssv.get(x, 0))(syn_ids)
+    mask = np.all(ssv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
-    filtered_mapped_sv_ids = mapped_sv_ids[mask]
+    ssv_ids = ssv_ids[mask]
 
     # this identifies all inter-ssv contact sites
-    mask = (filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1]) != 0
+    mask = (ssv_ids[:, 0] - ssv_ids[:, 1]) != 0
     syn_ids = syn_ids[mask]
-    inter_ssv_contacts = filtered_mapped_sv_ids[mask]
-    # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
-    # cells
-    relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
+    inter_ssv_contacts = ssv_ids[mask]
 
-    # create lookup from SSV-wide synapses to SV syn. objects
-    ssv_to_syn_ids_dc = defaultdict(list)
-    for i_entry in range(len(relevant_ssv_ids_enc)):
-        ssv_to_syn_ids_dc[relevant_ssv_ids_enc[i_entry]].append(syn_ids[i_entry])
+    syn_svs_filtered = defaultdict(list)
+    for i in range(syn_ids.shape[0]):
+        k = tuple(inter_ssv_contacts[i, :])
+        syn_svs_filtered[k].append(tuple(syn_ids[i, :]))
 
-    return ssv_to_syn_ids_dc
+    return syn_svs_filtered
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
@@ -344,24 +334,27 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
                      syn_sd.version, sd_syn_ssv.version, cs_gap_nm) for
                     ii in range(n_used_paths)]
+
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(
-            multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log)
+            multi_params, "combine_and_split_syn", remove_jobfolder=False, log=log)
 
 
 def _combine_and_split_syn_thread(args):
-    wd = args[0]
-    rel_ssv_with_syn_ids_items = args[1]
-    voxel_rel_paths = args[2]
-    syn_version = args[3]
-    syn_ssv_version = args[4]
-    cs_gap_nm = args[5]
+    wd = args[0]  # type: str
+    rel_ssv_with_syn_ids_items = args[1]  # type: List[Tuple[Tuple[int, int], List[Tuple[int, int]]]]
+    voxel_rel_paths = args[2]  # type: List[str]
+    syn_version = args[3]  # type: str
+    syn_ssv_version = args[4]  # type: str
+    cs_gap_nm = args[5]  # type: int
 
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=syn_ssv_version)
+    # The elements of the outer list in rel_ssv_with_syn_ids_items are tuples mapping SSV synaptic contact IDs
+    # (Tuple[int, int]) to a list of the corresponding SV synaptic contact IDs (again Tuple[int, int]).
+
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd, version=syn_ssv_version)
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
 
     scaling = sd_syn.scaling
@@ -379,42 +372,33 @@ def _combine_and_split_syn_thread(args):
     base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
-    base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-    syn_ssv_id = base_id
+    syn_ssv_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
 
     voxel_dc = VoxelStorageDyn(base_dir + "/voxel.pkl", read_only=False, voxel_mode=False)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
-    for ssvpartners_enc, syn_ids in rel_ssv_with_syn_ids_items:
+    for syn_ssv_partner_ids, syn_sv_partner_ids in rel_ssv_with_syn_ids_items:
         n_items_for_path += 1
-        # TODO 64bit refactoring - do not call this method with a single element - might not even be needed anymore
-        #  as the cs ID / syn ID could just be a tuple
-        ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
-        syn = sd_syn.get_segmentation_object(syn_ids[0])
-
         # verify ssv_partner_ids
-        syn.load_attr_dict()
-        syn_attr_list = [syn.attr_dict]  # used to collect syn properties
-        voxel_list = [syn.voxel_list]
-        # store index of syn. objects for attribute dict retrieval
-        synix_list = [0] * len(voxel_list[0])
-        for syn_ix, syn_id in enumerate(syn_ids[1:]):
-            syn = sd_syn.get_segmentation_object(syn_id)
-            syn.load_attr_dict()
-            syn_attr_list.append(syn.attr_dict)
-            voxel_list.append(syn.voxel_list)
-            synix_list += [syn_ix] * len(voxel_list[-1])
+        syn_attr_list, voxel_list, synix_list = [], [], []
+        for cur_syn_ix, cur_syn_partner_ids in enumerate(syn_sv_partner_ids):
+            cur_syn = sd_syn.get_segmentation_object(cur_syn_partner_ids)
+            cur_syn.load_attr_dict()
+            syn_attr_list.append(cur_syn.attr_dict)
+            cur_voxel_list = cur_syn.voxel_list  # assigned here to ensure re-use irrespective of voxel_caching
+            voxel_list.append(cur_voxel_list)
+            synix_list += [cur_syn_ix] * len(cur_voxel_list)
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
 
         if len(synix_list) == 0:
-            msg = 'Voxels not available for syn-objects {}.'.format(syn_ids)
+            msg = 'Voxels not available for syn-objects {}.'.format(syn_sv_partner_ids)
             log_extraction.error(msg)
             raise ValueError(msg)
 
-        ccs = connected_cluster_kdtree(voxel_list, dist_intra_object=cs_gap_nm,
-                                       dist_inter_object=20000, scale=scaling)
+        # Extract connected components on the voxel level
+        ccs = connected_cluster_kdtree(voxel_list, dist_intra_object=cs_gap_nm, dist_inter_object=20000, scale=scaling)
 
         voxel_list = np.concatenate(voxel_list)
 
@@ -433,7 +417,7 @@ def _combine_and_split_syn_thread(args):
             if (os.path.abspath(syn_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
-            synssv_attr_dc = dict(neuron_partners=ssv_ids)
+            synssv_attr_dc = dict(neuron_partners=syn_ssv_partner_ids)
             voxel_dc.set_voxel_cache(syn_ssv_id, this_vx)
             synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
             synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
@@ -483,14 +467,14 @@ def _combine_and_split_syn_thread(args):
             attr_dc[syn_ssv_id] = synssv_attr_dc
             if use_new_subfold:
                 syn_ssv_id += np.uint(1)
-                if syn_ssv_id - base_id >= div_base:
+                if syn_ssv_id - syn_ssv_id >= div_base:
                     # next ID chunk mapped to this storage
                     id_chunk_cnt += 1
-                    old_base_id = base_id
-                    base_id += np.uint(sd_syn_ssv.n_folders_fs * div_base) * id_chunk_cnt
-                    assert subfold_from_ix(base_id, sd_syn_ssv.n_folders_fs, old_version=False) == \
+                    old_base_id = syn_ssv_id
+                    syn_ssv_id += np.uint(sd_syn_ssv.n_folders_fs * div_base) * id_chunk_cnt
+                    assert subfold_from_ix(syn_ssv_id, sd_syn_ssv.n_folders_fs, old_version=False) == \
                            subfold_from_ix(old_base_id, sd_syn_ssv.n_folders_fs, old_version=False)
-                    syn_ssv_id = base_id
+                    syn_ssv_id = syn_ssv_id
             else:
                 syn_ssv_id += np.uint(sd_syn.n_folders_fs)
 
@@ -503,8 +487,7 @@ def _combine_and_split_syn_thread(args):
                 raise ValueError(f'Worker ran out of possible storage paths for storing {sd_syn_ssv.type}.')
             n_items_for_path = 0
             id_chunk_cnt = 0
-            base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
-            syn_ssv_id = base_id
+            syn_ssv_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
             base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
             voxel_dc = VoxelStorageDyn(base_dir + "/voxel.pkl", read_only=False, voxel_mode=False)
@@ -663,7 +646,7 @@ def _combine_and_split_cs_thread(args):
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
 
         # verify ssv_partner_ids
-        cs_lst = sd_cs.get_segmentation_object(cs_ids)
+        cs_lst = sd_cs.get_segmentation_objects(cs_ids)
         vxl_iter_lst = []
         vx_cnt = 0
         for cs in cs_lst:
@@ -931,9 +914,9 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         close_mi_ids = mi_ids[np.unique(np.concatenate(close_mi_ixs)).astype(np.int32)]
         close_vc_ids = vc_ids[np.unique(np.concatenate(close_vc_ixs).astype(np.int32))]
 
-        md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_object(close_mi_ids),
+        md_mi = seghelp.load_so_meshes_bulk(sd_mi.get_segmentation_objects(close_mi_ids),
                                             use_new_subfold=use_new_subfold)
-        md_vc = seghelp.load_so_meshes_bulk(sd_vc.get_segmentation_object(close_vc_ids),
+        md_vc = seghelp.load_so_meshes_bulk(sd_vc.get_segmentation_objects(close_vc_ids),
                                             use_new_subfold=use_new_subfold)
         # md_synssv = seghelp.load_so_meshes_bulk(sd_syn_ssv.get_segmentation_object(synssv_ids),
         #                                         use_new_subfold=use_new_subfold)
@@ -943,13 +926,13 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         for ii, synssv_id in enumerate(synssv_ids):
             synssv_obj = sd_syn_ssv.get_segmentation_object(synssv_id)
             # synssv_obj._mesh = md_synssv[synssv_id]
-            mis = sd_mi.get_segmentation_object(mi_ids[close_mi_ixs[ii]])
+            mis = sd_mi.get_segmentation_objects(mi_ids[close_mi_ixs[ii]])
             # load cached meshes
             for jj, ix in enumerate(close_mi_ixs[ii]):
                 mi = mis[jj]
                 mi._size = mi_sizes[ix]
                 mi._mesh = md_mi[mi.id]
-            vcs = sd_vc.get_segmentation_object(vc_ids[close_vc_ixs[ii]])
+            vcs = sd_vc.get_segmentation_objects(vc_ids[close_vc_ixs[ii]])
             for jj, ix in enumerate(close_vc_ixs[ii]):
                 vc = vcs[jj]
                 vc._size = vc_sizes[ix]

@@ -614,7 +614,6 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
     # is not written here and thus should not be deleted here if overwrite = True.
     deep_ssd_storage_pths = [
         ssd.mapping_dict_path,
-        ssd.mapping_dict_path,
         ssd.version_dict_path,
         f'{ssd.path}/id.npy',
         f'{ssd.path}/size.npy',

@@ -2453,7 +2453,7 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     # dendrite or soma
     pre_mask = np.any(m_exc & (syn_axs == 1), axis=1) & m_prob & \
                np.any((syn_axs == 0) | (syn_axs == 2), axis=1)
-    pre_syns = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[pre_mask])
+    pre_syns = sd_syn_ssv.get_segmentation_objects(sd_syn_ssv.ids[pre_mask])
     syn_objs_total += pre_syns
     syn_type_total += [1] * len(pre_syns)
 
@@ -2467,7 +2467,7 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     # dendrite or soma
     pre_mask = np.any(m_inh & (syn_axs == 1), axis=1) & m_prob & \
                np.any((syn_axs == 0) | (syn_axs == 2), axis=1)
-    pre_syns = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[pre_mask])
+    pre_syns = sd_syn_ssv.get_segmentation_objects(sd_syn_ssv.ids[pre_mask])
     syn_objs_total += pre_syns
     syn_type_total += [2] * len(pre_syns)
 

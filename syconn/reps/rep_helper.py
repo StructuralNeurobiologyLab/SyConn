@@ -122,19 +122,14 @@ def knossos_ml_from_sso(sso: 'SuperSegmentationObject',
     return txt
 
 
-def subfold_from_ix(ix, n_folders, old_version=False):
+def subfold_from_ix(ix: Union[Tuple[int, int], int], n_folders: int, old_version: bool = False) -> str:
     """
     # TODO: remove 'old_version' as soon as possible, currently there is one usage
-
-    Parameters
-    ----------
-    ix : int
-    n_folders: int
-
-    Returns
-    -------
-    str
     """
+
+    if isinstance(ix, Tuple):
+        ix = ix[0]
+
     assert n_folders % 10 == 0
     if not global_params.config.use_new_subfold:
         return subfold_from_ix_OLD(ix, n_folders, old_version)
@@ -190,34 +185,14 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     return subfold
 
 
-def ix_from_subfold(subfold, n_folders):
-    """
-
-    Parameters
-    ----------
-    subfold : str
-
-    Returns
-    -------
-    int
-    """
+def ix_from_subfold(subfold: str, n_folders: int) -> int:
     if not global_params.config.use_new_subfold:
         return ix_from_subfold_OLD(subfold, n_folders)
     else:
         return ix_from_subfold_new(subfold, n_folders)
 
 
-def ix_from_subfold_new(subfold, n_folders):
-    """
-
-    Parameters
-    ----------
-    subfold : str
-
-    Returns
-    -------
-    int
-    """
+def ix_from_subfold_new(subfold: str, n_folders: int) -> int:
     parts = subfold.strip("/").split("/")
     order = int(np.log10(n_folders))
     # TODO: ' + "000"' needs to be adapted if `div_base` is made variable in `subfold_from_ix`
