@@ -115,9 +115,9 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
-    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'],
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['process_cell_organelles'],
                                                     nb_cpus=ncores_per_job)
-    ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'],
+    ssd_proc.apply_mapping_decisions(ssd, global_params.config['process_cell_organelles'],
                                      nb_cpus=ncores_per_job)
     log.info('Finished mapping of cellular organelles to SSVs.')
 
@@ -183,7 +183,7 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
 
                 ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
                     load_cellorganelles_from_kd_overlaycubes, cube_of_interest_bb, log])
-                    for co in global_params.config['existing_cell_organelles']]
+                    for co in global_params.config['process_cell_organelles']]
                 for p in ps:
                     p.start()
                     time.sleep(5)
@@ -246,7 +246,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
-        transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
+        transf_func_kd_overlay = {k: None for k in global_params.config['process_cell_organelles']}
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     chunk_size_kdinit = chunk_size
@@ -259,10 +259,10 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
 
     log.info('Converting the predictions of the following cellular organelles to'
-             ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
+             ' KnossosDatasets: {}.'.format(global_params.config['process_cell_organelles']))
     start = time.time()
     oew.generate_subcell_kd_from_proba(
-        global_params.config['existing_cell_organelles'],
+        global_params.config['process_cell_organelles'],
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
         cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
@@ -270,7 +270,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
-             ' cell supervoxels.'.format(global_params.config['existing_cell_organelles']))
+             ' cell supervoxels.'.format(global_params.config['process_cell_organelles']))
     start = time.time()
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
@@ -281,10 +281,10 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
              ''.format(time.time() - start))
 
     log.info('Caching properties of subcellular structures {} and cell'
-             ' supervoxels'.format(global_params.config['existing_cell_organelles']))
+             ' supervoxels'.format(global_params.config['process_cell_organelles']))
     start = time.time()
     ps = [Process(target=sd_init, args=(co, max_n_jobs, log))
-          for co in ["sv"] + global_params.config['existing_cell_organelles']]
+          for co in ["sv"] + global_params.config['process_cell_organelles']]
     for p in ps:
         p.start()
         time.sleep(2)

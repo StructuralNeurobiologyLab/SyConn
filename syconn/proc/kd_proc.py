@@ -4,6 +4,7 @@
 from typing import Optional
 
 import numpy as np
+import tqdm
 
 from knossos_utils import KnossosDataset
 from syconn.handler import basics
@@ -58,6 +59,24 @@ def _convert_cube_size_kd_thread(args):
             kd_target.save_raw(offset=coord, mags=[mag], data=data, data_mag=mag)
         else:
             data = kd_source.load_seg(size=cube_size, offset=coord, mag=mag)
-            if np.sum(data) == 0:
-                log_proc.warn(f'Empty cube in kd={kd_source.conf_path} at {coord}, mag={mag}.')
             kd_target.save_seg(offset=coord, mags=[mag], data=data, data_mag=mag, compresslevel=compresslevel)
+
+
+def check_complete(kd1_p, kd2_p, mags, do_raw=False):
+    kd1 = basics.kd_factory(kd1_p)
+    kd2 = basics.kd_factory(kd2_p)
+
+    for mag in mags:
+        cs = np.array(kd2.cube_shape) * mag
+        grid = np.mgrid[0:kd1.boundary[0]:cs[0], 0:kd1.boundary[1]:cs[1], 0:kd1.boundary[2]:cs[2]]
+        chunk_coords = grid.reshape(3, -1).swapaxes(1, 0)
+        for coord in tqdm.tqdm(chunk_coords, total=len(chunk_coords)):
+            if do_raw:
+                data1 = kd1.load_raw(size=kd2.cube_shape, offset=coord, mag=mag)
+                data2 = kd1.load_raw(size=kd2.cube_shape, offset=coord, mag=mag)
+            else:
+                data1 = kd1.load_seg(size=kd2.cube_shape, offset=coord, mag=mag)
+                data2 = kd1.load_seg(size=kd2.cube_shape, offset=coord, mag=mag)
+            if not np.all(data1 == data2):
+                raise ValueError(f'Data is not identical.')
+
