@@ -1,5 +1,6 @@
 from syconn.handler.logger import log_main as logger
 import numpy as np
+import time
 
 def get_encoded_skeleton(backend, ssv_id, scales):
     """Gets encoded skeleton for ssv_id.
@@ -19,7 +20,10 @@ def get_encoded_skeleton(backend, ssv_id, scales):
     skeleton = {}
     
     try:
+        start = time.time()
         skeleton = backend.ssv_skeleton(ssv_id)
+        dtime = time.time() - start
+        logger.debug('Got ssv skeleton {} after {:.2f}'.format(ssv_id, dtime))
         nodes = np.array(skeleton["nodes"], dtype=np.float32).reshape(-1, 3)
 
     except:
@@ -58,7 +62,7 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
     :rtype encoded_mesh: bytes, -1 (mesh not available)
     """
 
-    logger.info('Getting binary encoded {} mesh for ssv_id {}'.format(obj_type, ssv_id))
+    logger.info('Getting binary encoded {} mesh {}'.format(obj_type, ssv_id))
 
     mesh = {}
 
@@ -71,10 +75,13 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
             return -1
     else:
         try:
+            start = time.time()
             object_vert = backend.ssv_obj_vert(ssv_id, obj_type)
             object_ind = backend.ssv_obj_ind(ssv_id, obj_type)
             mesh['vertices'] = object_vert['vert']
             mesh['indices'] = object_ind['ind']
+            dtime = time.time() - start
+            logger.debug('Got {} mesh {} after {:.2f}'.format(obj_type, ssv_id, dtime))
 
         except:
             # logger.error('{} mesh not available for ssv_id: {}'.format(obj_type, ssv_id))

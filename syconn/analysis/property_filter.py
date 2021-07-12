@@ -1,3 +1,4 @@
+from humanfriendly.terminal import message
 from syconn.reps import super_segmentation_dataset as ss
 from syconn.reps import segmentation
 from syconn.analysis.cli import configure_backend
@@ -14,6 +15,7 @@ import os
 import re
 import numpy as np
 import copy
+import time
 
 logger = log_gate
 
@@ -57,6 +59,8 @@ class PropertyFilter(SyConnClient):
     :type PAGE_SIZE: int
     :cvar syn_type: maps compartment to pre- or post-synaptic
     :type syn_type: dict
+    :cvar data_dir: directory containing .npy files 
+    :type data_dir: str
 
     :param backend: to retrieve the skeleton, mesh and cell types
     :type backend: SyConnBackend
@@ -69,6 +73,7 @@ class PropertyFilter(SyConnClient):
     properties = ('mi', 'size')
     # don't forget to update here, if properties number increases
     master_pattern = r'^([a-zA-Z]{2,4}|#)((_((>|<)[0-9]+|#)){2})?_(pg[1-9][0-9]{0,3})$'
+    # master_pattern = r'_?(mito[>|<|=][0-9][0-9]{0,3})?_?(size[>|<][1-9][0-9]{1,6})?_?(pg[1-9][0-9]{0,3})?$' # TODO(hashir): Independent property querying 
     ct_pattern = re.compile(r'^([a-zA-Z]{2,4})')
     property_filter = re.compile(r'_((>|<)[0-9]+)')
     page_pattern = re.compile(r'pg[1-9][0-9]{0,3}$')
@@ -78,6 +83,7 @@ class PropertyFilter(SyConnClient):
         "axon": "pre-synaptic",
         "soma": "post-synaptic",
     }
+    data_dir = '/home/shared'
 
     def __init__(self, backend, seg_path, organelles, clargs: dict, token=None):
         super().__init__(backend, seg_path, organelles, clargs, token)
@@ -88,6 +94,7 @@ class PropertyFilter(SyConnClient):
 
         self.CTs = backend.cts_in_data(self.gt_type)
         logger.info(f"Found [{self.CTs}] cell types in the dataset")
+        self.master_pattern = r'(' + '|'.join(ct for ct in self.CTs) + ')?' + self.__class__.master_pattern
 
         self.ssd = ss.SuperSegmentationDataset(global_params.config.working_dir, sso_locking=False, sso_caching=True)
         # sd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=global_params.config.working_dir)
@@ -95,12 +102,15 @@ class PropertyFilter(SyConnClient):
         self.ssv_ids = self.ssd.ssv_ids
         self.cur_message = None
 
-        self.neuron_partners = np.load('/home/shared/neuron_partnerss.npy', allow_pickle=True)
-        self.axoness_partners = np.load('/home/shared/partner_axonesss.npy', allow_pickle=True)
-        self.syn_probs = np.load('/home/shared/syn_probs.npy', allow_pickle=True)
-        self.syn_areas = np.load('/home/shared/mesh_areas.npy', allow_pickle=True)
-        self.partner_celltypes = np.load('/home/shared/partner_celltypess.npy', allow_pickle=True)
-        self.rep_coords = np.load('/home/shared/rep_coords.npy', allow_pickle=True)
+        if not os.path.exists(self.__class__.data_dir) or len(os.listdir(self.__class__.data_dir)) == 0:
+            logger.error('Data directory {} does not exist or is empty'.format(self.__class__.data_dir))
+
+        self.neuron_partners = np.load(os.path.join(self.__class__.data_dir, 'neuron_partnerss.npy'), allow_pickle=True)
+        self.axoness_partners = np.load(os.path.join(self.__class__.data_dir, 'partner_axonesss.npy'), allow_pickle=True)
+        self.syn_probs = np.load(os.path.join(self.__class__.data_dir, 'syn_probs.npy'), allow_pickle=True)
+        self.syn_areas = np.load(os.path.join(self.__class__.data_dir, 'mesh_areas.npy'), allow_pickle=True)
+        self.partner_celltypes = np.load(os.path.join(self.__class__.data_dir, 'partner_celltypess.npy'), allow_pickle=True)
+        self.rep_coords = np.load(os.path.join(self.__class__.data_dir, 'rep_coords.npy'), allow_pickle=True)
 
         # dict of CT indices in the ssv_ids array
         self.CTmask = {ct: [] for ct in self.CTs}
@@ -132,21 +142,29 @@ class PropertyFilter(SyConnClient):
             return
 
         ssv_id = segment_id.value
+        
+        message = 'Loading synaptic partner for selected ssv {}'.format(ssv_id)
+        if message != self.cur_message:
+            with self.viewer.config_state.txn() as cfs:
+                cfs.status_messages['status'] = message
+            self.cur_message = message
 
         with self.viewer.txn() as s:
-            print(self.viewer.state.cross_section_scale)
             segments = get_segmentation_layer(s.layers)[1].segments
             if ssv_id in segments:
-                # print('Clicked segment')
+                start = time.time()
                 result = self.get_synaptic_partner(ssv_id)
+                dtime = time.time() - start
+                logger.debug('Got synaptic partner after {:.2f}'.format(dtime))
 
                 if result == -1:
-                    message = 'No synpatic partner found for the selected ssv {}'.format(ssv_id)
+                    message = 'No synaptic partner found for the selected ssv {}'.format(ssv_id)
 
                     if message != self.cur_message:
                         with self.viewer.config_state.txn() as cfs:
                             cfs.status_messages['status'] = message
-                    
+                        self.cur_message = message
+
                     return
 
                 partner_ssv_id = result["partner_ssv"]
@@ -158,8 +176,6 @@ class PropertyFilter(SyConnClient):
 
                 segments.add(partner_ssv_id)
                 s.position = np.flip(rep_coords)
-
-                print(type(partner_ssv_id))
                 
                 # pre-synaptic -> post-synaptic
                 if self.__class__.syn_type[ssv_comp] == "pre-synaptic":
@@ -233,7 +249,7 @@ class PropertyFilter(SyConnClient):
             logger.info(f'Entered in query: {segment_query}')
             try:
                 ct_match = next(self.__class__.ct_pattern.finditer(segment_query))
-                celltype = ct_match.group(1)
+                celltype = ct_match.group(1).upper() # case insensitive match
                 logger.info(f'Celltype {celltype}')
                 if self.CTmask[celltype] == []:
                     logger.info(f"Storing ids mask of celltype {celltype} in memory")
@@ -268,12 +284,117 @@ class PropertyFilter(SyConnClient):
                     # if StopIteration is raised, break from loop
                     break
 
-            try:
-                page_match = next(iter(self.__class__.page_pattern.finditer(segment_query)))
+            page_match = next(iter(self.__class__.page_pattern.finditer(segment_query)))
+            if page_match == None:
+                pageNr = 1
+            else:
                 pageNr = int(page_match.group(0).split("pg")[1])
             
-            except:
-                logger.info('No match found for page property')
+            # logger.info('No match found for page property')
+
+            logger.info(f'Filter list: {filter_list}')
+            # get filtered ssv_ids
+            ssv_ids = self.get_state_segment_ids(celltype, filter_list)
+
+            if len(ssv_ids) == 0:
+                return
+
+            if isinstance(ssv_ids[0], np.ndarray):  # split happened
+
+                if pageNr < 1:
+                    logger.error("Numbering of the pages starts at 1.")
+                    return
+
+                if pageNr > len(ssv_ids):
+                    pageNr = len(ssv_ids)
+
+                page = ssv_ids[pageNr - 1]
+
+            else:  # no split
+                page = ssv_ids
+
+            # update segment query and state
+            response = ', '.join(str(ssv_id) for ssv_id in page)
+            new_state = copy.deepcopy(self.viewer.state)
+            new_state.layers[ix].segment_query = response
+            self.viewer.set_state(new_state)
+
+    # TODO(hashir): Independent property querying
+    def on_state_changed_experimental(self):
+        """Captures a state change and updates state."""
+
+        ix, segmentation_layer = get_segmentation_layer(self.viewer.state.layers)
+        segment_query = segmentation_layer.segment_query
+        
+        # full pattern match required to avoid response generation
+        if segment_query != None and re.fullmatch(self.master_pattern, segment_query) != None:
+        # if segment_query != None and re.fullmatch(self.__class__.master_pattern, segment_query).groups()
+            logger.info(f'Entered in query: {segment_query}')
+            matches = re.match(self.master_pattern, segment_query)
+            logger.debug(matches.groups())
+            try:
+                # ct_match = next(self.__class__.ct_pattern.finditer(segment_query))
+                ct_match = matches.group(1)
+                celltype = ct_match.upper() # case insensitive match
+                logger.info(f'Cell type {celltype}')
+                
+                if len(self.CTmask[celltype]) == 0:
+                    logger.info(f"Storing ids mask of cell type {celltype} in memory")
+                    start = timer()
+                    self.CTmask[celltype] = np.where(
+                        np.load(os.path.join(self.__class__.data_dir, 'celltype_cnn_e3s.npy'), allow_pickle=True) == str2int_converter(celltype, self.gt_type))[0]
+                    end = timer()
+                    logger.debug(f"Loaded cell type ids mask after {(end - start):.3f} seconds")
+
+            except (KeyError, AttributeError) as e:
+                celltype = None
+                logger.warning('No match found for celltype property!')
+
+            # list of (prop_type, operation, threshhold)
+            filter_list = []
+            pageNr = -1
+
+            # filter_iter = self.__class__.property_filter.finditer(segment_query)
+            # prop_iter = iter(self.__class__.properties)
+            filter_iter = iter([prop for prop in matches.groups()[1:-1]]) # excluding cell type and page properties
+            
+            while True:
+                try:
+                    filter_list.append(tuple(re.split('(>|<|=)', next(filter_iter)))) # property split (prop, >|<|=, int)
+                
+                except (StopIteration, TypeError) as e:
+                    break
+
+            #loop through property iterator
+            # while True:
+            #     try:
+            #         # get the next item
+            #         element = next(filter_iter).group(1)
+            #         prop = next(prop_iter)
+            #         if element == '#': # jump over missing condition
+            #             continue
+            #         filter_list.append((prop, element[0], element[1:]))
+
+            #     except StopIteration:
+            #         # if StopIteration is raised, break from loop
+            #         break
+
+            page_match = matches.group(4)
+            if page_match == None:
+                pageNr = 1
+            else:
+                pageNr = int(page_match.split("pg")[1])
+
+            # try:
+            #     if page_match == None:
+            #         pageNr = 1
+            #     else:
+            #         # page_match = next(iter(self.__class__.page_pattern.finditer(segment_query)))
+            #         # pageNr = int(page_match.group(0).split("pg")[1])
+            #         pageNr = int(page_match.split("pg")[1])
+            
+            # except:
+            #     logger.info('No match found for page property')
 
 
             logger.info(f'Filter list: {filter_list}')
@@ -313,13 +434,23 @@ class PropertyFilter(SyConnClient):
         :return ssv_ids_of_interest: 
         :rtype ssv_ids_of_interest: numpy.ndarray 
         """
+        if celltype != None:
+            indices = self.CTmask[celltype]
+        else:
+            indices = list(range(len(self.ssv_ids)))
 
-        indices = self.CTmask[celltype]
         mask = np.ones(shape=(len(indices),), dtype=np.bool)
-        logger.info(f"Indices  {indices}")
 
         for prop, op, thresh in filter_list:
-            prop_array = np.load(prop+"s.npy", allow_pickle=True)[indices]
+            ''' TODO(hashir): Independent property querying
+            if prop == "mito":
+                prop_name = "mi"
+            else:
+                prop_name = prop
+
+            prop_array = np.load(os.path.join(self.__class__.data_dir, prop_name+"s.npy"), allow_pickle=True)[indices]
+            '''
+            prop_array = np.load(os.path.join(self.__class__.data_dir, prop+"s.npy"), allow_pickle=True)[indices]
 
             # check for mito
             if prop == 'mi':
@@ -334,6 +465,9 @@ class PropertyFilter(SyConnClient):
 
             elif op == "<":
                 mask = np.logical_and(mask, (prop_array < int(thresh)))
+
+            else:
+                mask = np.logical_and(mask, (prop_array == int(thresh)))
 
         ssv_ids_of_interest = self.ssv_ids[indices]
         ssv_ids_of_interest = ssv_ids_of_interest[mask]

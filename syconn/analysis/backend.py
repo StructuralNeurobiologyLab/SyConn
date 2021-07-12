@@ -78,7 +78,7 @@ class SyConnBackend(object):
             'vertices': mesh[1],                    # num, x, y ,z
             'indices': mesh[0]}                     # triangles
         dtime = time.time() - start
-        self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
+        self.logger.debug('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
         return mesh
 
     def ssv_ind(self, ssv_id):
@@ -179,7 +179,7 @@ class SyConnBackend(object):
         """
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh indices'
-                         ''.format(ssv_id, obj_type))
+                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
@@ -194,8 +194,8 @@ class SyConnBackend(object):
         # Now assumes all object meshes do already exist
         mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
-        self.logger.info('Got ssv {} {} mesh indices after'
-                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
+        self.logger.debug('Got ssv {} {} mesh indices after'
+                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return {'ind': mesh[0].tolist()}
 
     def ssv_obj_vert(self, ssv_id, obj_type):
@@ -222,8 +222,8 @@ class SyConnBackend(object):
         # if not existent, create mesh
         mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
-        self.logger.info('Got ssv {} {} mesh vertices after'
-                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
+        self.logger.debug('Got ssv {} {} mesh vertices after'
+                        ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return {'vert': mesh[1].tolist()}
 
     def ssv_obj_norm(self, ssv_id, obj_type):
