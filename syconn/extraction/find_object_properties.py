@@ -320,25 +320,27 @@ def merge_type_dicts(type_dicts: List[dict]):
                 tot_map[cs_id] = cnt
 
 
-def merge_voxel_dicts(voxel_dicts: List[dict]):
+def merge_voxel_dicts(voxel_dicts: List[dict], key_to_str=False):
     """
-    Merge map dictionaries in-place. Values will be stored in first dictionary
+    Merge map dictionaries values will be stored in first dictionary, this method converts numpy arrays into lists.
 
     Args:
         voxel_dicts:
-        offset:
-
-    Returns:
-
+        key_to_str: If False, keep keys as they are, which is needed when loading data from npz files (default).
+            If True, converts keys to strings to enable `np.savez` (requires str).
     """
     tot_map = voxel_dicts[0]
     for el in voxel_dicts[1:]:
         # iterate over subcell. ids with dictionaries as values which store
         # voxel coordinates
         for cs_id, vxs in el.items():
+            if key_to_str:
+                cs_id = str(cs_id)
             if cs_id in tot_map:
                 tot_map[cs_id].extend(vxs)
             else:
+                if isinstance(vxs, np.ndarray):
+                    vxs = vxs.tolist()
                 tot_map[cs_id] = vxs
 
 

@@ -6,7 +6,7 @@
 # Authors: Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
+import dill
 # leave import here - needed by "shipping" lambda expression with numpy usage in arguments via "dill" package
 import numpy as np
 import pickle as pkl
@@ -20,7 +20,7 @@ with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
-            args.append(pkl.load(f))
+            args.append(dill.load(f))
         except EOFError:
             break
 

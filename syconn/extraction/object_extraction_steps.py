@@ -330,16 +330,15 @@ def _object_segmentation_thread(args):
 
             if hdf5_name in morph_ops:
                 # returns identity if len(morph_ops) == 0
-                mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
-                                                          mop_kwargs=dict(structure=struct))
-                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1:]:
-                    # TODO: currently morphological operations are not applied to the segmentation if binary_erosion
-                    #  triggers watershed. Desired behavior: Apply mops on segmentation up to first binary_erosion which
-                    #  is solely used to produce watershed seeds.
-                    # combine remaining fragments, TODO: this seems unnecessary
-                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0],
-                                                             ['binary_closing']).astype(np.uint32)
-                    # remove small fragments and 0; this will also delete objects bigger than min_size as
+                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name]:
+                    first_erosion_ix = morph_ops[hdf5_name].index('binary_erosion')
+                    tmp_data = apply_morphological_operations(tmp_data, morph_ops[hdf5_name][:first_erosion_ix],
+                                                              mop_kwargs=dict(structure=struct))
+                    # apply morphological operations to generate watershed seeds
+                    markers = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name][first_erosion_ix:],
+                                                             mop_kwargs=dict(structure=struct)).astype(np.uint32)
+
+                    # remove small fragments and 0; this might also delete objects bigger than min_size as
                     # this threshold is applied after N binary erosion!
                     if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
                         min_size = min_seed_vx[hdf5_name]
@@ -364,6 +363,8 @@ def _object_segmentation_thread(args):
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
                     max_label = np.max(this_labels_data)
                 else:
+                    mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
+                                                              mop_kwargs=dict(structure=struct))
                     this_labels_data, max_label = scipy.ndimage.label(mop_data)
             else:
                 this_labels_data, max_label = scipy.ndimage.label(tmp_data)

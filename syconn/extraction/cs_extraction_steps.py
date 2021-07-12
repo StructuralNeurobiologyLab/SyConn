@@ -123,6 +123,8 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
     if cube_shape is None:
         cube_shape = (256, 256, 256)
+    if chunk_size is None:
+        chunk_size = (512, 512, 512)
     if np.any(np.array(chunk_size) % np.array(cube_shape)):
         raise ValueError('Chunk size must be divisible by cube shape.')
     if max_n_jobs is None:
@@ -194,7 +196,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log, use_dill=True)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -261,7 +263,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    n_cores = 2
+    n_cores = 2 if qu.batchjob_enabled() else 1
     # slightly increase ncores per worker to compensate IO related downtime
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
@@ -455,13 +457,13 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)
-        merge_voxel_dicts([syn_voxels, curr_syn_vx])
+        merge_voxel_dicts([syn_voxels, curr_syn_vx], key_to_str=True)
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
     basics.write_obj2pkl(f'{worker_dir_props}/cs_props_{worker_nr}.pkl', cs_props)
     basics.write_obj2pkl(f'{worker_dir_props}/syn_props_{worker_nr}.pkl', syn_props)
-    basics.write_obj2pkl(f'{worker_dir_props}/syn_voxels_{worker_nr}.pkl', syn_voxels)
+    np.savez(f'{worker_dir_props}/syn_voxels_{worker_nr}.npz', **syn_voxels)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_asym_cnt_{worker_nr}.pkl', tot_asym_cnt)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_sym_cnt_{worker_nr}.pkl', tot_sym_cnt)
 
@@ -513,8 +515,8 @@ def _write_props_to_syn_thread(args):
             cs_workers_tmp = pkl.load(f)
         params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in cs_workers_tmp.items()]
         del cs_workers_tmp
-
-        res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False)
+        res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False,
+                                      debug=False)
         for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
             if len(tmp_dcs_cs) == 0:
                 continue
@@ -528,7 +530,7 @@ def _write_props_to_syn_thread(args):
             del tmp_asym_dc
             merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
             del tmp_sym_dc
-            merge_voxel_dicts([syn_voxels, tmp_syn_vxs])
+            merge_voxel_dicts([syn_voxels, tmp_syn_vxs], key_to_str=False)
             del tmp_syn_vxs
 
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
@@ -615,15 +617,11 @@ def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dic
     fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
     dc = basics.load_pkl2obj(fname)
 
-    for k in dc[0].keys():
-        dc[0][k] = np.array(dc[0][k], dtype=np.int32)
-        dc[1][k] = [np.array(dc[1][k][0], dtype=np.int32)]
-
     # convert lists to numpy arrays
     tmp_dcs_cs = [dict(), defaultdict(list), dict()]
     for k in intersec:
-        tmp_dcs_cs[0][k] = dc[0][k]
-        tmp_dcs_cs[1][k] = dc[1][k]
+        tmp_dcs_cs[0][k] = np.array(dc[0][k], dtype=np.int32)
+        tmp_dcs_cs[1][k] = np.array(dc[1][k], dtype=np.int32)
         tmp_dcs_cs[2][k] = dc[2][k]
     del dc
 
@@ -634,23 +632,25 @@ def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dic
     curr_sym_cnt = basics.load_pkl2obj(fname)
     fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
     curr_asym_cnt = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/syn_voxels_{worker_id}.pkl'
-    curr_syn_vxs = basics.load_pkl2obj(fname)
+    fname = f'{worker_dir_props}/syn_voxels_{worker_id}.npz'
+    curr_syn_vxs = np.load(fname)
 
     tmp_dcs_syn = [dict(), defaultdict(list), dict()]
     tmp_sym_dc = dict()
     tmp_asym_dc = dict()
+    tmp_syn_vx = dict()
     for k in intersec:
         if k not in dc[0]:
             continue
         tmp_dcs_syn[0][k] = dc[0][k]
         tmp_dcs_syn[1][k] = dc[1][k]
         tmp_dcs_syn[2][k] = dc[2][k]
+        tmp_syn_vx[k] = curr_syn_vxs[str(k)]  # savez only allows string keys
         if k in curr_sym_cnt:
             tmp_sym_dc[k] = curr_sym_cnt[k]
         if k in curr_asym_cnt:
             tmp_asym_dc[k] = curr_asym_cnt[k]
-    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, curr_syn_vxs
+    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vx
 
 
 def _generate_storage_lookup(args):
