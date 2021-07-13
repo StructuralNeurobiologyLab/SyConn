@@ -22,7 +22,7 @@ from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/songbird/j0251/j0251_72_seg_20210127/"
+    working_dir = "/ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
     key_val_pairs_conf = [
@@ -137,12 +137,12 @@ if __name__ == '__main__':
     exec_init.run_create_rag(graph_node_dtype=np.uint32)
     ftimer.stop()
 
-    log.info('Step 4/9 - Creating SuperSegmentationDataset')
+    log.info('Step 3/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
     exec_init.run_create_neuron_ssd(ncores_per_job=4)
     ftimer.stop()
 
-    log.info('Step 5/10 - Skeleton generation')
+    log.info('Step 4/10 - Skeleton generation')
     ftimer.start('Skeleton generation')
     exec_skeleton.run_skeleton_generation()
     ftimer.stop()
@@ -152,6 +152,14 @@ if __name__ == '__main__':
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
                                  transf_func_sj_seg=cellorganelle_transf_funcs['sj'])
     ftimer.stop()
+
+    # log.info('Step 5.5/9 - Contact detection')
+    # ftimer.start('Contact detection')
+    # if global_params.config['generate_cs_ssv']:
+    #     exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    # else:
+    #     log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
+    # ftimer.stop()
 
     # log.info('Step 6/9 - Compartment prediction')
     # ftimer.start('Compartment predictions')

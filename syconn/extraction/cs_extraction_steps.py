@@ -263,15 +263,15 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    n_cores = 2 if qu.batchjob_enabled() else 1
+    n_cores = 2 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
     # slightly increase ncores per worker to compensate IO related downtime
-    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
+    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=n_cores, remove_jobfolder=True)
+                           n_cores=1, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
