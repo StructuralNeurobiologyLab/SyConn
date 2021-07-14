@@ -46,7 +46,7 @@ if __name__ == '__main__':
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
           'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
                                       'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          )

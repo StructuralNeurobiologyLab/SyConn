@@ -64,7 +64,7 @@ if __name__ == '__main__':
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
           'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
                                       'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          ),
@@ -191,8 +191,6 @@ if __name__ == '__main__':
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
     # exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
     ftimer.stop()

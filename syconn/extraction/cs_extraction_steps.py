@@ -34,6 +34,7 @@ from ..mp import batchjob_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
+from ..proc.image import apply_morphological_operations, get_aniso_struct
 from ..reps import rep_helper
 from ..reps import segmentation
 from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties, \
@@ -330,6 +331,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     worker_dir_props = f"{dir_props}/{worker_nr}/"
     os.makedirs(worker_dir_props, exist_ok=True)
 
+    morph_ops = global_params.config['cell_objects']['extract_morph_op']
+    scaling = np.array(global_params.config['scaling'])
+    struct = get_aniso_struct(scaling)
+
     if global_params.config.syntype_available and \
             (global_params.config.sym_label == global_params.config.asym_label) and \
             (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
@@ -381,6 +386,11 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         else:
             sj_d = transf_func_sj_seg(
                 kd_sj.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)).astype(np.uint8, copy=False)
+        # apply mrophological operations on sj binary mask
+        if 'sj' in morph_ops:
+            sj_d = apply_morphological_operations(
+                sj_d.copy(), morph_ops['sj'], mop_kwargs=dict(structure=struct)).astype(np.uint8, copy=False)
+
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:

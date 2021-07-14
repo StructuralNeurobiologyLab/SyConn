@@ -22,14 +22,14 @@ from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/ssdscratch/pschuber/j0251_test_partial_run2/"
+    working_dir = "/ssdscratch/pschuber/j0251_test_partial_run3/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
 
     shape_j0251 = np.array([27119, 27350, 15494])
 
     cube_size = (np.array([2048, 2048, 1024]) * 1).astype(np.int32)
-    # all for 10 TVx
+
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int32)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int32)
 
@@ -54,7 +54,7 @@ if __name__ == '__main__':
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
           'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
                                       'binary_erosion', 'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          )
