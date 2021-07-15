@@ -18,6 +18,7 @@ from torch import nn
 from elektronn3.models.convpoint import SegSmall
 # from elektronn3.models.randla_net import RandLANet
 from elektronn3.models.lcp_adapt import ConvAdaptSeg
+from elektronn3.modules.loss import FocalLoss
 from lightconvpoint.utils.network import get_search, get_conv
 from elektronn3.training import Trainer3d, Backup, metrics
 
@@ -27,8 +28,11 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--model', type=str, default='segsmall', help='Model to use: segsmall/randla')
-parser.add_argument('--r', type=int, default=100, help='Radius of cs neighborhood')
-parser.add_argument('--bs', type=int, default=1, help='Batch size')
+parser.add_argument('--r', type=int, default=1000, help='Radius of cs neighborhood')
+parser.add_argument('--opt', type=str, default='Adam', help='Chosen optimizer: Adam/SGD')
+parser.add_argument('--lr', type=str, default='StepLR', help='Chosen learning rate: StepLR/ExponentialLR/CyclicLR/ConstantLR')
+parser.add_argument('--conv', type=str, default='ConvPoint', help='Convolution type for lcp')
+parser.add_argument('--bs', type=int, default=4, help='Batch size')
 parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
@@ -58,6 +62,9 @@ use_cuda = not args.co
 name = args.na
 modelselect = args.model
 radius = args.r
+opt = args.opt
+learning_rate = args.lr
+conv = args.conv
 batch_size = args.bs
 npoints = args.sp
 scale_norm = args.scale_norm
@@ -65,10 +72,10 @@ save_root = args.sr
 ctx = args.ctx
 use_bias = args.use_bias
 
-lr = 1e-3
+lr = 2e-3
 lr_stepsize = 100
-lr_dec = 0.992
-max_steps = 300000
+lr_dec = 0.995
+max_steps = 900000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -77,6 +84,7 @@ use_syntype = False
 dr = 0.2
 track_running_stats = False
 use_norm = 'gn'
+
 # 'no_merge': 0, 'merge_error': 1
 num_classes = 2
 use_subcell = False
@@ -86,17 +94,12 @@ if cellshape_only:
 act = 'relu'
 
 if name is None:
-    name = f'mergeError_pts_model_{modelselect}_radius{radius}'
-    if cellshape_only:
-        name += '_cellshapeOnly'
-    if use_syntype:
-        name += '_Syntype'
+    name = f'{modelselect}_r{radius}'
+
 if not cellshape_only and use_subcell:
     input_channels = 5 if use_syntype else 4
 else:
     input_channels = 1
-
-name += f'_eval{eval_nr}'
 
 if use_cuda:
     device = torch.device('cuda')
@@ -107,16 +110,20 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/amancu/mergeError/trainings/'
+    save_root = f'/wholebrain/scratch/amancu/mergeError/trainings/{modelselect}/'
+    # save_root = '/wholebrain/scratch/amancu/mergeError/'
 
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
 if modelselect == 'lcp':
     search = 'SearchQuantized'
-    conv = dict(layer='ConvPoint', kernel_separation=False)
+    # conv = dict(layer='ConvPoint', kernel_separation=False)
+    convol = dict(layer=conv, kernel_separation=False)
+    layer = convol['layer']
+    name += f'_{layer}_{search}'
     act = nn.ReLU
-    model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
+    model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
                          architecture=None, activation=act, norm='gn')
 # if modelselect == 'randla':
 #     model = RandLANet(input_channels, num_classes + 1, dropout_p=dr)
@@ -162,33 +169,54 @@ valid_ds = CloudFalseMergeLoader(radius=radius, npoints=npoints, transform=valid
 # PREPARE AND START TRAINING #
 
 # set up optimization
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-# optimizer = torch.optim.SGD(
-#     model.parameters(),
-#     lr=lr,  # Learning rate is set by the lr_sched below
-#     momentum=0.9,
-#     weight_decay=0.5e-5,
-# )
+if opt == 'Adam':
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    name += '_Adam'
+elif opt == 'SGD':
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=lr,  # Learning rate is set by the lr_sched below
+        momentum=0.9,
+        weight_decay=0.5e-5,
+    )
+    name += '_SGD'
 
 # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
-lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
+if learning_rate == 'StepLR':
+    lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+    name += '_StepLR'
+if learning_rate == 'ConstantLR':
+    lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, 1)
+    name += '_ConstantLR'
+elif learning_rate == 'ExponentialLR':
+    lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99998)
+    name += '_ExponentialLR'
+elif learning_rate == 'CyclicLR':
+    lr_sched = torch.optim.lr_scheduler.CyclicLR(
+        optimizer,
+        base_lr=1e-4,
+        max_lr=1e-2,
+        step_size_up=2000,
+        cycle_momentum=True,
+        mode='exp_range',
+        # gamma=0.99994,
+    )
+    name += '_CyclicLR'
 # set weight of the masking label at context boarders to 0
-# class_weights = torch.tensor([1, 0, 0, 0, 0, 1, 1] + [0], dtype=torch.float32, device=device)
+# class weight for foreground label greater
+
+# adapt class weights according to radius
+weights = [1,2]
+
+name += f'_weights{weights[0]},{weights[1]}_FocalLoss'
+
 if modelselect == 'lcp':
-    class_weights = torch.tensor([1] * num_classes, dtype=torch.float32, device=device)
+    class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
 else:
     class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
+
+# TODO: change this
+criterion = FocalLoss(weight=class_weights, ignore_index=num_classes).to(device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
@@ -214,7 +242,7 @@ if modelselect == 'lcp':
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
-        valid_dataset=None,
+        valid_dataset=valid_ds,
         batchsize=1,
         num_workers=8,
         valid_metrics=valid_metrics,
