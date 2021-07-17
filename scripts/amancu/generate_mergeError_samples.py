@@ -41,13 +41,13 @@ no_Skelmerger_radius = 20e3
 skelmerger_radius = 2e3
 
 # CHANGE
-nr_samples = 30000
+nr_samples = 6000
 # colors for labels
 RED = np.array([255., 50., 50., 255.])
 GREY = np.array([180., 180., 180., 255.])
 
 
-def find_vertNearestNeighbor(merged_cell, cs_verts: np.ndarray):
+def find_vertNearestNeighbor(merged_cell, cs_verts: np.ndarray, radius):
     '''
     Finds neighboring points of cell cloud to contact site cloud and labels them with 1, else 0
 
@@ -57,12 +57,12 @@ def find_vertNearestNeighbor(merged_cell, cs_verts: np.ndarray):
     '''
     # combine cell vertices and build mesh
     cell_mesh = merged_cell.mesh
-    cell_vertices = cell_mesh[1].reshape(-1,3)
+    cell_vertices = cell_mesh[1].reshape(-1, 3)
 
     # initialize cKTDTree with the combined cell vertices
     vert_NN = cKDTree(data=cell_vertices, )
     # find nearest neighbor of cell vertices to cs vertices
-    vert_neighbors = vert_NN.query_ball_point(x=cs_verts, r=cs_ptMerger_radius, workers=2)
+    vert_neighbors = vert_NN.query_ball_point(x=cs_verts, r=radius, workers=2)
     # create single set of point neighbors
     vert_neighbors = np.unique(np.concatenate(vert_neighbors)).astype(int)
 
@@ -73,7 +73,7 @@ def find_vertNearestNeighbor(merged_cell, cs_verts: np.ndarray):
     np.put(vertex_labels, vert_neighbors, one)
     # print(f'what labels does it contain {np.unique(vertex_labels, axis=0)}')
 
-    colors = np.full(shape=(len(cell_vertices),4,), fill_value=GREY)
+    colors = np.full(shape=(len(cell_vertices), 4,), fill_value=GREY)
     # print(f'shapes {cell_vertices.shape} and colors {colors.shape}')
     vert_neighbors = np.array([[x] for x in vert_neighbors])
     np.put_along_axis(colors, vert_neighbors, RED, axis=0)
@@ -92,84 +92,96 @@ def find_nodeNearestNeighbor(merged_cell, cs_coord_list):
     node_labels = np.zeros((len(merged_cell_nodes),)) - 1
 
     # find medium cube around artificial merger and set it to 0 (no-merger/cell_body)
-    kdtree = cKDTree(merged_cell_nodes)
+    kdtree = cKDTree(data=merged_cell_nodes)
 
     # find all skeleton nodes which are close to all contact-sites (r=20e3)
     for cs_coord in cs_coord_list:
         ixs = kdtree.query_ball_point(cs_coord, r=no_Skelmerger_radius, workers=2)
+        ixs = np.array(ixs[0])
         node_labels[ixs] = int(0)
 
     # find small cube around artificial merger and set it to 1 (true merger)
     for cs_coord in cs_coord_list:
         # ixs = kdtree.query_ball_point(cs_coord, r=2e3)
         ixs = kdtree.query_ball_point(cs_coord, r=skelmerger_radius, workers=2)
+        ixs = np.array(ixs[0])
         node_labels[ixs] = int(1)
 
     # write out annotated skeletons to ['merger_gt']
     return merged_cell_nodes, node_labels
 
 
-def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_set):
+def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_set, radii):
     # process every cell pair
-    for cellpair in tqdm(cell_pairs[slice],desc='Sample gen'):
+    for cellpair in tqdm(cell_pairs[slice], desc='Sample gen'):
         cell1 = cellpair[0]
         cell2 = cellpair[1]
         # if cells are same, skip
         if cell1 == cell2:
+            print(f'Dict cells are the same for: {cell1}')
             continue
 
         if dataset == 'test':
-            if os.path.exists(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{int(cs_ptMerger_radius)}/sso_{cell1}_{cell2}.pkl')):
-                continue
+            truth_array = [os.path.exists(os.path.expanduser(
+                f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{int(radius)}/sso_{cell1}_{cell2}.pkl'))
+                for radius in radii]
         else:
-            if os.path.exists(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/Hybridcloud/sso_{cell1}_{cell2}.pkl')):
-                continue
+            truth_array = [os.path.exists(os.path.expanduser(
+                f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(radius)}/Hybridcloud/sso_{cell1}_{cell2}.pkl'))
+                for radius in radii]
+        if np.all(truth_array):
+            continue
 
         # get partner cells, merge them, and get contact site mesh
         fstObj = ssd.get_super_segmentation_object(cell1)
         sndObj = ssd.get_super_segmentation_object(cell2)
-        merged_cell = merge_ssv(fstObj, sndObj)
 
         # merge cs meshes
-        cs_verts = np.empty(shape=(0,3,))
+        cs_verts = np.empty(shape=(0, 3,))
         # cs coords for skeleton nodes
         cs_coord_list = []
         try:
             for cs_id in cell_pair2cs_ids[(cell1, cell2)]:
                 cs = cs_dataset.get_segmentation_object(cs_id)
-                cs_mesh = calc_contact_syn_mesh(cs, vertex_size=10)[0]
-                cs_verts = np.concatenate((cs_verts, cs_mesh[1].reshape(-1,3)))
-                cs_coord = cs.rep_coord * merged_cell.scaling
-                cs_coord_list.append(cs_coord)
+                # list of cs meshes [(indices, vertices, normals)]
+                cs_mesh = calc_contact_syn_mesh(cs, vertex_size=10)
+                for mesh in cs_mesh:
+                    area_mesh = mesh[1].reshape(-1, 3)
+                    cs_verts = np.concatenate((cs_verts, area_mesh))
+                    # choose random vertex as representative of the contact area (may be multiple for 1 CS)
+                    idx = np.random.randint(len(area_mesh), size=1)
+                    cs_coord_list.append(area_mesh[idx])
         except:
             continue
         if len(cs_coord_list) == 0:
             log.info('No cs found for given cell pair')
             continue
 
-        # look for nearest neighbors, merge cell meshes and label
-        cell_vertices, vertex_labels, colors = find_vertNearestNeighbor(merged_cell, cs_verts)
+        # pass one vertex from each contact site mess too, so that the skeleton concatenation is done correctly
+        merged_cell = merge_ssv(fstObj, sndObj, cs_coord_list)
 
         # look for nearby skeleton nodes
         merged_cell_nodes, node_labels = find_nodeNearestNeighbor(merged_cell, cs_coord_list)
 
-        features = np.zeros(shape=(len(cell_vertices),), dtype=np.int32)
+        features = np.zeros(shape=(len(merged_cell.mesh[1].reshape(-1, 3)),), dtype=np.int32)
 
-        # save mesh to .ply and mesh+skeleton with labels as HybridCloud .pkl
-        hc = HybridCloud(vertices=cell_vertices, labels=vertex_labels, features=features,
-                         nodes=merged_cell_nodes, node_labels=node_labels,
-                         edges=merged_cell.skeleton['edges'])
+        for radius in radii:
+            # look for nearest neighbors, merge cell meshes and label
+            cell_vertices, vertex_labels, colors = find_vertNearestNeighbor(merged_cell, cs_verts, radius)
 
-        if dataset == 'test':
-            if hc.save2pkl(os.path.expanduser(
-                    f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{int(cs_ptMerger_radius)}/sso_{cell1}_{cell2}.pkl')):
-                log.info('HybridCloud not written')
-        else:
-            if hc.save2pkl(os.path.expanduser(
-                    f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/Hybridcloud/sso_{cell1}_{cell2}.pkl')):
-                log.info('HybridCloud not written')
+            # save mesh to .ply and mesh+skeleton with labels as HybridCloud .pkl
+            hc = HybridCloud(vertices=cell_vertices, labels=vertex_labels, features=features,
+                             nodes=merged_cell_nodes, node_labels=node_labels,
+                             edges=merged_cell.skeleton['edges'])
+
+            if dataset == 'test':
+                if hc.save2pkl(os.path.expanduser(
+                        f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{int(radius)}/sso_{cell1}_{cell2}.pkl')):
+                    log.info('HybridCloud not written')
+            else:
+                if hc.save2pkl(os.path.expanduser(
+                        f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(radius)}/Hybridcloud/sso_{cell1}_{cell2}.pkl')):
+                    log.info('HybridCloud not written')
         # mesh2obj_file_colors(os.path.expanduser(
         #     f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/Verts/csMergePts_{cell1}_{cell2}.ply'),
         #     [np.array([]), merged_cell.mesh[1], np.array([])], colors)
@@ -225,8 +237,9 @@ if __name__ == '__main__':
                         default=15)
     parser.add_argument('--set', type=str, help='Training or test set generation.', default='training')
     args = parser.parse_args()
-    global cs_ptMerger_radius
+    # global cs_ptMerger_radius
     cs_ptMerger_radius = args.r
+    cs_merge_radii = [1000, 2000]
     n_proc = args.nproc
     dataset = args.set
 
@@ -240,7 +253,7 @@ if __name__ == '__main__':
     dict_sv2ssv = ssd.mapping_dict_reversed  # dict: {supervoxel : super-supervoxel}
     log.info(f'Datasets loaded')
 
-    log.info(f'Cs merge radius: {cs_ptMerger_radius}')
+    log.info(f'Cs merge radii: {cs_merge_radii}')
 
     # skip small and very large CS. Keep 5000 < size < 100.000 -> 184715199 contact sites (2000 < size < 100.000 -> 349095102)
     if not os.path.exists(filtered_cs_ids_path):
@@ -275,11 +288,11 @@ if __name__ == '__main__':
 
     if dataset == 'test':
         offset = 30e3
-        nr_samples = 10000
+        nr_samples = 1500
         log.info(f'Offset and nr_samples adapted to test set.')
     else:
         offset = 0
-        nr_samples = 30000
+        nr_samples = 7000
 
     # setup parallelization parameters
     log.info(f'Using {n_proc} processors')
@@ -296,7 +309,7 @@ if __name__ == '__main__':
     log.info(proc_slices)
     # set of ssv_ids to find entries faster
     ssv_ids_set = set(ssd.ssv_ids)
-    params = [(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_ids_set) for slice in proc_slices]
+    params = [(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_ids_set, cs_merge_radii) for slice in proc_slices]
 
     time = timeit.default_timer()
     log.info(f'Sample generation started {time} with {len(params)} tasks')
