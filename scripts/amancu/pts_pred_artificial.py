@@ -52,7 +52,7 @@ def prob(pred):
     return res
 
 
-def process_data_slice(slice, pred_files, lock, model, ctx_size, ctx_dst_fac, npoints, pred_transform, device, lcp_flag,
+def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform, device, lcp_flag,
                        result_dc):
     """
     Adds average results of metrics (precision, recall, accuracy, f1score) per cell in the result_dc dictionary of results.
@@ -116,7 +116,7 @@ def process_data_slice(slice, pred_files, lock, model, ctx_size, ctx_dst_fac, np
                 pass
             mesh2obj_file_colors(os.path.expanduser(
                 f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/1000/Adam_ExponentialLR/' + os.path.basename(
-                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/{radius}/SGD_CyclicLR/' + os.path.basename(
+                    # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/{radius}/SGD_CyclicLR/' + os.path.basename(
                     pred_files[i]) + f'_original_{ii}.ply'),
                 [np.array([]), sample_pts[0, :, :], np.array([])], colors)
             #
@@ -139,14 +139,15 @@ def process_data_slice(slice, pred_files, lock, model, ctx_size, ctx_dst_fac, np
         # "merge" contexts and their predictions, taking the majority vote over all predictions per vertex
         predictions = np.concatenate(predictions)
         pred_indices = np.concatenate(pred_indices)
-        print(f'pred shape {predictions.shape}, indcs shape {pred_indices.shape}')
-        pred_labels = np.ones((len(hc.vertices), 1)) * (-1)
+        # print(f'pred shape {predictions.shape}, indcs shape {pred_indices.shape}')
+        pred_labels = np.zeros((len(hc.vertices), 1))
         evaluate_preds(pred_indices, predictions, pred_labels)
-        print(f'Number of foreground labels in whole cell: {len(np.where(pred_labels == 1)[0])}')
+        # print(f'Number of foreground labels in whole cell: {len(np.where(pred_labels == 1)[0])}')
 
-        pred = pred.astype(np.float64)
+        # pred = pred.astype(np.float64)
         # evaluate cell metric results
         true_labels = hc.labels
+        # print(f'true {np.unique(true_labels)} and predicted {np.unique(pred_labels)} and shapes {true_labels.shape} {pred_labels.shape}')
         precision = precision_score(true_labels, pred_labels, average='binary', zero_division=0)
         recall = recall_score(true_labels, pred_labels, average='binary', zero_division=0)
         accuracy = accuracy_score(true_labels, pred_labels)
@@ -164,15 +165,15 @@ def process_data_slice(slice, pred_files, lock, model, ctx_size, ctx_dst_fac, np
         # -> global metrics
 
         # append metrics for a cell pair
-        lock.acquire()
-        try:
-            result_dc['precision'].append(precision)
-            result_dc['recall'].append(recall)
-            result_dc['accuracy'].append(accuracy)
-            result_dc['fscore'].append(f1score)
+        # lock.acquire()
+        # try:
+        result_dc['precision'].append(precision)
+        result_dc['recall'].append(recall)
+        result_dc['accuracy'].append(accuracy)
+        result_dc['fscore'].append(f1score)
             # result_dc['pr_curve'].append((prec_rec, auc))
-        finally:
-            lock.release()
+        # finally:
+        #     lock.release()
 
 
 def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: Callable):
@@ -253,8 +254,8 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
 
 # cs_merge_radii = [100, 500, 1000, 2000, 5000]
 # cs_merge_radii = [2000]
-radii = [1000]
-radius = 1000
+radii = [2000]
+radius = 2000
 # colors for labels
 RED = np.array([255., 125., 125., 255.])
 GREY = np.array([180., 180., 180., 255.])
@@ -275,7 +276,7 @@ if __name__ == '__main__':
     track_running_stats = False
     act = 'relu'
     use_bias = True
-    npoints = int(15e3)
+    npoints = int(10e3)
     scale_norm = 5e3
     ctx_size = 20e3
     ctx_dst_fac = 3
@@ -298,12 +299,39 @@ if __name__ == '__main__':
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_eval0_ConvPoint_SearchQuantized/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_Adam/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_Adam_weights1,4/state_dict.pth'
-            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/mergeError_pts_model_lcp_radius1000_ConvPoint_SearchQuantized_Adam_ExponentialLR_weights1,2/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/mergeError_pts_model_lcp_radius1000_ConvPoint_SearchQuantized_Adam_ExponentialLR_weights1,2/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_SGD_CyclicLR/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_SGD_CyclicLR_weights1,2/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_eval0_FKAConv_SearchQuantized/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_5samples/state_dict.pth'
+            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_20samples/state_dict.pth'
         # pred_files = glob.glob(folder)
-        pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R1000/Hybridcloud/sso_240259084_314052640.pkl']
+        # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_209549121_209742637.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_9529398_19721758.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl']
+        pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1574929_1767377.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_209549121_209742637.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130650624_188296720.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_9529398_19721758.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_226082525_238186872.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_40022718_113258940.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_28958042_54095396.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_2208821_2571960.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_217066591_241081409.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',            # 10
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_212101191_232639528.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50307606_160236492.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50792978_303842028.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130750890_177395993.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1437627_1443233.pkl',
+                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_19450892_82261946.pkl',
+                    # '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
+                      ]
 
         model_name = os.path.basename(os.path.dirname(save_path))
         print(f'Predicting for radius {radius} with nr of files {len(pred_files)} on {model_name}')
@@ -314,8 +342,19 @@ if __name__ == '__main__':
                 conv = dict(layer='ConvPoint', kernel_separation=False)
                 # conv = dict(layer='FKAConv', kernel_separation=False)
                 act = torch.nn.ReLU
+                architecture_1024 = [dict(ic=-1, oc=1, ks=16, nn=16, np=1024),
+                                     dict(ic=1, oc=1, ks=16, nn=16, np=512),
+                                     dict(ic=1, oc=1, ks=16, nn=16, np=256),
+                                     dict(ic=1, oc=2, ks=16, nn=16, np=64),
+                                     dict(ic=2, oc=2, ks=16, nn=16, np=16),
+                                     dict(ic=2, oc=2, ks=16, nn=16, np=8),
+                                     dict(ic=2, oc=2, ks=16, nn=4, np='d'),
+                                     dict(ic=4, oc=2, ks=16, nn=4, np='d'),
+                                     dict(ic=4, oc=1, ks=16, nn=4, np='d'),
+                                     dict(ic=2, oc=1, ks=16, nn=8, np='d'),
+                                     dict(ic=2, oc=1, ks=16, nn=8, np='d')]
                 model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
-                                     architecture=None, activation=act, norm='gn').to(device)
+                                     architecture=architecture_1024, activation=act, norm='bn').to(device)
             else:
                 model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
                                  track_running_stats=track_running_stats, act=act, use_bias=use_bias).to(device)
@@ -324,6 +363,7 @@ if __name__ == '__main__':
             model.eval()
 
             # dictionary with lists of all metrics for each cell pair
+            global result_dc
             result_dc = {
                 'precision': [],
                 'recall': [],
@@ -332,24 +372,27 @@ if __name__ == '__main__':
                 'pr_curve': []
             }
 
+            process_data_slice(np.s_[0:len(pred_files)], pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
+                       device, lcp_flag, result_dc)
+
             # split tasks for processes
-            proc_slices = []
-            offset = len(pred_files) // nproc
-            for i in range(nproc):
-                slice_start = offset * i
-                slice_end = offset * i if i < nproc - 1 else len(pred_files)
-                proc_slices.append(np.s_[slice_start:slice_end])
-
-            result_dict_lock = mp.Lock()
-
-            params = [(slice, pred_files, result_dict_lock, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
-                       device, lcp_flag, result_dc) for slice in proc_slices]
-
-            running_tasks = [mp.Process(target=process_data_slice, args=param) for param in params]
-            for running_task in running_tasks:
-                running_task.start()
-            for running_task in running_tasks:
-                running_task.join()
+            # proc_slices = []
+            # offset = len(pred_files) // nproc
+            # for i in range(nproc):
+            #     slice_start = offset * i
+            #     slice_end = offset * i if i < nproc - 1 else len(pred_files)
+            #     proc_slices.append(np.s_[slice_start:slice_end])
+            #
+            # result_dict_lock = mp.Lock()
+            #
+            # params = [(slice, pred_files, result_dict_lock, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
+            #            device, lcp_flag, result_dc) for slice in proc_slices]
+            #
+            # running_tasks = [mp.Process(target=process_data_slice, args=param) for param in params]
+            # for running_task in running_tasks:
+            #     running_task.start()
+            # for running_task in running_tasks:
+            #     running_task.join()
 
             print(f'Processing finished')
 
@@ -395,6 +438,6 @@ if __name__ == '__main__':
             # plt.show(block=False)
             # plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
 
-            df = pd.DataFrame.from_dict(result)
-            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/1000/Adam_ExponentialLR/{model_name}.csv'
+            df = pd.DataFrame.from_dict(result, orient='index')
+            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/{model_name}.csv'
             df.to_csv(csv_path)
