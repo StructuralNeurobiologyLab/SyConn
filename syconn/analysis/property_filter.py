@@ -1,3 +1,4 @@
+from typing_extensions import final
 from humanfriendly.terminal import message
 from syconn.reps import super_segmentation_dataset as ss
 from syconn.reps import segmentation
@@ -8,8 +9,8 @@ from syconn.handler.logger import log_main as log_gate
 from syconn.handler.prediction import str2int_converter, int2str_converter
 from syconn import global_params
 from timeit import default_timer as timer
-# from neuroglancer.server import global_server
 import neuroglancer
+import neuroglancer.cli
 import argparse
 import os
 import re
@@ -72,8 +73,8 @@ class PropertyFilter(SyConnClient):
 
     properties = ('mi', 'size')
     # don't forget to update here, if properties number increases
-    master_pattern = r'^([a-zA-Z]{2,4}|#)((_((>|<)[0-9]+|#)){2})?_(pg[1-9][0-9]{0,3})$'
-    # master_pattern = r'_?(mito[>|<|=][0-9][0-9]{0,3})?_?(size[>|<][1-9][0-9]{1,6})?_?(pg[1-9][0-9]{0,3})?$' # TODO(hashir): Independent property querying 
+    # master_pattern = r'^([a-zA-Z]{2,4}|#)((_((>|<)[0-9]+|#)){2})?_(pg[1-9][0-9]{0,3})$'
+    master_pattern = r'^([a-zA-Z]{2,4})?_?(mito[>|<|=][0-9][0-9]{0,3})?_?(size[>|<][1-9][0-9]{1,6})?_?(pg[1-9][0-9]{0,3})?$' # TODO(hashir): Independent property querying 
     ct_pattern = re.compile(r'^([a-zA-Z]{2,4})')
     property_filter = re.compile(r'_((>|<)[0-9]+)')
     page_pattern = re.compile(r'pg[1-9][0-9]{0,3}$')
@@ -93,8 +94,10 @@ class PropertyFilter(SyConnClient):
             self.gt_type = "ctgt_j0251_v2"
 
         self.CTs = backend.cts_in_data(self.gt_type)
-        logger.info(f"Found [{self.CTs}] cell types in the dataset")
-        self.master_pattern = r'(' + '|'.join(ct for ct in self.CTs) + ')?' + self.__class__.master_pattern
+        logger.info(f"Found {self.CTs} cell types in the dataset")
+
+        # self.master_pattern = r'(' + '|'.join(ct for ct in self.CTs) + ')?' + self.__class__.master_pattern
+        # logger.info(self.master_pattern)
 
         self.ssd = ss.SuperSegmentationDataset(global_params.config.working_dir, sso_locking=False, sso_caching=True)
         # sd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=global_params.config.working_dir)
@@ -125,7 +128,7 @@ class PropertyFilter(SyConnClient):
         
         # defer callback necessary to avoid deadlock 
         self.viewer.shared_state.add_changed_callback(
-            lambda: self.viewer.defer_callback(self.on_state_changed)
+            lambda: self.viewer.defer_callback(self.on_state_changed_experimental)
         )
 
     def _handle_select(self, action_state):
@@ -175,7 +178,8 @@ class PropertyFilter(SyConnClient):
                 rep_coords = result["rep_coords"]
 
                 segments.add(partner_ssv_id)
-                s.position = np.flip(rep_coords)
+                # s.position = np.flip(rep_coords)
+                s.position = rep_coords
                 
                 # pre-synaptic -> post-synaptic
                 if self.__class__.syn_type[ssv_comp] == "pre-synaptic":
@@ -194,8 +198,8 @@ class PropertyFilter(SyConnClient):
                             ({ssv_comp})'
 
                 if message != self.cur_message:
-                    with self.viewer.config_state.txn() as cfs:
-                        cfs.status_messages['status'] = message
+                    with self.viewer.config_state.txn() as s:
+                        s.status_messages['status'] = message
                     self.cur_message = message
             else:
                 return
@@ -255,13 +259,18 @@ class PropertyFilter(SyConnClient):
                     logger.info(f"Storing ids mask of celltype {celltype} in memory")
                     start = timer()
                     self.CTmask[celltype] = np.where(
-                        np.load('celltype_cnn_e3s.npy', allow_pickle=True) == str2int_converter(celltype, self.gt_type))[0]
+                        np.load(os.path.join(self.__class__.data_dir, 'celltype_cnn_e3s.npy'), allow_pickle=True) == str2int_converter(celltype, self.gt_type))[0]
                     end = timer()
                     logger.info(f"Loaded celltype ids mask after {(end - start):.3f} seconds")
 
-            except:
-                ct_match = None
-                logger.warning('No match found for celltype property!')
+            except AttributeError as e:
+                logger.error(e)
+
+            except KeyError as e:
+                logger.error(f"No matching cell type found for {e}")
+
+            except FileNotFoundError as e:
+                logger.error(f"{e} celltype_cnn_e3s.npy not found")            
 
             # list of (prop_type, operation, threshhold)
             filter_list = []
@@ -327,16 +336,13 @@ class PropertyFilter(SyConnClient):
         segment_query = segmentation_layer.segment_query
         
         # full pattern match required to avoid response generation
-        if segment_query != None and re.fullmatch(self.master_pattern, segment_query) != None:
-        # if segment_query != None and re.fullmatch(self.__class__.master_pattern, segment_query).groups()
+        if segment_query != None and re.fullmatch(self.__class__.master_pattern, segment_query, re.IGNORECASE) != None: # ignore case for string based properties
             logger.info(f'Entered in query: {segment_query}')
-            matches = re.match(self.master_pattern, segment_query)
+            matches = re.match(self.__class__.master_pattern, segment_query, re.IGNORECASE)
             logger.debug(matches.groups())
+
             try:
-                # ct_match = next(self.__class__.ct_pattern.finditer(segment_query))
-                ct_match = matches.group(1)
-                celltype = ct_match.upper() # case insensitive match
-                logger.info(f'Cell type {celltype}')
+                celltype = matches.group(1).upper() # case insensitive match
                 
                 if len(self.CTmask[celltype]) == 0:
                     logger.info(f"Storing ids mask of cell type {celltype} in memory")
@@ -346,38 +352,43 @@ class PropertyFilter(SyConnClient):
                     end = timer()
                     logger.debug(f"Loaded cell type ids mask after {(end - start):.3f} seconds")
 
-            except (KeyError, AttributeError) as e:
+            # AttributeError: if cell type is not matched
+            # KeyError: if cell type is matched but not present in the dataset
+            # FileNotFoundError: if celltype_cnn_e3s.npy is not found
+            except (AttributeError, KeyError, FileNotFoundError) as e: 
                 celltype = None
-                logger.warning('No match found for celltype property!')
+                if type(e).__name__ == "KeyError":
+                    logger.warning('{}: {} not found in the dataset'.format(type(e).__name__, e))
+                else:
+                    logger.warning('{}: {}'.format(type(e).__name__, e))
+
+            finally:
+                logger.info(f'Cell type {celltype}')
+
+            if celltype != None:
+                message = 'Loading ssv ids of cell type {}'.format(celltype)
+
+            else:
+                message = 'Loading ssv ids'
 
             # list of (prop_type, operation, threshhold)
             filter_list = []
             pageNr = -1
-
-            # filter_iter = self.__class__.property_filter.finditer(segment_query)
-            # prop_iter = iter(self.__class__.properties)
-            filter_iter = iter([prop for prop in matches.groups()[1:-1]]) # excluding cell type and page properties
+            
+            filter_iter = iter([prop for prop in matches.groups()[1:-1] if prop != None]) # excluding cell type, page and NoneType properties
             
             while True:
                 try:
-                    filter_list.append(tuple(re.split('(>|<|=)', next(filter_iter)))) # property split (prop, >|<|=, int)
-                
-                except (StopIteration, TypeError) as e:
+                    prop = next(filter_iter)
+                    message += ' with {}'.format(prop)
+                    filter_list.append(tuple(re.split('(>|<|=)', prop))) # property split (prop, >|<|=, int)
+                    
+                # StopIteration: to end the iterator
+                except (StopIteration, TypeError) as e: 
+                    logger.info('{}: End of parsing'.format(type(e).__name__))
                     break
 
-            #loop through property iterator
-            # while True:
-            #     try:
-            #         # get the next item
-            #         element = next(filter_iter).group(1)
-            #         prop = next(prop_iter)
-            #         if element == '#': # jump over missing condition
-            #             continue
-            #         filter_list.append((prop, element[0], element[1:]))
-
-            #     except StopIteration:
-            #         # if StopIteration is raised, break from loop
-            #         break
+            logger.info(f'Filter list: {filter_list}')
 
             page_match = matches.group(4)
             if page_match == None:
@@ -385,19 +396,11 @@ class PropertyFilter(SyConnClient):
             else:
                 pageNr = int(page_match.split("pg")[1])
 
-            # try:
-            #     if page_match == None:
-            #         pageNr = 1
-            #     else:
-            #         # page_match = next(iter(self.__class__.page_pattern.finditer(segment_query)))
-            #         # pageNr = int(page_match.group(0).split("pg")[1])
-            #         pageNr = int(page_match.split("pg")[1])
+            if message != self.cur_message:
+                with self.viewer.config_state.txn() as s:
+                    s.status_messages['status'] = message
+                self.cur_message = message
             
-            # except:
-            #     logger.info('No match found for page property')
-
-
-            logger.info(f'Filter list: {filter_list}')
             # get filtered ssv_ids
             ssv_ids = self.get_state_segment_ids(celltype, filter_list)
 
@@ -439,26 +442,27 @@ class PropertyFilter(SyConnClient):
         else:
             indices = list(range(len(self.ssv_ids)))
 
-        mask = np.ones(shape=(len(indices),), dtype=np.bool)
+        mask = np.ones(shape=(len(indices),), dtype=np.bool)       
 
         for prop, op, thresh in filter_list:
-            ''' TODO(hashir): Independent property querying
-            if prop == "mito":
+            # TODO(hashir): Independent property querying
+            if prop.lower() == "mito":
                 prop_name = "mi"
             else:
-                prop_name = prop
+                prop_name = prop.lower()
 
             prop_array = np.load(os.path.join(self.__class__.data_dir, prop_name+"s.npy"), allow_pickle=True)[indices]
-            '''
-            prop_array = np.load(os.path.join(self.__class__.data_dir, prop+"s.npy"), allow_pickle=True)[indices]
 
             # check for mito
-            if prop == 'mi':
+            if prop_name == 'mi':
                 start = timer()
                 func = np.vectorize(len)
                 prop_array = func(prop_array)
                 end = timer()
                 logger.info('Time: {:.2f}'.format(end-start))
+
+            if prop_name == 'size':
+                thresh *= 1000
 
             if op == ">":
                 mask = np.logical_and(mask, (prop_array > int(thresh)))
@@ -466,13 +470,11 @@ class PropertyFilter(SyConnClient):
             elif op == "<":
                 mask = np.logical_and(mask, (prop_array < int(thresh)))
 
-            else:
+            else: # equality check
                 mask = np.logical_and(mask, (prop_array == int(thresh)))
 
         ssv_ids_of_interest = self.ssv_ids[indices]
         ssv_ids_of_interest = ssv_ids_of_interest[mask]
-
-        print(ssv_ids_of_interest)
 
         # divide if greater than PAGE_SIZE
         if len(ssv_ids_of_interest) > self.__class__.PAGE_SIZE:
