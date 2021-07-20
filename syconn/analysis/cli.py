@@ -1,4 +1,5 @@
 from __future__ import print_function
+import glob
 from logging import log
 from neuroglancer.local_volume import LocalVolume
 from syconn.handler.logger import log_main as logger
@@ -12,10 +13,10 @@ import numpy as np
 from knossos_utils import KnossosDataset
 import neuroglancer
 import neuroglancer.cli
-import neuroglancer.server as srv
-import neuroglancer.settings as st
+from neuroglancer import config
 
 flask_PORT = 8000 # for development environment
+
 
 def configure_backend():
     """Setups SyConnBackend object and logger
@@ -36,21 +37,26 @@ def configure_backend():
 
     return backend
 
-class SyConnClient(object):
-    """
-    Client used to visualize the segmented data.Contains embedded neuroglancer 
-    viewer. 
 
-    :param backend: to retrieve the skeleton and mesh data in neuroglancer.LocalVolume
+class SyConnClient(object):
+    """Client used to visualize the segmented and image data with cell
+    skeletons, cell meshes and organelle meshes. Contains embedded 
+    :class:`neuroglancer.viewer.Viewer` 
+
+    :param backend: to retrieve the skeleton and mesh data in 
+        neuroglancer.LocalVolume
     :type backend: SyConnBackend
-    :param seg_path: path of the segmentation data (global_params.config.kd_seg_path)
+    :param seg_path: path of the segmentation data 
+        (global_params.config.kd_seg_path)
     :type seg_path: str
     :param organelles: command line arg; supported organelles
     :type organelles: list
-    :param clargs: command line args; used for retrieving <HOST> and <PORT> 
+    :param clargs: command line args; used for retrieving <HOST> and 
+        <PORT> 
     :type clargs: dict
 
-    .. note:: One client instance corresponds to one neuroglancer viewer.
+    .. note:: One client instance corresponds to one neuroglancer 
+        viewer.
     """
 
     def __init__(self, backend, seg_path, organelles, clargs, token):
@@ -68,8 +74,17 @@ class SyConnClient(object):
         logger.info(f"Raw path: {raw_path}")
         logger.info(f"Seg path: {seg_path}")
 
-        self.seg_dataset = KnossosDataset(seg_path)
-        self.raw_dataset = KnossosDataset(raw_path)
+        if config.seg_dataset != None:
+            self.seg_dataset = config.seg_dataset
+
+        else:
+            self.seg_dataset = KnossosDataset(seg_path)
+
+        if config.raw_dataset != None:
+            self.raw_dataset = config.raw_dataset
+
+        else:
+            self.raw_dataset = KnossosDataset(raw_path)
 
         # warn the user for no organelles
         if organelles == []:
@@ -78,7 +93,7 @@ class SyConnClient(object):
         # self.host = clargs['host']
         # self.port = clargs['port']
         
-        viewer = self.viewer = neuroglancer.Viewer(token=token)
+        viewer = self.viewer = neuroglancer.Viewer(token=token, allow_credentials=True)
         logger.info('Neuroglancer viewer object initialized')
 
         # start flask server with desired seg_dataset
@@ -89,8 +104,8 @@ class SyConnClient(object):
             self.configure_viewer(self.backend, s, raw_dataset=self.raw_dataset, seg_dataset=self.seg_dataset,
                                   flask_PORT=flask_PORT, organelles=organelles)
 
-    def __del__(self):
-        self.flask_server.join()
+    # def __del__(self):
+    #     self.flask_server.join()
 
     @property
     def seg_name(self):
@@ -100,16 +115,15 @@ class SyConnClient(object):
 
     @property
     def raw_name(self):
-        """Raw data name"""
+        """Image name"""
 
         return self._raw_path.split('/')[-1]
 
-    def configure_viewer(self, backend: SyConnBackend, state, raw_dataset=None, seg_dataset=None, dimensions=None,
-                         flask_PORT=8000, organelles=[]):
+    def configure_viewer(self, backend: SyConnBackend, state, raw_dataset=None, seg_dataset=None, flask_PORT=8000, organelles=[]):
         """
         Configures the Syconn client so it parses the desired data to 
-        Neuroglancer Viewer. Layer visibility depends on ordering. Last layer
-        overrides the side panel visibility of all layers.
+        Neuroglancer Viewer. Layer visibility depends on ordering. Last
+        layer overrides the side panel visibility of all layers.
         
         :param backend: SyConnBackend
         :param state: neuroglancer.viewer_state.ViewerState
@@ -119,11 +133,21 @@ class SyConnClient(object):
 
         .. note::
 
-           The precomputed source uses http://syconn.esc.mpcdf.mpg.de/ in
-           the production environment. For a local development environment,
-           use http://localhost:[PORT]/ and configure flask-CORS in 
+           The precomputed source uses http://syconn.esc.mpcdf.mpg.de/ 
+           in the production environment. For a local tornado 
+           development environment, we use http://localhost:[PORT]/.
+           Additionally, if flask is used in the development 
+           environment (cross-origin source), configure flask-CORS in 
            neuroglancer/python/neuroglancer/flask_server.py
         """
+
+        if config.dev_environ:
+            host = config.global_server_args['host']
+            port = config.global_server_args['port']
+            source = f'http://{host}:{port}'
+        
+        else:
+            source = f'http://syconn.esc.mpcdf.mpg.de'
 
         def append_organelle_layer(state, organelle):
             """
@@ -148,7 +172,7 @@ class SyConnClient(object):
             state.layers.append(
                 name=name,
                 layer=neuroglancer.SegmentationLayer(
-                    source=f'precomputed://http://syconn.esc.mpcdf.mpg.de/{organelle}',
+                    source=f'precomputed://' + source + f'/{organelle}', # organelle mesh
                     segment_default_color=color,
                     linked_segmentation_group=self.seg_name,
                     linked_segmentation_color_group=False,
@@ -158,56 +182,62 @@ class SyConnClient(object):
             state.selected_layer.layer = name
             state.selected_layer.visible = False
 
-        # set local volume dimensions if not provided
-        scales = seg_dataset.scale
-        if dimensions is None:
-            dimensions = neuroglancer.CoordinateSpace(
-                names=['z', 'y', 'x'],
-                units='nm',
-                scales=[scales[2], scales[1], scales[0]],
-            )
+        # set local volume dimensions 
+        scales = raw_dataset.scale
 
         # raw image
         state.layers.append(
             name=self.raw_name,
             layer=neuroglancer.ImageLayer(
                 source=[
-                    neuroglancer.LocalVolume(
-                        dataset=raw_dataset,
-                        dimensions=dimensions,
-                        backend=backend,
-                        precomputedMesh=False,
-                        object_type='sv',
-                        volume_type='image',
-                        # chunk_layout='isotropic',
-                        downsampling='3d',
-                        task_type='lowest_then_downsample'
-                    ),
+                    # neuroglancer.LocalVolume(
+                    #     dataset=raw_dataset,
+                    #     dimensions=neuroglancer.CoordinateSpace(
+                    #         names=['z', 'y', 'x'],
+                    #         units='nm',
+                    #         scales=[scales[2], scales[1], scales[0]],
+                    #     ),
+                    #     backend=backend,
+                    #     precomputedMesh=False,
+                    #     object_type='sv',
+                    #     volume_type='image',
+                    #     # chunk_layout='isotropic',
+                    #     downsampling='3d',
+                    #     task_type='lowest_then_downsample'
+                    # ),
+                    f'precomputed://' + source + '/volume/img'
                 ]
             )
         )
 
         state.selected_layer.layer = self.raw_name
-        state.selected_layer.visible = True
+        state.selected_layer.visible = False
+
+        scales = seg_dataset.scale
         
         # segmentation 
         state.layers.append(
             name=self.seg_name,
             layer=neuroglancer.SegmentationLayer(
                 source=[
-                    neuroglancer.LocalVolume(
-                        dataset=seg_dataset,
-                        dimensions=dimensions,
-                        backend=backend,
-                        precomputedMesh=False,
-                        object_type='sv',
-                        volume_type='segmentation',
-                        # chunk_layot='isotropic',
-                        downsampling='3d',
-                        task_type='lowest_then_downsample'
-                        ),
-                    f'precomputed://http://syconn.esc.mpcdf.mpg.de/sv', # ssv mesh
-                    f'precomputed://http://syconn.esc.mpcdf.mpg.de/skeletons'
+                    # neuroglancer.LocalVolume(
+                    #     dataset=seg_dataset,
+                    #     dimensions=neuroglancer.CoordinateSpace(
+                    #         names=['z', 'y', 'x'],
+                    #         units='nm',
+                    #         scales=[scales[2], scales[1], scales[0]],
+                    #     ),
+                    #     backend=backend,
+                    #     precomputedMesh=False,
+                    #     object_type='sv',
+                    #     volume_type='segmentation',
+                    #     # chunk_layot='isotropic',
+                    #     downsampling='3d',
+                    #     task_type='lowest_then_downsample'
+                    # ),
+                    f'precomputed://' + source + '/volume/seg',
+                    f'precomputed://' + source + '/sv', # ssv mesh
+                    f'precomputed://' + source + '/skeletons' # ssv skeleton
                 ],
                 mesh_silhouette_rendering=2,
             )
@@ -215,7 +245,6 @@ class SyConnClient(object):
 
         state.selected_layer.layer = self.seg_name
         state.selected_layer.visible = True
-        # state.selected_layer.keys()
 
         # Configure skeleton layer
         # Adjust the skeleton rendering options
@@ -238,8 +267,8 @@ if __name__ == '__main__':
     Supported organelles = ('mi', 'sj', 'vc')
     
     To run client: 
-    python -i cli.py --wd=<WORKING_DIRECTORY> --host=<HOST> --port=<PORT>
-        --organelles <list of organelles>
+    python -i cli.py --wd=<WORKING_DIRECTORY> --host=<HOST> 
+        --port=<PORT> --organelles <list of organelles>
     """
 
     ap = argparse.ArgumentParser()
