@@ -1,6 +1,7 @@
 from syconn.handler.logger import log_main as logger
 import numpy as np
 import time
+import json
 
 def get_encoded_skeleton(backend, ssv_id, scales):
     """Gets encoded skeleton for ssv_id.
@@ -99,6 +100,14 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
 
     encoded_mesh = b''.join([array.tobytes('C') for array in data])
     return encoded_mesh
+
+def get_mesh_meta(ssv_id, lod):
+    fragments = []
+    fragments.append("{}:{}:{}_mesh".format(ssv_id, lod, ssv_id))
+    meta = json.dumps({"fragments": fragments})
+
+
+    return meta
 
 def handle_layer_args(ap):
     g = ap.add_argument_group(title='SyConn layer options')

@@ -20,16 +20,15 @@
 - [x] Look into the downsampling where it is happening in the frontend or Neuroglancer server
 - [x] Compare highest factor and upsampling with lowest factor and downsampling (runtime)
 - [x] Render differently colored organelle meshes with a mouse click (without the seg query)
-- [ ] Coloring of meshes (diff obj types)
+- [x] Coloring of meshes (diff obj types)
 - [x] Fix rendering of subvolume chunks (gray boxes); check available mags
 - [x] Property selector list (manually created); Text boxes to select the values of the property (1. select the attribute, 2. select the number of objects to display)
     1. celltype_cnn_e3 e.g MSN, EA
     2. number of mitochndria in ssv (check mapping_mi_idss.npy)
     3. ssv size (sizes.npy) e.g min, max
-- [ ] svs.npy (all the supervoxel ids)
+    4. supervoxel ids (svs.npy)
 - [ ] Invert cell_ids to supervoxel_ids (mapping_dict and mapping_dict_reversed). Same for rag_flat datasets
-- [ ] Method in syconn server receiving the coords, bounding box and cell type and give back the subset of ids (using numba or cython)
-- [x] Segment query even for the properties will be huge; return a random subset of the segment query or return a range of segment query based on user input or show segments page-wise
+- [x] Segment query even for the properties will be huge; return a random subset of the segment query (page) or return a range of segment query based on user input
 - [x] Check deepcopy behaviour (entire viewer state deepcopied or not)
 - [x] Check references of locks (_lock, __lock)
 - [x] Hotkey to show the cell connected to the selected cell by the largest synapse
@@ -40,17 +39,19 @@
 - [x] Include celltypes in status message 
 - [x] remove ngrok; directly serve with http behind port 80 
 - [x] multiple independent users without accidental synchronization
-- [ ] Resolve the magnification when zooming out; Use the crossSectionScale from the viewer state and trace back to the downsample factor in the server
 - [ ] Modify the index page (include a background maybe)
+- [ ] Tutorial page (refer on the index page of server)
+- [ ] Suppress dual print statements in python interactive mode
 - [x] Viewer modifications:
-    * Fix type in synaptic partner status message (synpatic)
-    * Add 'Loading synaptic partner for selected ssv' when `action_handler` is invoked
-    * Implicitly load page 1 in the property filter without having to type '_pg1'
-    * Celltype query support in lower and upper
-    * Replace placeholder text in segment query
+    * [x] Fix type in synaptic partner status message (synpatic)
+    * [x] Add 'Loading synaptic partner for selected ssv' when `action_handler` is invoked
+    * [x] Implicitly load page 1 in the property filter without having to type '_pg1'
+    * [x] Celltype query support in lower and upper
+    * [x] Replace placeholder text in segment query
 - [x] Time fetching and computation operations (synaptic filtering, skeleton/mesh retrieval, page splitting)
 - [ ] Optimize synaptic partner property
-- [ ] Tutorial page (refer on the index page of server)
-- [ ] See ChunkLayoutPreference, computeNearIsotropicDownsamplingLevels, LinkedZoomState, LinkedViewerNavigationState, TrackableCrossSectionZoom, TrackableProjectionZoom (why stopping at 4?)
-
+- [x] Serve precomputed volume source (on flask-async/quart/tornado)
+- [ ] Suppress typescript property map (or use segment properties precomputed)
+- [ ] Garbage collector for destroying python objects (ViewerState, PropertyFilter)
+- [ ] 
 
