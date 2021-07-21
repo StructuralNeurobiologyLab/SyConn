@@ -52,7 +52,7 @@ if __name__ == '__main__':
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
-        ('generate_cs_ssv', True),
+        ('generate_cs_ssv', False),  # cs_ssv: contact site objects between cells
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
