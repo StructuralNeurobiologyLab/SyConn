@@ -27,6 +27,7 @@ from scipy.special import softmax
 from matplotlib import pyplot
 from syconn.proc.meshes import mesh2obj_file_colors
 from syconn.handler.prediction_pts import evaluate_preds
+from scipy.spatial import cKDTree
 
 
 def prob(pred):
@@ -103,50 +104,81 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
             pred = np.argmax(pred, 1)
             predictions.append(pred)
             pred_indices.append(vert_indices[0])
-
-            # uncomment to see meshlab results
-            # # original
-            colors = np.full(shape=(sample_pts.shape[1], 4,), fill_value=GREY)
-            mask = np.where(sample_labels == 1)[0]
-            mask = np.array([[x] for x in mask])
-            try:
-                np.put_along_axis(colors, mask, RED, axis=0)
-            except:
-                # print("No foreground labels in original context.")
-                pass
-            mesh2obj_file_colors(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/1000/Adam_ExponentialLR/' + os.path.basename(
-                    # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/{radius}/SGD_CyclicLR/' + os.path.basename(
-                    pred_files[i]) + f'_original_{ii}.ply'),
-                [np.array([]), sample_pts[0, :, :], np.array([])], colors)
-            #
-            # # prediction
-            # colors = np.full(shape=(sample_pts.shape[1], 4,), fill_value=GREY)
-            # mask = np.where(pred == 1)[0].astype(np.int64)
-            # mask = np.array([[x] for x in mask])
-            # try:
-            #     np.put_along_axis(colors, mask, RED, axis=0)
-            # except:
-            #     # print("No foreground labels in prediction.")
-            #     pass
-            # mesh2obj_file_colors(os.path.expanduser(
-            #     f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/1000/Adam_ExponentialLR/' + os.path.basename(
-            #     # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/1000/SGD_CyclicLR/' + os.path.basename(
-            #         pred_files[i]) + f'_prediction_{ii}.ply'),
-            #     [np.array([]), sample_pts[0, :, :], np.array([])], colors)
             ii += 1
 
         # "merge" contexts and their predictions, taking the majority vote over all predictions per vertex
         predictions = np.concatenate(predictions)
         pred_indices = np.concatenate(pred_indices)
         # print(f'pred shape {predictions.shape}, indcs shape {pred_indices.shape}')
-        pred_labels = np.zeros((len(hc.vertices), 1))
-        evaluate_preds(pred_indices, predictions, pred_labels)
-        # print(f'Number of foreground labels in whole cell: {len(np.where(pred_labels == 1)[0])}')
 
-        # pred = pred.astype(np.float64)
+        # 0: background, 1: foreground, 3: no prediction -> for use of bincount
+        pred_labels = np.ones((len(hc.vertices), 1)) * (3)
+        # pred labels will have the vertices labels of values [0,1,3]
+        evaluate_preds(pred_indices, predictions, pred_labels)
+
+        # for 3 labeled vertices, we employ a kdtree approach to inherit the label of the neighbouring vertices
+        tree = cKDTree(data=hc.vertices, )
+        # loop until there are no more non-predicted labels
+        while np.any(pred_labels == 3):
+            vert_idcs = np.where(pred_labels == 3)[0]
+            # print(f'indices: {vert_idcs}')
+            verts = hc.vertices[vert_idcs]
+            for i, vert in enumerate(verts):
+                # print(f'indic: {vert_idcs[i]}')
+                res = tree.query_ball_point(x=vert, r=300)              # gets approx 10 neighbors
+                # print(len(res))
+                # cast majority vote on neighbor predictions
+                cnt = np.bincount(pred_labels[res][:,0].astype(np.int64))
+                vert_label = np.argmax(cnt)
+                pred_labels[vert_idcs[i]] = vert_label
+
         # evaluate cell metric results
         true_labels = hc.labels
+
+        # uncomment to see meshlab results
+        # original
+        colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
+        mask = np.where(true_labels == 1)[0]
+        mask = np.array([[x] for x in mask])
+        try:
+            np.put_along_axis(colors, mask, RED, axis=0)
+        except:
+            # print("No foreground labels in original context.")
+            pass
+        mesh2obj_file_colors(os.path.expanduser(
+            f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch_2048/meshes/' + os.path.basename(
+                path) + f'_arch2048_original.ply'),
+            [np.array([]), hc.vertices, np.array([])], colors)
+
+        # prediction
+        colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
+        mask = np.where(pred_labels == 1)[0].astype(np.int64)
+        mask = np.array([[x] for x in mask])
+        try:
+            np.put_along_axis(colors, mask, RED, axis=0)
+        except:
+            # print("No foreground labels in prediction.")
+            pass
+        mesh2obj_file_colors(os.path.expanduser(
+            f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch_2048/meshes/' + os.path.basename(
+                path) + f'_arch2048_prediction.ply'),
+            [np.array([]), hc.vertices, np.array([])], colors)
+
+
+        # node_tree = cKDTree(data=hc.nodes,)
+        # # calculate true node labels
+        # true_node_labels = np.zeros(shape(hc.nodes.shape[0]),)
+        #
+        #
+        # # calculate predicted node labels
+        # pred_node_labels = np.zeros(shape(hc.nodes.shape[0]),)
+        #
+        #
+
+
+
+
+
         # print(f'true {np.unique(true_labels)} and predicted {np.unique(pred_labels)} and shapes {true_labels.shape} {pred_labels.shape}')
         precision = precision_score(true_labels, pred_labels, average='binary', zero_division=0)
         recall = recall_score(true_labels, pred_labels, average='binary', zero_division=0)
@@ -160,10 +192,6 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         #     prec_rec.append((prec, rec))
         #     auc.append(average_precision_score(true_labels[np.where(true_labels==i)], pred_labels[np.where(pred_labels==i)]))
 
-        # TODO metrics on cell prediction
-        # pro cell precision, recall, accuracy, fscore
-        # -> global metrics
-
         # append metrics for a cell pair
         # lock.acquire()
         # try:
@@ -171,7 +199,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         result_dc['recall'].append(recall)
         result_dc['accuracy'].append(accuracy)
         result_dc['fscore'].append(f1score)
-            # result_dc['pr_curve'].append((prec_rec, auc))
+        # result_dc['pr_curve'].append((prec_rec, auc))
         # finally:
         #     lock.release()
 
@@ -182,8 +210,6 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
     # print(f'base node dist {base_node_dst}')
     # select source nodes for context extraction
     pcd = o3d.geometry.PointCloud()
-    # transform hc nodes to voxel coordinates
-    # nodes = hc.nodes / [10,10,25]
     pcd.points = o3d.utility.Vector3dVector(hc.nodes)
 
     # TODO ANSCHAUEN
@@ -199,7 +225,8 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
                                        source_nodes])
     node_arrs = context_splitting_kdt(hc, source_nodes, ctx_size)
     # print(f'Original {len(hc.nodes)}, extracted {len(node_arrs)}')
-    # print(f'Node arrs {node_arrs}')
+    # print(f'Node arrs {len(node_arrs)}')
+    # print(f'HC vert num {len(hc.vertices)}')
     # collect contexts into batches (each batch contains every n_batches contexts
     # (e.g. every 4th if n_batches = 4)
     for ii in range(n_batches):
@@ -304,34 +331,63 @@ if __name__ == '__main__':
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_SGD_CyclicLR_weights1,2/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_eval0_FKAConv_SearchQuantized/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_5samples/state_dict.pth'
-            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_20samples/state_dict.pth'
-        # pred_files = glob.glob(folder)
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_FocalLoss_20samples/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_nonorm_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture_2048_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture_large_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
+            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/lcp_r2000_ConvPoint_SearchQuantized_architecture2048_Adam_StepLR_weights1,2_CrossEntropy/state_dict.pth'
+        pred_files = glob.glob(folder)
         # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',
         #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
         #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_209549121_209742637.pkl',
         #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_9529398_19721758.pkl',
         #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl']
-        pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1574929_1767377.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_209549121_209742637.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130650624_188296720.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_9529398_19721758.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_226082525_238186872.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_40022718_113258940.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_28958042_54095396.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_2208821_2571960.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_217066591_241081409.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',            # 10
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_212101191_232639528.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50307606_160236492.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50792978_303842028.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130750890_177395993.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1437627_1443233.pkl',
-                    '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_19450892_82261946.pkl',
-                    # '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
-                      ]
+        # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1574929_1767377.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_209549121_209742637.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130650624_188296720.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_9529398_19721758.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_226082525_238186872.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_40022718_113258940.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_28958042_54095396.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_2208821_2571960.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_217066591_241081409.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',            # 10
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_212101191_232639528.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50307606_160236492.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50792978_303842028.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130750890_177395993.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1437627_1443233.pkl',
+        #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_19450892_82261946.pkl',
+        #             # '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
+        #               ]
+        # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130750890_177395993.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_217066591_241081409.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_135276895_160863880.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_249125218_261419284.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_9529398_19721758.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1037781_24879303.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_209549121_209742637.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_50307606_160236492.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_28958042_54095396.pkl',
+        #               # 10
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_130650624_188296720.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_86196746_158670784.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_109957093_122059097.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_40022718_113258940.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_140734639_140923411.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1437627_1443233.pkl',
+        #               '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_1574929_1767377.pkl',
+        #               # '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42866227_162377533.pkl',
+        #               ]
+        # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_42482050_43253052.pkl']
 
         model_name = os.path.basename(os.path.dirname(save_path))
         print(f'Predicting for radius {radius} with nr of files {len(pred_files)} on {model_name}')
@@ -353,8 +409,34 @@ if __name__ == '__main__':
                                      dict(ic=4, oc=1, ks=16, nn=4, np='d'),
                                      dict(ic=2, oc=1, ks=16, nn=8, np='d'),
                                      dict(ic=2, oc=1, ks=16, nn=8, np='d')]
+                architecture_2048 = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+                                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
+                                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 512},
+                                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
+                                     {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+                                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
+                                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
+                                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                                     {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                                     {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
+                                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
+                architecture_large = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+                                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
+                                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
+                                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
+                                      {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+                                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
+                                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
+                                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                                      {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                                      {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
+                                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
                 model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
-                                     architecture=architecture_1024, activation=act, norm='bn').to(device)
+                                     architecture=architecture_2048, activation=act, norm='gn').to(device)
             else:
                 model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
                                  track_running_stats=track_running_stats, act=act, use_bias=use_bias).to(device)
@@ -372,8 +454,9 @@ if __name__ == '__main__':
                 'pr_curve': []
             }
 
-            process_data_slice(np.s_[0:len(pred_files)], pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
-                       device, lcp_flag, result_dc)
+            process_data_slice(np.s_[0:len(pred_files)], pred_files, model, ctx_size, ctx_dst_fac, npoints,
+                               pred_transform,
+                               device, lcp_flag, result_dc)
 
             # split tasks for processes
             # proc_slices = []
@@ -439,5 +522,5 @@ if __name__ == '__main__':
             # plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
 
             df = pd.DataFrame.from_dict(result, orient='index')
-            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/{model_name}.csv'
+            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch_2048/{model_name}.csv'
             df.to_csv(csv_path)

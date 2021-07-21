@@ -76,7 +76,7 @@ for ssv_id in ssv_ids:
     # cluster errors
     coordinates = verts[0,:,:]
 
-    pos_indices = np.where(pred==1)
+    pos_indices = np.where(pred==1)[0]
     positive_vertices = verts[pos_indices]
     positive_coords = np.array([coordinates[pos_indices]])
 
