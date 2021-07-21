@@ -105,6 +105,8 @@ def find_nodeNearestNeighbor(merged_cell, cs_coord_list):
         # ixs = kdtree.query_ball_point(cs_coord, r=2e3)
         ixs = kdtree.query_ball_point(cs_coord, r=skelmerger_radius, workers=2)
         ixs = np.array(ixs[0])
+        if len(ixs)==0:
+            continue
         node_labels[ixs] = int(1)
 
     # write out annotated skeletons to ['merger_gt']
@@ -151,10 +153,11 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
                     # choose random vertex as representative of the contact area (may be multiple for 1 CS)
                     idx = np.random.randint(len(area_mesh), size=1)
                     cs_coord_list.append(area_mesh[idx])
-        except:
+        except Exception as e:
+            print(f'[EXCEPTION]: {e}')
             continue
         if len(cs_coord_list) == 0:
-            log.info('No cs found for given cell pair')
+            log.info(f'No cs found for given cell pair {cell1} and {cell2}')
             continue
 
         # pass one vertex from each contact site mess too, so that the skeleton concatenation is done correctly
@@ -231,15 +234,16 @@ def create_lookup_table(filtered_contact_sites_ids, cs_dataset, dict_sv2ssv):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Generate samples for merger error')
-    parser.add_argument('--r', type=int, help='Radius of merger',
-                        default=50)
+    parser.add_argument('--r', nargs='+', help='Radius of merger',
+                        default=[1000,2000])
     parser.add_argument('--nproc', type=int, help='Number of processors to use',
                         default=15)
     parser.add_argument('--set', type=str, help='Training or test set generation.', default='training')
     args = parser.parse_args()
     # global cs_ptMerger_radius
-    cs_ptMerger_radius = args.r
-    cs_merge_radii = [1000, 2000]
+    cs_merge_radii = [int(x) for x in args.r]
+    # cs_merge_radii = [1000, 2000]
+    # cs_merge_radii = [100, 500, 5000]
     n_proc = args.nproc
     dataset = args.set
 
@@ -288,7 +292,7 @@ if __name__ == '__main__':
 
     if dataset == 'test':
         offset = 30e3
-        nr_samples = 1500
+        nr_samples = 2000
         log.info(f'Offset and nr_samples adapted to test set.')
     else:
         offset = 0
