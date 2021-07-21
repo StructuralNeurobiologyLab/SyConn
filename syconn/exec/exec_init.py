@@ -42,6 +42,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
             separation.
         ncores_per_job: Number of cores per worker for
             :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
+        overwrite:
 
     Notes:
         * This is a memory intensiv step, consider increasing `ncores_per_job`.
@@ -223,9 +224,6 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     their associations with cell fragments (calculating the overlap between every sub-cellular structure and
     cell fragment instance) are extracted.
 
-    Todo:
-        * Don't extract sj objects and replace their use-cases with syn objects (?).
-
     Args:
         chunk_size: Size of the cube which are processed by each worker.
         n_folders_fs: Number of folders used to create the folder structure in
@@ -299,6 +297,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
 
 
 def run_create_rag(graph_node_dtype=None):
+    # TODO: use BinarySearchStore
     """
     If ``global_params.config.prior_astrocyte_removal==True``:
         stores pruned RAG at ``global_params.config.pruned_svgraph_path``, required for all glia
@@ -344,12 +343,14 @@ def run_create_rag(graph_node_dtype=None):
         raise ValueError from e
     log.debug("Finished preparation of SSV size dictionary based "
               "on bounding box diagonal of corresponding SVs.")
-    before_cnt = len(G.nodes())
-    for ix in list(G.nodes()):
+    before_cnt = G.number_of_nodes()
+    # explicit copy needed, as G is modified in the  loop
+    for ix in tqdm.tqdm(list(G.nodes()), total=before_cnt, desc='CC size filter'):
         if ccsize_dict[ix] <= global_params.config['min_cc_size_ssv']:
             G.remove_node(ix)
+    # TODO: check if this loop (despite cache_properties=['size'], see above) is limiting speed
     total_size = 0
-    for n in G.nodes():
+    for n in tqdm.tqdm(G.nodes(), total=G.number_of_nodes(), desc='Total size'):
         total_size += sd.get_segmentation_object(n).size
     total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
     log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
@@ -357,9 +358,9 @@ def run_create_rag(graph_node_dtype=None):
              f"{nx.number_connected_components(G)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
     nx.write_edgelist(G, global_params.config.pruned_svgraph_path)
     with open(global_params.config.pruned_svagg_list_path, 'w') as f:
-        for cc in tqdm.tqdm(nx.connected_components(G), desc='Write SV agg.'):
+        for cc in nx.connected_components(G):
             f.write(','.join([str(el) for el in cc]) + '\n')
-
+    log.debug("SV agglomerations have been written to file.")
     if not global_params.config.prior_astrocyte_removal:
         os.makedirs(global_params.config.working_dir + '/glia/', exist_ok=True)
         shutil.copy(global_params.config.pruned_svgraph_path, global_params.config.neuron_svgraph_path)

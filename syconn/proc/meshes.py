@@ -1075,7 +1075,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
     Args:
-        voxel_iter: Iterator of binary voxel mak (3D cube) and cube offset (in voxels).
+        voxel_iter: Iterator of binary voxel mask (3D cube) and cube offset (in voxels).
         scale: Size of voxels in `mask_list` in nm (x, y, z).
         vertex_size: In nm. Resolution used to simplify mesh.
         boundary_struct: Connectivity of kernel used to determine boundary
@@ -1084,7 +1084,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
             "An important parameter of the function is depth that defines the depth of the octree
             used for the surface reconstruction and hence implies the resolution of the resulting
             triangle mesh. A higher depth value means a mesh with more details."
-        compute_connected_components:< Compute connected components of mesh. Return list of meshes.
+        compute_connected_components: Compute connected components of mesh. Return list of meshes.
         voxel_size_simplify: Voxel size in nm when applying `simplify_vertex_clustering`. Defaults to `vertex_size`.
         min_vert_num: Minimum number of vertices of the connected component meshes (only applied if
             `compute_connected_components=True`).
@@ -1095,12 +1095,12 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         std_ratio: Standard deviation of distance between points used as threshold for filtering. See
             http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
 
-    Notes: Use `mask_list` with cubes with 1-voxel-overlap to guarantee that boundaries that align with
-        the 3D  array border are identified correctly.
+    Notes: Use `voxel_iter` with cubes that have 1-voxel-overlap to guarantee that segmentation instance boundaries
+        that align with the 3D  array border are identified correctly.
 
     Returns:
         Flat Index/triangle, vertex and normals array of the mesh. List[ind, vert, norm] if
-        `compute_connected_components=True`.
+        ``compute_connected_components=True``.
     """
     if voxel_size_simplify is None:
         voxel_size_simplify = vertex_size

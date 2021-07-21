@@ -524,7 +524,7 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
 
     Args:
         voxel_coords: List of numpy arrays in voxel coordinates.
-        dist_intra_object: Maximum distance between two voxels of different synapses to
+        dist_intra_object: Maximum distance between two voxels of different synapse fragments to
             consider them the same object. In nm.
         dist_inter_object: Maximum distance between two objects to check for close voxels
             between them. In nm.
