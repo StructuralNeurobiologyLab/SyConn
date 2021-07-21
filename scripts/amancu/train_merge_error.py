@@ -33,7 +33,7 @@ parser.add_argument('--opt', type=str, default='Adam', help='Chosen optimizer: A
 parser.add_argument('--lr', type=str, default='StepLR', help='Chosen learning rate: StepLR/ExponentialLR/CyclicLR/ConstantLR')
 parser.add_argument('--conv', type=str, default='ConvPoint', help='Convolution type for lcp')
 parser.add_argument('--bs', type=int, default=4, help='Batch size')
-parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
+parser.add_argument('--sp', type=int, default=10000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
@@ -75,7 +75,7 @@ use_bias = args.use_bias
 lr = 2e-3
 lr_stepsize = 100
 lr_dec = 0.995
-max_steps = 900000
+max_steps = 1000000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -110,10 +110,38 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = f'/wholebrain/scratch/amancu/mergeError/trainings/{modelselect}/'
+    save_root = f'/wholebrain/scratch/amancu/mergeError/trainings/{modelselect}/see'
     # save_root = '/wholebrain/scratch/amancu/mergeError/'
 
 # CREATE NETWORK AND PREPARE DATA SET
+architecture_2048 = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
+                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 512},
+                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
+                     {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
+                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
+                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                     {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                     {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
+                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
+architecture_large = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
+                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
+                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
+                      {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
+                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
+                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                      {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+                      {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
+                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
+
+
 
 # Model selection
 if modelselect == 'lcp':
@@ -121,10 +149,12 @@ if modelselect == 'lcp':
     # conv = dict(layer='ConvPoint', kernel_separation=False)
     convol = dict(layer=conv, kernel_separation=False)
     layer = convol['layer']
-    name += f'_{layer}_{search}'
+
+    ##TODO CHANGE NAME HERE
+    name += f'_{layer}_{search}_architectureLarge'
     act = nn.ReLU
     model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
-                         architecture=None, activation=act, norm='gn')
+                         architecture=architecture_large, activation=act, norm='gn')
 # if modelselect == 'randla':
 #     model = RandLANet(input_channels, num_classes + 1, dropout_p=dr)
 else:
@@ -159,6 +189,7 @@ train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='norma
                                   clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
 valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
+# valid_transform = clouds.Compose([])
 
 # mask boarder points with 'num_classes' and set its weight to 0
 train_ds = CloudFalseMergeLoader(radius=radius, npoints=npoints, transform=train_transform,
@@ -208,15 +239,13 @@ elif learning_rate == 'CyclicLR':
 # adapt class weights according to radius
 weights = [1,2]
 
-name += f'_weights{weights[0]},{weights[1]}_FocalLoss'
+# name += f'_weights{weights[0]},{weights[1]}_FocalLoss'
+name += f'_weights{weights[0]},{weights[1]}_CrossEntropy'
 
-if modelselect == 'lcp':
-    class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
-else:
-    class_weights = torch.tensor([1] * num_classes + [0], dtype=torch.float32, device=device)
+class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
 
 # TODO: change this
-criterion = FocalLoss(weight=class_weights, ignore_index=num_classes).to(device)
+# criterion = FocalLoss(weight=class_weights, ignore_index=num_classes).to(device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
@@ -253,7 +282,7 @@ if modelselect == 'lcp':
         num_classes=num_classes,
         # example_input=example_input,
         dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-        nbatch_avg=5,
+        nbatch_avg=1,
         tqdm_kwargs={'disable': False},
         lcp_flag=True
     )
