@@ -171,6 +171,20 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
 
+    # todo remove?
+    # init KD for syn and cs
+    #for ot in ['cs', 'syn']:
+    #    path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_seg/"
+    #    if os.path.isdir(path_kd):
+    #        log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+    #        shutil.rmtree(path_kd)
+    #    target_kd = knossosdataset.KnossosDataset()
+    #    target_kd._cube_shape = cube_shape
+    #    scale = np.array(global_params.config['scaling'])
+    #    target_kd.scales = [scale, ]
+    #    target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+    #                                      mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
     for ii, chunk_k in enumerate(iter_params):
@@ -252,11 +266,14 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             os.makedirs(curr_dir, exist_ok=True)
 
     # Write SD
+    # todo remove?
+    path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
+    path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
     n_cores = 2 if qu.batchjob_enabled() else 1
     # slightly increase ncores per worker to compensate IO related downtime
-    multi_params = [(sv_id_block, n_folders_fs, dir_props, int(n_cores * 1.5))
+    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
@@ -329,8 +346,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                          'must differ.')
 
     # init target KD for cs and syn segmentation
-    kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
-    kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
+    # todo remove?
+    #kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
+    #kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
 
     # init. synaptic junction (sj) KD
     kd_sj = basics.kd_factory(global_params.config.kd_sj_path)
@@ -445,6 +463,16 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             tuple_dicts[7],
             tuple_dicts[8])
 
+        # todo remove
+        #kd_cs.save_seg(offset=offset + overlap, mags=[1, ],
+        #               data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
+        #               data_mag=1)
+        ## syn segmentation contains the intersecting voxels between SJ and CS
+        #contacts[sj_d == 0] = 0
+        #kd_syn.save_seg(offset=offset + overlap, mags=[1, ],
+        #                data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
+        #                data_mag=1)
+
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)
@@ -500,11 +528,13 @@ def _row_wise_intersect(A: np.ndarray, B: np.ndarray) -> np.ndarray:
 def _write_props_to_syn_thread(args):
     cs_ids_ch = args[0]  # type: List[int]
     n_folders_fs = args[1]  # type: int
-    dir_props = args[2]  #type: str
-    if len(args) < 4:
+    knossos_path = args[2]  # type: str
+    knossos_path_cs = args[3]  # type: str
+    dir_props = args[4]  #type: str
+    if len(args) < 6:
         nb_cores = 4
     else:
-        nb_cores = args[3]
+        nb_cores = args[5]
     min_obj_vx_dc = global_params.config['cell_objects']['min_obj_vx']
     tmp_path = global_params.config.temp_path
     if global_params.config.use_new_subfold:
@@ -667,14 +697,10 @@ def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dic
     del dc
 
     # Synapses (syn)
-    dc_syn = basics.load_pkl2obj(
-        f'{worker_dir_props}/syn_props_{worker_id}.pkl')
-    curr_sym_cnt = basics.load_pkl2obj(
-        f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl')
-    curr_asym_cnt = basics.load_pkl2obj(
-        f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl')
-    curr_syn_vxs = basics.load_pkl2obj(
-        f'{worker_dir_props}/syn_voxels_{worker_id}.pkl')
+    dc_syn = basics.load_pkl2obj(f'{worker_dir_props}/syn_props_{worker_id}.pkl')
+    curr_sym_cnt = basics.load_pkl2obj(f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl')
+    curr_asym_cnt = basics.load_pkl2obj(f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl')
+    curr_syn_vxs = np.load(f'{worker_dir_props}/syn_voxels_{worker_id}.npz')
 
     syn_rep_coord = dc_syn[0]  # type: Dict[Tuple[int, int], np.ndarray]
     syn_bbox = dc_syn[1]  # type: Dict[Tuple[int, int], List[np.ndarray]]
@@ -682,6 +708,7 @@ def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dic
 
     syn_rep_coord_filtered, syn_bbox_filtered, syn_size_filtered = dict(), defaultdict(list), dict()
     syn_filtered = [syn_rep_coord_filtered, syn_bbox_filtered, syn_size_filtered]
+    filtered_syn_vxs = dict()
 
     filtered_sym_dc = dict()
     filtered_asym_dc = dict()
@@ -691,11 +718,12 @@ def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dic
         syn_rep_coord_filtered[k] = syn_rep_coord[k]
         syn_bbox_filtered[k] = syn_bbox[k]
         syn_size_filtered[k] = syn_size[k]
+        filtered_syn_vxs[k] = curr_syn_vxs[str(k)]  # np.savez supports string keys only
         if k in curr_sym_cnt:
             filtered_sym_dc[k] = curr_sym_cnt[k]
         if k in curr_asym_cnt:
             filtered_asym_dc[k] = curr_asym_cnt[k]
-    return cs_filtered, syn_filtered, filtered_sym_dc, filtered_asym_dc, curr_syn_vxs
+    return cs_filtered, syn_filtered, filtered_sym_dc, filtered_asym_dc, filtered_syn_vxs
 
 
 def _generate_storage_lookup(args):

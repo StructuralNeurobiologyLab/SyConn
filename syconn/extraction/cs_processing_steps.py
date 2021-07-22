@@ -608,11 +608,11 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
 
 
 def _combine_and_split_cs_thread(args):
-    wd = args[0]
-    rel_ssv_with_cs_ids_items = args[1]
-    voxel_rel_paths = args[2]
-    cs_version = args[3]
-    cs_ssv_version = args[4]
+    wd = args[0]  # type: str
+    rel_ssv_with_cs_ids_items = args[1]  # type: List[Tuple[Tuple[int, int], List[Tuple[int, int]]]]
+    voxel_rel_paths = args[2]  # type: List[str]
+    cs_version = args[3]   # type: str
+    cs_ssv_version = args[4]  # type: str
 
     sd_cs_ssv = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version=cs_ssv_version)
     sd_cs = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
@@ -639,19 +639,15 @@ def _combine_and_split_cs_thread(args):
 
     # iterate over cell partners and their contact site IDs (each contact site is between two supervoxels
     # of the partner cells)
-    for ssvpartners_enc, cs_ids in rel_ssv_with_cs_ids_items:
+    for ssv_ids, cs_ids in rel_ssv_with_cs_ids_items:
         n_items_for_path += 1
-        # TODO 64bit refactoring - do not call this method with a single element - might not even be needed anymore
-        #  as the cs ID / syn ID could just be a tuple
-        ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
 
         # verify ssv_partner_ids
         cs_lst = sd_cs.get_segmentation_objects(cs_ids)
         vxl_iter_lst = []
         vx_cnt = 0
         for cs in cs_lst:
-            vx_store = VoxelStorageDyn(cs.voxel_path, read_only=True,
-                                       disable_locking=True)
+            vx_store = VoxelStorageDyn(cs.voxel_path, read_only=True, disable_locking=True)
             vxl_iter_lst.append(vx_store.iter_voxelmask_offset(cs.id, overlap=1))
             vx_cnt += vx_store.object_size(cs.id)
         if mesh_min_obj_vx > vx_cnt:
