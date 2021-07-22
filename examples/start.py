@@ -30,6 +30,8 @@ if __name__ == '__main__':
                         help='Level of logging (INFO, DEBUG).')
     parser.add_argument('--steps', type=str, default='all',
                         help='Which steps to run: comma-separated list of ints (0-13) or "all"')
+    parser.add_argument('--skip_steps', type=str, default='none',
+                        help='Which steps to skip: comma-separated list of ints (0-13) or "none"')
     parser.add_argument('--overwrite', dest='overwrite', action='store_true',
                         help='Overwrite generated data.')
     parser.set_defaults(overwrite=False)
@@ -40,7 +42,18 @@ if __name__ == '__main__':
         args.working_dir = "~/SyConn/wd_example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir) + "/"
 
-    steps = {
+    if args.skip_steps == 'none':
+        skip_steps = set()
+    else:
+        skip_steps = set(int(xx) for xx in args.skip_steps.split(','))
+    if args.steps == 'all':
+        steps = set(range(14))
+    else:
+        steps = set(int(xx) for xx in args.steps.split(','))
+
+    steps_todo = sorted(steps-skip_steps)
+
+    steps_names = {
         0: 'preparation',
         1: 'dense_predictions',
         2: 'sd_generation',
@@ -56,13 +69,9 @@ if __name__ == '__main__':
         12: 'matrix_export',
         13: 'start_server', }
 
-    if args.steps == 'all':
-        todo = [steps[xx] for xx in range(14)]
-    else:
-        todo = [steps[int(xx)] for xx in args.steps.split(',')]
-
+    todo = [steps_names[xx] for xx in steps_todo]
     todo_str = '\n\t'.join(todo)
-    print(f'Will run the following steps (specified: "{args.steps}"):\n\n\t{todo_str}')
+    print(f'Will run the following steps (specified: do: "{args.steps}", skip: "{args.skip_steps}"):\n\n\t{todo_str}')
 
     # set up basic parameter, log, working directory and config file
     experiment_name = 'j0126_example'
