@@ -87,7 +87,7 @@ if __name__ == '__main__':
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
-        ('generate_cs_ssv', True),
+        ('generate_cs_ssv', False),  # cs_ssv: contact site objects between cells
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -99,7 +99,7 @@ if __name__ == '__main__':
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
           'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
                                       'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          ),

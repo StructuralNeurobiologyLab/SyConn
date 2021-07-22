@@ -174,7 +174,7 @@ class VoxelStorageL(StorageClass):
 
 def VoxelStorage(inp, **kwargs):
     """
-    Deprecated storage for voxel data.
+    Alias for :class:`~VoxelStorageDyn`.
 
     Args:
         inp:
@@ -183,12 +183,7 @@ def VoxelStorage(inp, **kwargs):
     Returns:
 
     """
-    obj = VoxelStorageClass(inp, **kwargs)
-    if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
-        obj = VoxelStorageDyn(inp, **kwargs)
-    else:
-        log_backend.error('VoxelStorage is deprecated. Please switch to'
-                          ' VoxelStorageDyn.')
+    obj = VoxelStorageDyn(inp, **kwargs)
     return obj
 
 

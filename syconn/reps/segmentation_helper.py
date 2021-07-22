@@ -534,6 +534,7 @@ def prepare_so_attr_cache(sd: 'SegmentationDataset', so_ids: np.ndarray, attr_ke
         SegmentatonObect in `so_ids`.
     """
     attr_cache = {k: dict() for k in attr_keys}
+    # TODO: Use BinarySearchStore
     soid2ix = {so_id: sd.soid2ix[so_id] for so_id in so_ids}
     sd._soid2ix = None  # free memory
     for attr in attr_keys:

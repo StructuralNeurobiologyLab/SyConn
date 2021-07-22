@@ -187,8 +187,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              load_from_kd_overlaycubes, transf_func_kd_overlay])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(transform_func, multi_params,
-                                             nb_cpus=nb_cpus, debug=debug)
+        results = sm.start_multiprocess_imap(transform_func, multi_params, nb_cpus=nb_cpus, debug=False)
 
         results_as_list = []
         for result in results:
@@ -329,15 +328,15 @@ def _object_segmentation_thread(args):
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
             if hdf5_name in morph_ops:
-                # returns identity if len(morph_ops) == 0
-                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name]:
+                if 'binary_erosion' in morph_ops[hdf5_name]:
                     first_erosion_ix = morph_ops[hdf5_name].index('binary_erosion')
-                    tmp_data = apply_morphological_operations(tmp_data, morph_ops[hdf5_name][:first_erosion_ix],
+                    tmp_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name][:first_erosion_ix],
                                                               mop_kwargs=dict(structure=struct))
-                    # apply morphological operations to generate watershed seeds
-                    markers = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name][first_erosion_ix:],
-                                                             mop_kwargs=dict(structure=struct)).astype(np.uint32)
-
+                    # apply erosion operations to generate watershed seeds
+                    markers = apply_morphological_operations(tmp_data.copy(),
+                                                             morph_ops[hdf5_name][first_erosion_ix:],
+                                                             mop_kwargs=dict(structure=struct))
+                    markers = scipy.ndimage.label(markers)[0].astype(np.uint32)
                     # remove small fragments and 0; this might also delete objects bigger than min_size as
                     # this threshold is applied after N binary erosion!
                     if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:

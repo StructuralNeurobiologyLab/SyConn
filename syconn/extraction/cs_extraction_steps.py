@@ -36,6 +36,7 @@ from ..mp import batchjob_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
+from ..proc.image import apply_morphological_operations, get_aniso_struct
 from ..reps import rep_helper
 from ..reps import segmentation
 from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties, \
@@ -271,15 +272,15 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    n_cores = 2 if qu.batchjob_enabled() else 1
+    n_cores = 2 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
     # slightly increase ncores per worker to compensate IO related downtime
-    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
+    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=n_cores)
+                           n_cores=1, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
@@ -338,6 +339,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     worker_dir_props = f"{dir_props}/{worker_nr}/"
     os.makedirs(worker_dir_props, exist_ok=True)
 
+    morph_ops = global_params.config['cell_objects']['extract_morph_op']
+    scaling = np.array(global_params.config['scaling'])
+    struct = get_aniso_struct(scaling)
+
     if global_params.config.syntype_available and \
             (global_params.config.sym_label == global_params.config.asym_label) and \
             (global_params.config.kd_sym_path == global_params.config.kd_asym_path):
@@ -390,6 +395,11 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         else:
             sj_d = transf_func_sj_seg(
                 kd_sj.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)).astype(np.uint8, copy=False)
+        # apply mrophological operations on sj binary mask
+        if 'sj' in morph_ops:
+            sj_d = apply_morphological_operations(
+                sj_d.copy(), morph_ops['sj'], mop_kwargs=dict(structure=struct)).astype(np.uint8, copy=False)
+
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:

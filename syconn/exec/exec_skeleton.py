@@ -172,7 +172,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     else:
         cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int32)
 
-    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0])
+    dataset_size = cube_of_interest_bb[1] - cube_of_interest_bb[0]
 
     if np.all(cube_size > dataset_size):
         cube_size = dataset_size

@@ -319,7 +319,8 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         assert np.ndim(ids) == 1
         lookup = dict()
-        queries = np.intersect1d(ids, self.sv_ids)
+        # explicitly cast to uint64 because if `ids` is a list of python int intersect auto-casts to float
+        queries = np.intersect1d(ids, self.sv_ids).astype(np.uint64)
         for sv_id, ssv_id in zip(queries, self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
             lookup[sv_id] = ssv_id
         return lookup

@@ -371,8 +371,9 @@ class SyConnBackend(object):
         :param sv_id:
         :return:
         """
+        sv_id = int(sv_id)
         try:
-            ssv_id = self.ssd.sv2ssv_ids(sv_id)[sv_id]
+            ssv_id = self.ssd.sv2ssv_ids([int(sv_id)])[sv_id]
         except KeyError:
             # sv_id is not in sv2ssv_ids output (dict) -> ssv ID is not part of ssd.ssv_ids
             ssv_id = 0
