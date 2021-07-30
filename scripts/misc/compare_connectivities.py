@@ -32,7 +32,7 @@ def compare_svagg_lists(in_svagg_1: str, in_svagg_2: str, id_map: Dict[np.uint64
 def compare_connectivities(in_csv_1: str, in_csv_2: str, id_map: Dict[np.uint64, np.uint64]):
     """
     This connectivity comparison method relies on the id mapping preserving the ordering of IDs. This will be the case
-    with the remapping methods in test_64bit.py.
+    with the remapping methods in gen_64bit_test_data.py
 
     :param in_csv_1: Path to connectivity csv 1
     :param in_csv_2: Path to connectivity csv 2
@@ -58,13 +58,13 @@ def compare_connectivities(in_csv_1: str, in_csv_2: str, id_map: Dict[np.uint64,
 
 def main():
     parser = argparse.ArgumentParser(description='Compare results of different SyConn runs that differ only in IDs '
-                                                 '(for use with test_64bit.py)')
+                                                 '(for use with gen_64bit_test_data.py)')
     parser.add_argument('--run_dir_1', type=str, required=True,
                         help='SyConn run directory 1')
     parser.add_argument('--run_dir_2', type=str, required=True,
                         help='SyConn run directory 2')
     parser.add_argument('--id_map_pickle', type=str, required=True,
-                        help='Path to pickle file mapping IDs from run 1 to run 2.')
+                        help='Path to pickle file mapping IDs from run 1 to run 2. Must preserve ordering.')
     args = parser.parse_args()
 
     with open(args.id_map_pickle, 'rb') as fp:

@@ -23,7 +23,8 @@ def load_h5(f: str, dtype=np.uint32) -> np.ndarray:
 
 def remap_64bit(in_ids: List[np.uint32], map: str) -> Dict[np.uint64, np.uint64]:
     """
-    Remap in_ids to IDs where about half are below 2**32 and the other half are between 2**32 and 2**64.
+    Remap in_ids to IDs where about half are below 2**32 and the other half are between 2**32 and 2**64 (method
+    "half_low_half_high") or by left shifting everything by 32 bits (method "leftshift").
     """
 
     if map == 'half_low_half_high':
@@ -68,9 +69,8 @@ def convert_data_folder(in_dir: str, map: str = 'half_low_half_high'):
     with h5py.File(f'{out_dir}/seg.h5', 'w') as h:
         h.create_dataset('seg', data=seg_remapped)
 
-    # The graph does not actually need to be directed, but we are using directed graphs here to ensure that the
-    # ordering of the IDs in the edges doesn't change, in order to make checking the correctness of the remapped data
-    # easier.
+    # The graph does not actually need to be directed, but we are using directed graphs here in order to make checking
+    # the correctness of the remapped data easier.
     g_old = nx.read_edgelist(f'{in_dir}/neuron_rag.bz2', create_using=nx.DiGraph, nodetype=np.uint64)
     g_new = nx.DiGraph()
 
