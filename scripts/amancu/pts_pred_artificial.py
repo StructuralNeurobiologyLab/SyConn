@@ -31,33 +31,29 @@ from syconn.handler.prediction_pts import evaluate_preds
 from scipy.spatial import cKDTree
 
 
-def prob(pred):
-    """
-    Transform prediciton to range [0,1], to which is the binary prediction closer.
-    Args:
-        pred: Raw prediction of shape (N,1)
+def merge_dict(dict1, dict2):
+    ''' Merge dictionaries and keep values of common keys in list'''
+    # dict3 = {}
+    for key, value in dict1.items():
+        dict1[key].extend(dict2[key])
+    return dict1
 
-    """
-    # determine indices
-    ind = np.argmax(pred, 1).astype(np.float64)
-    ind = ind.astype(np.int64)
-    # normalize predictions
-    softened = softmax(pred, axis=1)
-    # print(softened)
-    res = []
-    for i in range(len(pred)):
-        nr = softened[i]
-        nr = nr[ind[i]]
-        res.append(nr if ind[i] == 1 else 1 - nr)
-    res = np.array(res)
-    # print(res)
+def merge_multiple_dicts(list_of_dicts):
+    res = {
+        'precision': [],
+        'recall': [],
+        'accuracy': [],
+        'fscore': [],
+    }
+    for d in list_of_dicts:
+        merge_dict(res,d)
+        print(res)
     return res
 
 
-def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform, device, lcp_flag,
-                       result_dc):
+def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform, device, lcp_flag, queue):
     """
-    Adds average results of metrics (precision, recall, accuracy, f1score) per cell in the result_dc dictionary of results.
+    Adds average results of metrics (precision, recall, accuracy, f1score) per cell in the res_dc dictionary of results.
 
     Args:
         slice: np.s_ slice to process the files
@@ -65,18 +61,29 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
 
     """
     hc = HybridCloud()
+    res_dc = {
+        'precision': [],
+        'recall': [],
+        'accuracy': [],
+        'fscore': [],
+    }
     # for each whole cells
-    for i in tqdm(range(len(pred_files))):
-        path = pred_files[i]
-        hc.load_from_pkl(path)
+    for i in tqdm(pred_files[slice], desc='Predict HCs'):
+        path = i
+        hc.load_from_pkl(i)
         predictions = []
         pred_indices = []
 
+        vert_tree = cKDTree(data=hc.vertices,)
         ii = 0
-        for (sample_feats, sample_pts, sample_labels), vert_indices in extract_subhcs(hc, ctx_size, ctx_dst_fac,
+        source_nodes=[]
+        for (sample_feats, sample_pts, sample_labels), source_node, vert_indices in extract_subhcs(hc, ctx_size, ctx_dst_fac,
                                                                                       npoints, pred_transform):
 
             sample_feats = sample_feats[:, :, None]
+            source_node = int(source_node[0,0])
+            source_nodes.append(source_node)
+            # print(f'source node: {source_node}')
 
             dpts = torch.from_numpy(sample_pts).to(device).float()
             dfeats = torch.from_numpy(sample_feats).to(device).float()
@@ -101,6 +108,16 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
 
             # prepare predictions
             pred = np.argmax(pred, 1)
+
+            # # place the external context of the prediction on null, so that they focus only on the middle
+            # vert_tree = cKDTree(data=sample_pts[0,:,:], )
+            # # print(f'src nodes: {source_node_idcs}')
+            # inner_hcvert_idcs = vert_tree.query_ball_point(hc.nodes[source_node], r=10000)
+            # # print(f'innver verts equals all idcs {inner_vert_idcs == np.arange(len(hc.vertices))}')
+            # mask = np.ones(shape=(len(pred),), dtype=bool)
+            # mask[inner_hcvert_idcs] = bool(0)
+            # pred[mask] = int(0)
+
             predictions.append(pred)
             pred_indices.append(vert_indices[0])
             ii += 1
@@ -114,66 +131,73 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         # pred labels will have the vertices labels of values [0,1,3]
         evaluate_preds(pred_indices, predictions, pred_labels)
 
+        vert_tree = cKDTree(data=hc.vertices, )
+        inner_hcvert_idcs = vert_tree.query_ball_point(hc.nodes[source_nodes], r=10000)
+        inner_hcvert_idcs = np.concatenate(inner_hcvert_idcs)
+        print(f'innver verts equals all idcs {inner_hcvert_idcs == np.arange(len(hc.vertices))}')
+        mask = np.ones(shape=(len(pred_labels),), dtype=bool)
+        mask[inner_hcvert_idcs] = bool(0)
+        pred_labels[mask] = int(0)
+
+
+        # # render the contexts
+        # colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
+        # mask = np.zeros(len(hc.vertices))
+        # mask[inner_vert_idcs] = 1
+        # mask = mask.astype(bool)
+        # mask = np.array([[x] for x in mask])
+        # try:
+        #     np.put_along_axis(colors, mask, PINK, axis=0)
+        # except:
+        #     # print("No foreground labels in original context.")
+        #     pass
+        # mesh2obj_file_colors(os.path.expanduser(
+        #     # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/' + os.path.basename(
+        #     f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
+        #         path) + f'_context.ply'),
+        #     [np.array([]), hc.vertices, np.array([])], colors)
+
         # for 3 labeled vertices, we employ a kdtree approach to inherit the label of the neighbouring vertices
-        tree = cKDTree(data=hc.vertices, )
-        # loop until there are no more non-predicted labels
-        while np.any(pred_labels == 3):
-            vert_idcs = np.where(pred_labels == 3)[0]
-            verts = hc.vertices[vert_idcs]
-            for i, vert in enumerate(verts):
-                res = tree.query_ball_point(x=vert, r=400)              # gets approx 10 neighbors
-                # cast majority vote on neighbor predictions
-                cnt = np.bincount(pred_labels[res][:,0].astype(np.int64))
-                vert_label = np.argmax(cnt)
-                pred_labels[vert_idcs[i]] = vert_label
+        # propagate labels to unlabeled vertices
+        # labeled_indices = np.where(pred_labels!=3)[0]
+        # labeled_vertices = hc.vertices[labeled_indices]
+        # labeled_tree = cKDTree(data=labeled_vertices, )
+        # vert_idcs = np.where(pred_labels == 3)[0]
+        # unlabeled_verts = hc.vertices[vert_idcs]
+        # labeled_neighbors = labeled_tree.query_ball_point(x=unlabeled_verts, r=1000)
+        # # print(f'neighbors {labeled_neighbors}')
+        # for i, cluster in enumerate(labeled_neighbors):
+        #     if len(cluster) == 0:
+        #         pred_labels[vert_idcs[i]] = int(0)
+        #     cnt = np.bincount(pred_labels[labeled_indices[cluster]][:, 0].astype(np.int64))
+        #     try:
+        #         vert_label = np.argmax(cnt)
+        #     except:
+        #         print(f'Could not find neighbor in propagation for cell pair {os.path.basename(path)} and vert {unlabeled_verts[i]} in idc of hc.vertices {vert_idcs[i]}')
+        #         vert_label = int(0)
+        #     pred_labels[vert_idcs[i]] = vert_label
 
         # evaluate cell metric results
         true_labels = hc.labels
 
-        vert_tree = cKDTree(data=hc.vertices,)
-        # calculate true node labels
+        # calculate true and pred node labels
         true_node_labels = np.zeros(shape=(hc.nodes.shape[0],))
         pred_node_labels = np.zeros(shape=(hc.nodes.shape[0],))
         for i, node in enumerate(hc.nodes):
-            vert_idcs = vert_tree.query_ball_point(x=node, r=700)
-            vert_true = true_labels[vert_idcs]
-            vert_preds = pred_labels[vert_idcs]
-            cnt_true = np.bincount(vert_true[:,0].astype(np.int64))
-            cnt_pred = np.bincount(vert_preds[:,0].astype(np.int64))
-            true_node_label = np.argmax(cnt_true)
-            pred_node_label = np.argmax(cnt_pred)
-            true_node_labels[i] = true_node_label
-            pred_node_labels[i] = pred_node_label
-
-        # random node predictions to inspect in meshlab
-        if ran.random() > 0.8:
-            # original
-            colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
-            mask = np.where(true_node_labels == 1)[0]
-            mask = np.array([[x] for x in mask])
             try:
-                np.put_along_axis(colors, mask, RED, axis=0)
+                vert_idcs = vert_tree.query_ball_point(x=node, r=700)
+                # vert_idcs = vert_tree.query(x=node, k=10)
+                vert_true = true_labels[vert_idcs]
+                vert_preds = pred_labels[vert_idcs]
+                cnt_true = np.bincount(vert_true[:,0].astype(np.int64))
+                cnt_pred = np.bincount(vert_preds[:,0].astype(np.int64))
+                true_node_label = np.argmax(cnt_true)
+                pred_node_label = np.argmax(cnt_pred)
+                true_node_labels[i] = true_node_label
+                pred_node_labels[i] = pred_node_label
             except:
-                # print("No foreground labels in original context.")
-                pass
-            mesh2obj_file_colors(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch_2048/meshes/' + os.path.basename(
-                    path) + f'_arch2048_original.ply'),
-                [np.array([]), hc.nodes, np.array([])], colors)
-
-            # prediction
-            colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
-            mask = np.where(pred_node_labels == 1)[0].astype(np.int64)
-            mask = np.array([[x] for x in mask])
-            try:
-                np.put_along_axis(colors, mask, RED, axis=0)
-            except:
-                # print("No foreground labels in prediction.")
-                pass
-            mesh2obj_file_colors(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch_2048/meshes/' + os.path.basename(
-                    path) + f'_arch2048_prediction.ply'),
-                [np.array([]), hc.nodes, np.array([])], colors)
+                true_node_labels[i] = int(0)
+                pred_node_labels[i] = int(0)
 
         # # prediction per vertex
         # precision = precision_score(true_labels, pred_labels, average='binary', zero_division=0)
@@ -187,22 +211,88 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         accuracy = accuracy_score(true_node_labels, pred_node_labels)
         f1score = f1_score(true_node_labels, pred_node_labels, average='binary', zero_division=0)
 
-        result_dc['precision'].append(precision)
-        result_dc['recall'].append(recall)
-        result_dc['accuracy'].append(accuracy)
-        result_dc['fscore'].append(f1score)
+        res_dc['precision'].append(precision)
+        res_dc['recall'].append(recall)
+        res_dc['accuracy'].append(accuracy)
+        res_dc['fscore'].append(f1score)
+
+        # if ran.random() > 0.05:
+        #     print(f'For {os.path.basename(path)} \n Precision: {precision} \n Recall: {recall} \n Accuracy: {accuracy} \n Fscore: {f1score}')
+        #     # original nodes
+        #     colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
+        #     mask = np.where(hc.labels == 1)[0]
+        #     mask = np.array([[x] for x in mask])
+        #     try:
+        #         np.put_along_axis(colors, mask, PINK, axis=0)
+        #     except:
+        #         # print("No foreground labels in original context.")
+        #         pass
+        #     mesh2obj_file_colors(os.path.expanduser(
+        #         f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/contexts/' + os.path.basename(
+        #             path) + f'_original_verts.ply'),
+        #         [np.array([]), hc.vertices, np.array([])], colors)
+        #
+        #     # prediction
+        #     colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
+        #     mask = np.where(pred_labels == 1)[0].astype(np.int64)
+        #     mask = np.array([[x] for x in mask])
+        #     try:
+        #         np.put_along_axis(colors, mask, PINK, axis=0)
+        #     except:
+        #         # print("No foreground labels in prediction.")
+        #         pass
+        #     mesh2obj_file_colors(os.path.expanduser(
+        #         f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/contexts/' + os.path.basename(
+        #             path) + f'_prediction_verts.ply'),
+        #         [np.array([]), hc.vertices, np.array([])], colors)
+
+
+        # random node predictions to inspect in meshlab
+        if ran.random() > 0.9:
+            print(f'For {os.path.basename(path)} \n Precision: {precision} \n Recall: {recall} \n Accuracy: {accuracy} \n Fscore: {f1score}')
+            # original nodes
+            colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
+            mask = np.where(hc.node_labels == 1)[0]
+            mask = np.concatenate((mask, np.where(hc.node_labels == 2)[0]))
+            mask = np.array([[x] for x in mask])
+            try:
+                np.put_along_axis(colors, mask, PINK, axis=0)
+            except:
+                # print("No foreground labels in original context.")
+                pass
+            mesh2obj_file_colors(os.path.expanduser(
+                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
+                    path) + f'_run5_original_nodes.ply'),
+                [np.array([]), hc.nodes, np.array([])], colors)
+
+            # prediction
+            colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
+            mask = np.where(pred_node_labels == 1)[0].astype(np.int64)
+            mask = np.array([[x] for x in mask])
+            try:
+                np.put_along_axis(colors, mask, PINK, axis=0)
+            except:
+                # print("No foreground labels in prediction.")
+                pass
+            mesh2obj_file_colors(os.path.expanduser(
+                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
+                    path) + f'_run5_prediction_nodes.ply'),
+                [np.array([]), hc.nodes, np.array([])], colors)
+    print(res_dc)
+    queue.put(res_dc)
 
 def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: Callable):
     # choose base nodes with context overlap
     base_node_dst = ctx_size / ctx_dst_fac
+    # print(f'dist {base_node_dst}')
     # print(f'base node dist {base_node_dst}')
     # select source nodes for context extraction
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-
-    # TODO ANSCHAUEN
     pcd, idcs = pcd.voxel_down_sample_and_trace(base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
-
+    # print(f'idcs {idcs}')
     source_nodes = np.max(idcs, axis=1)
     bs = 1
     n_batches = int(np.ceil(len(source_nodes) / bs))
@@ -212,28 +302,30 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
         source_nodes = np.concatenate([np.random.choice(source_nodes, bs - len(source_nodes) % bs),
                                        source_nodes])
     node_arrs = context_splitting_kdt(hc, source_nodes, ctx_size)
-    # print(f'Original {len(hc.nodes)}, extracted {len(node_arrs)}')
-    # print(f'Node arrs {len(node_arrs)}')
-    # print(f'HC vert num {len(hc.vertices)}')
+    # print(f'source nodes len {len(source_nodes)} and node arrs len {len(node_arrs)}')
+    # print(f'src_nodes: {source_nodes}')
+    # print(f'Extracted number of contexts {len(node_arrs)}')
+
     # collect contexts into batches (each batch contains every n_batches contexts
     # (e.g. every 4th if n_batches = 4)
     for ii in range(n_batches):
         # initialize list of data
         batch_v = np.zeros((bs, npoints, 3))
         batch_f = np.zeros((bs, npoints), dtype=bool)
+        batch_sn = np.ones((bs, 1))*(-1)
         # used later for removing cell organelles
         batch_l = np.zeros((bs, npoints, 1), dtype=bool)
         idcs_list = []
         arr_list = {'verts': batch_v,
                     'feats': batch_f,
                     'labels': batch_l,
+                    'source_node': batch_sn,
                     'global_vert_indices': idcs_list}
         # arr_list.append((batch, batch_f, batch_mask, idcs_list))
         # generate contexts
         cnt = 0
         for node_arr in node_arrs[ii::n_batches]:
             hc_sub, idcs_sub = extract_subset(hc, node_arr)
-            # replace subsets with zero vertices by another subset (this is probably very rare)
             ix = 0
             while len(hc_sub.vertices) == 0:
                 if ix >= len(hc.nodes):
@@ -261,10 +353,10 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
             arr_list['feats'][cnt] = hc_sample.features
             # masks get used later when mapping predictions back onto the cell surface during postprocessing
             arr_list['labels'][cnt] = hc_sample.labels
+            arr_list['source_node'][cnt] = source_nodes[ii]
             arr_list['global_vert_indices'].append(global_idcs)
             cnt += 1
-        # batch_progress = ii + 1
-        yield (arr_list['feats'], arr_list['verts'], arr_list['labels']), arr_list['global_vert_indices']
+        yield (arr_list['feats'], arr_list['verts'], arr_list['labels']), arr_list['source_node'], arr_list['global_vert_indices']
 
 
 # cs_merge_radii = [100, 500, 1000, 2000, 5000]
@@ -272,14 +364,15 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
 radii = [2000]
 radius = 2000
 # colors for labels
-RED = np.array([255., 125., 125., 255.])
+PINK = np.array([10., 255., 10., 255.])
+BLUE = np.array([255., 125., 125., 255.])
 GREY = np.array([180., 180., 180., 255.])
-nproc = 1
+nproc = 5
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Prediction pipeline for merge error detection')
     parser.add_argument('--r', type=int, help='Radius of cs merger',
-                        default=100)
+                        default=2000)
     args = parser.parse_args()
     radius = args.r
 
@@ -300,10 +393,8 @@ if __name__ == '__main__':
     lcp_flag = True
 
     torch.multiprocessing.set_start_method('spawn')
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-    else:
-        device = torch.device('cpu')
+    device = torch.device('cuda')
+
 
     for radius in radii:
         # test set
@@ -325,7 +416,7 @@ if __name__ == '__main__':
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture_2048_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture_large_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
-            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/lcp_r2000_ConvPoint_SearchQuantized_architecture2048_Adam_StepLR_weights1,2_CrossEntropy/state_dict.pth'
+            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/lcp_r2000_ConvPoint_SearchQuantized_archLrg_run6_Adam_StepLR_weights1,2_CrossEntropy/state_dict.pth'
         pred_files = glob.glob(folder)
         # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',
         #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
@@ -386,17 +477,6 @@ if __name__ == '__main__':
                 conv = dict(layer='ConvPoint', kernel_separation=False)
                 # conv = dict(layer='FKAConv', kernel_separation=False)
                 act = torch.nn.ReLU
-                architecture_1024 = [dict(ic=-1, oc=1, ks=16, nn=16, np=1024),
-                                     dict(ic=1, oc=1, ks=16, nn=16, np=512),
-                                     dict(ic=1, oc=1, ks=16, nn=16, np=256),
-                                     dict(ic=1, oc=2, ks=16, nn=16, np=64),
-                                     dict(ic=2, oc=2, ks=16, nn=16, np=16),
-                                     dict(ic=2, oc=2, ks=16, nn=16, np=8),
-                                     dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-                                     dict(ic=4, oc=2, ks=16, nn=4, np='d'),
-                                     dict(ic=4, oc=1, ks=16, nn=4, np='d'),
-                                     dict(ic=2, oc=1, ks=16, nn=8, np='d'),
-                                     dict(ic=2, oc=1, ks=16, nn=8, np='d')]
                 architecture_2048 = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
                                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
                                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 512},
@@ -424,7 +504,7 @@ if __name__ == '__main__':
                                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
                 model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
-                                     architecture=architecture_2048, activation=act, norm='gn').to(device)
+                                     architecture=architecture_large, activation=act, norm='gn').to(device)
             else:
                 model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
                                  track_running_stats=track_running_stats, act=act, use_bias=use_bias).to(device)
@@ -439,39 +519,45 @@ if __name__ == '__main__':
                 'recall': [],
                 'accuracy': [],
                 'fscore': [],
-                'pr_curve': []
             }
 
-            process_data_slice(np.s_[0:len(pred_files)], pred_files, model, ctx_size, ctx_dst_fac, npoints,
-                               pred_transform,
-                               device, lcp_flag, result_dc)
+            # process_data_slice(np.s_[0:20], pred_files, model, ctx_size, ctx_dst_fac, npoints,
+            #                    pred_transform,
+            #                    device, lcp_flag)
 
             # split tasks for processes
-            # proc_slices = []
-            # offset = len(pred_files) // nproc
-            # for i in range(nproc):
-            #     slice_start = offset * i
-            #     slice_end = offset * i if i < nproc - 1 else len(pred_files)
-            #     proc_slices.append(np.s_[slice_start:slice_end])
-            #
-            # result_dict_lock = mp.Lock()
-            #
-            # params = [(slice, pred_files, result_dict_lock, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
-            #            device, lcp_flag, result_dc) for slice in proc_slices]
-            #
-            # running_tasks = [mp.Process(target=process_data_slice, args=param) for param in params]
-            # for running_task in running_tasks:
-            #     running_task.start()
-            # for running_task in running_tasks:
-            #     running_task.join()
+            proc_slices = []
+            # TODO change here
+            offset = 10 // nproc
+            for i in range(nproc):
+                slice_start = offset * i
+                # slice_end = offset * i if i < nproc - 1 else len(pred_files)
+                slice_end = offset * (i+1) if i < nproc - 1 else 10
+                proc_slices.append(np.s_[slice_start:slice_end])
 
+            print(f'slices {proc_slices}')
+            queue = mp.Queue()
+            jobs = []
+            running_tasks = []
+            params = [(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
+                       device, lcp_flag, queue) for slice in proc_slices]
+
+            running_tasks = [mp.Process(target=process_data_slice, args=param) for param in params]
+            for running_task in running_tasks:
+                running_task.start()
+            for running_task in running_tasks:
+                running_task.join()
             print(f'Processing finished')
+
+            # get results
+            results = [queue.get() for task in running_tasks]
+            print(results)
+            result_dc = merge_multiple_dicts(results)
 
             precisions = result_dc['precision']
             recalls = result_dc['recall']
             accuracies = result_dc['accuracy']
             fscores = result_dc['fscore']
-            pr_curve = result_dc['pr_curve']
             print(f'prec {precisions}')
             print(f'recalls {recalls}')
             print(f'accur {accuracies}')
@@ -510,5 +596,6 @@ if __name__ == '__main__':
             # plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
 
             df = pd.DataFrame.from_dict(result, orient='index')
-            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch_2048/{model_name}.csv'
+            # csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/{model_name}.csv'
+            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/{model_name}.csv'
             df.to_csv(csv_path)
