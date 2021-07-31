@@ -111,7 +111,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
             pred = np.argmax(pred, 1)
 
             # place the external context of the prediction on null, so that they focus only on the middle
-            pred[mask[0,:]] = int(0)
+            pred= pred[mask[0,:]]
 
             predictions.append(pred)
             pred_indices.append(vert_indices[0])
@@ -125,18 +125,6 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         pred_labels = np.ones((len(hc.vertices), 1)) * (3)
         # pred labels will have the vertices labels of values [0,1,3]
         evaluate_preds(pred_indices, predictions, pred_labels)
-
-        #TODO move this per context prediction
-
-        # #contain only middle focused predictions
-        # vert_tree = cKDTree(data=hc.vertices, )
-        # inner_hcvert_idcs = vert_tree.query_ball_point(hc.nodes[source_nodes], r=20000)
-        # inner_hcvert_idcs = np.unique(np.concatenate(inner_hcvert_idcs))
-        # # print(f'len total innververts {len(inner_hcvert_idcs)}')
-        # # print(f'innver verts equals all idcs {inner_hcvert_idcs == np.arange(len(hc.vertices))}')
-        # mask = np.ones(shape=(len(pred_labels),), dtype=bool)
-        # mask[inner_hcvert_idcs] = bool(0)
-        # pred_labels[mask] = int(0)
 
         if len(np.where(pred_labels==3)[0]) != 0:
             # print(f'Found {os.path.basename(path)} with {len(np.where(pred_labels==3)[0])} unpredicted (3) labels')
@@ -166,7 +154,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         # labeled_tree = cKDTree(data=labeled_vertices, )
         # vert_idcs = np.where(pred_labels == 3)[0]
         # unlabeled_verts = hc.vertices[vert_idcs]
-        # labeled_neighbors = labeled_tree.query_ball_point(x=unlabeled_verts, r=1000)
+        # labeled_neighbors = labeled_tree.query_ball_point(x=unlabeled_verts, r=500)
         # # print(f'neighbors {labeled_neighbors}')
         # for i, cluster in enumerate(labeled_neighbors):
         #     if len(cluster) == 0:
@@ -264,7 +252,8 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
                 # print("No foreground labels in original context.")
                 pass
             mesh2obj_file_colors(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/testSet/' + os.path.basename(
+                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/testSet/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch2048/meshes/' + os.path.basename(
                 # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
                     path) + f'_run5_original_nodes.ply'),
                 [np.array([]), hc.nodes, np.array([])], colors)
@@ -279,7 +268,8 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
                 # print("No foreground labels in prediction.")
                 pass
             mesh2obj_file_colors(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/testSet/' + os.path.basename(
+                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/testSet/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch2048/meshes/' + os.path.basename(
                 # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
                     path) + f'_run5_prediction_nodes.ply'),
                 [np.array([]), hc.nodes, np.array([])], colors)
@@ -350,8 +340,11 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
             inner_ids = tree.query_ball_point(hc.nodes[source_nodes[ii]], r=15000)
             mask = np.ones(shape=(len(hc_sample.vertices),), dtype=bool)
             mask[inner_ids] = bool(0)
+            inner_mask = np.zeros(shape=(len(hc_sample.vertices),), dtype=bool)
+            inner_mask[inner_ids] = bool(1)
             # get vertex indices respective to total hc
             global_idcs = idcs_sub[idcs_sample.astype(int)]
+            global_idcs = global_idcs[inner_mask]
             # prepare masks for filtering sv vertices
             # bounds = hc.obj_bounds['sv']
             # sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
@@ -362,7 +355,8 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
             arr_list['feats'][cnt] = hc_sample.features
             # masks get used later when mapping predictions back onto the cell surface during postprocessing
             arr_list['labels'][cnt] = hc_sample.labels
-            arr_list['margin_mask'][cnt] = mask
+            # arr_list['margin_mask'][cnt] = mask
+            arr_list['margin_mask'][cnt] = inner_mask
             arr_list['source_node'][cnt] = source_nodes[ii]
             arr_list['global_vert_indices'].append(global_idcs)
             cnt += 1
@@ -377,7 +371,7 @@ radius = 2000
 PINK = np.array([10., 255., 10., 255.])
 BLUE = np.array([255., 125., 125., 255.])
 GREY = np.array([180., 180., 180., 255.])
-nproc = 5
+nproc = 50
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Prediction pipeline for merge error detection')
@@ -403,7 +397,10 @@ if __name__ == '__main__':
     lcp_flag = True
 
     torch.multiprocessing.set_start_method('spawn')
-    device = torch.device('cuda')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
 
 
     for radius in radii:
@@ -413,21 +410,8 @@ if __name__ == '__main__':
         # folder = f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{radius}/Hybridcloud/*.pkl'
         folder = f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{radius}/*.pkl'
         if lcp_flag:
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_eval0_ConvPoint_SearchQuantized/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_Adam/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_Adam_weights1,4/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/mergeError_pts_model_lcp_radius1000_ConvPoint_SearchQuantized_Adam_ExponentialLR_weights1,2/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_SGD_CyclicLR/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_SGD_CyclicLR_weights1,2/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_eval0_FKAConv_SearchQuantized/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_5samples/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_FocalLoss_20samples/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_bn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_nonorm_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture1024_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture_2048_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
-            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/test/see/lcp_r2000_ConvPoint_SearchQuantized_architecture_large_augmentations_gn_Adam_StepLR_weights1,2_CrossEntropy_1sample/state_dict.pth'
-            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/lcp_r2000_ConvPoint_SearchQuantized_archLrg_run6_Adam_StepLR_weights1,2_CrossEntropy/state_dict.pth'
+            save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/lcp_r2000_ConvPoint_SearchQuantized_arch2048_run5_Adam_StepLR_weights1,2_CrossEntropy/state_dict.pth'
+            # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/see/lcp_r2000_ConvPoint_SearchQuantized_archLrg_run6_Adam_StepLR_weights1,2_CrossEntropy/state_dict.pth'
         pred_files = glob.glob(folder)
         # pred_files = ['/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_3807046_15922193.pkl',
         #             '/wholebrain/scratch/amancu/mergeError/ptclouds/R2000/Hybridcloud/sso_44948783_70288384.pkl',
@@ -515,7 +499,7 @@ if __name__ == '__main__':
                                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
                 model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
-                                     architecture=architecture_large, activation=act, norm='gn').to(device)
+                                     architecture=architecture_2048, activation=act, norm='gn').to(device)
             else:
                 model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
                                  track_running_stats=track_running_stats, act=act, use_bias=use_bias).to(device)
@@ -532,19 +516,14 @@ if __name__ == '__main__':
                 'fscore': [],
             }
 
-            # process_data_slice(np.s_[0:20], pred_files, model, ctx_size, ctx_dst_fac, npoints,
-            #                    pred_transform,
-            #                    device, lcp_flag)
-
             # split tasks for processes
             proc_slices = []
-            # TODO change here
             offset = len(pred_files) // nproc
-            # offset = 1000 // nproc
+            # offset = 10 // nproc
             for i in range(nproc):
                 slice_start = offset * i
                 slice_end = offset * (i+1) if i < nproc - 1 else len(pred_files)
-                # slice_end = offset * (i+1) if i < nproc - 1 else 1000
+                # slice_end = offset * (i+1) if i < nproc - 1 else 10
                 proc_slices.append(np.s_[slice_start:slice_end])
 
             print(f'slices {proc_slices}')
@@ -608,6 +587,7 @@ if __name__ == '__main__':
             # plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
 
             df = pd.DataFrame.from_dict(result, orient='index')
-            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/{model_name}_testSet_context_focus.csv'
+            # csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/{model_name}_testSet_context_focus.csv'
+            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/arch2048/{model_name}_testSet_context_focus.csv'
             # csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/{model_name}.csv'
             df.to_csv(csv_path)
