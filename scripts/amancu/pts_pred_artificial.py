@@ -48,6 +48,7 @@ def merge_multiple_dicts(list_of_dicts):
     for d in list_of_dicts:
         merge_dict(res,d)
         print(res)
+        print(f'in merge')
     return res
 
 
@@ -77,7 +78,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         vert_tree = cKDTree(data=hc.vertices,)
         ii = 0
         source_nodes=[]
-        for (sample_feats, sample_pts, sample_labels), source_node, vert_indices in extract_subhcs(hc, ctx_size, ctx_dst_fac,
+        for (sample_feats, sample_pts, sample_labels), source_node, mask, vert_indices in extract_subhcs(hc, ctx_size, ctx_dst_fac,
                                                                                       npoints, pred_transform):
 
             sample_feats = sample_feats[:, :, None]
@@ -109,14 +110,8 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
             # prepare predictions
             pred = np.argmax(pred, 1)
 
-            # # place the external context of the prediction on null, so that they focus only on the middle
-            # vert_tree = cKDTree(data=sample_pts[0,:,:], )
-            # # print(f'src nodes: {source_node_idcs}')
-            # inner_hcvert_idcs = vert_tree.query_ball_point(hc.nodes[source_node], r=10000)
-            # # print(f'innver verts equals all idcs {inner_vert_idcs == np.arange(len(hc.vertices))}')
-            # mask = np.ones(shape=(len(pred),), dtype=bool)
-            # mask[inner_hcvert_idcs] = bool(0)
-            # pred[mask] = int(0)
+            # place the external context of the prediction on null, so that they focus only on the middle
+            pred[mask[0,:]] = int(0)
 
             predictions.append(pred)
             pred_indices.append(vert_indices[0])
@@ -131,14 +126,21 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         # pred labels will have the vertices labels of values [0,1,3]
         evaluate_preds(pred_indices, predictions, pred_labels)
 
-        vert_tree = cKDTree(data=hc.vertices, )
-        inner_hcvert_idcs = vert_tree.query_ball_point(hc.nodes[source_nodes], r=10000)
-        inner_hcvert_idcs = np.concatenate(inner_hcvert_idcs)
-        print(f'innver verts equals all idcs {inner_hcvert_idcs == np.arange(len(hc.vertices))}')
-        mask = np.ones(shape=(len(pred_labels),), dtype=bool)
-        mask[inner_hcvert_idcs] = bool(0)
-        pred_labels[mask] = int(0)
+        #TODO move this per context prediction
 
+        # #contain only middle focused predictions
+        # vert_tree = cKDTree(data=hc.vertices, )
+        # inner_hcvert_idcs = vert_tree.query_ball_point(hc.nodes[source_nodes], r=20000)
+        # inner_hcvert_idcs = np.unique(np.concatenate(inner_hcvert_idcs))
+        # # print(f'len total innververts {len(inner_hcvert_idcs)}')
+        # # print(f'innver verts equals all idcs {inner_hcvert_idcs == np.arange(len(hc.vertices))}')
+        # mask = np.ones(shape=(len(pred_labels),), dtype=bool)
+        # mask[inner_hcvert_idcs] = bool(0)
+        # pred_labels[mask] = int(0)
+
+        if len(np.where(pred_labels==3)[0]) != 0:
+            # print(f'Found {os.path.basename(path)} with {len(np.where(pred_labels==3)[0])} unpredicted (3) labels')
+            pred_labels[np.where(pred_labels==3)[0]] = int(0)
 
         # # render the contexts
         # colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
@@ -216,6 +218,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
         res_dc['accuracy'].append(accuracy)
         res_dc['fscore'].append(f1score)
 
+        # uncomment for vertices render
         # if ran.random() > 0.05:
         #     print(f'For {os.path.basename(path)} \n Precision: {precision} \n Recall: {recall} \n Accuracy: {accuracy} \n Fscore: {f1score}')
         #     # original nodes
@@ -248,7 +251,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
 
 
         # random node predictions to inspect in meshlab
-        if ran.random() > 0.9:
+        if ran.random() > 0.95:
             print(f'For {os.path.basename(path)} \n Precision: {precision} \n Recall: {recall} \n Accuracy: {accuracy} \n Fscore: {f1score}')
             # original nodes
             colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
@@ -261,8 +264,8 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
                 # print("No foreground labels in original context.")
                 pass
             mesh2obj_file_colors(os.path.expanduser(
-                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/' + os.path.basename(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/testSet/' + os.path.basename(
+                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
                     path) + f'_run5_original_nodes.ply'),
                 [np.array([]), hc.nodes, np.array([])], colors)
 
@@ -276,8 +279,8 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
                 # print("No foreground labels in prediction.")
                 pass
             mesh2obj_file_colors(os.path.expanduser(
-                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/' + os.path.basename(
-                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/testSet/' + os.path.basename(
+                # f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/' + os.path.basename(
                     path) + f'_run5_prediction_nodes.ply'),
                 [np.array([]), hc.nodes, np.array([])], colors)
     print(res_dc)
@@ -312,13 +315,15 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
         # initialize list of data
         batch_v = np.zeros((bs, npoints, 3))
         batch_f = np.zeros((bs, npoints), dtype=bool)
-        batch_sn = np.ones((bs, 1))*(-1)
+        mask = np.zeros((bs, npoints), dtype=bool)
+        batch_sn = np.zeros((bs,1))
         # used later for removing cell organelles
         batch_l = np.zeros((bs, npoints, 1), dtype=bool)
         idcs_list = []
         arr_list = {'verts': batch_v,
                     'feats': batch_f,
                     'labels': batch_l,
+                    'margin_mask': mask,
                     'source_node': batch_sn,
                     'global_vert_indices': idcs_list}
         # arr_list.append((batch, batch_f, batch_mask, idcs_list))
@@ -341,6 +346,10 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
                 ix += 1
             # fill batches with sampled and transformed subsets
             hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints)
+            tree = cKDTree(data=hc_sample.vertices)
+            inner_ids = tree.query_ball_point(hc.nodes[source_nodes[ii]], r=15000)
+            mask = np.ones(shape=(len(hc_sample.vertices),), dtype=bool)
+            mask[inner_ids] = bool(0)
             # get vertex indices respective to total hc
             global_idcs = idcs_sub[idcs_sample.astype(int)]
             # prepare masks for filtering sv vertices
@@ -353,10 +362,11 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
             arr_list['feats'][cnt] = hc_sample.features
             # masks get used later when mapping predictions back onto the cell surface during postprocessing
             arr_list['labels'][cnt] = hc_sample.labels
+            arr_list['margin_mask'][cnt] = mask
             arr_list['source_node'][cnt] = source_nodes[ii]
             arr_list['global_vert_indices'].append(global_idcs)
             cnt += 1
-        yield (arr_list['feats'], arr_list['verts'], arr_list['labels']), arr_list['source_node'], arr_list['global_vert_indices']
+        yield (arr_list['feats'], arr_list['verts'], arr_list['labels']), arr_list['source_node'], arr_list['margin_mask'], arr_list['global_vert_indices']
 
 
 # cs_merge_radii = [100, 500, 1000, 2000, 5000]
@@ -400,7 +410,8 @@ if __name__ == '__main__':
         # test set
         # folder = f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{radius}/*.pkl'
         # training set
-        folder = f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{radius}/Hybridcloud/*.pkl'
+        # folder = f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{radius}/Hybridcloud/*.pkl'
+        folder = f'/wholebrain/scratch/amancu/mergeError/test_dataset/R{radius}/*.pkl'
         if lcp_flag:
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_eval0_ConvPoint_SearchQuantized/state_dict.pth'
             # save_path = f'/wholebrain/scratch/amancu/mergeError/trainings/lcp/mergeError_pts_model_lcp_radius{radius}_ConvPoint_SearchQuantized_Adam/state_dict.pth'
@@ -528,11 +539,12 @@ if __name__ == '__main__':
             # split tasks for processes
             proc_slices = []
             # TODO change here
-            offset = 10 // nproc
+            offset = len(pred_files) // nproc
+            # offset = 1000 // nproc
             for i in range(nproc):
                 slice_start = offset * i
-                # slice_end = offset * i if i < nproc - 1 else len(pred_files)
-                slice_end = offset * (i+1) if i < nproc - 1 else 10
+                slice_end = offset * (i+1) if i < nproc - 1 else len(pred_files)
+                # slice_end = offset * (i+1) if i < nproc - 1 else 1000
                 proc_slices.append(np.s_[slice_start:slice_end])
 
             print(f'slices {proc_slices}')
@@ -596,6 +608,6 @@ if __name__ == '__main__':
             # plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
 
             df = pd.DataFrame.from_dict(result, orient='index')
-            # csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/{model_name}.csv'
-            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/{model_name}.csv'
+            csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/archLrg/{model_name}_testSet_context_focus.csv'
+            # csv_path = f'/wholebrain/scratch/amancu/mergeError/preds/lcp/ConvPoint/2000/test/parallel/{model_name}.csv'
             df.to_csv(csv_path)
