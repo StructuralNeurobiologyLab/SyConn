@@ -10,6 +10,8 @@ import shutil
 import sys
 import argparse
 import numpy as np
+import yaml
+from pathlib import Path
 
 from syconn import global_params
 from syconn.handler.config import generate_default_conf, initialize_logging
@@ -34,6 +36,8 @@ if __name__ == '__main__':
                         help='Which steps to skip: comma-separated list of ints (0-13) or "none"')
     parser.add_argument('--overwrite', dest='overwrite', action='store_true',
                         help='Overwrite generated data.')
+    parser.add_argument('--custom_params', type=str, default=None,
+                        help='YAML file with custom config for this run.')
     parser.set_defaults(overwrite=False)
     args = parser.parse_args()
     example_cube_id = int(args.example_cube)
@@ -78,36 +82,17 @@ if __name__ == '__main__':
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
     prior_astrocyte_removal = False
-    key_val_pairs_conf = [
-        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
-        ('use_point_models', False),
-        ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
-        ('ncores_per_node', 20),
-        ('mem_per_node', 250000),
-        ('ngpus_per_node', 2),
-        ('nnodes_total', 4),
-        ('generate_cs_ssv', False),  # cs_ssv: contact site objects between cells
-        ('skeleton', {'use_kimimaro': True}),
-        ('log_level', log_level),
-        # these will be created during synapse type prediction (
-        # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
-        # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
-        #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
-        ('cell_objects',
-         {
-          # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
-          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
-                                      'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing'],
-                               'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
-          }
-         ),
-        ('meshes', {'meshing_props_points':
-            {'cs_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20),
-             'syn_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20)}}
-         )
-    ]
+
+    if args.custom_params is None:
+        parms = Path(os.path.realpath(__file__)).parents[0] / Path('default_params.yml')
+    else:
+        parms = args.custom_params
+
+    with open(parms, 'r') as fp:
+        print(f'Loading yml from {parms}')
+        y = yaml.safe_load(fp)
+        key_val_pairs_conf = [(xx, yy) for xx, yy in y.items()]
+
     if example_cube_id == 1:
         chunk_size = (256, 256, 256)
     elif example_cube_id == 2:

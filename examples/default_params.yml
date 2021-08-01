@@ -1,0 +1,38 @@
+batchjob_max_time: 4-0
+cell_objects:
+  extract_morph_op:
+    mi:
+    - binary_opening
+    - binary_closing
+    - binary_erosion
+    - binary_erosion
+    - binary_erosion
+    sj:
+    - binary_opening
+    - binary_closing
+    vc:
+    - binary_opening
+    - binary_closing
+    - binary_erosion
+generate_cs_ssv: false
+glia:
+  prior_astrocyte_removal: false
+log_level: INFO
+mem_per_node: 255000
+meshes:
+  meshing_props_points:
+    cs_ssv:
+      depth: 11
+      vertex_size: 20
+      voxel_size_simplify: 20
+    syn_ssv:
+      depth: 11
+      vertex_size: 20
+      voxel_size_simplify: 20
+ncores_per_node: 20
+ngpus_per_node: 2
+nnodes_total: 4
+pyopengl_platform: egl
+skeleton:
+  use_kimimaro: true
+use_point_models: false
