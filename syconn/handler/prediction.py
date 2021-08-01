@@ -678,7 +678,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
     cd = ChunkDataset()
     cd.initialize(kd, cube_of_interest[1], chunk_size, target_path + '/cd_tmp/',
-                  box_coords=cube_of_interest[0], list_of_coords=[],
+                  box_coords=cube_of_interest[0],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
     # init target KnossosDatasets
@@ -756,7 +756,7 @@ def dense_predictor(args):
     # init ChunkDataset:
     cd = ChunkDataset()
     cd.initialize(kd, cube_of_interest[1], chunk_size, target_p + '/cd_tmp/',
-                  box_coords=cube_of_interest[0], list_of_coords=[],
+                  box_coords=cube_of_interest[0],
                   fit_box_size=True, overlap=overlap_shape)
 
     # init Target KnossosDataset

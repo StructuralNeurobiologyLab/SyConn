@@ -116,8 +116,7 @@ def generate_subcell_kd_from_proba(
     # TODO: possible to restrict ChunkDataset here already to report correct number of processed chunks? Check
     #  coordinate framework compatibility downstream in `from_probabilities_to_kd`
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True,
-                  list_of_coords=[])
+                  box_coords=[0, 0, 0], fit_box_size=True)
     log.info('Started object extraction of cellular organelles "{}" from '
              '{} chunks.'.format(", ".join(subcell_names), len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co)) for co in subcell_names}

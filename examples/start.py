@@ -232,7 +232,8 @@ if __name__ == '__main__':
         log.info('Step 2/12 - Creating SegmentationDatasets (incl. SV meshes)')
         ftimer.start('SD generation')
         exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                        n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite)
+                                        n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite,
+                                        cube_of_interest_bb=None)
         exec_init.run_create_rag()
         ftimer.stop()
 
@@ -259,13 +260,14 @@ if __name__ == '__main__':
     if 'skeleton_generation' in todo:
         log.info('Step 5/12 - Skeleton generation')
         ftimer.start('Skeleton generation')
-        exec_skeleton.run_skeleton_generation()
+        exec_skeleton.run_skeleton_generation(cube_of_interest_bb=None)
         ftimer.stop()
 
     if 'synapse_detection' in todo:
         log.info('Step 6/12 - Synapse detection')
         ftimer.start('Synapse detection')
-        exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
+        exec_syns.run_syn_generation(
+            chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite, cube_of_interest_bb=None)
         ftimer.stop()
 
     if 'neuron_rendering' in todo:
