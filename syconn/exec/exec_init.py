@@ -343,6 +343,14 @@ def run_create_rag(graph_node_dtype=None):
     for ix in tqdm.tqdm(list(G.nodes()), total=before_cnt, desc='CC size filter'):
         if ccsize_dict[ix] <= global_params.config['min_cc_size_ssv']:
             G.remove_node(ix)
+            continue
+        try:
+            sd.get_segmentation_object(ix)
+        except KeyError:
+            # This can occur if some IDs in the connected component are not present in the dataset, despite the
+            # component having a large enough size due to the IDs that are contained. This can happen when operating
+            # on some restricted region of interest without having changed the corresponding merge graph.
+            G.remove_node(ix)
     # TODO: check if this loop (despite cache_properties=['size'], see above) is limiting speed
     total_size = 0
     for n in tqdm.tqdm(G.nodes(), total=G.number_of_nodes(), desc='Total size'):

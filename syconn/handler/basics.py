@@ -812,7 +812,7 @@ def cset_cube_of_interest_parms(
         bbox = [np.zeros(3, dtype=np.int32), kd.boundary]
 
     if bbox is not None and mask_fname is None and mask_mag is None:
-        size = bbox[1] - bbox[0] + 1
+        size = bbox[1] - bbox[0]
         offset = bbox[0]
         mask_fname = None
         mask_mag = None
