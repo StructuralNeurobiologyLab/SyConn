@@ -238,10 +238,11 @@ def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = F
         # if ID is not in bbs, it was skipped due to low voxel count
         curr_bbs = [bbs[n] for n in cc if n in bbs]
         if len(curr_bbs) == 0:
-            raise ValueError(f'Could not find a single bounding box for connected component with IDs: {cc}.')
-            # log_proc.warn(f'Could not find a single bounding box for connected component with IDs: {cc}. '
-            #               f'Setting size to zero')
-            # cc_size = 0
+            #raise ValueError(f'Could not find a single bounding box for connected component with IDs: {cc}.')
+            # todo what is the point of warning here? This is a legitimate case when working on restricted bboxes.
+            #log_proc.warn(f'Could not find a single bounding box for connected component with IDs: {cc}. '
+            #              f'Setting size to zero')
+            cc_size = 0
         else:
             curr_bbs = np.concatenate(curr_bbs)
             cc_size = np.linalg.norm(np.max(curr_bbs, axis=0) -
