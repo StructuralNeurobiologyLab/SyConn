@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict, Set
+from typing import List, Tuple, Dict, Set, Callable
 
 import argparse
 
@@ -14,13 +14,13 @@ def load_svagg(in_fname: str) -> List[Set[np.uint64]]:
     return ccs
 
 
-def compare_svagg_lists(in_svagg_1: str, in_svagg_2: str, id_map: Dict[np.uint64, np.uint64]):
+def compare_svagg_lists(in_svagg_1: str, in_svagg_2: str, id_map: Callable[[np.uint64], np.uint64]):
     ccs_1 = load_svagg(in_svagg_1)
     ccs_2 = load_svagg(in_svagg_2)
 
     # Transforming the inner sets to strings of sorted IDs that are hashable, so that the lists can be converted to
     # sets and easily compared
-    ccs_1 = set(','.join([str(zz) for zz in sorted(id_map[yy] for yy in xx)]) for xx in ccs_1)
+    ccs_1 = set(','.join([str(zz) for zz in sorted(id_map(yy) for yy in xx)]) for xx in ccs_1)
     ccs_2 = set(','.join([str(zz) for zz in sorted(yy for yy in xx)]) for xx in ccs_2)
 
     print(f'{len(ccs_1)} components in run 1')
@@ -29,7 +29,7 @@ def compare_svagg_lists(in_svagg_1: str, in_svagg_2: str, id_map: Dict[np.uint64
     print(f'Components in run 2 but not in 1: {ccs_2 - ccs_1}')
 
 
-def compare_connectivities(in_csv_1: str, in_csv_2: str, id_map: Dict[np.uint64, np.uint64]):
+def compare_connectivities(in_csv_1: str, in_csv_2: str, id_map: Callable[[np.uint64], np.uint64]):
     """
     This connectivity comparison method relies on the id mapping preserving the ordering of IDs. This will be the case
     with the remapping methods in gen_64bit_test_data.py
@@ -46,7 +46,7 @@ def compare_connectivities(in_csv_1: str, in_csv_2: str, id_map: Dict[np.uint64,
     conn_2 = set(tuple(xx)
               for xx in np.loadtxt(in_csv_2)[:, 3:5].astype(np.uint64))  # type: Set[Tuple[np.uint64, np.uint64]]
 
-    conn_1_remap = set(tuple(id_map[yy] for yy in xx) for xx in conn_1)
+    conn_1_remap = set(tuple(id_map(yy) for yy in xx) for xx in conn_1)
 
     print(f'{len(conn_1_remap)} connections in run 1')
     print(f'{len(conn_2)} connections in run 2')
@@ -63,12 +63,22 @@ def main():
                         help='SyConn run directory 1')
     parser.add_argument('--run_dir_2', type=str, required=True,
                         help='SyConn run directory 2')
-    parser.add_argument('--id_map_pickle', type=str, required=True,
+    parser.add_argument('--id_map_pickle', type=str, required=False,
                         help='Path to pickle file mapping IDs from run 1 to run 2. Must preserve ordering.')
     args = parser.parse_args()
 
-    with open(args.id_map_pickle, 'rb') as fp:
-        id_map = pkl.load(fp)
+    if args.id_map_pickle is not None:
+        print(f'Loading mapping pickle from {args.id_map_pickle}')
+        with open(args.id_map_pickle, 'rb') as fp:
+            id_map_dict = pkl.load(fp)
+
+        def id_map(in_id):
+            return id_map_dict[in_id]
+    else:
+        print(f'No mapping pickle provided, assuming no ID translation required.')
+
+        def id_map(in_id):
+            return in_id
 
     compare_svagg_lists(
         f'{args.run_dir_1}/pruned_svagg_list.txt',

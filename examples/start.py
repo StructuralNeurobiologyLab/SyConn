@@ -83,9 +83,6 @@ if __name__ == '__main__':
     scale = np.array([10, 10, 20])
     prior_astrocyte_removal = False
 
-    cube_of_interest_bb = None
-    #cube_of_interest_bb = np.array([[0, 0, 256], [400, 400, 256+255]], dtype=np.int32)
-
     if args.custom_params is None:
         parms = Path(os.path.realpath(__file__)).parents[0] / Path('default_params.yml')
     else:
