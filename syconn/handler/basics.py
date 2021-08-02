@@ -17,7 +17,7 @@ import signal
 import tempfile
 import zipfile
 from collections import defaultdict
-from typing import List, Union
+from typing import List, Union, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -804,4 +804,25 @@ def str_delta_sec(seconds: int) -> str:
     str_rep += f'{s:02d}s'
     return str_rep
 
+
+def cset_cube_of_interest_parms(
+        kd, bbox: Optional[np.ndarray], mask_fname: Optional[str], mask_mag: Optional[int]) -> Tuple[
+    Optional[np.ndarray], Optional[np.ndarray], Optional[str], Optional[int]]:
+    if bbox is None and mask_fname is None and mask_mag is None:
+        bbox = [np.zeros(3, dtype=np.int32), kd.boundary]
+
+    if bbox is not None and mask_fname is None and mask_mag is None:
+        size = bbox[1] - bbox[0] + 1
+        offset = bbox[0]
+        mask_fname = None
+        mask_mag = None
+    elif bbox is None and mask_fname is not None and mask_mag is not None:
+        size = None
+        offset = None
+        mask_fname = mask_fname
+        mask_mag = mask_mag
+    else:
+        assert False, 'Incorrect cube of interest config should have been caught on config init.'
+
+    return offset, size, mask_fname, mask_mag
 

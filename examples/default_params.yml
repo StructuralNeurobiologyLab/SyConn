@@ -1,4 +1,7 @@
 batchjob_max_time: 4-0
+cube_of_interest_bb:
+cube_of_interest_mask_fname:
+cube_of_interest_mask_mag:
 cell_objects:
   extract_morph_op:
     mi:

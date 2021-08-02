@@ -284,7 +284,6 @@ def _cache_storage_paths(args) -> None:
 def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                               n_folders_fs: int = 1000, n_folders_fs_sc: int = 1000,
                               n_chunk_jobs: Optional[int] = None, n_cores: int = 1,
-                              cube_of_interest_bb: Optional[tuple] = None,
                               chunk_size: Optional[Union[tuple, np.ndarray]] = None,
                               log: Logger = None, overwrite=False):
     """Replaces `map_objects_to_sv` and parts of `from_ids_to_objects`.
@@ -303,7 +302,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         n_folders_fs_sc:
         n_chunk_jobs:
         n_cores:
-        cube_of_interest_bb:
         chunk_size:
         log:
         overwrite:
@@ -332,10 +330,12 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         n_chunk_jobs = global_params.config.ncore_total * 2
     if chunk_size is None:
         chunk_size = [512, 512, 512]
-    if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-    size = cube_of_interest_bb[1] - cube_of_interest_bb[0]
-    offset = cube_of_interest_bb[0]
+
+    offset, size, mask_fname, mask_mag = basics.cset_cube_of_interest_parms(
+            kd,
+            global_params.config.cube_of_interest_bb,
+            global_params.config.cube_of_interest_mask_fname,
+            global_params.config.cube_of_interest_mask_mag)
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, size, chunk_size, cd_dir,
@@ -528,7 +528,8 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
+        # todo need to use something else here if mem is a problem.
+        #n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=n_cores)
 

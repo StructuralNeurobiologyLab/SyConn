@@ -751,6 +751,23 @@ class DynConfig(Config):
         return bool(self['meshes']['use_new_meshing'])
 
     @property
+    def cube_of_interest_bb(self) -> Optional[np.ndarray]:
+        bbox = self['cube_of_interest_bb']
+
+        if bbox is not None:
+            bbox = np.array(bbox)
+
+        return bbox
+
+    @property
+    def cube_of_interest_mask_fname(self) -> Optional[str]:
+        return self['cube_of_interest_mask_fname']
+
+    @property
+    def cube_of_interest_mask_mag(self) -> Optional[int]:
+        return self['cube_of_interest_mask_mag']
+
+    @property
     def qsub_work_folder(self) -> str:
         """
         Directory where intermediate batchjob results are stored.
@@ -925,6 +942,25 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
         raise ValueError(f'Overwrite attempt of existing config file at '
                          f'"{default_conf.path_config}".')
+
+    good_cube_of_interest_configs = [
+        (0, 0, 0),
+        (1, 0, 0),
+        (0, 1, 1),
+    ]
+    cube_of_interest_settings = (
+        entries['cube_of_interest_bb'],
+        entries['cube_of_interest_mask_fname'],
+        entries['cube_of_interest_mask_mag'], )
+    fine = []
+    for cur_good_conf in good_cube_of_interest_configs:
+        fine.append(all(
+            [yy is None if xx == 0 else yy is not None for xx, yy in zip(cur_good_conf, cube_of_interest_settings)]))
+    if not any(fine):
+        raise Exception('Please set 1) none of the cube_of_interest_* parameters 2) cube_of_interest_bb only or '
+                        '3) both cube_of_interest_mask_fname and cube_of_interest_mask_mag, but not '
+                        'cube_of_interest_bb')
+
     default_conf.write_config(working_dir)
 
 

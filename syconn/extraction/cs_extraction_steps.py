@@ -44,8 +44,8 @@ from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
-                          max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None,
-                          n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
+                          max_n_jobs: Optional[int] = None, n_folders_fs: int = 1000,
+                          cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
                           transf_func_sj_seg: Optional[Callable] = None):
     """
     Extracts contact sites and their overlap with ``sj`` objects and stores them in a
@@ -107,8 +107,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         chunk_size: Sub-cube volume which is processed at a time.
         log: Logger.
         max_n_jobs: Maximum number of jobs, only used as a lower bound.
-        cube_of_interest_bb: Sub-volume of the data set which is processed.
-            Default: Entire data set.
         n_folders_fs: Number of folders used for organizing supervoxel data.
         cube_shape: Cube shape used within 'syn' and 'cs' KnossosDataset.
         overwrite: Overwrite existing cache.
@@ -122,8 +120,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         log_extraction.error(msg)
         raise ImportError(msg)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
-    if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
     if cube_shape is None:
         cube_shape = (256, 256, 256)
     if chunk_size is None:
@@ -132,8 +128,12 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         raise ValueError(f'Chunk size ({chunk_size}) must be divisible by cube shape ({cube_shape}).')
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
-    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
-    offset = cube_of_interest_bb[0]
+
+    offset, size, mask_fname, mask_mag = basics.cset_cube_of_interest_parms(
+        kd,
+        global_params.config.cube_of_interest_bb,
+        global_params.config.cube_of_interest_mask_fname,
+        global_params.config.cube_of_interest_mask_mag)
 
     if global_params.config.use_new_subfold:
         target_dir_func = rep_helper.subfold_from_ix_new

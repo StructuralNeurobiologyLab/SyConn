@@ -61,7 +61,6 @@ def generate_subcell_kd_from_proba(
         subcell_names: List[str], chunk_size: Optional[Union[list, tuple]] = None,
         transf_func_kd_overlay: Optional[Dict[str, Callable]] = None,
         load_cellorganelles_from_kd_overlaycubes: bool = False,
-        cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None,
         cube_shape: Optional[Tuple[int]] = None,
         log: Logger = None, overwrite=False, **kwargs):
     """
@@ -82,7 +81,6 @@ def generate_subcell_kd_from_proba(
         chunk_size:
         transf_func_kd_overlay:
         load_cellorganelles_from_kd_overlaycubes:
-        cube_of_interest_bb:
         cube_shape:
         log:
         overwrite:
@@ -98,10 +96,13 @@ def generate_subcell_kd_from_proba(
     if cube_shape is None:
         cube_shape = (256, 256, 256)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
-    if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
-    offset = cube_of_interest_bb[0]
+
+    offset, size, mask_fname, mask_mag = basics.cset_cube_of_interest_parms(
+        kd,
+        global_params.config.cube_of_interest_bb,
+        global_params.config.cube_of_interest_mask_fname,
+        global_params.config.cube_of_interest_mask_mag)
+
     cd_dir = "{}/chunkdatasets/{}/".format(global_params.config.working_dir, "_".join(subcell_names))
     if os.path.isdir(cd_dir):
         if not overwrite:

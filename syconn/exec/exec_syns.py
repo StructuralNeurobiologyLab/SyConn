@@ -62,7 +62,6 @@ def run_matrix_export():
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
-                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
                        overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
     """
     Run the synapse generation. Will create
@@ -82,8 +81,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         n_folders_fs: Number of folders used to create the folder structure in
             each :class:`~syconn.reps.segmentation.SegmentationDataset`.
         max_n_jobs: Number of parallel jobs.
-        cube_of_interest_bb: Defines the bounding box of the cube to process.
-            By default this is set to (np.zoers(3); kd.boundary).
         overwrite:
         transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
             sj foreground.
@@ -94,12 +91,8 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     kd_seg_path = global_params.config.kd_seg_path
     kd = kd_factory(kd_seg_path)
 
-    if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-
     # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-                              cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg, overwrite=overwrite)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 

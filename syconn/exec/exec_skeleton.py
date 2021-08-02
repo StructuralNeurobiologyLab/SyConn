@@ -22,24 +22,20 @@ from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
 from syconn.mp.mp_utils import start_multiprocess_imap
-from syconn.handler.basics import load_pkl2obj, write_obj2pkl
+from syconn.handler.basics import load_pkl2obj, write_obj2pkl, cset_cube_of_interest_parms
 
 
-def run_skeleton_generation(cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
-                            map_myelin: Optional[bool] = None, ncores_skelgen: int = 2):
+def run_skeleton_generation(map_myelin: Optional[bool] = None, ncores_skelgen: int = 2):
     """
 
     Args:
-        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
-            coord, upper coord)
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
         ncores_skelgen: Number of cores used during skeleton generation.
     """
     if global_params.config.use_kimimaro:
         # volume-based
-        run_kimimaro_skeletonization(cube_of_interest_bb=cube_of_interest_bb, map_myelin=map_myelin,
-                                     ncores_skelgen=ncores_skelgen)
+        run_kimimaro_skeletonization(map_myelin=map_myelin, ncores_skelgen=ncores_skelgen)
     else:
         # SSV-based skeletonization on mesh vertices, not centered. Does not require cube_of_interest_bb
         run_skeleton_generation_fallback(map_myelin=map_myelin)
@@ -130,8 +126,8 @@ def run_skeleton_axoness():
 
 
 def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None,
-                                 cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None,
-                                 ds: Optional[np.ndarray] = None, ncores_skelgen: int = 2):
+                                 cube_size: np.ndarray = None, ds: Optional[np.ndarray] = None,
+                                 ncores_skelgen: int = 2):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in
     proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
@@ -142,7 +138,6 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
         cube_size: Cube size used within each worker. This should be as big as possible to prevent
             un-centered skeletons in cell compartments with big diameters. In mag 1 voxels.
-        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
         ds: Downsampling.
         ncores_skelgen: Number of cores used during skeleton generation.
     """
@@ -167,18 +162,18 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     # TODO: cube_size should be voxel size dependent
     if cube_size is None:
         cube_size = np.array([1024, 1024, 512])  # this is in mag1
-    if cube_of_interest_bb is not None:
-        cube_of_interest_bb = np.array(cube_of_interest_bb, dtype=np.int32)
-    else:
-        cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int32)
 
-    dataset_size = cube_of_interest_bb[1] - cube_of_interest_bb[0]
+    offset, size, mask_fname, mask_mag = cset_cube_of_interest_parms(
+        kd,
+        global_params.config.cube_of_interest_bb,
+        global_params.config.cube_of_interest_mask_fname,
+        global_params.config.cube_of_interest_mask_mag)
 
-    if np.all(cube_size > dataset_size):
-        cube_size = dataset_size
+    if np.all(cube_size > size):
+        cube_size = size
 
-    cd.initialize(kd, dataset_size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
-                  box_coords=cube_of_interest_bb[0], fit_box_size=True)
+    cd.initialize(kd, size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
+                  box_coords=offset, fit_box_size=True)
     multi_params = [(cube_size, offs, ds) for offs in chunkify_successive(
         list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
 

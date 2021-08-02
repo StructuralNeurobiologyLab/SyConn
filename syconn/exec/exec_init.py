@@ -215,7 +215,6 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           max_n_jobs: Optional[int] = None,
                           load_cellorganelles_from_kd_overlaycubes: bool = False,
                           transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
-                          cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
                           overwrite=False):
     """
     Convert binary class segmentation mask of sub-cellular structure predictions into an isntance segmentation
@@ -253,8 +252,6 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         # loading cached data or adapt number of jobs/cache size dynamically,
         # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
-    if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
 
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['process_cell_organelles']))
@@ -263,8 +260,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         global_params.config['process_cell_organelles'],
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-        cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
-        overwrite=overwrite)
+        log=log, n_chunk_jobs=max_n_jobs, overwrite=overwrite)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -273,8 +269,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
-        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log,
-        overwrite=overwrite)
+        chunk_size=chunk_size, log=log, overwrite=overwrite)
     log.info('Finished extraction and mapping after {:.2f}s.'
              ''.format(time.time() - start))
 
