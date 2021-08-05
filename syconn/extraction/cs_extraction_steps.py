@@ -144,16 +144,12 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     cd_dir = global_params.config.temp_path + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
     cset = chunky.ChunkDataset()
-    cset.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                    box_coords=[0, 0, 0], fit_box_size=True)
+    cset.initialize(kd, size, chunk_size, cd_dir, box_coords=offset, fit_box_size=True)
 
     if log is None:
         log = log_extraction
-    if size is not None and offset is not None:
-        chunk_list, _ = \
-            calculate_chunk_numbers_for_box(cset, offset, size)
-    else:
-        chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+
+    chunk_list = [ii for ii in range(len(cset.chunk_dict))]
 
     all_times = []
     step_names = []

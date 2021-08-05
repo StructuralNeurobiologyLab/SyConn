@@ -1282,7 +1282,7 @@ def _extract_voxels_combined_thread_OLD(args):
 
 
 def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1,
-                               offset=None, size=None, stride=(4 * 128, 4 * 128, 4 * 128),
+                               stride=(4 * 128, 4 * 128, 4 * 128),
                                overwrite=False, as_raw=False, fast_downsampling=False,
                                n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None,
                                compresslevel=None):
@@ -1301,8 +1301,6 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
         name:
         hdf5names:
         n_cores:
-        offset:
-        size:
         stride:
         overwrite:
         as_raw:
@@ -1330,20 +1328,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
                       target_kds[hdf5name].boundary), \
             "KnossosDataset boundaries differ."
 
-    if offset is None or size is None:
-        offset = np.zeros(3, dtype=np.int32)
-        # use any KD to infere the boundary
-        size = np.copy(target_kds[hdf5names[0]].boundary)
-
-    multi_params = []
-    for coordx in range(offset[0], offset[0] + size[0],
-                        stride[0]):
-        for coordy in range(offset[1], offset[1] + size[1],
-                            stride[1]):
-            for coordz in range(offset[2], offset[2] + size[2],
-                                stride[2]):
-                coords = np.array([coordx, coordy, coordz])
-                multi_params.append(coords)
+    multi_params = [np.array(xx) for xx in cset.rechunked_space(stride)]
     multi_params = basics.chunkify(multi_params, n_max_job)
     multi_params = [[coords, stride, cset.path_head_folder, target_kd_paths, name,
                      hdf5names, as_raw, unified_labels, 1, orig_dtype,
@@ -1387,9 +1372,10 @@ def _export_cset_as_kds_thread(args):
             target_kd = kd_factory(path)
             target_kds[hdf5name] = target_kd
 
-    for dim in range(3):
-        if coords[dim] + size[dim] > cset.box_size[dim]:
-            size[dim] = cset.box_size[dim] - coords[dim]
+    # todo both wrong and unnecessary?
+    #for dim in range(3):
+    #    if coords[dim] + size[dim] > cset.box_size[dim]:
+    #        size[dim] = cset.box_size[dim] - coords[dim]
 
     data_dict = cset.from_chunky_to_matrix(size, coords, name, hdf5names,
                                            dtype=orig_dtype)

@@ -114,10 +114,8 @@ def generate_subcell_kd_from_proba(
         log.debug('Found existing ChunkDataset at {}. Removing it now.'.format(cd_dir))
         shutil.rmtree(cd_dir)
     cd = chunky.ChunkDataset()
-    # TODO: possible to restrict ChunkDataset here already to report correct number of processed chunks? Check
-    #  coordinate framework compatibility downstream in `from_probabilities_to_kd`
-    cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
+    cd.initialize(kd, size, chunk_size, cd_dir,
+                  box_coords=offset, fit_box_size=True)
     log.info('Started object extraction of cellular organelles "{}" from '
              '{} chunks.'.format(", ".join(subcell_names), len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co)) for co in subcell_names}
@@ -147,7 +145,7 @@ def generate_subcell_kd_from_proba(
                              "_".join(subcell_names),
                              # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                              prob_kd_path_dict=prob_kd_path_dict, thresholds=prob_threshs,
-                             hdf5names=subcell_names, size=size, offset=offset,
+                             hdf5names=subcell_names,
                              load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
                              transf_func_kd_overlay=transf_func_kd_overlay, log=log, **kwargs)
     shutil.rmtree(cd_dir, ignore_errors=True)
@@ -162,7 +160,6 @@ def from_probabilities_to_kd(
         log: Optional[Logger] = None, overlap: str = "auto",
         sigmas: Optional[list] = None, thresholds: Optional[list] = None,
         debug: bool = False, swapdata: bool = False,
-        offset: Optional[np.ndarray] = None, size: Optional[np.ndarray] = None,
         suffix: str = "", transform_func: Optional[Callable] = None,
         func_kwargs: Optional[dict] = None, n_cores: Optional[int] = None,
         overlap_thresh: Optional[int] = 0,
@@ -208,8 +205,6 @@ def from_probabilities_to_kd(
         debug: If True, multiprocessing steps only operate on one core using 'map'
           which allows for better error messages.
         swapdata: If true an x-z swap is applied to the data prior to processing.
-        offset: Offset of the processed volume.
-        size: Size of the processed volume of the dataset starting at `offset`.
         suffix: Suffix used for the intermediate processing steps.
         transform_func: [WIP] Segmentation method which is applied, currently
           only func:`~syconn.extraction.object_extraction_steps.
@@ -247,14 +242,10 @@ def from_probabilities_to_kd(
         for kd_key in kd_keys:
             assert kd_key in hdf5names
 
-    if size is not None and offset is not None:
-        chunk_list, chunk_translator = \
-            calculate_chunk_numbers_for_box(cset, offset, size)
-    else:
-        chunk_translator = {}
-        chunk_list = [ii for ii in range(len(cset.chunk_dict))]
-        for ii in range(len(cset.chunk_dict)):
-            chunk_translator[ii] = ii
+    chunk_translator = {}
+    chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+    for ii in range(len(cset.chunk_dict)):
+        chunk_translator[ii] = ii
 
     if thresholds is not None and thresholds[0] <= 1.:
         thresholds = np.array(thresholds)
@@ -365,8 +356,7 @@ def from_probabilities_to_kd(
     chunky.save_dataset(cset)
     oes.export_cset_to_kd_batchjob(
         target_kd_paths, cset, '{}_stitched_components'.format(filename),
-        hdf5names, offset=offset, size=size, stride=cset.chunk_size,
-        as_raw=False, orig_dtype=np.uint64, unified_labels=False, log=log,
+        hdf5names, stride=cset.chunk_size, as_raw=False, orig_dtype=np.uint64, unified_labels=False, log=log,
         n_max_job=n_chunk_jobs, n_cores=n_cores)
     all_times.append(time.time() - time_start)
     step_names.append("export KD")
