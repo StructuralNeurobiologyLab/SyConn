@@ -97,7 +97,7 @@ def generate_subcell_kd_from_proba(
         cube_shape = (256, 256, 256)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
 
-    offset, size, mask_fname, mask_mag = basics.cset_cube_of_interest_parms(
+    offset, size, mask_arr, mask_mag = basics.cset_cube_of_interest_parms(
         kd,
         global_params.config.cube_of_interest_bb,
         global_params.config.cube_of_interest_mask_fname,
@@ -114,8 +114,8 @@ def generate_subcell_kd_from_proba(
         log.debug('Found existing ChunkDataset at {}. Removing it now.'.format(cd_dir))
         shutil.rmtree(cd_dir)
     cd = chunky.ChunkDataset()
-    cd.initialize(kd, size, chunk_size, cd_dir,
-                  box_coords=offset, fit_box_size=True)
+    cd.initialize(kd, size, chunk_size, cd_dir, box_coords=offset, fit_box_size=True, mask_arr=mask_arr,
+                  mask_mag=mask_mag)
     log.info('Started object extraction of cellular organelles "{}" from '
              '{} chunks.'.format(", ".join(subcell_names), len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co)) for co in subcell_names}

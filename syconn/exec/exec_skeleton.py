@@ -163,17 +163,19 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     if cube_size is None:
         cube_size = np.array([1024, 1024, 512])  # this is in mag1
 
-    offset, size, mask_fname, mask_mag = cset_cube_of_interest_parms(
+    offset, size, mask_arr, mask_mag = cset_cube_of_interest_parms(
         kd,
         global_params.config.cube_of_interest_bb,
         global_params.config.cube_of_interest_mask_fname,
         global_params.config.cube_of_interest_mask_mag)
 
-    if np.all(cube_size > size):
-        cube_size = size
+    # todo was this necessary? doesn't work like this with new chunking model
+    #if np.all(cube_size > size):
+    #    cube_size = size
 
     cd.initialize(kd, size, cube_size, f'{tmp_dir}/cd_tmp_skel/',
-                  box_coords=offset, fit_box_size=True)
+                  box_coords=offset, fit_box_size=True, mask_arr=mask_arr,
+                  mask_mag=mask_mag)
     multi_params = [(cube_size, offs, ds) for offs in chunkify_successive(
         list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
 

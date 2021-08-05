@@ -27,6 +27,7 @@ from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 from plyfile import PlyData
 
 from . import log_handler
+from . import compression
 from .. import global_params
 
 
@@ -814,15 +815,18 @@ def cset_cube_of_interest_parms(
     if bbox is not None and mask_fname is None and mask_mag is None:
         size = bbox[1] - bbox[0]
         offset = bbox[0]
-        mask_fname = None
+        mask_arr = None
         mask_mag = None
     elif bbox is None and mask_fname is not None and mask_mag is not None:
         size = None
         offset = None
-        mask_fname = mask_fname
+        h5_contents = compression.load_from_h5py(mask_fname)
+        if len(h5_contents) != 1:
+            raise Exception('Please provide a h5 file containing exactly one array as mask.')
+        mask_arr = h5_contents[0]
         mask_mag = mask_mag
     else:
         assert False, 'Incorrect cube of interest config should have been caught on config init.'
 
-    return offset, size, mask_fname, mask_mag
+    return offset, size, mask_arr, mask_mag
 

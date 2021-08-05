@@ -129,7 +129,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 4
 
-    offset, size, mask_fname, mask_mag = basics.cset_cube_of_interest_parms(
+    offset, size, mask_arr, mask_mag = basics.cset_cube_of_interest_parms(
         kd,
         global_params.config.cube_of_interest_bb,
         global_params.config.cube_of_interest_mask_fname,
@@ -144,7 +144,8 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     cd_dir = global_params.config.temp_path + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
     cset = chunky.ChunkDataset()
-    cset.initialize(kd, size, chunk_size, cd_dir, box_coords=offset, fit_box_size=True)
+    cset.initialize(kd, size, chunk_size, cd_dir, box_coords=offset, fit_box_size=True, mask_arr=mask_arr,
+                    mask_mag=mask_mag)
 
     if log is None:
         log = log_extraction

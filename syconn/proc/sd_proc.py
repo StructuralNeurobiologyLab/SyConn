@@ -331,15 +331,15 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if chunk_size is None:
         chunk_size = [512, 512, 512]
 
-    offset, size, mask_fname, mask_mag = basics.cset_cube_of_interest_parms(
+    offset, size, mask_arr, mask_mag = basics.cset_cube_of_interest_parms(
             kd,
             global_params.config.cube_of_interest_bb,
             global_params.config.cube_of_interest_mask_fname,
             global_params.config.cube_of_interest_mask_mag)
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
     cd = chunky.ChunkDataset()
-    cd.initialize(kd, size, chunk_size, cd_dir,
-                  box_coords=offset, fit_box_size=True)
+    cd.initialize(kd, size, chunk_size, cd_dir, box_coords=offset, fit_box_size=True, mask_arr=mask_arr,
+                  mask_mag=mask_mag)
 
     sv_sd = segmentation.SegmentationDataset(
         working_dir=global_params.config.working_dir, obj_type="sv",
@@ -564,8 +564,10 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params, debug=False)
     else:
+        # todo need to use something else here if mem is a problem.
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(size) < 2e12 else 2
+        #n_cores = 1 if np.prod(size) < 2e12 else 2
+        n_cores = 1
         qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
