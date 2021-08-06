@@ -1,21 +1,15 @@
 from __future__ import print_function
-import glob
-from logging import log
-from neuroglancer.local_volume import LocalVolume
-from syconn.handler.logger import log_main as logger
-from syconn import global_params
-from syconn.analysis.backend import SyConnBackend
-from syconn.analysis.utils import handle_layer_args
-# from syconn.analysis.flask_server import start_flask_server
 import argparse
 import os
 import numpy as np
 from knossos_utils import KnossosDataset
-import neuroglancer
+
+from syconn.handler.logger import log_main as logger
+from syconn import global_params
+from syconn.analysis.backend import SyConnBackend
+
 import neuroglancer.cli
 from neuroglancer import config
-
-flask_PORT = 8000 # for development environment
 
 
 def configure_backend():
@@ -59,67 +53,42 @@ class SyConnClient(object):
         viewer.
     """
 
-    def __init__(self, backend, seg_path, organelles, clargs, token):
+    def __init__(self, params, organelles, token=None):
         
-        self.backend = backend
-        self._seg_path = seg_path
-
-        if os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(seg_path)))) == 'j0251':
-            raw_path = '/wholebrain/songbird/j0251/j0251_72_clahe2'
-        else:
-            raw_path = seg_path
-
-        self._raw_path = raw_path
-
-        logger.info(f"Raw path: {raw_path}")
-        logger.info(f"Seg path: {seg_path}")
-
-        if config.seg_dataset != None:
-            self.seg_dataset = config.seg_dataset
-
-        else:
-            self.seg_dataset = KnossosDataset(seg_path)
-
-        if config.raw_dataset != None:
-            self.raw_dataset = config.raw_dataset
-
-        else:
-            self.raw_dataset = KnossosDataset(raw_path)
-
+        self.acquisition = params.acquisition
+        self.version = params.version
         # warn the user for no organelles
         if organelles == []:
             logger.info('No organelles selected')
-
-        # self.host = clargs['host']
-        # self.port = clargs['port']
         
         viewer = self.viewer = neuroglancer.Viewer(token=token, allow_credentials=True)
         logger.info('Neuroglancer viewer object initialized')
-
-        # start flask server with desired seg_dataset
-        # self.flask_server = start_flask_server(flask_PORT, backend, self.seg_dataset)
         
         # configure viewer
         with viewer.txn() as s:
-            self.configure_viewer(self.backend, s, raw_dataset=self.raw_dataset, seg_dataset=self.seg_dataset,
-                                  flask_PORT=flask_PORT, organelles=organelles)
+            if self.acquisition == "example_cube":
+                self.configure_viewer(params["backend"], s, raw_dataset=params["segmentation"], seg_dataset=params["segmentation"],
+                                organelles=organelles)
 
-    # def __del__(self):
-    #     self.flask_server.join()
+            else:
+                self.configure_viewer(params["backend"], s, raw_dataset=params["image"], seg_dataset=params["segmentation"],
+                                organelles=organelles)
 
     @property
     def seg_name(self):
         """Segmentation name"""
-
-        return self._seg_path.split('/')[-2]
+        
+        return self.acquisition + '_' + self.version
 
     @property
     def raw_name(self):
         """Image name"""
+        if "example_cube" in self.acquisition:
+            return self.acquisition + '_' + self.version
 
-        return self._raw_path.split('/')[-1]
+        return "j0251_72_clahe2"
 
-    def configure_viewer(self, backend: SyConnBackend, state, raw_dataset=None, seg_dataset=None, flask_PORT=8000, organelles=[]):
+    def configure_viewer(self, backend: SyConnBackend, state, raw_dataset=None, seg_dataset=None, organelles=[]):
         """
         Configures the Syconn client so it parses the desired data to 
         Neuroglancer Viewer. Layer visibility depends on ordering. Last
@@ -190,22 +159,7 @@ class SyConnClient(object):
             name=self.raw_name,
             layer=neuroglancer.ImageLayer(
                 source=[
-                    # neuroglancer.LocalVolume(
-                    #     dataset=raw_dataset,
-                    #     dimensions=neuroglancer.CoordinateSpace(
-                    #         names=['z', 'y', 'x'],
-                    #         units='nm',
-                    #         scales=[scales[2], scales[1], scales[0]],
-                    #     ),
-                    #     backend=backend,
-                    #     precomputedMesh=False,
-                    #     object_type='sv',
-                    #     volume_type='image',
-                    #     # chunk_layout='isotropic',
-                    #     downsampling='3d',
-                    #     task_type='lowest_then_downsample'
-                    # ),
-                    f'precomputed://' + source + '/volume/img'
+                    f'precomputed://' + source + '/volume/image' # raw volume
                 ]
             )
         )
@@ -220,24 +174,10 @@ class SyConnClient(object):
             name=self.seg_name,
             layer=neuroglancer.SegmentationLayer(
                 source=[
-                    # neuroglancer.LocalVolume(
-                    #     dataset=seg_dataset,
-                    #     dimensions=neuroglancer.CoordinateSpace(
-                    #         names=['z', 'y', 'x'],
-                    #         units='nm',
-                    #         scales=[scales[2], scales[1], scales[0]],
-                    #     ),
-                    #     backend=backend,
-                    #     precomputedMesh=False,
-                    #     object_type='sv',
-                    #     volume_type='segmentation',
-                    #     # chunk_layot='isotropic',
-                    #     downsampling='3d',
-                    #     task_type='lowest_then_downsample'
-                    # ),
-                    f'precomputed://' + source + '/volume/seg',
+                    f'precomputed://' + source + '/volume/segmentation', # segmentation volume
                     f'precomputed://' + source + '/sv', # ssv mesh
-                    f'precomputed://' + source + '/skeletons' # ssv skeleton
+                    f'precomputed://' + source + '/skeletons', # ssv skeleton
+                    # f'precomputed://' + source + '/properties',
                 ],
                 mesh_silhouette_rendering=2,
             )
@@ -273,21 +213,21 @@ if __name__ == '__main__':
 
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_server_arguments(ap)
-    handle_layer_args(ap)
     args = ap.parse_args()
     neuroglancer.cli.handle_server_arguments(args)
-
-    global backend
 
     if args.wd == '':
         logger.error('No working directory selected... Aborting')
 
     global_params.wd = os.path.expanduser(args.wd)
 
+    global backend
     backend = configure_backend()
 
-    # load seg and raw data
-    seg_path = global_params.config.kd_seg_path
+    if "example_cube" in args.wd:
+        params = dict(backend=backend, segmentation=KnossosDataset(global_params.config.working_dir+"/knossosdatasets/seg"), image=KnossosDataset(global_params.config.working_dir+"/knossosdatasets/seg"))
+    else:
+        params = dict(backend=backend, segmentation=KnossosDataset(global_params.config.kd_seg_path), image=KnossosDataset("/wholebrain/songbird/j0251/j0251_72_clahe2"))
 
-    client = SyConnClient(backend, seg_path, args.organelles, dict(host=args.host, port=args.port))
+    client = SyConnClient(params, args.organelles)
     logger.info('Neuroglancer server running at {}'.format(client.viewer))
