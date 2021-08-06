@@ -1,4 +1,38 @@
 # Tasks
+
+### In progress
+- [ ] Look into import folders for absolute path
+- [ ] Tutorial (gifs) (refer on the index page of server or under the viewer)
+    - [x] Welcome page
+        - Selecting the dropdowns
+    - [x] Navigation
+        - Open help panel (scroll down)
+        - Move around in 2d
+        - Zoom out in 2d w/ zooming in 3d
+        - open layer panel 
+        - show different controls in help panel 
+    - [x] Request segments
+        - Skeletons, cell and organelle meshes
+        - Toggle visibility of the segments
+        - Show different controls in the Render tab
+    - [ ] Property filtering
+        - Categorical and numerical properties
+        - Filter cell ids 
+        - Select ids from the side panel
+        - Synapse filtering
+        - Status messages
+- [ ] Suppress dual print statements in python interactive mode
+- [ ] Garbage collector for destroying python objects (ViewerState, PropertyFilter)
+- [ ] See segmentation datasets for different organelles
+- [ ] Additional layer for synapse nodes
+- [ ] Fix viewer oritentation; sometimes the viewer is rendered with the bounding box in the corner
+- [ ] Check gzip compression done by nginx (currently not compressed); a workaround could be to gzip encode the data from the backend and then decode it in the frontend 
+- [ ] Better status messages (e.g Modals) for the user
+- [ ] Serve compressed data from Knossos directly and decompress it in the frontend (check compression formats supported by neuroglancer)
+
+
+
+### Done
 - [x] Skeleton rendering (neuroglancer.SkeletonSource)
 - [x] Simple mesh generation in LocalVolume
 - [x] Mitochondira mesh rendering
@@ -16,18 +50,15 @@
 - [x] Response in flask json.dumps and binary
 - [x] Integrate flask into cli main
 - [x] Specify organelle types in the main parameters
-- [ ] Look into import folders for absolute path
 - [x] Look into the downsampling where it is happening in the frontend or Neuroglancer server
 - [x] Compare highest factor and upsampling with lowest factor and downsampling (runtime)
 - [x] Render differently colored organelle meshes with a mouse click (without the seg query)
 - [x] Coloring of meshes (diff obj types)
 - [x] Fix rendering of subvolume chunks (gray boxes); check available mags
 - [x] Property selector list (manually created); Text boxes to select the values of the property (1. select the attribute, 2. select the number of objects to display)
-    1. celltype_cnn_e3 e.g MSN, EA
-    2. number of mitochndria in ssv (check mapping_mi_idss.npy)
-    3. ssv size (sizes.npy) e.g min, max
-    4. supervoxel ids (svs.npy)
-- [ ] Invert cell_ids to supervoxel_ids (mapping_dict and mapping_dict_reversed). Same for rag_flat datasets
+    * [x] celltype_cnn_e3 e.g MSN, EA
+    * [x] number of mitochndria in ssv (check mapping_mi_idss.npy)
+    * [x] ssv size (sizes.npy) e.g min, max
 - [x] Segment query even for the properties will be huge; return a random subset of the segment query (page) or return a range of segment query based on user input
 - [x] Check deepcopy behaviour (entire viewer state deepcopied or not)
 - [x] Check references of locks (_lock, __lock)
@@ -39,9 +70,6 @@
 - [x] Include celltypes in status message 
 - [x] remove ngrok; directly serve with http behind port 80 
 - [x] multiple independent users without accidental synchronization
-- [ ] Modify the index page (include a background maybe)
-- [ ] Tutorial page (refer on the index page of server)
-- [ ] Suppress dual print statements in python interactive mode
 - [x] Viewer modifications:
     * [x] Fix type in synaptic partner status message (synpatic)
     * [x] Add 'Loading synaptic partner for selected ssv' when `action_handler` is invoked
@@ -49,9 +77,15 @@
     * [x] Celltype query support in lower and upper
     * [x] Replace placeholder text in segment query
 - [x] Time fetching and computation operations (synaptic filtering, skeleton/mesh retrieval, page splitting)
-- [ ] Optimize synaptic partner property
 - [x] Serve precomputed volume source (on flask-async/quart/tornado)
-- [ ] Suppress typescript property map (or use segment properties precomputed)
-- [ ] Garbage collector for destroying python objects (ViewerState, PropertyFilter)
-- [ ] 
+- [x] Optimize synaptic partner property
+    - [x] Start with getting the indices of the syn partners and reduce all the property arrays based on these indices; then use the mask and sort by the syn areas
+- [x] Modify the index page (include a background maybe)
+    - [x] Add a dropdown for selecting the dataset and/or properties to filter from
+- [x] Move static data to the server (e.g. SyConnBackend, KnossosDatasets, .npy files)
+- [x] Use supervisord and nginx load balancer to run the server (multi-process)
+- [x] Use ProcessPoolExecutor for parallelizing the segmentation; ProcessPoolExecutor cannot entirely be used (currently both multithreading and multiprocessing is used)
+- [x] Suppress typescript property map (or use segment properties precomputed)
+
+
 
