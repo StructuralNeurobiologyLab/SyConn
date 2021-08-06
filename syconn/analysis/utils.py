@@ -106,10 +106,4 @@ def get_mesh_meta(ssv_id, lod):
     fragments.append("{}:{}:{}_mesh".format(ssv_id, lod, ssv_id))
     meta = json.dumps({"fragments": fragments})
 
-
     return meta
-
-def handle_layer_args(ap):
-    g = ap.add_argument_group(title='SyConn layer options')
-    g.add_argument('--organelles', nargs='+', default=[],
-                        help='Organelle layers to be displayed')
