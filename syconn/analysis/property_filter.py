@@ -1,22 +1,23 @@
-from typing_extensions import final
-from humanfriendly.terminal import message
-from syconn.reps import super_segmentation_dataset as ss
-from syconn.reps import segmentation
-from syconn.analysis.cli import configure_backend
-from syconn.analysis.cli import SyConnClient
-from syconn.analysis.utils import handle_layer_args
-from syconn.handler.logger import log_main as log_gate
-from syconn.handler.prediction import str2int_converter, int2str_converter
-from syconn import global_params
-from timeit import default_timer as timer
-import neuroglancer
-import neuroglancer.cli
 import argparse
 import os
 import re
 import numpy as np
 import copy
 import time
+from timeit import default_timer as timer
+from bs4 import BeautifulSoup as Soup
+from knossos_utils import KnossosDataset
+
+from syconn.analysis.cli import configure_backend
+from syconn.analysis.cli import SyConnClient
+from syconn.analysis.utils import handle_layer_args
+from syconn.handler.logger import log_main as log_gate
+from syconn.handler.prediction import str2int_converter, int2str_converter
+from syconn import global_params
+
+import neuroglancer
+import neuroglancer.cli
+from neuroglancer.viewer_config_state import SegmentIdMapEntry
 
 logger = log_gate
 
@@ -60,8 +61,6 @@ class PropertyFilter(SyConnClient):
     :type PAGE_SIZE: int
     :cvar syn_type: maps compartment to pre- or post-synaptic
     :type syn_type: dict
-    :cvar data_dir: directory containing .npy files 
-    :type data_dir: str
 
     :param backend: to retrieve the skeleton, mesh and cell types
     :type backend: SyConnBackend
@@ -84,36 +83,23 @@ class PropertyFilter(SyConnClient):
         "axon": "pre-synaptic",
         "soma": "post-synaptic",
     }
-    data_dir = '/home/shared'
 
-    def __init__(self, backend, seg_path, organelles, clargs: dict, token=None):
-        super().__init__(backend, seg_path, organelles, clargs, token)
+    def __init__(self, params, organelles, token=None):
+        super().__init__(params, organelles, token)
+
+        self.params = params
+        self.version = params.version
+        self._token = token
 
         self.gt_type = "ctgt"
-        if 'j0251' in global_params.config.working_dir:
+        if params.acquisition == "j0251":
             self.gt_type = "ctgt_j0251_v2"
-
-        self.CTs = backend.cts_in_data(self.gt_type)
-        logger.info(f"Found {self.CTs} cell types in the dataset")
-
-        # self.master_pattern = r'(' + '|'.join(ct for ct in self.CTs) + ')?' + self.__class__.master_pattern
-        # logger.info(self.master_pattern)
-
-        self.ssd = ss.SuperSegmentationDataset(global_params.config.working_dir, sso_locking=False, sso_caching=True)
-        # sd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=global_params.config.working_dir)
         
-        self.ssv_ids = self.ssd.ssv_ids
+        self.CTs = params["backend"].cts_in_data(self.gt_type)
+        logger.info(f"Found {self.CTs} cell types in the dataset")
+        
+        self.ssv_ids = params["ssvs"]
         self.cur_message = None
-
-        if not os.path.exists(self.__class__.data_dir) or len(os.listdir(self.__class__.data_dir)) == 0:
-            logger.error('Data directory {} does not exist or is empty'.format(self.__class__.data_dir))
-
-        self.neuron_partners = np.load(os.path.join(self.__class__.data_dir, 'neuron_partnerss.npy'), allow_pickle=True)
-        self.axoness_partners = np.load(os.path.join(self.__class__.data_dir, 'partner_axonesss.npy'), allow_pickle=True)
-        self.syn_probs = np.load(os.path.join(self.__class__.data_dir, 'syn_probs.npy'), allow_pickle=True)
-        self.syn_areas = np.load(os.path.join(self.__class__.data_dir, 'mesh_areas.npy'), allow_pickle=True)
-        self.partner_celltypes = np.load(os.path.join(self.__class__.data_dir, 'partner_celltypess.npy'), allow_pickle=True)
-        self.rep_coords = np.load(os.path.join(self.__class__.data_dir, 'rep_coords.npy'), allow_pickle=True)
 
         # dict of CT indices in the ssv_ids array
         self.CTmask = {ct: [] for ct in self.CTs}
@@ -128,8 +114,12 @@ class PropertyFilter(SyConnClient):
         
         # defer callback necessary to avoid deadlock 
         self.viewer.shared_state.add_changed_callback(
-            lambda: self.viewer.defer_callback(self.on_state_changed_experimental)
+            lambda: self.viewer.defer_callback(self.on_state_changed)
         )
+
+    @property
+    def token(self):
+        return self._token
 
     def _handle_select(self, action_state):
         """Action handler for synaptic filtering [keyp]
@@ -143,10 +133,15 @@ class PropertyFilter(SyConnClient):
 
         if segment_id is None: 
             return
-
+        
         ssv_id = segment_id.value
+
+        # if segment_id.value is a collections.namedtuple (key=ssv_id, value=None, label=celltype), extract the ssv_id
+        if isinstance(ssv_id, SegmentIdMapEntry):
+            ssv_id = ssv_id[0]
         
         message = 'Loading synaptic partner for selected ssv {}'.format(ssv_id)
+
         if message != self.cur_message:
             with self.viewer.config_state.txn() as cfs:
                 cfs.status_messages['status'] = message
@@ -160,6 +155,7 @@ class PropertyFilter(SyConnClient):
                 dtime = time.time() - start
                 logger.debug('Got synaptic partner after {:.2f}'.format(dtime))
 
+                # if no synaptic partner is found
                 if result == -1:
                     message = 'No synaptic partner found for the selected ssv {}'.format(ssv_id)
 
@@ -170,6 +166,7 @@ class PropertyFilter(SyConnClient):
 
                     return
 
+                # get synaptic partner id, compartment predictions and celltypes
                 partner_ssv_id = result["partner_ssv"]
                 ssv_comp = int2str_converter(result["ssv_comp"], "axgt").split('_')[1]
                 partner_ssv_comp = int2str_converter(result["partner_ssv_comp"], "axgt").split('_')[1]
@@ -177,11 +174,22 @@ class PropertyFilter(SyConnClient):
                 partner_ssv_ct = int2str_converter(result["partner_ssv_ct"], self.gt_type)
                 rep_coords = result["rep_coords"]
 
+                # add synaptic partner to segment list
                 segments.add(partner_ssv_id)
-                # s.position = np.flip(rep_coords)
-                s.position = rep_coords
+                # s.position = np.flip(rep_coords) # use for neuroglancer.LocalVolume source
+                s.position = rep_coords # set position to the representative coordinate
+
+                # TODO(hashir): use bootstrap alert instead of status messages
+                # soup = Soup(open("/home/hashir/neuroglancer/python/neuroglancer/static/index.html"))
+                # container = soup.find(id="neuroglancer-container")
+                # alert_div = soup.new_tag('div')
+                # alert_div['class'] = "alert alert-success mb-0"
+                # alert_div.string = "abcd"
+                # container.insert_before(alert_div)
+                # with open("/home/hashir/neuroglancer/python/neuroglancer/static/index.html", "w") as f:
+                #     f.write(str(soup))
                 
-                # pre-synaptic -> post-synaptic
+                # pre-synaptic -> post-synaptic message format
                 if self.__class__.syn_type[ssv_comp] == "pre-synaptic":
                     message = f'{ssv_id}: {ssv_ct} \
                         {self.__class__.syn_type[ssv_comp]} \
@@ -214,35 +222,40 @@ class PropertyFilter(SyConnClient):
         :rtype result: dict, -1
         """
 
-        mask = np.any(self.neuron_partners == ssv_id, axis=1) # synaptic partners
-        mask = mask & np.where(self.syn_probs > 0.9, True, False) 
-        mask_axon_den = np.where((self.axoness_partners[:,0] == 1) | (self.axoness_partners[:,1] == 1), True, False) & np.where((self.axoness_partners[:,0] == 0) | (self.axoness_partners[:,1] == 0), True, False) # axon -> dendrite connections
-        mask_axon_soma = np.where((self.axoness_partners[:,0] == 1) | (self.axoness_partners[:,1] == 1), True, False) & np.where((self.axoness_partners[:,0] == 2) | (self.axoness_partners[:,1] == 2), True, False) # axon -> soma connections
-        mask = mask & (mask_axon_den | mask_axon_soma) 
+        partners_ix = np.where(np.any(self.params["neuron_partners"] == ssv_id, axis=1))[0]
+        mask = np.ones_like(partners_ix, dtype=bool)
+        mask = mask & (self.params["syn_probs"][partners_ix] > 0.9)
+        
+        if not np.any(mask):
+            return -1
+        
+        mask_axon_den = np.where((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1), True, False) & \
+                np.where((self.params["partner_axoness"][partners_ix][:,0] == 0) | (self.params["partner_axoness"][partners_ix][:,1] == 0), True, False)
 
-        if np.any(mask): # atleast one ssv_id satisfies the conditions   
-            # get index of maximum synapse area conditioned on the mask
-            largest_syn_ix = np.argmax(self.syn_areas[mask])
+        mask_axon_soma = np.where((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1), True, False) & \
+                np.where((self.params["partner_axoness"][partners_ix][:,0] == 2) | (self.params["partner_axoness"][partners_ix][:,1] == 2), True, False)
 
-            # get largest synaptic partner
-            largest_syn_partner = self.neuron_partners[mask][largest_syn_ix]
-            # get synaptic partner location
-            partner_loc = np.where(largest_syn_partner != ssv_id)[0].item()
+        mask = mask & (mask_axon_den | mask_axon_soma)
+        
+        if not np.any(mask):
+            return -1
+        
+        loc = self.params["syn_areas"][partners_ix][mask].argmax()
+        partners = self.params["neuron_partners"][partners_ix][mask][loc]
+        partner_loc = np.where(partners != ssv_id)[0].item() 
+        
+        result = {
+            "partner_ssv": partners[partner_loc],
+            "ssv_comp": self.params["partner_axoness"][partners_ix][mask][loc][1-partner_loc],
+            "partner_ssv_comp": self.params["partner_axoness"][partners_ix][mask][loc][partner_loc],
+            "ssv_ct": self.params["partner_celltypes"][partners_ix][mask][loc][1-partner_loc],
+            "partner_ssv_ct": self.params["partner_celltypes"][partners_ix][mask][loc][partner_loc],
+            "rep_coords": self.params["rep_coords"][partners_ix][mask][loc]
+        }
+        
+        return result
 
-            result = {
-                "partner_ssv": largest_syn_partner[partner_loc],
-                "ssv_comp": self.axoness_partners[mask][largest_syn_ix][1-partner_loc],
-                "partner_ssv_comp": self.axoness_partners[mask][largest_syn_ix][partner_loc],
-                "ssv_ct": self.partner_celltypes[mask][largest_syn_ix][1-partner_loc],
-                "partner_ssv_ct": self.partner_celltypes[mask][largest_syn_ix][partner_loc],
-                "rep_coords": self.rep_coords[mask][largest_syn_ix]
-            }
-
-            return result
-
-        return -1
-
-    def on_state_changed(self):
+    def on_state_changed_deprecated(self):
         """Captures a state change and updates state."""
 
         ix, segmentation_layer = get_segmentation_layer(self.viewer.state.layers)
@@ -259,7 +272,7 @@ class PropertyFilter(SyConnClient):
                     logger.info(f"Storing ids mask of celltype {celltype} in memory")
                     start = timer()
                     self.CTmask[celltype] = np.where(
-                        np.load(os.path.join(self.__class__.data_dir, 'celltype_cnn_e3s.npy'), allow_pickle=True) == str2int_converter(celltype, self.gt_type))[0]
+                        self.params["celltypes"] == str2int_converter(celltype, self.gt_type))[0]
                     end = timer()
                     logger.info(f"Loaded celltype ids mask after {(end - start):.3f} seconds")
 
@@ -328,9 +341,9 @@ class PropertyFilter(SyConnClient):
             new_state.layers[ix].segment_query = response
             self.viewer.set_state(new_state)
 
-    # TODO(hashir): Independent property querying
-    def on_state_changed_experimental(self):
-        """Captures a state change and updates state."""
+    def on_state_changed(self):
+        """Captures a state change and updates state. Individual
+        property querying supported"""
 
         ix, segmentation_layer = get_segmentation_layer(self.viewer.state.layers)
         segment_query = segmentation_layer.segment_query
@@ -343,12 +356,20 @@ class PropertyFilter(SyConnClient):
 
             try:
                 celltype = matches.group(1).upper() # case insensitive match
-                
+                if celltype == "GPE":
+                    celltype = "GPe"
+
+                elif celltype == "GPI":
+                    celltype = "GPi"
+
+                elif celltype == "MODULATORY":
+                    celltype = "modulatory"
+
                 if len(self.CTmask[celltype]) == 0:
                     logger.info(f"Storing ids mask of cell type {celltype} in memory")
                     start = timer()
                     self.CTmask[celltype] = np.where(
-                        np.load(os.path.join(self.__class__.data_dir, 'celltype_cnn_e3s.npy'), allow_pickle=True) == str2int_converter(celltype, self.gt_type))[0]
+                        self.params["celltype_cnn_e3s"] == str2int_converter(celltype, self.gt_type))[0]
                     end = timer()
                     logger.debug(f"Loaded cell type ids mask after {(end - start):.3f} seconds")
 
@@ -364,6 +385,7 @@ class PropertyFilter(SyConnClient):
 
             finally:
                 logger.info(f'Cell type {celltype}')
+            celltype = None
 
             if celltype != None:
                 message = 'Loading ssv ids of cell type {}'.format(celltype)
@@ -371,17 +393,21 @@ class PropertyFilter(SyConnClient):
             else:
                 message = 'Loading ssv ids'
 
-            # list of (prop_type, operation, threshhold)
+            # list of (prop_type, operation, threshold)
             filter_list = []
             pageNr = -1
             
             filter_iter = iter([prop for prop in matches.groups()[1:-1] if prop != None]) # excluding cell type, page and NoneType properties
             
+            # add operator-operand pairs to filter_list
             while True:
                 try:
                     prop = next(filter_iter)
-                    message += ' with {}'.format(prop)
                     filter_list.append(tuple(re.split('(>|<|=)', prop))) # property split (prop, >|<|=, int)
+                    if filter_list[0][0].lower() == "size":
+                        message += ' with {}000'.format(prop) # add 1000 to size
+                    else:
+                        message += ' with {}'.format(prop)
                     
                 # StopIteration: to end the iterator
                 except (StopIteration, TypeError) as e: 
@@ -390,6 +416,7 @@ class PropertyFilter(SyConnClient):
 
             logger.info(f'Filter list: {filter_list}')
 
+            # handle pages
             page_match = matches.group(4)
             if page_match == None:
                 pageNr = 1
@@ -437,21 +464,21 @@ class PropertyFilter(SyConnClient):
         :return ssv_ids_of_interest: 
         :rtype ssv_ids_of_interest: numpy.ndarray 
         """
+
         if celltype != None:
-            indices = self.CTmask[celltype]
+            indices = self.CTmask[celltype] # use cached cell type indices
         else:
             indices = list(range(len(self.ssv_ids)))
 
         mask = np.ones(shape=(len(indices),), dtype=np.bool)       
 
         for prop, op, thresh in filter_list:
-            # TODO(hashir): Independent property querying
             if prop.lower() == "mito":
                 prop_name = "mi"
             else:
                 prop_name = prop.lower()
 
-            prop_array = np.load(os.path.join(self.__class__.data_dir, prop_name+"s.npy"), allow_pickle=True)[indices]
+            prop_array = self.params[prop_name+"s"][indices]
 
             # check for mito
             if prop_name == 'mi':
@@ -513,16 +540,21 @@ if __name__ == "__main__":
     args = ap.parse_args()
     neuroglancer.cli.handle_server_arguments(args)
 
-    global backend
     if args.wd == '':
         logger.error('No working directory selected... Aborting')
 
     global_params.wd = os.path.expanduser(args.wd)
     
+    global backend
     backend = configure_backend()
+
+    if "example_cube" in args.wd:
+        params = dict(backend=backend, segmentation=KnossosDataset(global_params.config.working_dir+"/knossosdatasets/seg"), image=KnossosDataset(global_params.config.working_dir+"/knossosdatasets/seg"))
+    else:
+        params = dict(backend=backend, segmentation=KnossosDataset(global_params.config.kd_seg_path), image=KnossosDataset("/wholebrain/songbird/j0251/j0251_72_clahe2"))
     
     # load seg and raw data
     seg_path = global_params.config.kd_seg_path
     
-    pf = PropertyFilter(backend, seg_path, args.organelles, dict(host=args.host, port=args.port))
+    pf = PropertyFilter(params, args.organelles)
     print(pf.viewer)
