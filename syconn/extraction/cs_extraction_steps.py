@@ -129,7 +129,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     if np.any(np.array(chunk_size) % np.array(cube_shape)):
         raise ValueError('Chunk size must be divisible by cube shape.')
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 4
+        max_n_jobs = global_params.config.ncore_total * 8
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
 
@@ -322,6 +322,7 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         Two lists of dictionaries (representative coordinates, bounding box and
         voxel count) for ``cs`` and ``syn`` objects, per-synapse counts of
         symmetric and asymmetric voxels.
+
     """
     chunks = args[0]
     knossos_path = args[1]
@@ -382,14 +383,14 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         if transf_func_sj_seg is None:
             sj_d = (kd_sj.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2) >
-                    255 * global_params.config['cell_objects']["probathresholds"]['sj']).astype(np.uint8, copy=False)
+                    255 * global_params.config['cell_objects']["probathresholds"]['sj']).astype('u1')
         else:
             sj_d = transf_func_sj_seg(
-                kd_sj.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)).astype(np.uint8, copy=False)
-        # apply mrophological operations on sj binary mask
+                kd_sj.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)).astype('u1', copy=False)
+        # apply morphological operations on sj binary mask
         if 'sj' in morph_ops:
             sj_d = apply_morphological_operations(
-                sj_d.copy(), morph_ops['sj'], mop_kwargs=dict(structure=struct)).astype(np.uint8, copy=False)
+                sj_d.copy(), morph_ops['sj'], mop_kwargs=dict(structure=struct)).astype('u1', copy=False)
 
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
@@ -397,17 +398,17 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                 # TODO: add thresholds to global_params
                 if global_params.config.sym_label is None:
                     sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                             >= 123).astype(np.uint8, copy=False)
+                             >= 123).astype('u1', copy=False)
                 else:
                     sym_d = (kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                             == global_params.config.sym_label).astype(np.uint8, copy=False)
+                             == global_params.config.sym_label).astype('u1', copy=False)
 
                 if global_params.config.asym_label is None:
                     asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                              >= 123).astype(np.uint8, copy=False)
+                              >= 123).astype('u1', copy=False)
                 else:
                     asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                              == global_params.config.asym_label).astype(np.uint8, copy=False)
+                              == global_params.config.asym_label).astype('u1', copy=False)
             else:
                 assert global_params.config.asym_label is not None, \
                     'Label of asymmetric synapses is not set.'

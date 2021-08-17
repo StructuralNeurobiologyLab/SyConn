@@ -39,7 +39,7 @@ if __name__ == '__main__':
                    'use_new_renderings_locs': True,
                    'view_properties': {'nb_views': 3}
                    }),
-        ('slurm', {'exclude_nodes': ['wb08', 'wb09']}),
+        ('slurm', {'exclude_nodes': []}),
         ('cell_objects',
          {'sym_label': 1, 'asym_label': 2,
           'min_obj_vx': {'sv': 1},
@@ -71,9 +71,9 @@ if __name__ == '__main__':
     # currently using `dill` package to support lambda expressions, a weak feature. Make
     #  sure all dependencies within the lambda expressions are imported in
     #  `batchjob_object_segmentation.py` (here: numpy)
-    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype(np.uint8),
-                                      vc=lambda x: (x == 3).astype(np.uint8),
-                                      sj=lambda x: (x == 2).astype(np.uint8))
+    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype('u1'),
+                                      vc=lambda x: (x == 3).astype('u1'),
+                                      sj=lambda x: (x == 2).astype('u1'))
 
     # Preparing data
     # --------------------------------------------------------------------------
@@ -108,44 +108,44 @@ if __name__ == '__main__':
                              'directory "{}".'.format(mpath, working_dir))
     ftimer.stop()
 
-    # Start SyConn
-    # --------------------------------------------------------------------------
-    log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
-    log.critical('Working directory is set to "{}".'.format(working_dir))
-
-    log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
-    ftimer.start('SD generation')
-    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
-                                    n_folders_fs=n_folders_fs,
-                                    load_cellorganelles_from_kd_overlaycubes=True,
-                                    transf_func_kd_overlay=cellorganelle_transf_funcs,
-                                    max_n_jobs=global_params.config.ncore_total * 4)
-
-    # generate flattened RAG
-    from syconn.reps.segmentation import SegmentationDataset
-    sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
-    rag_sub_g = nx.Graph()
-    # add SV IDs to graph via self-edges
-    mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
-    mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
-    filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
-    rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    log.info('{} SVs were added to the RAG after applying the size '
-             'filter.'.format(len(filtered_ids)))
-    nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
-
-    exec_init.run_create_rag(graph_node_dtype=np.uint32)
-    ftimer.stop()
-
-    log.info('Step 3/9 - Creating SuperSegmentationDataset')
-    ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(ncores_per_job=4)
-    ftimer.stop()
-
-    log.info('Step 4/10 - Skeleton generation')
-    ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
-    ftimer.stop()
+    # # Start SyConn
+    # # --------------------------------------------------------------------------
+    # log.info('Starting SyConn pipeline for data cube (shape: {}).'.format(ftimer.dataset_shape))
+    # log.critical('Working directory is set to "{}".'.format(working_dir))
+    #
+    # log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
+    # ftimer.start('SD generation')
+    # exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
+    #                                 n_folders_fs=n_folders_fs,
+    #                                 load_cellorganeclles_from_kd_overlaycubes=True,
+    #                                 transf_func_kd_overlay=cellorganelle_transf_funcs,
+    #                                 max_n_jobs=global_params.config.ncore_total * 4)
+    #
+    # # generate flattened RAG
+    # from syconn.reps.segmentation import SegmentationDataset
+    # sd = SegmentationDataset(obj_type="sv", working_dir=global_params.config.working_dir)
+    # rag_sub_g = nx.Graph()
+    # # add SV IDs to graph via self-edges
+    # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
+    # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
+    # filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
+    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
+    # log.info('{} SVs were added to the RAG after applying the size '
+    #          'filter.'.format(len(filtered_ids)))
+    # nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
+    #
+    # exec_init.run_create_rag(graph_node_dtype=np.uint32)
+    # ftimer.stop()
+    #
+    # log.info('Step 3/9 - Creating SuperSegmentationDataset')
+    # ftimer.start('SSD generation')
+    # exec_init.run_create_neuron_ssd(ncores_per_job=4)
+    # ftimer.stop()
+    #
+    # log.info('Step 4/10 - Skeleton generation')
+    # ftimer.start('Skeleton generation')
+    # exec_skeleton.run_skeleton_generation()
+    # ftimer.stop()
 
     log.info('Step 5/9 - Synapse detection')
     ftimer.start('Synapse detection')

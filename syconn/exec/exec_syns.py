@@ -101,7 +101,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
                               n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
-    log.info('SegmentationDataset of type "cs" and "syn" was generated.')
+    log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
 
     # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,
