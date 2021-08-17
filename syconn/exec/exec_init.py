@@ -29,7 +29,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
 
 
-def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1):
+def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1, overwrite: bool = False):
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
     ``version=0`` at the currently active working directory based on the SV graph
@@ -42,6 +42,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
             separation.
         ncores_per_job: Number of cores per worker for
             :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
+        overwrite:
 
     Notes:
         * This is a memory intensiv step, consider increasing `ncores_per_job`.
@@ -92,7 +93,8 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
 
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(g_p, len(cc_dict), len(cc_dict_inv)))
     ssd = SuperSegmentationDataset(working_dir=working_dir, version='0',
-                                   ssd_type="ssv", sv_mapping=cc_dict_inv)
+                                   ssd_type="ssv", sv_mapping=cc_dict_inv, create=True,
+                                   overwrite=overwrite)
     # create cache-arrays for frequently used attributes
     # also executes 'ssd.save_dataset_shallow()' and populates sv_ids attribute of all SSVs
     ssd.save_dataset_deep(nb_cpus=ncores_per_job)
@@ -114,9 +116,9 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
 
     log.info('Finished SSD initialization. Starting cellular organelle mapping.')
     # map cellular organelles to SSVs
-    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['existing_cell_organelles'],
+    ssd_proc.aggregate_segmentation_object_mappings(ssd, global_params.config['process_cell_organelles'],
                                                     nb_cpus=ncores_per_job)
-    ssd_proc.apply_mapping_decisions(ssd, global_params.config['existing_cell_organelles'],
+    ssd_proc.apply_mapping_decisions(ssd, global_params.config['process_cell_organelles'],
                                      nb_cpus=ncores_per_job)
     log.info('Finished mapping of cellular organelles to SSVs.')
 
@@ -182,7 +184,7 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
 
                 ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
                     load_cellorganelles_from_kd_overlaycubes, cube_of_interest_bb, log])
-                    for co in global_params.config['existing_cell_organelles']]
+                    for co in global_params.config['process_cell_organelles']]
                 for p in ps:
                     p.start()
                     time.sleep(5)
@@ -222,9 +224,6 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     their associations with cell fragments (calculating the overlap between every sub-cellular structure and
     cell fragment instance) are extracted.
 
-    Todo:
-        * Don't extract sj objects and replace their use-cases with syn objects (?).
-
     Args:
         chunk_size: Size of the cube which are processed by each worker.
         n_folders_fs: Number of folders used to create the folder structure in
@@ -245,7 +244,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
-        transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
+        transf_func_kd_overlay = {k: None for k in global_params.config['process_cell_organelles']}
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     chunk_size_kdinit = chunk_size
@@ -258,10 +257,10 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
 
     log.info('Converting the predictions of the following cellular organelles to'
-             ' KnossosDatasets: {}.'.format(global_params.config['existing_cell_organelles']))
+             ' KnossosDatasets: {}.'.format(global_params.config['process_cell_organelles']))
     start = time.time()
     oew.generate_subcell_kd_from_proba(
-        global_params.config['existing_cell_organelles'],
+        global_params.config['process_cell_organelles'],
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
         cube_of_interest_bb=cube_of_interest_bb, log=log, n_chunk_jobs=max_n_jobs,
@@ -269,7 +268,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
-             ' cell supervoxels.'.format(global_params.config['existing_cell_organelles']))
+             ' cell supervoxels.'.format(global_params.config['process_cell_organelles']))
     start = time.time()
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
@@ -280,10 +279,10 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
              ''.format(time.time() - start))
 
     log.info('Caching properties of subcellular structures {} and cell'
-             ' supervoxels'.format(global_params.config['existing_cell_organelles']))
+             ' supervoxels'.format(global_params.config['process_cell_organelles']))
     start = time.time()
     ps = [Process(target=sd_init, args=(co, max_n_jobs, log))
-          for co in ["sv"] + global_params.config['existing_cell_organelles']]
+          for co in ["sv"] + global_params.config['process_cell_organelles']]
     for p in ps:
         p.start()
         time.sleep(2)
@@ -298,6 +297,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
 
 
 def run_create_rag(graph_node_dtype=None):
+    # TODO: use BinarySearchStore
     """
     If ``global_params.config.prior_astrocyte_removal==True``:
         stores pruned RAG at ``global_params.config.pruned_svgraph_path``, required for all glia
@@ -343,12 +343,14 @@ def run_create_rag(graph_node_dtype=None):
         raise ValueError from e
     log.debug("Finished preparation of SSV size dictionary based "
               "on bounding box diagonal of corresponding SVs.")
-    before_cnt = len(G.nodes())
-    for ix in list(G.nodes()):
+    before_cnt = G.number_of_nodes()
+    # explicit copy needed, as G is modified in the  loop
+    for ix in tqdm.tqdm(list(G.nodes()), total=before_cnt, desc='CC size filter'):
         if ccsize_dict[ix] <= global_params.config['min_cc_size_ssv']:
             G.remove_node(ix)
+    # TODO: check if this loop (despite cache_properties=['size'], see above) is limiting speed
     total_size = 0
-    for n in G.nodes():
+    for n in tqdm.tqdm(G.nodes(), total=G.number_of_nodes(), desc='Total size'):
         total_size += sd.get_segmentation_object(n).size
     total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
     log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
@@ -356,9 +358,9 @@ def run_create_rag(graph_node_dtype=None):
              f"{nx.number_connected_components(G)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
     nx.write_edgelist(G, global_params.config.pruned_svgraph_path)
     with open(global_params.config.pruned_svagg_list_path, 'w') as f:
-        for cc in tqdm.tqdm(nx.connected_components(G), desc='Write SV agg.'):
+        for cc in nx.connected_components(G):
             f.write(','.join([str(el) for el in cc]) + '\n')
-
+    log.debug("SV agglomerations have been written to file.")
     if not global_params.config.prior_astrocyte_removal:
         os.makedirs(global_params.config.working_dir + '/glia/', exist_ok=True)
         shutil.copy(global_params.config.pruned_svgraph_path, global_params.config.neuron_svgraph_path)

@@ -26,7 +26,7 @@ import open3d as o3d
 
 from . import log_extraction
 from .. import global_params
-from ..backend.storage import AttributeDict, VoxelStorage, MeshStorage
+from ..backend.storage import AttributeDict, VoxelStorageDyn, MeshStorage
 from ..handler.basics import chunkify
 from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
@@ -255,10 +255,12 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
     sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
 
-    # TODO: use mapping_dict_reversed
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
-    sv_ids[sv_ids >= len(ssd.id_changer)] = 0
-    mapped_sv_ids = ssd.id_changer[sv_ids]
+    sv_ids[sv_ids > ssd.mapping_lookup_reverse.id_array[-1]] = 0
+    mapping_dc = ssd.sv2ssv_ids(np.unique(sv_ids.flatten()))
+    def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
+    # np.vectorize is not efficient, just a more convenient "map"
+    mapped_sv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
     filtered_mapped_sv_ids = mapped_sv_ids[mask]
@@ -309,7 +311,9 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
     # TODO: this procedure creates folders with single and double digits, e.g. '0' and '00'. Single digit folders are
     #  not used during write-outs, they are probably generated within this method's makedirs
+    log_extraction.debug(f'Filtering relevant synapses.')
     rel_ssv_with_syn_ids = filter_relevant_syn(syn_sd, ssd)
+    log_extraction.debug(f'Filtering relevant synapses done.')
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
     n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
@@ -357,8 +361,7 @@ def _combine_and_split_syn_thread(args):
 
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=syn_ssv_version)
-    sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
-                                              version=syn_version)
+    sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
 
     scaling = sd_syn.scaling
 
@@ -378,7 +381,7 @@ def _combine_and_split_syn_thread(args):
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     syn_ssv_id = base_id
 
-    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
+    voxel_dc = VoxelStorageDyn(base_dir + "/voxel.pkl", read_only=False, voxel_mode=False)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
@@ -413,79 +416,70 @@ def _combine_and_split_syn_thread(args):
         voxel_list = np.concatenate(voxel_list)
 
         for this_cc in ccs:
-            this_cc_mask = np.array(list(this_cc))
-            # retrieve the index of the syn objects selected for this CC
-            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
-                                                       return_counts=True)
-            # the weight is important
-            this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
-            if np.sum(this_syn_ids_cnt) < cell_obj_cnf['min_obj_vx']['syn_ssv']:
-                continue
-            this_attr = syn_attr_list[this_syn_ixs]
-            this_vx = voxel_list[this_cc_mask]
-            abs_offset = np.min(this_vx, axis=0)
-            this_vx -= abs_offset
-            id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
-            id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
-            syn_ssv = sd_syn_ssv.get_segmentation_object(syn_ssv_id)
-            if (os.path.abspath(syn_ssv.attr_dict_path)
-                    != os.path.abspath(base_dir + "/attr_dict.pkl")):
-                raise ValueError(f'Path mis-match!')
-            synssv_attr_dc = dict(neuron_partners=ssv_ids)
-            voxel_dc[syn_ssv_id] = [id_mask], [abs_offset]
-            syn_ssv._voxels = syn_ssv.load_voxels(voxel_dc=voxel_dc)
-            # make sure load_voxels still calculates bounding box and size
-            if syn_ssv._bounding_box is None or syn_ssv._size is None:
-                msg = f'load_voxels call did not calculate size and/or bounding box of {syn_ssv}.'
-                log_extraction.error(msg)
-                raise ValueError(msg)
-            syn_ssv.calculate_rep_coord(voxel_dc=voxel_dc)
-            synssv_attr_dc["rep_coord"] = syn_ssv.rep_coord
-            synssv_attr_dc["bounding_box"] = syn_ssv.bounding_box
-            synssv_attr_dc["size"] = syn_ssv.size
-            # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
-            if mesh_min_obj_vx < syn_ssv.size:
-                syn_ssv._mesh = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
-                mesh_dc[syn_ssv.id] = syn_ssv.mesh
-                synssv_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
-                synssv_attr_dc["mesh_area"] = syn_ssv.mesh_area
-            else:
-                zero_mesh = [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),
-                             np.zeros((0,), dtype=np.float32)]
-                mesh_dc[syn_ssv.id] = zero_mesh
-                synssv_attr_dc["mesh_bb"] = syn_ssv.bounding_box * scaling
-                synssv_attr_dc["mesh_area"] = 0
-            # aggregate syn properties
-            syn_props_agg = {}
-            # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
-            for dc in this_attr:
-                for k in ['id_cs_ratio', 'cs_id', 'sym_prop', 'asym_prop']:
-                    syn_props_agg.setdefault(k, []).append(dc[k])
-            # store cs and sj IDs
-            syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
-            del syn_props_agg['cs_id']
+            # do not process synapse again if job has been restartet
+            if syn_ssv_id not in attr_dc:
+                this_cc_mask = np.array(list(this_cc))
+                # retrieve the index of the syn objects selected for this CC
+                this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
+                                                           return_counts=True)
+                # the weight is important
+                this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
+                if np.sum(this_syn_ids_cnt) < cell_obj_cnf['min_obj_vx']['syn_ssv']:
+                    continue
+                this_attr = syn_attr_list[this_syn_ixs]
+                this_vx = voxel_list[this_cc_mask]
+                syn_ssv = sd_syn_ssv.get_segmentation_object(syn_ssv_id)
+                if (os.path.abspath(syn_ssv.attr_dict_path)
+                        != os.path.abspath(base_dir + "/attr_dict.pkl")):
+                    raise ValueError(f'Path mis-match!')
+                synssv_attr_dc = dict(neuron_partners=ssv_ids)
+                voxel_dc.set_voxel_cache(syn_ssv_id, this_vx)
+                synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
+                synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
+                synssv_attr_dc["size"] = len(this_vx)
+                # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
+                if mesh_min_obj_vx < synssv_attr_dc["size"]:
+                    syn_ssv._mesh = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
+                    mesh_dc[syn_ssv.id] = syn_ssv.mesh
+                    synssv_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
+                    synssv_attr_dc["mesh_area"] = syn_ssv.mesh_area
+                else:
+                    zero_mesh = [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),
+                                 np.zeros((0,), dtype=np.float32)]
+                    mesh_dc[syn_ssv.id] = zero_mesh
+                    synssv_attr_dc["mesh_bb"] = synssv_attr_dc["bounding_box"] * scaling
+                    synssv_attr_dc["mesh_area"] = 0
+                # aggregate syn properties
+                syn_props_agg = {}
+                # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
+                for dc in this_attr:
+                    for k in ['id_cs_ratio', 'cs_id', 'sym_prop', 'asym_prop']:
+                        syn_props_agg.setdefault(k, []).append(dc[k])
+                # rename and delete old entry
+                syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
+                del syn_props_agg['cs_id']
 
-            # use the fraction of 'syn' voxels used for this connected component, i.e. 'this_agg_syn_weights', as weight
-            # agglomerate the syn-to-cs ratio as a weighted sum
-            syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
+                # use the fraction of 'syn' voxels used for this connected component, i.e. 'this_agg_syn_weights', as weight
+                # agglomerate the syn-to-cs ratio as a weighted sum
+                syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
 
-            # 'syn_ssv' synapse type as weighted sum of the 'syn' fragment types
-            sym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['sym_prop']))
-            asym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['asym_prop']))
-            syn_props_agg['sym_prop'] = sym_prop
-            syn_props_agg['asym_prop'] = asym_prop
+                # 'syn_ssv' synapse type as weighted sum of the 'syn' fragment types
+                sym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['sym_prop']))
+                asym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['asym_prop']))
+                syn_props_agg['sym_prop'] = sym_prop
+                syn_props_agg['asym_prop'] = asym_prop
 
-            if sym_prop + asym_prop == 0:
-                sym_ratio = -1
-            else:
-                sym_ratio = sym_prop / float(asym_prop + sym_prop)
-            syn_props_agg["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > cell_obj_cnf['sym_thresh'] else 1
-            syn_props_agg["syn_sign"] = syn_sign
+                if sym_prop + asym_prop == 0:
+                    sym_ratio = -1
+                else:
+                    sym_ratio = sym_prop / float(asym_prop + sym_prop)
+                syn_props_agg["syn_type_sym_ratio"] = sym_ratio
+                syn_sign = -1 if sym_ratio > cell_obj_cnf['sym_thresh'] else 1
+                syn_props_agg["syn_sign"] = syn_sign
 
-            # add syn_ssv dict to AttributeStorage
-            synssv_attr_dc.update(syn_props_agg)
-            attr_dc[syn_ssv_id] = synssv_attr_dc
+                # add syn_ssv dict to AttributeStorage
+                synssv_attr_dc.update(syn_props_agg)
+                attr_dc[syn_ssv_id] = synssv_attr_dc
             if use_new_subfold:
                 syn_ssv_id += np.uint(1)
                 if syn_ssv_id - base_id >= div_base:
@@ -501,8 +495,8 @@ def _combine_and_split_syn_thread(args):
 
         if n_items_for_path > n_per_voxel_path:
             voxel_dc.push()
-            attr_dc.push()
             mesh_dc.push()
+            attr_dc.push()
             cur_path_id += 1
             if len(voxel_rel_paths) == cur_path_id:
                 raise ValueError(f'Worker ran out of possible storage paths for storing {sd_syn_ssv.type}.')
@@ -512,7 +506,7 @@ def _combine_and_split_syn_thread(args):
             syn_ssv_id = base_id
             base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
-            voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
+            voxel_dc = VoxelStorageDyn(base_dir + "/voxel.pkl", read_only=False, voxel_mode=False)
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
             mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
@@ -534,7 +528,7 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
 
     Args:
         voxel_coords: List of numpy arrays in voxel coordinates.
-        dist_intra_object: Maximum distance between two voxels of different synapses to
+        dist_intra_object: Maximum distance between two voxels of different synapse fragments to
             consider them the same object. In nm.
         dist_inter_object: Maximum distance between two objects to check for close voxels
             between them. In nm.
@@ -656,7 +650,6 @@ def _combine_and_split_cs_thread(args):
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
     cs_ssv_id = base_id
 
-    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
@@ -671,8 +664,8 @@ def _combine_and_split_cs_thread(args):
         vxl_iter_lst = []
         vx_cnt = 0
         for cs in cs_lst:
-            vx_store = VoxelStorage(cs.voxel_path, read_only=True,
-                                    disable_locking=True)
+            vx_store = VoxelStorageDyn(cs.voxel_path, read_only=True,
+                                       disable_locking=True)
             vxl_iter_lst.append(vx_store.iter_voxelmask_offset(cs.id, overlap=1))
             vx_cnt += vx_store.object_size(cs.id)
         if mesh_min_obj_vx > vx_cnt:
@@ -682,14 +675,11 @@ def _combine_and_split_cs_thread(args):
             ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
 
         for mesh_cc in ccs:
-            abs_offset = np.min(mesh_cc[1].reshape((-1, 3)), axis=0) // scaling
             cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id)
             if (os.path.abspath(cs_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
             csssv_attr_dc = dict(neuron_partners=ssv_ids)
-            # store dummy (no) voxels at correct offset
-            voxel_dc[cs_ssv_id] = [np.zeros((0, 0, 0))], [abs_offset]
             # don't store normals
             cs_ssv._mesh = [mesh_cc[0], mesh_cc[1], np.zeros((0,), dtype=np.float32)]
             mesh_dc[cs_ssv.id] = cs_ssv.mesh
@@ -724,7 +714,6 @@ def _combine_and_split_cs_thread(args):
                 cs_ssv_id += np.uint(sd_cs.n_folders_fs)
 
         if n_items_for_path > n_per_voxel_path:
-            voxel_dc.push()
             attr_dc.push()
             mesh_dc.push()
             cur_path_id += 1
@@ -736,12 +725,10 @@ def _combine_and_split_cs_thread(args):
             cs_ssv_id = base_id
             base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
-            voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
             mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
     if n_items_for_path > 0:
-        voxel_dc.push()
         attr_dc.push()
         mesh_dc.push()
 

@@ -71,8 +71,6 @@ def um_umint_fact():
 
 def map_subcell_C(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_chs):
     """ch and subcell_chs must all have the same shape!
-    TODO: check if uint32 and uint64 works with current unordered map definition,
-    using n_type instead of uint64 results in an error.
     Returns rep coord, bounding box and size dict for cell segmentation objects,
     list of those property dicts for each subcellular segmentation type and number
     of overlapping voxels between subcellular and cell segmentation
@@ -113,8 +111,6 @@ def map_subcell_C(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_chs):
 
 def map_subcell_extract_props(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_chs):
     """ch and subcell_chs must all have the same shape!
-    TODO: check if uint32 and uint64 works with current unordered map definition,
-    using n_type instead of uint64 results in an error.
     Returns rep coord, bounding box and size dict for cell segmentation objects,
     list of those property dicts for each subcellular segmentation type and number
     of overlapping voxels between subcellular and cell segmentation

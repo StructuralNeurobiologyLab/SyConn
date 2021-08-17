@@ -28,6 +28,9 @@ if __name__ == '__main__':
                              'or "2" (1100, 1100, 600).')
     parser.add_argument('--log_level', type=str, default='INFO',
                         help='Level of logging (INFO, DEBUG).')
+    parser.add_argument('--overwrite', dest='overwrite', action='store_true',
+                        help='Overwrite generated data.')
+    parser.set_defaults(overwrite=False)
     args = parser.parse_args()
     example_cube_id = int(args.example_cube)
     log_level = args.log_level
@@ -49,7 +52,7 @@ if __name__ == '__main__':
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
-        ('generate_cs_ssv', True),
+        ('generate_cs_ssv', False),  # cs_ssv: contact site objects between cells
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -61,7 +64,7 @@ if __name__ == '__main__':
           # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
           'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
                                       'binary_erosion'],
-                               'sj': ['binary_opening', 'binary_closing', 'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing'],
                                'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
           }
          ),
@@ -71,7 +74,7 @@ if __name__ == '__main__':
          )
     ]
     if example_cube_id == 1:
-        chunk_size = (256, 256, 128)
+        chunk_size = (256, 256, 256)
     elif example_cube_id == 2:
         chunk_size = (256, 256, 256)
     else:
@@ -188,8 +191,6 @@ if __name__ == '__main__':
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
     # exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
     ftimer.stop()
@@ -197,7 +198,7 @@ if __name__ == '__main__':
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     ftimer.start('SD generation')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc)
+                                    n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite)
     exec_init.run_create_rag()
     ftimer.stop()
 
@@ -216,7 +217,7 @@ if __name__ == '__main__':
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd()
+    exec_init.run_create_neuron_ssd(overwrite=args.overwrite)
     ftimer.stop()
 
     log.info('Step 5/9 - Skeleton generation')
@@ -224,24 +225,24 @@ if __name__ == '__main__':
     exec_skeleton.run_skeleton_generation()
     ftimer.stop()
 
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 5.5/9 - Neuron rendering')
-        ftimer.start('Neuron rendering')
-        exec_render.run_neuron_rendering()
-        ftimer.stop()
-
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
     ftimer.stop()
 
     log.info('Step 6.5/9 - Contact detection')
     ftimer.start('Contact detection')
     if global_params.config['generate_cs_ssv']:
-        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
     else:
         log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
+
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Extra step - Neuron rendering')
+        ftimer.start('Neuron rendering')
+        exec_render.run_neuron_rendering()
+        ftimer.stop()
 
     log.info('Step 7/9 - Compartment prediction')
     ftimer.start('Compartment predictions')

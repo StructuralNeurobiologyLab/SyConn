@@ -9,8 +9,9 @@ import tempfile
 import numpy as np
 from multiprocessing import Process, Queue
 from syconn import global_params
+# TODO: test VoxelStorageDyn
 from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
-    VoxelStorage, BinarySearchStore
+    VoxelStorageClass, BinarySearchStore
 from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
      read_txt_from_zip, remove_from_zip
 
@@ -29,17 +30,23 @@ def _setup_testfile(fname):
 
 
 def test_BinarySearchStore():
+    np.random.seed(0)
     n_shards = 5
     n_elements = int(1e6)
-    ids = np.random.randint(1, 1e10, n_elements).astype(np.uint64)
-    attr = dict(ssv_ids=np.random.randint(1, 1e10, n_elements, ))
+    max_int = int(2e6)  # choice becomes slow for large max values
+    ids = np.random.choice(max_int, n_elements, replace=False).astype(np.uint64)
+    attr = dict(ssv_ids=np.random.choice(max_int, n_elements, replace=False).astype(np.uint64))
     tf = tempfile.TemporaryFile()
     bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
     ixs_sample = np.random.permutation(len(ids))[:1000]
     attrs = bss.get_attributes(ids[ixs_sample], 'ssv_ids')
+    if not np.array_equal(attr['ssv_ids'][ixs_sample], attrs):
+        not_equal = attr['ssv_ids'][ixs_sample] != attrs
+        print(attrs[not_equal], attr['ssv_ids'][ixs_sample][not_equal])
     assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
     assert bss.n_shards == n_shards, "Number of shards differ."
     assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
+    assert np.max(ids) == bss.id_array[-1], 'Maxima do not match.'  # captured by test below, but important detail
     assert np.array_equal(bss.id_array, np.sort(ids)), "Sort failed."
 
 
@@ -117,7 +124,6 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 
 
 def test_saving_loading_and_copying_process_for_Attribute_dict():
-
     """
     Checks the saving,loading and copying  functionality for an attribute dict
     Returns An Assertion Error in case an exception is thrown
@@ -218,18 +224,18 @@ def test_compression_and_decompression_for_mesh_dict():
         raise AssertionError
 
 
-def test_compression_and_decompression_for_voxel_dict():
+def test_compression_and_decompression_for_voxel_storage():
     test_p = _setup_testfile('test4')
 
     try:
         # tests least entropy data
         start = time.time()
-        vd = VoxelStorage(test_p, read_only=False, cache_decomp=True)
+        vd = VoxelStorageClass(test_p, read_only=False, cache_decomp=True)
         voxel_masks = [np.zeros((128, 128, 100)).astype(np.uint8),
                        np.zeros((10, 50, 20)).astype(np.uint8)] * 2
         offsets = np.random.randint(0, 1000, (4, 3))
         logging.debug("VoxelDict arr size (zeros):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
-        logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
+        logging.debug("VoxelDict arr size (zeros):\t%s" % ([a.shape for a in voxel_masks]))
         start_comp = time.time()
         vd[8192734] = [voxel_masks, offsets]
         vd.push()
@@ -240,10 +246,10 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.warning('FAILED: test_compression_and_decompression_for_voxel_dict: STEP 1 ' + str(e))
         raise AssertionError
 
-    # tests decompressing
+    # tests reading
     try:
         start_loading = time.time()
-        vd = VoxelStorage(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorageClass(test_p, read_only=True, cache_decomp=True)
         logging.debug("Finished loading of compressed VoxelDict after %0.4fs." % (time.time() - start_loading))
         start = time.time()
         _ = vd[8192734]
@@ -271,7 +277,7 @@ def test_compression_and_decompression_for_voxel_dict():
 
     # checks high entropy data
     try:
-        vd = VoxelStorage(test_p, read_only=False)
+        vd = VoxelStorageClass(test_p, read_only=False)
         voxel_masks = [np.random.randint(0, 1, (128, 128, 100)).astype(np.uint8),
                        np.random.randint(0, 1, (10, 50, 20)).astype(np.uint8)] * 2
         offsets = np.random.randint(0, 1000, (4, 3))
@@ -283,7 +289,7 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.debug("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
         # tests decompressing
-        vd = VoxelStorage(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorageClass(test_p, read_only=True, cache_decomp=True)
         start = time.time()
         _ = vd[8192734]
         logging.debug("Finished decompression of VoxelDict after %0.4fs." % (time.time() - start))
@@ -482,3 +488,5 @@ def remove_files_after_test(file_name):
         os.remove(str(dir_path) + '/' + file_name)
 
 
+if __name__ == '__main__':
+    test_BinarySearchStore()

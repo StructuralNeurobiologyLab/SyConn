@@ -4,10 +4,12 @@
 from typing import Optional
 
 import numpy as np
+import tqdm
 
 from knossos_utils import KnossosDataset
 from syconn.handler import basics
 from syconn.mp.mp_utils import start_multiprocess_imap
+from . import log_proc
 
 
 def convert_cube_size_kd(source_kd: str, target_kd_path: str, cube_size: np.ndarray,
@@ -43,7 +45,7 @@ def convert_cube_size_kd(source_kd: str, target_kd_path: str, cube_size: np.ndar
         njobs = max(nb_threads, int(np.ceil(len(chunk_coords) / 4)))
         multi_params = [(source_kd, target_kd_path, coords, do_raw, mag, cs, compresslevel) for coords in
                         basics.chunkify(chunk_coords, njobs)]
-        start_multiprocess_imap(_convert_cube_size_kd_thread, multi_params, nb_cpus=nb_threads)
+        start_multiprocess_imap(_convert_cube_size_kd_thread, multi_params, nb_cpus=nb_threads, desc=f'mag={mag}')
 
 
 def _convert_cube_size_kd_thread(args):
@@ -58,3 +60,23 @@ def _convert_cube_size_kd_thread(args):
         else:
             data = kd_source.load_seg(size=cube_size, offset=coord, mag=mag)
             kd_target.save_seg(offset=coord, mags=[mag], data=data, data_mag=mag, compresslevel=compresslevel)
+
+
+def check_complete(kd1_p, kd2_p, mags, do_raw=False):
+    kd1 = basics.kd_factory(kd1_p)
+    kd2 = basics.kd_factory(kd2_p)
+
+    for mag in mags:
+        cs = np.array(kd2.cube_shape) * mag
+        grid = np.mgrid[0:kd1.boundary[0]:cs[0], 0:kd1.boundary[1]:cs[1], 0:kd1.boundary[2]:cs[2]]
+        chunk_coords = grid.reshape(3, -1).swapaxes(1, 0)
+        for coord in tqdm.tqdm(chunk_coords, total=len(chunk_coords)):
+            if do_raw:
+                data1 = kd1.load_raw(size=kd2.cube_shape, offset=coord, mag=mag)
+                data2 = kd1.load_raw(size=kd2.cube_shape, offset=coord, mag=mag)
+            else:
+                data1 = kd1.load_seg(size=kd2.cube_shape, offset=coord, mag=mag)
+                data2 = kd1.load_seg(size=kd2.cube_shape, offset=coord, mag=mag)
+            if not np.all(data1 == data2):
+                raise ValueError(f'Data is not identical.')
+

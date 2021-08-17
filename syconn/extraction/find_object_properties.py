@@ -3,7 +3,7 @@ import scipy.ndimage
 from numba import typed
 from numba import types
 import numpy as np
-from typing import Tuple
+from typing import Tuple, List
 
 from syconn import global_params
 from syconn.extraction.block_processing_C import process_block_nonzero
@@ -20,7 +20,7 @@ uint64_int64_dict = types.DictType(types.uint64, types.int64)
 
 
 @numba.jit(nopython=True)
-def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.ndarray, sym_mask: np.ndarray)\
+def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.ndarray, sym_mask: np.ndarray)\
         -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray],
                  np.ndarray, np.ndarray]:
     """
@@ -195,7 +195,7 @@ def extract_cs_syntype(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask: np.n
 
 
 @numba.jit(nopython=True)
-def find_object_properties_cs(cs_seg: np.ndarray):
+def find_object_properties_cs_64bit(cs_seg: np.ndarray):
     """
     Extract contact properties for every contact site ID tuple inside `cs_seg`.
 
@@ -299,7 +299,7 @@ def convert_nvox2ratio_syntype(syn_cnts, sym_cnts, asym_cnts):
     return asym_ratio, sym_ratio
 
 
-def merge_type_dicts(type_dicts):
+def merge_type_dicts(type_dicts: List[dict]):
     """
     Merge map dictionaries in-place. Values will be stored in first dictionary
 
@@ -318,6 +318,30 @@ def merge_type_dicts(type_dicts):
                 tot_map[cs_id] += cnt
             else:
                 tot_map[cs_id] = cnt
+
+
+def merge_voxel_dicts(voxel_dicts: List[dict], key_to_str=False):
+    """
+    Merge map dictionaries values will be stored in first dictionary, this method converts numpy arrays into lists.
+
+    Args:
+        voxel_dicts:
+        key_to_str: If False, keep keys as they are, which is needed when loading data from npz files (default).
+            If True, converts keys to strings to enable `np.savez` (requires str).
+    """
+    tot_map = voxel_dicts[0]
+    for el in voxel_dicts[1:]:
+        # iterate over subcell. ids with dictionaries as values which store
+        # voxel coordinates
+        for cs_id, vxs in el.items():
+            if key_to_str:
+                cs_id = str(cs_id)
+            if cs_id in tot_map:
+                tot_map[cs_id].extend(vxs)
+            else:
+                if isinstance(vxs, np.ndarray):
+                    vxs = vxs.tolist()
+                tot_map[cs_id] = vxs
 
 
 def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:
@@ -400,14 +424,14 @@ def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: n
 @numba.jit(nopython=True)
 def detect_seg_boundaries(arr: np.ndarray) -> np.ndarray:
     """
-    Identify whether IDs differ within 6-connectivity and return boundary mask.
+    Identify whether IDs differ within 6-connectivity and return boolean mask.
     0 IDs are skipped.
 
     Args:
         arr: Segmentation volume (XYZ).
 
     Returns:
-        Boundary mask.
+        Binary boundary mask (1: segmentation boundary, 0: inside segmentation or background).
     """
     nx, ny, nz = arr.shape[:3]
     boundary = np.zeros((nx, ny, nz), dtype=np.bool_)
@@ -433,27 +457,15 @@ def detect_seg_boundaries(arr: np.ndarray) -> np.ndarray:
 
 def detect_cs(arr: np.ndarray) -> np.ndarray:
     """
-    Old version. Use detect_cs_64bit!
+    Only works if ``arr.dtype`` is uint32. Use detect_cs_64bit for uin64 segmentation.
 
     Args:
-        arr: 3D segmentation array (only np.uint32!)
+        arr: 3D segmentation array (only np.uint32).
 
     Returns:
-        3D contact site segmentation array (np.uint64).
+        3D contact site instance segmentation array (np.uint64).
     """
-    # simple edge detector, only works reliably if extra-cellular space is available
-    # TODO: switch to C++ loop with 6-neighborhood checks (unequal to center ID) to achieve symmetric
-    #  contact sites in the case of zero extra-cellular space.
-    jac = np.zeros([3, 3, 3], dtype=np.int32)
-    jac[1, 1, 1] = -6
-    jac[1, 1, 0] = 1
-    jac[1, 1, 2] = 1
-    jac[1, 0, 1] = 1
-    jac[1, 2, 1] = 1
-    jac[2, 1, 1] = 1
-    jac[0, 1, 1] = 1
-    edges = scipy.ndimage.convolve(arr.astype(np.int32), jac) < 0
-    edges = edges.astype(np.uint32, copy=False)
+    edges = detect_seg_boundaries(arr).astype(np.uint32, copy=False)
     arr = arr.astype(np.uint32, copy=False)
     cs_seg = process_block_nonzero(
         edges, arr, global_params.config['cell_objects']['cs_filtersize'])

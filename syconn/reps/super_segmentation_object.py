@@ -490,8 +490,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         All cell supervoxel IDs which are assigned to this cell reconstruction.
         """
-        # must be <= uint32
-        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint32)
+        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint64)
 
     @property
     def sj_ids(self) -> np.ndarray:
@@ -1269,7 +1268,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         """
         if obj_types is None:
-            obj_types = self.config['existing_cell_organelles']
+            obj_types = self.config['process_cell_organelles']
         annotations = []
         for obj_type in obj_types:
             assert obj_type in self.attr_dict
@@ -1672,7 +1671,7 @@ class SuperSegmentationObject(SegmentationBase):
                          save: bool = True):
         """
         Wrapper function for mapping all existing cell organelles (as defined in
-        :py:attr:`~config['existing_cell_organelles']`).
+        :py:attr:`~config['process_cell_organelles']`).
 
         Args:
             obj_types: Type of :class:`~syconn.reps.super_segmentation_object
@@ -1680,9 +1679,10 @@ class SuperSegmentationObject(SegmentationBase):
             save: Saves the attribute dict of this SSV object afterwards.
         """
         if obj_types is None:
-            obj_types = self.config['existing_cell_organelles']
+            obj_types = self.config['process_cell_organelles']
         self.aggregate_segmentation_object_mappings(obj_types, save=save)
         for obj_type in obj_types:
+            # TODO: remove handling of sj?
             self.apply_mapping_decision(obj_type, save=save,
                                         correct_for_background=obj_type == "sj")
 
@@ -1714,7 +1714,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         self.load_attr_dict()
         self._map_cellobjects()
-        for sv_type in self.config['existing_cell_organelles'] + ["sv", "syn_ssv"]:
+        for sv_type in self.config['process_cell_organelles'] + ["sv", "syn_ssv"]:
             _ = self._load_obj_mesh(obj_type=sv_type, rewrite=False)
         self.calculate_skeleton()
 
@@ -2365,7 +2365,8 @@ class SuperSegmentationObject(SegmentationBase):
         write_skeleton_kzip(dest_path, [new_anno])
 
     def mergelist2kzip(self, dest_path: Optional[str] = None):
-        self.load_attr_dict()
+        if len(self.attr_dict) == 0:
+            self.load_attr_dict()
         kml = knossos_ml_from_sso(self)
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
@@ -2497,7 +2498,7 @@ class SuperSegmentationObject(SegmentationBase):
                 or None to use default values (see :func:`~mesh2kzip`).
             individual_sv_meshes: Export meshes of cell supervoxels individually.
             object_meshes: Defaults to subcellular organelles defined in config.yml
-                ('existing_cell_organelles').
+                ('process_cell_organelles').
             synssv_instead_sj: If True, will use 'syn_ssv' objects instead of 'sj'.
 
 
@@ -2526,7 +2527,7 @@ class SuperSegmentationObject(SegmentationBase):
             attr_keys.remove('rag')
 
         if object_meshes is None:
-            object_meshes = list(self.config['existing_cell_organelles']) + ['sv']
+            object_meshes = list(self.config['process_cell_organelles']) + ['sv', 'syn_ssv']
         else:
             object_meshes = list(object_meshes)
 

@@ -174,7 +174,7 @@ class VoxelStorageL(StorageClass):
 
 def VoxelStorage(inp, **kwargs):
     """
-    Deprecated storage for voxel data.
+    Alias for :class:`~VoxelStorageDyn`.
 
     Args:
         inp:
@@ -183,13 +183,7 @@ def VoxelStorage(inp, **kwargs):
     Returns:
 
     """
-    obj = VoxelStorageClass(inp, **kwargs)
-    if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
-        obj = VoxelStorageDyn(inp, **kwargs)
-    # # TODO: activate as soon as synapse-detection pipelines is refactored.
-    # else:
-    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
-    #                         ' VoxelStorageDyn.')
+    obj = VoxelStorageDyn(inp, **kwargs)
     return obj
 
 
@@ -253,6 +247,8 @@ class VoxelStorageDyn(CompressedStorage):
             self._dc_intern['size'] = defaultdict(int)
         if 'rep_coord' not in self._dc_intern:
             self._dc_intern['rep_coord'] = dict()
+        if 'voxel_cache' not in self._dc_intern:
+            self._dc_intern['voxel_cache'] = dict()
         if voxeldata_path is not None:
             old_p = self._dc_intern['meta']['voxeldata_path']
             new_p = voxeldata_path
@@ -322,6 +318,30 @@ class VoxelStorageDyn(CompressedStorage):
         if self.voxel_mode:
             log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
         self._dc_intern['rep_coord'][item] = value
+
+    def set_voxel_cache(self, key: int, voxel_coords: np.ndarray):
+        """
+        This is only used to store the voxels during the synapse extraction step. This method operates independent of
+        :func:`~__setitem__`.
+
+        Args:
+            key: Segment ID.
+            voxel_coords: Voxel coordinates.
+        """
+        self._dc_intern['voxel_cache'][key] = voxel_coords
+
+    def get_voxel_cache(self, key: int):
+        """
+        Voxels corresponding to item `key` must have been added to store via :func:`~set_voxel_cache`.
+        This implementation operates independent of :func:`~get_voxeldata`.
+
+        Args:
+            key: Segment ID.
+
+        Returns:
+            Voxel coordinates.
+        """
+        return self._dc_intern['voxel_cache'][key]
 
     def get_voxeldata(self, item: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """
@@ -533,6 +553,10 @@ class BinarySearchStore:
                  attr_arrays: Optional[Dict[str, np.ndarray]] = None, overwrite: bool = False,
                  n_shards: Optional[int] = None, rdcc_nbytes: int = 5*2**20):
         """
+        Data structure to store properties (values) of a corresponding ID array (keys). Internally a binary search
+        is used that uses a sorted representation of keys and values to enable sparse look-ups with a much lower
+        memory complexity than python dictionaries.
+        Maximum ID is the last element of :attr:`~id_array`.
 
         Args:
             fname: File name.
@@ -549,13 +573,14 @@ class BinarySearchStore:
                 raise ValueError('ID array is given, but no attribute array(s).')
             if isinstance(fname, str) and os.path.isfile(fname):
                 if not overwrite:
-                    raise FileExistsError(f'BinarySearchStore at "{fname}" already exists."')
+                    raise FileExistsError(f'BinarySearchStore at "{fname}" already exists and overwrite is False."')
                 else:
                     os.remove(fname)
             if n_shards is None:
                 n_shards = 5
             if isinstance(fname, str):
                 os.makedirs(os.path.split(self.fname)[0], exist_ok=True)
+            # sort keys / ID array
             ixs = np.argsort(id_array)
             id_array = id_array[ixs]
             bucket_ranges = []

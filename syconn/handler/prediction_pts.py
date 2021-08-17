@@ -2090,6 +2090,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             if len(source_nodes) % bs != 0:
                 source_nodes = np.concatenate([np.random.choice(source_nodes, bs - len(source_nodes) % bs),
                                                source_nodes])
+
             node_arrs = context_splitting_kdt(hc, source_nodes, ctx)
             # collect contexts into batches (each batch contains every n_batches contexts
             # (e.g. every 4th if n_batches = 4)

@@ -54,7 +54,7 @@ and segmentation pipeline:
    
 
 6. In `syconn/handler/config.yml` make the following changes:
-   * To the list `existing_cell_organelles` add the element `co`.
+   * To the list `process_cell_organelles` add the element `co`.
    * Under `paths:` with an indentation add the line `kd_co:`
      (include the `:`).
    * Under `versions:` with an indentation add the line

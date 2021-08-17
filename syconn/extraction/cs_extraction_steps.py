@@ -13,7 +13,7 @@ import shutil
 import time
 from collections import defaultdict
 from logging import Logger
-from typing import Optional, Dict, List, Tuple, Union
+from typing import Optional, Dict, List, Tuple, Union, Callable
 
 from multiprocessing import Process
 
@@ -34,14 +34,17 @@ from ..mp import batchjob_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.sd_proc import _cache_storage_paths
 from ..proc.sd_proc import merge_prop_dicts, dataset_analysis
+from ..proc.image import apply_morphological_operations, get_aniso_struct
 from ..reps import rep_helper
 from ..reps import segmentation
-from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties
+from .find_object_properties import merge_type_dicts, detect_cs_64bit, detect_cs, find_object_properties, \
+find_object_properties_cs_64bit, merge_voxel_dicts
 
 
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None,
-                          n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False):
+                          n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
+                          transf_func_sj_seg: Optional[Callable] = None):
     """
     Extracts contact sites and their overlap with ``sj`` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
@@ -93,13 +96,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
                 generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
                           key_value_pairs=key_val_pairs_conf)
 
-    Todo:
-        * using the prob. maps of the initial synaptic junction prediction,
-          the object extraction of ``sj`` objects can be removed.
-        * Replace sj_0 Segmentation dataset by the overlapping CS<->
-          sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
-          syn_0. Do not extract sj objects in general.
-
     Notes:
         * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
         * Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
@@ -112,8 +108,10 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         cube_of_interest_bb: Sub-volume of the data set which is processed.
             Default: Entire data set.
         n_folders_fs: Number of folders used for organizing supervoxel data.
-        cube_shape: Cube shape used within contact site KnossosDataset.
+        cube_shape: Cube shape used within 'syn' and 'cs' KnossosDataset.
         overwrite: Overwrite existing cache.
+        transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
+            sj foreground.
 
     """
     if extract_cs_syntype is None:
@@ -124,12 +122,14 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     kd = basics.kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-    if chunk_size is None:
-        chunk_size = (512, 512, 512)
     if cube_shape is None:
         cube_shape = (256, 256, 256)
+    if chunk_size is None:
+        chunk_size = (512, 512, 512)
+    if np.any(np.array(chunk_size) % np.array(cube_shape)):
+        raise ValueError('Chunk size must be divisible by cube shape.')
     if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 4
+        max_n_jobs = global_params.config.ncore_total * 8
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
 
@@ -168,36 +168,36 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             raise FileExistsError(msg)
         log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
         shutil.rmtree(dir_props)
-    if os.path.isdir(cset.path_head_folder):
-        if not overwrite:
-            msg = f'Could not start extraction of supervoxel objects ' \
-                  f'because temporary files already exist at "{cset.path_head_folder}" ' \
-                  f'and overwrite was set to False.'
-            log.error(msg)
-            raise FileExistsError(msg)
-        log.debug(f'Found existing cache folder at {cset.path_head_folder}. Removing it now.')
-        shutil.rmtree(cset.path_head_folder)
     os.makedirs(dir_props)
-    os.makedirs(cset.path_head_folder)
+
+    # init KD for syn and cs
+    for ot in ['cs', 'syn']:
+        path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_seg/"
+        if os.path.isdir(path_kd):
+            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+            shutil.rmtree(path_kd)
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd._cube_shape = cube_shape
+        scale = np.array(global_params.config['scaling'])
+        target_kd.scales = [scale, ]
+        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
 
     multi_params = []
-    if max_n_jobs > len(chunk_list) // 50:
-        iter_params = basics.chunkify(chunk_list, max_n_jobs)
-    else:
-        iter_params = basics.chunkify_successive(chunk_list, 50)
+    iter_params = basics.chunkify(chunk_list, max_n_jobs)
     for ii, chunk_k in enumerate(iter_params):
         multi_params.append([[cset.chunk_dict[k] for k in chunk_k],
-                             global_params.config.kd_seg_path, ii, dir_props])
+                             global_params.config.kd_seg_path, ii, dir_props, transf_func_sj_seg])
 
     # reduce step
     start = time.time()
     cs_worker_dc_fname = f'{global_params.config.temp_path}/cs_worker_dict.pkl'
-    dict_paths_tmp += [cs_worker_dc_fname, dir_props, cset.path_head_folder]
+    dict_paths_tmp += [cs_worker_dc_fname, dir_props]
     syn_ids = []
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log, use_dill=True)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -210,7 +210,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             cs_worker_mapping[worker_nr] = cs_ids_curr
     else:
         results = start_multiprocess_imap(_contact_site_extraction_thread,
-                                          multi_params, verbose=False)
+                                          multi_params, verbose=False, debug=False)
         for worker_nr, worker_res in tqdm.tqdm(results, leave=False):
             syn_ids_curr = np.array(worker_res['syn'], dtype=np.uint64)
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)
@@ -221,7 +221,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     log_extraction.debug(f'Collected partial results from {len(cs_worker_mapping)} workers.')
     with open(cs_worker_dc_fname, 'wb') as f:
         pkl.dump(cs_worker_mapping, f, protocol=4)
-    del cs_worker_mapping
+    del cs_worker_mapping, cset
 
     syn_ids = np.unique(np.concatenate(syn_ids)).astype(np.uint64)
     n_syn = len(syn_ids)
@@ -240,51 +240,10 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     step_names.append("extract objects and collect properties of cs and syn.")
     all_times.append(time.time() - start)
 
-    # reduce step
-    start = time.time()
-
-    all_times.append(time.time() - start)
-    step_names.append("conversion of results")
-
     log.info(f'Finished extraction of initial contact sites (#objects: {n_cs}) and synapses'
              f' (#objects: {n_syn}).')
     if n_syn == 0:
         log.critical('WARNING: Did not find any synapses during extraction step.')
-
-    # write cs and syn segmentation to KD and SD
-    chunky.save_dataset(cset)
-    kd = basics.kd_factory(global_params.config.kd_seg_path)
-
-    # convert Chunkdataset to syn and cs KD
-    def _convert_cd_to_kd(ot):
-        path_kd = "{}/knossosdatasets/{}_seg/".format(
-            global_params.config.working_dir, ot)
-        if os.path.isdir(path_kd):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
-            shutil.rmtree(path_kd)
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd._cube_shape = cube_shape
-        scale = np.array(global_params.config['scaling'])
-        target_kd.scales = [scale, ]
-        target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-                                          mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
-        target_kd = basics.kd_factory(path_kd)  # test if init is possible
-        export_cset_to_kd_batchjob({ot: path_kd}, cset, ot, [ot],  offset=offset, size=size,
-                                   stride=chunk_size, as_raw=False,
-                                   orig_dtype=np.uint64, unified_labels=False, log=log)
-        log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset'
-                  ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
-
-    procs = [Process(target=_convert_cd_to_kd, args=('cs',)),
-             Process(target=_convert_cd_to_kd, args=('syn',))]
-    for p in procs:
-        p.start()
-    for p in procs:
-        p.join()
-        if p.exitcode != 0:
-            raise Exception(f'Worker {p.name} stopped unexpectedly with exit '
-                            f'code {p.exitcode}.')
-        p.close()
 
     # create folders for existing (sub-)cell supervoxels to prevent collisions using makedirs
     for ii, struct in enumerate(['cs', 'syn']):
@@ -305,15 +264,15 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    n_cores = 2
+    n_cores = 2 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
     # slightly increase ncores per worker to compensate IO related downtime
-    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, int(n_cores * 1.5))
+    multi_params = [(sv_id_block, n_folders_fs, path, path_cs, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
-        start_multiprocess_imap(_write_props_to_syn_thread, multi_params)
+        start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=n_cores, remove_jobfolder=True)
+                           n_cores=1, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
@@ -358,20 +317,24 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
     Todo:
         * Get rid of the second argument -> use config parameter instead.
-        * using the prob. maps of the initial synaptic junction prediction
-          the object extraction of ``sj`` objects can be removed.
 
     Returns:
         Two lists of dictionaries (representative coordinates, bounding box and
         voxel count) for ``cs`` and ``syn`` objects, per-synapse counts of
         symmetric and asymmetric voxels.
+
     """
     chunks = args[0]
     knossos_path = args[1]
     worker_nr = args[2]
     dir_props = args[3]
+    transf_func_sj_seg = args[4]
     worker_dir_props = f"{dir_props}/{worker_nr}/"
     os.makedirs(worker_dir_props, exist_ok=True)
+
+    morph_ops = global_params.config['cell_objects']['extract_morph_op']
+    scaling = np.array(global_params.config['scaling'])
+    struct = get_aniso_struct(scaling)
 
     if global_params.config.syntype_available and \
             (global_params.config.sym_label == global_params.config.asym_label) and \
@@ -380,22 +343,27 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                          'asymmetric synapses are identical. Either one '
                          'must differ.')
 
-    kd = basics.kd_factory(knossos_path)
-    # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction),
-    #  see below.
-    kd_sj = basics.kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
+    # init target KD for cs and syn segmentation
+    kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
+    kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
+
+    # init. synaptic junction (sj) KD
+    kd_sj = basics.kd_factory(global_params.config.kd_sj_path)
+    # init synapse type KD if available
     if global_params.config.syntype_available:
         kd_syntype_sym = basics.kd_factory(global_params.config.kd_sym_path)
         kd_syntype_asym = basics.kd_factory(global_params.config.kd_asym_path)
     else:
         kd_syntype_sym, kd_syntype_asym = None, None
+
+    # cell segmentation
+    kd = basics.kd_factory(knossos_path)
+
     cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
+    syn_voxels = {}
     tot_sym_cnt = {}
     tot_asym_cnt = {}
-    cum_dt_data = 0
-    cum_dt_proc = 0
-    cum_dt_proc2 = 0
     cs_filtersize = np.array(global_params.config['cell_objects']['cs_filtersize'])
     cs_dilation = global_params.config['cell_objects']['cs_dilation']
     # stencil_offset is used to load more data as these will be cropped when performing detect_cs(_64bit)
@@ -405,51 +373,42 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     for chunk in chunks:
         offset = np.array(chunk.coordinates - overlap)  # also used for loading synapse data
         size = 2 * overlap + np.array(chunk.size)  # also used for loading synapse data
-        start = time.time()
-
         data = kd.load_seg(size=size + 2 * stencil_offset,
                            offset=offset - stencil_offset,
                            mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
-        cum_dt_data += time.time() - start
-        start = time.time()
 
         # contacts has size as given with `size`, because detect_cs performs valid conv.
         # -> contacts result is cropped by stencil_offset on each side
-
-        # TODO: use new detect_cs after verification
         contacts = np.asarray(detect_cs(data))
-        # contacts = np.asarray(detect_cs_64bit(data))
-        # contacts_new = np.array(contacts)
-        # res = np.zeros(contacts.shape[:3], dtype=np.uint64)
-        # mask = contacts[..., 0] != 0
-        # res[mask] = (contacts[mask][..., 0] << 32) + contacts[mask][..., 1]
-        # contacts = res
 
-        cum_dt_proc += time.time() - start
+        if transf_func_sj_seg is None:
+            sj_d = (kd_sj.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2) >
+                    255 * global_params.config['cell_objects']["probathresholds"]['sj']).astype('u1')
+        else:
+            sj_d = transf_func_sj_seg(
+                kd_sj.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)).astype('u1', copy=False)
+        # apply morphological operations on sj binary mask
+        if 'sj' in morph_ops:
+            sj_d = apply_morphological_operations(
+                sj_d.copy(), morph_ops['sj'], mop_kwargs=dict(structure=struct)).astype('u1', copy=False)
 
-        start = time.time()
-        # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
-        # sj_d = (kd_sj.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
-        # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
-        sj_d = (kd_sj.load_seg(size=size, offset=offset, mag=1,
-                               datatype=np.uint64) > 0).astype(np.uint8, copy=False).swapaxes(0, 2)
         # get binary mask for symmetric and asymmetric syn. type per voxel
         if global_params.config.syntype_available:
             if global_params.config.kd_asym_path != global_params.config.kd_sym_path:
                 # TODO: add thresholds to global_params
                 if global_params.config.sym_label is None:
                     sym_d = (kd_syntype_sym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                             >= 123).astype(np.uint8, copy=False)
+                             >= 123).astype('u1', copy=False)
                 else:
                     sym_d = (kd_syntype_sym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                             == global_params.config.sym_label).astype(np.uint8, copy=False)
+                             == global_params.config.sym_label).astype('u1', copy=False)
 
                 if global_params.config.asym_label is None:
                     asym_d = (kd_syntype_asym.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                              >= 123).astype(np.uint8, copy=False)
+                              >= 123).astype('u1', copy=False)
                 else:
                     asym_d = (kd_syntype_asym.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
-                              == global_params.config.asym_label).astype(np.uint8, copy=False)
+                              == global_params.config.asym_label).astype('u1', copy=False)
             else:
                 assert global_params.config.asym_label is not None, \
                     'Label of asymmetric synapses is not set.'
@@ -463,14 +422,12 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         else:
             sym_d = np.zeros_like(sj_d)
             asym_d = np.zeros_like(sj_d)
-        cum_dt_data += time.time() - start
 
         # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
-        start = time.time()
+
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
-        _, bb_dc, _ = find_object_properties(contacts)  # TODO: change to find_object_properties_cs from
-        # find_object_properties_numba
+        _, bb_dc, _ = find_object_properties(contacts)
         n_closings = overlap
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
@@ -489,41 +446,38 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             # only update background or the objects itself and do not remove object voxels (res == 1), e.g. at boundary
             proc_mask = ((binary_mask == 1) | (sub_vol == 0)) & (res == 1)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
-        cum_dt_proc2 += time.time() - start
 
-        start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects
         # and the asym and sym voxels, do not use overlap here!
-        # TODO: use numba implementation of extract_cs_syntype - then conversion to lists is not required anymore
-        # TODO: use python lists instead of numpy arrays as dictionary values in curr_cs_p and curr_syn_p
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt, curr_syn_vx = extract_cs_syntype(
             contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             sj_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
             asym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
-            sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap])
-        cum_dt_proc += time.time() - start
-        os.makedirs(chunk.folder, exist_ok=True)
-        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
-                                  overlap:-overlap]], chunk.folder + "cs.h5",
-                                 ['cs'], overwrite=True)
+            # overlap was removed; use correct offset for the analysis of the object properties
+            sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap], offset=offset + overlap)
+
+        kd_cs.save_seg(offset=offset + overlap, mags=[1, ],
+                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
+                       data_mag=1)
         # syn segmentation contains the intersecting voxels between SJ and CS
         contacts[sj_d == 0] = 0
-        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
-                                  overlap:-overlap]], chunk.folder + "syn.h5",
-                                 ['syn'], overwrite=True)
+        kd_syn.save_seg(offset=offset + overlap, mags=[1, ],
+                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
+                        data_mag=1)
+
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)
+        merge_voxel_dicts([syn_voxels, curr_syn_vx], key_to_str=True)
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
     basics.write_obj2pkl(f'{worker_dir_props}/cs_props_{worker_nr}.pkl', cs_props)
     basics.write_obj2pkl(f'{worker_dir_props}/syn_props_{worker_nr}.pkl', syn_props)
+    np.savez(f'{worker_dir_props}/syn_voxels_{worker_nr}.npz', **syn_voxels)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_asym_cnt_{worker_nr}.pkl', tot_asym_cnt)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_sym_cnt_{worker_nr}.pkl', tot_sym_cnt)
-    # log_extraction.error("Cum. time for loading data: {:.2f} s; for processing: {:.2f} "
-    #                      "s for processing2: {:.2f} s. {} cs and {} syn.".format(
-    #     cum_dt_data, cum_dt_proc, cum_dt_proc2, len(cs_props[0]), len(syn_props[0])))
+
     return worker_nr, dict(cs=list(cs_props[0].keys()), syn=list(syn_props[0].keys()))
 
 
@@ -565,15 +519,16 @@ def _write_props_to_syn_thread(args):
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
         cs_asym_cnt = {}
+        syn_voxels = {}
 
         # get cached worker lookup
         with open(f'{global_params.config.temp_path}/cs_worker_dict.pkl', "rb") as f:
             cs_workers_tmp = pkl.load(f)
         params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in cs_workers_tmp.items()]
         del cs_workers_tmp
-
-        res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False)
-        for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc in res:
+        res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False,
+                                      debug=False)
+        for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
             if len(tmp_dcs_cs) == 0:
                 continue
             # cs
@@ -586,6 +541,8 @@ def _write_props_to_syn_thread(args):
             del tmp_asym_dc
             merge_type_dicts([cs_sym_cnt, tmp_sym_dc])
             del tmp_sym_dc
+            merge_voxel_dicts([syn_voxels, tmp_syn_vxs], key_to_str=False)
+            del tmp_syn_vxs
 
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
@@ -595,7 +552,6 @@ def _write_props_to_syn_thread(args):
         # this class is only used to query the voxel data
         voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
                                    read_only=False, disable_locking=True)
-        voxel_dc_store = VoxelStorage(vx_p, read_only=False, disable_locking=True)
 
         # get dummy CS segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so_cs = sd_cs.get_segmentation_object(obj_id_mod)
@@ -654,32 +610,29 @@ def _write_props_to_syn_thread(args):
             voxel_dc.set_object_repcoord(cs_id, rp)
             ids_to_load_voxels.append(cs_id)
             # # write voxels explicitly - this assumes reasonably sized synapses
-            voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
+            voxel_dc.set_voxel_cache(cs_id, np.array(syn_voxels[cs_id], dtype=np.uint32))
+            del syn_voxels[cs_id]
 
-        voxel_dc_store.push()
+        voxel_dc.push()
         voxel_dc_cs.push()
         this_attr_dc.push()
         this_attr_dc_cs.push()
 
 
-def _write_props_collect_helper(args):
+def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dict, dict]:
     dir_props, worker_id, intersec = args
     if len(intersec) == 0:
-        return {}, {}, {}, {}
+        return [{}, {}, {}], [{}, {}, {}], {}, {}, {}
     worker_dir_props = f"{dir_props}/{worker_id}/"
     # cs
     fname = f'{worker_dir_props}/cs_props_{worker_id}.pkl'
     dc = basics.load_pkl2obj(fname)
 
-    for k in dc[0].keys():
-        dc[0][k] = np.array(dc[0][k], dtype=np.int32)
-        dc[1][k] = [np.array(dc[1][k][0], dtype=np.int32)]
-
     # convert lists to numpy arrays
     tmp_dcs_cs = [dict(), defaultdict(list), dict()]
     for k in intersec:
-        tmp_dcs_cs[0][k] = dc[0][k]
-        tmp_dcs_cs[1][k] = dc[1][k]
+        tmp_dcs_cs[0][k] = np.array(dc[0][k], dtype=np.int32)
+        tmp_dcs_cs[1][k] = np.array(dc[1][k], dtype=np.int32)
         tmp_dcs_cs[2][k] = dc[2][k]
     del dc
 
@@ -690,21 +643,25 @@ def _write_props_collect_helper(args):
     curr_sym_cnt = basics.load_pkl2obj(fname)
     fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
     curr_asym_cnt = basics.load_pkl2obj(fname)
+    fname = f'{worker_dir_props}/syn_voxels_{worker_id}.npz'
+    curr_syn_vxs = np.load(fname)
 
     tmp_dcs_syn = [dict(), defaultdict(list), dict()]
     tmp_sym_dc = dict()
     tmp_asym_dc = dict()
+    tmp_syn_vx = dict()
     for k in intersec:
         if k not in dc[0]:
             continue
         tmp_dcs_syn[0][k] = dc[0][k]
         tmp_dcs_syn[1][k] = dc[1][k]
         tmp_dcs_syn[2][k] = dc[2][k]
+        tmp_syn_vx[k] = curr_syn_vxs[str(k)]  # savez only allows string keys
         if k in curr_sym_cnt:
             tmp_sym_dc[k] = curr_sym_cnt[k]
         if k in curr_asym_cnt:
             tmp_asym_dc[k] = curr_asym_cnt[k]
-    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc
+    return tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vx
 
 
 def _generate_storage_lookup(args):

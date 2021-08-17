@@ -1349,15 +1349,14 @@ def average_node_axoness_views(sso: 'super_segmentation.SuperSegmentationObject'
     sso.skeleton["axoness%s_avg%d" % (pred_key_appendix, max_dist)] = avg_pred
 
 
-def majority_vote_compartments(sso, ax_pred_key='axoness'):
+def majority_vote_compartments(sso: 'SuperSegmentationObject', ax_pred_key: str = 'axoness'):
     """
     By default, will save new skeleton attribute with key
     ax_pred_key + "_comp_maj". Will not call ``sso.save_skeleton()``.
 
     Args:
         sso: SuperSegmentationObject
-        ax_pred_key: str
-            Key for the axoness predictions stored in sso.skeleton
+        ax_pred_key: Key for the axoness predictions stored in sso.skeleton
 
     Returns:
 
@@ -1422,39 +1421,48 @@ def majorityvote_skeleton_property(sso: 'super_segmentation.SuperSegmentationObj
     sso.skeleton["%s_avg%d" % (prop_key, max_dist)] = avg_prop
 
 
-def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.config['ncores_per_node']):
+def find_incomplete_ssv_views(ssd: 'SuperSegmentationDataset', woglia: bool, n_cores: Optional[int] = None):
+    if n_cores is None:
+        n_cores = global_params.config['ncores_per_node']
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
     missing_ssv_ids = set()
+    incomplete_ssv_ids = ssd.sv2ssv_ids(incomplete_sv_ids)
     for sv_id in incomplete_sv_ids:
         try:
-            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            ssv_id = incomplete_ssv_ids[sv_id]
             missing_ssv_ids.add(ssv_id)
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
 
 
-def find_incomplete_ssv_skeletons(ssd, n_cores=global_params.config['ncores_per_node']):
+def find_incomplete_ssv_skeletons(ssd, n_cores: Optional[int] = None):
+    if n_cores is None:
+        n_cores = global_params.config['ncores_per_node']
     svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
     incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
     missing_ssv_ids = set()
+    incomplete_ssv_ids = ssd.sv2ssv_ids(incomplete_sv_ids)
     for sv_id in incomplete_sv_ids:
         try:
-            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            ssv_id = incomplete_ssv_ids[sv_id]
             missing_ssv_ids.add(ssv_id)
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
 
 
-def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.config['ncores_per_node']):
+def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores: Optional[int] = None):
+    if n_cores is None:
+        n_cores = global_params.config['ncores_per_node']
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_attributes(sd, attr_key, n_cores)
     missing_ssv_ids = set()
+    incomplete_ssv_ids = ssd.sv2ssv_ids(incomplete_sv_ids)
     for sv_id in incomplete_sv_ids:
         try:
-            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            ssv_id = incomplete_ssv_ids[sv_id]
             missing_ssv_ids.add(ssv_id)
         except KeyError:
             pass  # sv does not exist in this SSD
@@ -2018,7 +2026,6 @@ def assemble_from_mergelist(ssd: 'SuperSegmentationDataset', mergelist: Union[Di
     """
     Creates
     :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.mapping_dict` and
-    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.id_changer` and finally calls
     :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.save_dataset_shallow`.
 
     Will overwrite existing mapping dict, id changer and version files.
@@ -2039,19 +2046,12 @@ def assemble_from_mergelist(ssd: 'SuperSegmentationDataset', mergelist: Union[Di
         else:
             raise Exception("sv_mapping has unknown type")
 
-    # TODO: change to mapping_dict, remove id_changer
-    # Changed -1 defaults to 0
-    # ssd._id_changer = np.zeros(np.max(list(mergelist.keys())) + 1,
-    #                           dtype=np.uint64)
-    ssd._id_changer = np.ones(int(np.max(list(mergelist.keys())) + 1),
-                              dtype=int) * (-1)
     mapping_dict = dict()
     for sv_id in mergelist.values():
         mapping_dict[sv_id] = []
 
     for sv_id in mergelist.keys():
         mapping_dict[mergelist[sv_id]].append(sv_id)
-        ssd._id_changer[sv_id] = mergelist[sv_id]
 
     ssd._mapping_dict = mapping_dict
     ssd.create_mapping_lookup_reverse()
@@ -2203,13 +2203,14 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
     Args:
         sso: Cell object.
-        ctx_vol: Additional volume above and below the bounding box of the extracted
-            connected component spine head skeleton nodes, i.e. the inspected volume is
-            at least ``2*ctx_vol``.
+        ctx_vol: Additional volume around the spine head synapse rep. coord used to calculate the volume estimation,
+            i.e. the inspected volume is ``2*ctx_vol``.
     """
+    if len(sso.attr_dict) == 0:
+        sso.load_attr_dict()
+    sso.attr_dict['spinehead_vol'] = {}
     ctx_vol = np.array(ctx_vol)
     scaling = sso.scaling
-    sso.attr_dict['spinehead_vol'] = {}
     if 'spiness' not in sso.label_dict('vertex'):
         msg = f'"spiness" not available in skeleton of SSO {sso.id}.'
         log_reps.error(msg)
@@ -2241,12 +2242,12 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
     ds = sso.scaling[2] // np.array(sso.scaling)
     assert np.all(ds > 0)
     kd = kd_factory(sso.config.kd_seg_path)
-
+    k_nn = sso.config['spines']['semseg2coords_spines']['k']
     # iterate over spine head synapses
     for c, ssv_syn_id in zip(ssv_syncoords, ssv_synids):
-        bb = np.array([np.min([c], axis=0), np.max([c], axis=0)])
-        offset = bb[0] - ctx_vol
-        size = (bb[1] - bb[0] + ds + 2 * ctx_vol).astype(np.int32)
+        offset = c - ctx_vol
+        offset[offset < 0] = 0
+        size = (2 * ctx_vol).astype(np.int32)
         # get cell segmentation mask
         seg = kd.load_seg(offset=offset, size=size, mag=1).swapaxes(2, 0)
         seg = ndimage.zoom(seg, 1 / ds, order=0)
@@ -2279,15 +2280,13 @@ def extract_spinehead_volume_mesh(sso: 'super_segmentation.SuperSegmentationObje
 
         # assign labels from nearby vertices; convert maxima coordinates back to mag 1 via 'ds'
         maxima_sp = colorcode_vertices(maxima * ds, verts_bb - offset, semseg_bb,
-                                       k=sso.config['spines']['semseg2coords_spines']['k'],
-                                       return_color=False, nb_cpus=sso.nb_cpus)
+                                       k=k_nn, return_color=False, nb_cpus=sso.nb_cpus)
         local_maxi = np.zeros_like(distance)
         local_maxi[maxima[:, 0], maxima[:, 1], maxima[:, 2]] = maxima_sp
 
         labels = watershed(-distance, local_maxi, mask=seg).astype(np.uint64)
         labels[labels != 1] = 0  # only keep spine head locations
         labels, nb_obj = ndimage.label(labels)
-
         c = c - offset
         max_id = 1
         # if more than one spine head object get the one with the majority voxels in vicinity

@@ -721,11 +721,12 @@ class main_class(QtGui.QDialog):
         ids_in_k = set([tree.tree_id() for tree in trees if
                         tree.tree_id() < self.obj_id_offs])
         # get selected ssv ids
+        # this should be done for all ids at once to improve speed
         ssv_ids_selected = [self.syconn_gate.get_ssv_of_sv(sv_id)['ssv'] for sv_id in sel_sv_ids] #if not sv_id in ids_in_k
 
 
 
-        # id_changer returns 0 for a supervoxel that is unconnected, add support for single svs
+        # ssv_id is 0 for a supervoxel that is unconnected, add support for single svs
         ssv_ids_selected = [ssv_id for ssv_id in ssv_ids_selected if ssv_id != 0]
 
         #print('ssv_ids_selected {0}'.format(ssv_ids_selected))

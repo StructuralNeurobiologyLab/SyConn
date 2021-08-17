@@ -187,8 +187,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              load_from_kd_overlaycubes, transf_func_kd_overlay])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(transform_func, multi_params,
-                                             nb_cpus=nb_cpus, debug=debug)
+        results = sm.start_multiprocess_imap(transform_func, multi_params, nb_cpus=nb_cpus, debug=False)
 
         results_as_list = []
         for result in results:
@@ -329,17 +328,16 @@ def _object_segmentation_thread(args):
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
             if hdf5_name in morph_ops:
-                # returns identity if len(morph_ops) == 0
-                mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
-                                                          mop_kwargs=dict(structure=struct))
-                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1:]:
-                    # TODO: currently morphological operations are not applied to the segmentation if binary_erosion
-                    #  triggers watershed. Desired behavior: Apply mops on segmentation up to first binary_erosion which
-                    #  is solely used to produce watershed seeds.
-                    # combine remaining fragments, TODO: this seems unnecessary
-                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0],
-                                                             ['binary_closing']).astype(np.uint32)
-                    # remove small fragments and 0; this will also delete objects bigger than min_size as
+                if 'binary_erosion' in morph_ops[hdf5_name]:
+                    first_erosion_ix = morph_ops[hdf5_name].index('binary_erosion')
+                    tmp_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name][:first_erosion_ix],
+                                                              mop_kwargs=dict(structure=struct))
+                    # apply erosion operations to generate watershed seeds
+                    markers = apply_morphological_operations(tmp_data.copy(),
+                                                             morph_ops[hdf5_name][first_erosion_ix:],
+                                                             mop_kwargs=dict(structure=struct))
+                    markers = scipy.ndimage.label(markers)[0].astype(np.uint32)
+                    # remove small fragments and 0; this might also delete objects bigger than min_size as
                     # this threshold is applied after N binary erosion!
                     if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
                         min_size = min_seed_vx[hdf5_name]
@@ -364,6 +362,8 @@ def _object_segmentation_thread(args):
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
                     max_label = np.max(this_labels_data)
                 else:
+                    mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
+                                                              mop_kwargs=dict(structure=struct))
                     this_labels_data, max_label = scipy.ndimage.label(mop_data)
             else:
                 this_labels_data, max_label = scipy.ndimage.label(tmp_data)
@@ -448,13 +448,11 @@ def _make_unique_labels_thread(func_args):
 
         for nb_hdf5_name in range(len(hdf5names)):
             hdf5_name = hdf5names[nb_hdf5_name]
+            cc_data_list[nb_hdf5_name] = cc_data_list[nb_hdf5_name].astype(np.uint64)
             matrix = cc_data_list[nb_hdf5_name]
             matrix[matrix > 0] += this_max_nb_dict[hdf5_name]
 
-        compression.save_to_h5py(cc_data_list,
-                                 chunk.folder + filename +
-                                 "_unique_components%s.h5"
-                                 % suffix, hdf5names)
+        compression.save_to_h5py(cc_data_list, chunk.folder + filename + "_unique_components%s.h5" % suffix, hdf5names)
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
@@ -746,7 +744,7 @@ def _apply_merge_list_thread(args):
                       offset[1]: this_shape[1] - offset[1],
                       offset[2]: this_shape[2] - offset[2]]
             this_cc = id_changer[this_cc]
-            cc_data_list[nb_hdf5_name] = np.array(this_cc, dtype=np.uint32)
+            cc_data_list[nb_hdf5_name] = this_cc
 
         compression.save_to_h5py(cc_data_list,
                                  chunk.folder + filename +
@@ -892,7 +890,9 @@ def _extract_voxels_thread(args):
                 try:
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
-                except:
+                except Exception as e:
+                    log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                      f' precision: {str(e)}')
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 
@@ -1177,7 +1177,9 @@ def _extract_voxels_combined_thread_NEW(args):
             try:
                 this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                 mag=1).swapaxes(0, 2)
-            except:
+            except Exception as e:
+                log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                  f' precision: {str(e)}')
                 this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                 datatype=np.uint32, mag=1).swapaxes(0, 2)
             # returns 3 dicts: rep coord, bounding box, size
@@ -1240,7 +1242,9 @@ def _extract_voxels_combined_thread_OLD(args):
                 try:
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
-                except:
+                except Exception as e:
+                    log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                      f' precision: {str(e)}')
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 

@@ -16,6 +16,7 @@ dependencies:
   # From conda-forge and defaults
   - python >=3.7  # (3.6 should also work)
   - pip
+  - lemon
   - vigra
   - freeglut
   - pyopengl
@@ -80,14 +81,12 @@ dependencies:
     - git+https://github.com/ELEKTRONN/elektronn3.git@syconn#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx
-    -
+
     # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
     - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
 
     # training scripts
     - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
-#    - # PointConv definitions
-#    - git+https://github.com/valeoai/LightConvPoint.git
 
       #for skeletonisation
     - fill-voids

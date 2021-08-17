@@ -114,7 +114,7 @@ def generate_subcell_kd_from_proba(
         shutil.rmtree(cd_dir)
     cd = chunky.ChunkDataset()
     # TODO: possible to restrict ChunkDataset here already to report correct number of processed chunks? Check
-    #  coordinate frame work compatibility downstream in `from_probabilities_to_kd`
+    #  coordinate framework compatibility downstream in `from_probabilities_to_kd`
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True,
                   list_of_coords=[])

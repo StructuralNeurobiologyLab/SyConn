@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, Callable
 
 import numpy as np
 
@@ -62,7 +62,8 @@ def run_matrix_export():
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
-                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None):
+                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
+                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -83,6 +84,9 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         max_n_jobs: Number of parallel jobs.
         cube_of_interest_bb: Defines the bounding box of the cube to process.
             By default this is set to (np.zoers(3); kd.boundary).
+        overwrite:
+        transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
+            sj foreground.
     """
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
@@ -96,13 +100,13 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                               cube_of_interest_bb=cube_of_interest_bb,
-                              n_folders_fs=n_folders_fs)
-    log.info('SegmentationDataset of type "cs" and "syn" was generated.')
+                              n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
+    log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
 
     # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
-                              log=log, n_folders_fs=n_folders_fs)
+                              log=log, n_folders_fs=n_folders_fs, overwrite=overwrite)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
@@ -135,7 +139,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     log.info('Finished.')
 
 
-def run_cs_ssv_generation(n_folders_fs: int = 10000):
+def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
     """
     Create agglomerated contact site objects between cells. For this, 'cs' objects need to be extracted.
 
@@ -147,7 +151,8 @@ def run_cs_ssv_generation(n_folders_fs: int = 10000):
     log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
     cps.combine_and_split_cs(global_params.config.working_dir,
-                             log=log, n_folders_fs=n_folders_fs)
+                             log=log, n_folders_fs=n_folders_fs,
+                             overwrite=overwrite)
     sd_cs_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                     obj_type='cs_ssv')
     # recompute=False: size, bounding box, rep_coord and mesh properties

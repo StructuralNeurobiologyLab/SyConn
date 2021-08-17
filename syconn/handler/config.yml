@@ -11,7 +11,8 @@ pyopengl_platform: 'egl'
 # This will be set during initialization
 version:
 
-existing_cell_organelles: ['mi', 'sj', 'vc']#, 'er', 'golgi']
+# KnossosDataset for 'sj' type is required to exist, but it is not needed to be processed like 'mi', ..
+process_cell_organelles: ['mi', 'vc']#, 'er', 'golgi']
 syntype_avail: False
 
 # Compute backend: 'SLURM', None
@@ -56,7 +57,7 @@ paths:
 generate_cs_ssv: True
 
 # min. connected component size of glia nodes/SV after thresholding glia proba
-min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
+min_cc_size_ssv: 5000  # in nm; L1-norm on vertex bounding box
 
 # (Super-)SegmentationDataset versions
 versions:
@@ -84,7 +85,7 @@ cell_objects:
     golgi: 100 # arbitrary placeholder
     sv: 1  # all cell supervoxels are extracted
     cs: 10  # contact sites tend to be small
-    syn: 10  # these are overlayed with contact sites and therefore tend to be small
+    syn: 10  # these are overlaid with contact sites and therefore tend to be small
     syn_ssv: 100 # minimum number of voxel for synapses in SSVs
 
   lower_mapping_ratios:

@@ -439,7 +439,7 @@ class SegmentationObject(SegmentationBase):
         """
         if self._size is None and 'size' in self.attr_dict:
             self._size = self.attr_dict['size']
-        if self._size is None and self.attr_dict_exists:
+        elif self._size is None and self.attr_dict_exists:
             self._size = self.lookup_in_attribute_dict("size")
         if self._size is None:
             self.calculate_size()
@@ -460,7 +460,7 @@ class SegmentationObject(SegmentationBase):
     def bounding_box(self) -> np.ndarray:
         if self._bounding_box is None and 'bounding_box' in self.attr_dict:
             self._bounding_box = self.attr_dict['bounding_box']
-        if self._bounding_box is None and self.attr_dict_exists:
+        elif self._bounding_box is None and self.attr_dict_exists:
             self._bounding_box = self.lookup_in_attribute_dict('bounding_box')
         if self._bounding_box is None:
             self.calculate_bounding_box()
@@ -478,7 +478,7 @@ class SegmentationObject(SegmentationBase):
         """
         if self._rep_coord is None and 'rep_coord' in self.attr_dict:
             self._rep_coord = self.attr_dict['rep_coord']
-        if self._rep_coord is None and self.attr_dict_exists:
+        elif self._rep_coord is None and self.attr_dict_exists:
             self._rep_coord = self.lookup_in_attribute_dict("rep_coord")
         if self._rep_coord is None:
             self.calculate_rep_coord()
@@ -734,11 +734,14 @@ class SegmentationObject(SegmentationBase):
         Returns:
             3D array of the all voxels which belong to this supervoxel.
         """
-        if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True, disable_locking=True)
-        if not isinstance(voxel_dc, VoxelStorageDyn):
-            voxels = load_voxels_depr(self, voxel_dc=voxel_dc)
+        # syn_ssv do not have a segmentation KD; voxels are cached in their VoxelStorage
+        if self.type == 'syn_ssv':
+            vxs_list = self.voxel_list - self.bounding_box[0]
+            voxels = np.zeros(self.bounding_box[1] - self.bounding_box[0] + 1, dtype=np.bool)
+            voxels[vxs_list[..., 0], vxs_list[..., 1], vxs_list[..., 2]] = True
         else:
+            if voxel_dc is None:
+                voxel_dc = VoxelStorage(self.voxel_path, read_only=True, disable_locking=True)
             voxels = voxel_dc.get_voxel_data_cubed(self.id)[0]
         if self.voxel_caching:
             self._voxels = voxels
@@ -1238,7 +1241,7 @@ class SegmentationObject(SegmentationBase):
         Write supervoxel segmentation to k.zip.
 
         Todo:
-            * check usage.
+            * Broken, segmentation not rendered in K.
 
         Args:
             path:
@@ -1254,11 +1257,8 @@ class SegmentationObject(SegmentationBase):
             except:
                 raise ValueError("KnossosDataset could not be loaded")
 
-        kd.from_matrix_to_cubes(self.bounding_box[0],
-                                data=self.voxels.astype(np.uint64) * write_id,
-                                datatype=np.uint64,
-                                kzip_path=path,
-                                overwrite=False)
+        kd.save_to_kzip(offset=self.bounding_box[0], data=self.voxels.astype(np.uint64).swapaxes(0, 2) * write_id,
+                        kzip_path=path, data_mag=1, mags=[1])
 
     def clear_cache(self):
         """
@@ -1404,7 +1404,7 @@ class SegmentationDataset(SegmentationBase):
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
         organelles (e.g. 'mi', 'vc', etc.; see
-        :py:attr:`~syconn.global_params.config['existing_cell_organelles']`).
+        :py:attr:`~syconn.global_params.config['process_cell_organelles']`).
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
