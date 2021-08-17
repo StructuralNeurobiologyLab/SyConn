@@ -459,10 +459,11 @@ if elektronn3_avail:
                 #                  27435010]
                 # self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
                 #                in ssv_ids_proof]
-                source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2/hc_out_2021_04/'
+                source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_06_30_more_samples/hc_out_2021_06/'
 
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')
+            self.fnames = [fname for fname in self.fnames if not '186817352' in fname]
 
             print(f'Using {len(self.fnames)} cells for training.')
             if use_subcell:  # TODO: add syntype

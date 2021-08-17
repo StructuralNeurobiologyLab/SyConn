@@ -47,7 +47,7 @@ def label_search(g: nx.Graph, source: int) -> int:
 def anno_skeleton2np(a_obj, scaling, verbose=False):
     a_nodes = list(a_obj.getNodes())
     a_node_coords = np.array([n.getCoordinate() * scaling for n in a_nodes])
-    a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int)
+    a_node_labels = np.array([comment2int(n.getComment()) for n in a_nodes], dtype=np.int32)
     a_node_labels_raw = np.array([n.getComment() for n in a_nodes])
     # generate graph from nodes in annotation object
     a_edges = []
@@ -96,8 +96,9 @@ def labels2mesh(args):
             out_path: path to folder where output should be saved.
     """
     kzip_path, out_path, version, overwrite = args
-    sso_id = int(re.findall(r"_(\d+)", kzip_path)[0])
+    sso_id = int(re.findall(r"_(\d+)", os.path.split(kzip_path)[1])[0])
     sso = SuperSegmentationObject(sso_id, version=version)
+    assert sso.attr_dict_exists
     path2pkl = f'{out_path}/sso_{sso_id}.pkl'
     if os.path.isfile(path2pkl) and not overwrite:
         return
@@ -112,8 +113,8 @@ def labels2mesh(args):
     else:
         raise ValueError(f'Could not find annotation skeleton in "{kzip_path}".')
 
-    label_mapping = label_mappings['fine']
-    num_class = class_nums['fine']
+    label_mapping = label_mappings[TARGET_LABELS]
+    num_class = class_nums[TARGET_LABELS]
 
     # load and prepare sso
     sso.load_attr_dict()
@@ -160,9 +161,6 @@ def labels2mesh(args):
     meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
     feature_map = dict(pts_feat_dict)
 
-    # create cloud ensemble
-    encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3,
-                'terminal': 4, 'neck': 5, 'head': 6}
     obj_names = ['sv', 'mi', 'vc', 'syn_ssv']
     verts_tot = []
     feats_tot = []
@@ -205,7 +203,6 @@ def labels2mesh(args):
     # labels contain negative integer
     labels_tot = np.concatenate(labels_tot).astype(np.int16)
     # print(sso_id, np.unique(labels_tot, return_counts=True), labels_tot.shape, verts_tot.shape, feats_tot.shape)
-    print(sso_id, np.unique(node_labels, return_counts=True))
     assert np.sum(node_labels) > 0, f'No valid no labels found for cell "{kzip_path}".'
     hc = HybridCloud(vertices=verts_tot, features=feats_tot, labels=labels_tot,
                      nodes=nodes, node_labels=node_labels, edges=edges)
@@ -234,7 +231,7 @@ def comment2int(comment: str, convert_to_morphx: bool = True):
      encoding = {'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3,
             'terminal': 4, 'neck': 5, 'head': 6, 'nr': 7,
             'in': 8, 'p': 9, 'st': 10, 'ignore': 11, 'merger': 12,
-            'pure_dendrite': 13, 'pure_axon': 14}
+            'pure_dendrite': 13, 'pure_axon': 14, 'soma_at_pure_comp': 15}
 
      """
     comment = comment.strip()
@@ -246,6 +243,8 @@ def comment2int(comment: str, convert_to_morphx: bool = True):
         return 1
     elif comment == "a_end":
         return 1 if not convert_to_morphx else 14
+    elif comment == "s_end":
+        return 1 if not convert_to_morphx else 15
     elif comment in ["gt_soma", "other", "s"]:
         return 2
     elif comment in ["gt_bouton", "b", "bouton"]:
@@ -295,13 +294,13 @@ label_mappings = dict(fine=[(7, 5), (8, 5), (9, 5), (10, 6)],
 # j0251 ignore labels
 label_remove = dict(
     # ignore "ignore", merger, pure dendrite and pure axon (TODO: what are those?!)
-    fine=[11, 12, 13, 14, -1],
+    fine=[11, 12, 13, 14, 15, -1],
     # ignore axon, soma, bouton, terminal
-    dnh=[1, 2, 3, 4, 11, 12, 13, 14, -1],
+    dnh=[1, 2, 3, 4, 11, 12, 13, 14, 15, -1],
     # ignore dendrite, soma, neck, head
-    abt=[0, 2, 5, 6, 11, 12, 13, 14, -1],
+    abt=[0, 2, 5, 6, 11, 12, 13, 14, 15, -1],
     # ignore same as in "fine"
-    ads=[11, 12, 13, 14, -1],
+    ads=[11, 12, 13, 14, 15, -1],
 )
 
 class_nums = dict(fine=7, dnh=3, abt=3, ads=3)
@@ -318,19 +317,20 @@ def gt_generation(kzip_paths, out_path, version: str = None, overwrite=True):
     params = [(p, out_path, version, overwrite) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=cpu_count(), debug=False)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=False)
 
 
 if __name__ == "__main__":
+    TARGET_LABELS = 'ads'  # 'fine'
     # j0251 GT refined
     global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
 
-    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/j0251_refined_round2_/"
-    destination = data_path + '/hc_out_2021_04/'
+    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_06_30_more_samples/"
+    destination = data_path + '/hc_out_2021_07_ads/'
     os.makedirs(destination, exist_ok=True)
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
 
-    gt_generation(file_paths, destination, overwrite=True)
+    gt_generation(file_paths, destination, overwrite=False)
 
     # -------- OLD ------------
     # # axon GT

@@ -25,8 +25,8 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=1, help='Batch size')
-parser.add_argument('--sp', type=int, default=20000, help='Number of sample points')
+parser.add_argument('--bs', type=int, default=4, help='Batch size')
+parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
@@ -60,8 +60,10 @@ ctx = args.ctx
 
 lr = 2e-3
 lr_stepsize = 100
-lr_dec = 0.992
-max_steps = 300000
+lr_dec = 0.996
+max_steps = 500000
+
+normalize_pts = True
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -75,8 +77,10 @@ if cellshape_only:
     use_syntype = False
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_nclass' \
-           f'{num_classes}_fkaconv_noScale'
+    name = f'semseg_pts_nb{npoints}_ctx{ctx}_nclass' \
+           f'{num_classes}_ptconv_noScale_BN_strongerWeighted_noKernelSep_noBatchAvg'
+    if not normalize_pts:
+        name += '_NonormPts'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -95,25 +99,25 @@ print(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251_June2021/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251_July2021/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
 search = 'SearchQuantized'
-conv = dict(layer='PointConv', kernel_separation=False)
+conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_pts)
 act = nn.ReLU
-model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=32,
-                     architecture=None, activation=act, norm='gn')
+model = ConvAdaptSeg(input_channels, num_classes, get_conv(conv), get_search(search), kernel_num=64,
+                     architecture=None, activation=act, norm='bn')
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
 
 model.to(device)
+example_input = (torch.ones(batch_size, input_channels, npoints).to(device),
+                 torch.ones(batch_size, 3, npoints).to(device))
 
-example_input = (torch.ones(batch_size, npoints, input_channels).to(device),
-                 torch.ones(batch_size, npoints, 3).to(device))
 enable_save_trace = False if args.jit == 'disabled' else True
 if args.jit == 'onsave':
     # Make sure that tracing works
@@ -128,19 +132,24 @@ elif args.jit == 'train':
     model = tracedmodel
 
 # Transformations to be applied to samples before feeding them to the network
-train_transform = clouds.Compose([clouds.RandomVariation((-30, 30), distr='normal'),  # in nm
+train_transform = clouds.Compose([clouds.RandomVariation((-20, 20), distr='normal'),  # in nm
                                   clouds.Center(),
                                   # clouds.Normalization(scale_norm),
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
-                                  clouds.RandomScale(distr_scale=0.1, distr='uniform')])
-valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
+                                  clouds.RandomScale(distr_scale=0.05, distr='uniform')])
+valid_transform = clouds.Compose([clouds.Center(),
+                                  # clouds.Normalization(scale_norm)
+                                  ])
 
 # mask boarder points with 'num_classes' and set its weight to 0
+source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_06_30_more_samples/hc_out_2021_06/'
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes,
+                           source_dir=source_dir)
 valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes)
+                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=num_classes,
+                           source_dir=source_dir)
 
 # PREPARE AND START TRAINING #
 
@@ -160,14 +169,15 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # lr_sched = torch.optim.lr_scheduler.CyclicLR(
 #     optimizer,
 #     base_lr=1e-4,
-#     max_lr=1e-2,
+#     max_lr=5e-3,
 #     step_size_up=2000,
+#     step_size_down=20000,
 #     cycle_momentum=True,
 #     mode='exp_range',
 #     gamma=0.99994,
 # )
 # set weight of the masking label at context boarders to 0
-class_weights = torch.tensor([1] * num_classes, dtype=torch.float32, device=device)
+class_weights = torch.tensor([1, 1, 1, 2, 8, 4, 8], dtype=torch.float32, device=device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
 
 valid_metrics = {  # mean metrics
@@ -204,8 +214,8 @@ trainer = Trainer3d(
     num_classes=num_classes,
     # example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=5,
-    tqdm_kwargs=dict(disable=False),
+    nbatch_avg=1,
+    tqdm_kwargs=dict(disable=True),
     lcp_flag=True
 )
 

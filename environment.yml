@@ -33,6 +33,8 @@ dependencies:
   - fasteners
   - numpy <= 1.21
   - coloredlogs
+  - # lemon=1.3.1=1  lead to import error of vigra: 'ImportError: libemon.so.1.3.1: cannot open shared object file: No such file or directory'
+  - lemon=1.3.1=he9d42e9_3
   - termcolor
   # fix version due to stored RFC models.
   - scikit-learn = 0.24.1

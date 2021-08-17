@@ -1306,9 +1306,13 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         cnt = 0
         for source_node in source_nodes:
             # create local context
+            while_cnt = 0
             while True:
                 if hc.node_labels[source_node] != 1:
                     raise ValueError(f'Invalid source node in "{pkl_f}".')
+                if while_cnt > 10:
+                    batch_out_l[cnt] = mask_borders_with_id
+                    break
                 node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 # if mask_borders_with_id is not None:
@@ -1317,9 +1321,16 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 #                         ctx_size_fluct * 0.8
                 #     hc_sub._labels[border_vert_mask] = mask_borders_with_id
                 sample_feats = hc_sub.features
+                while_cnt += 1
                 if len(sample_feats) > 0:
                     break
                 source_node = np.random.choice(source_nodes)
+            # skip this sample
+            if while_cnt > 10:
+                log_handler.warn(f'Could not create context from {fnames_pkl} at source node '
+                                 f'{hc.nodes[source_node]}.')
+                cnt += 1
+                continue
             sample_pts = hc_sub.vertices
             sample_labels = hc_sub.labels
 
