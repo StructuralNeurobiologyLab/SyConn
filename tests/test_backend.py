@@ -11,7 +11,7 @@ from multiprocessing import Process, Queue
 from syconn import global_params
 # TODO: test VoxelStorageDyn
 from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
-    VoxelStorageClass, BinarySearchStore
+    VoxelStorageClass, BinarySearchStore, VoxelStorageLazyLoading
 from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
      read_txt_from_zip, remove_from_zip
 
@@ -27,6 +27,22 @@ def _setup_testfile(fname):
     if os.path.isfile(f'{dir_path}/.{fname}.pkl.lk'):
         os.remove(f'{dir_path}/.{fname}.pkl.lk')
     return test_p
+
+
+def test_VoxelStorageLazyLoading():
+    test_p = f"{dir_path}/vx_dc_lazy.npz"
+    if os.path.isfile(test_p):
+        os.remove(test_p)
+    arr = np.arange(90).reshape((30, 3))
+    vx_dc_lazy = VoxelStorageLazyLoading(test_p)
+    assert len(vx_dc_lazy) == 0
+    vx_dc_lazy[10] = arr
+    vx_dc_lazy.push()
+    del vx_dc_lazy
+    vx_dc_lazy = VoxelStorageLazyLoading(test_p)
+    assert 10 in vx_dc_lazy
+    np.array_equal(vx_dc_lazy[10], arr)
+    assert len(vx_dc_lazy) == 1
 
 
 def test_BinarySearchStore():
@@ -489,4 +505,4 @@ def remove_files_after_test(file_name):
 
 
 if __name__ == '__main__':
-    test_BinarySearchStore()
+    test_VoxelStorageLazyLoading()

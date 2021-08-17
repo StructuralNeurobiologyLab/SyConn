@@ -45,14 +45,14 @@ if __name__ == '__main__':
     prior_astrocyte_removal = False
     key_val_pairs_conf = [
         ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
-        ('use_point_models', False),
+        ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
-        ('generate_cs_ssv', False),  # cs_ssv: contact site objects between cells
+        ('generate_cs_ssv', True),  # cs_ssv: contact site objects between cells
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (

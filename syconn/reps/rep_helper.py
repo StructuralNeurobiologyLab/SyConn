@@ -198,12 +198,13 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     return subfold
 
 
-def ix_from_subfold(subfold, n_folders):
+def ix_from_subfold(subfold, n_folders) -> int:
     """
 
     Parameters
     ----------
-    subfold : str
+    subfold :
+    n_folders:
 
     Returns
     -------

@@ -25,7 +25,7 @@ from vigra.filters import gaussianGradient
 
 from .image import apply_pca
 from .. import global_params
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn, VoxelStorageLazyLoading
 from ..handler.basics import write_data2kzip, data2kzip
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
@@ -1181,7 +1181,8 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
     return mesh
 
 
-def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject', voxel_dc: Optional[VoxelStorageDyn] = None,
+def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
+                          voxel_dc: Optional[Union[VoxelStorageLazyLoading, VoxelStorageDyn]] = None,
                           **gen_kwgs) -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
 
@@ -1193,11 +1194,16 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject', voxel_dc: O
     Returns:
 
     """
-    assert segobj.type in ['cs', 'syn', 'syn_ssv', 'cs_ssv'], 'Object type not supported'
+    assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
     if segobj._voxel_list is None:
-        if voxel_dc is None:
-            voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
-        voxels = np.array(voxel_dc.get_voxel_cache(segobj.id), dtype=np.uint32)
+        if segobj.type == 'cs':
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
+            voxels = np.array(voxel_dc.get_voxel_cache(segobj.id), dtype=np.uint32)
+        else:
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageLazyLoading(segobj.voxel_path)
+            voxels = np.array(voxel_dc[segobj.id], dtype=np.uint32)
     else:
         voxels = np.array(segobj._voxel_list, dtype=np.uint32)
     abs_offset = np.min(voxels, axis=0)

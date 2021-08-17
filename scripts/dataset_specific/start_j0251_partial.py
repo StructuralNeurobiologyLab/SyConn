@@ -37,7 +37,7 @@ if __name__ == '__main__':
         ('min_cc_size_ssv', 2000),  # minimum bounding box diagonal of cell (fragments) in nm
         ('glia', {'prior_astrocyte_removal': False}),
         ('pyopengl_platform', 'egl'),
-        ('batch_proc_system', 'SLURM'),
+        ('batch_proc_system', None),
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
         ('nnodes_total', 17),
@@ -146,7 +146,7 @@ if __name__ == '__main__':
 
     log.info('Step 3/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd(ncores_per_job=4)
+    exec_init.run_create_neuron_ssd(ncores_per_job=2)
     ftimer.stop()
 
     log.info('Step 4/10 - Skeleton generation')

@@ -26,7 +26,7 @@ import open3d as o3d
 
 from . import log_extraction
 from .. import global_params
-from ..backend.storage import AttributeDict, VoxelStorageDyn, MeshStorage
+from ..backend.storage import AttributeDict, VoxelStorageDyn, MeshStorage, VoxelStorageLazyLoading
 from ..handler.basics import chunkify
 from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
@@ -254,13 +254,16 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     syn_ids = sd_syn.ids.copy()
 
     sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
+    log_extraction.debug('Generated supervoxel IDs for all syn objects.')
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids > ssd.mapping_lookup_reverse.id_array[-1]] = 0
     mapping_dc = ssd.sv2ssv_ids(np.unique(sv_ids.flatten()))
+    log_extraction.debug('Generated sv-ssv mapping dict.')
     def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
-    # np.vectorize is not efficient, just a more convenient "map"
+    # np.vectorize is not more efficient/concurrent, just a more convenient "map"
     mapped_sv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
+    log_extraction.debug('Mapped SV IDs to SSV IDs for all syn objects.')
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
     filtered_mapped_sv_ids = mapped_sv_ids[mask]
@@ -272,12 +275,12 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
     # cells
     relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
-
+    log_extraction.debug('Filtered intra-cell syn objects and created syn_ssv IDs.')
     # create lookup from SSV-wide synapses to SV syn. objects
     ssv_to_syn_ids_dc = defaultdict(list)
     for i_entry in range(len(relevant_ssv_ids_enc)):
         ssv_to_syn_ids_dc[relevant_ssv_ids_enc[i_entry]].append(syn_ids[i_entry])
-
+    log_extraction.debug('Created cell-pair syn object lists for subsequent split and agglomeration.')
     return ssv_to_syn_ids_dc
 
 
@@ -381,7 +384,7 @@ def _combine_and_split_syn_thread(args):
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     syn_ssv_id = base_id
 
-    voxel_dc = VoxelStorageDyn(base_dir + "/voxel.pkl", read_only=False, voxel_mode=False)
+    voxel_dc = VoxelStorageLazyLoading(base_dir + "/voxel.npz", overwrite=True)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
@@ -414,9 +417,8 @@ def _combine_and_split_syn_thread(args):
                                        dist_inter_object=20000, scale=scaling)
 
         voxel_list = np.concatenate(voxel_list)
-
         for this_cc in ccs:
-            # do not process synapse again if job has been restartet
+            # do not process synapse again if job has been restarted
             if syn_ssv_id not in attr_dc:
                 this_cc_mask = np.array(list(this_cc))
                 # retrieve the index of the syn objects selected for this CC
@@ -433,7 +435,7 @@ def _combine_and_split_syn_thread(args):
                         != os.path.abspath(base_dir + "/attr_dict.pkl")):
                     raise ValueError(f'Path mis-match!')
                 synssv_attr_dc = dict(neuron_partners=ssv_ids)
-                voxel_dc.set_voxel_cache(syn_ssv_id, this_vx)
+                voxel_dc[syn_ssv_id] = this_vx
                 synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
                 synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
                 synssv_attr_dc["size"] = len(this_vx)
@@ -495,6 +497,7 @@ def _combine_and_split_syn_thread(args):
 
         if n_items_for_path > n_per_voxel_path:
             voxel_dc.push()
+            voxel_dc.close()
             mesh_dc.push()
             attr_dc.push()
             cur_path_id += 1
@@ -506,12 +509,13 @@ def _combine_and_split_syn_thread(args):
             syn_ssv_id = base_id
             base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
-            voxel_dc = VoxelStorageDyn(base_dir + "/voxel.pkl", read_only=False, voxel_mode=False)
+            voxel_dc = VoxelStorageLazyLoading(base_dir + "/voxel.npz")
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
             mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
     if n_items_for_path > 0:
         voxel_dc.push()
+        voxel_dc.close()
         attr_dc.push()
         mesh_dc.push()
 

@@ -238,6 +238,8 @@ class VoxelStorageDyn(CompressedStorage):
 
     def __init__(self, inp: str, voxel_mode: bool = True,
                  voxeldata_path: Optional[str] = None, **kwargs):
+        if not inp.endswith('.pkl'):
+            inp = inp + '.pkl'
         super().__init__(inp, **kwargs)
         self.voxel_mode = voxel_mode
         if 'meta' not in self._dc_intern:
@@ -264,6 +266,7 @@ class VoxelStorageDyn(CompressedStorage):
                 raise ValueError(msg)
             kd = kd_factory(voxeldata_path)
             self.voxeldata = kd
+        self._cache_dc = VoxelStorageLazyLoading(inp.replace('.pkl', '.npz'))
 
     def __setitem__(self, key: int, value: Any):
         if self.voxel_mode:
@@ -319,6 +322,11 @@ class VoxelStorageDyn(CompressedStorage):
             log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
         self._dc_intern['rep_coord'][item] = value
 
+    def push(self):
+        if len(self._cache_dc) > 0:
+            self._cache_dc.push()
+        super().push()
+
     def set_voxel_cache(self, key: int, voxel_coords: np.ndarray):
         """
         This is only used to store the voxels during the synapse extraction step. This method operates independent of
@@ -328,7 +336,7 @@ class VoxelStorageDyn(CompressedStorage):
             key: Segment ID.
             voxel_coords: Voxel coordinates.
         """
-        self._dc_intern['voxel_cache'][key] = voxel_coords
+        self._cache_dc[key] = voxel_coords
 
     def get_voxel_cache(self, key: int):
         """
@@ -341,7 +349,7 @@ class VoxelStorageDyn(CompressedStorage):
         Returns:
             Voxel coordinates.
         """
-        return self._dc_intern['voxel_cache'][key]
+        return self._cache_dc[key]
 
     def get_voxeldata(self, item: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """
@@ -412,6 +420,80 @@ class VoxelStorageDyn(CompressedStorage):
                              or (type(k) is not str)])
         return obj_elements
 
+
+class VoxelStorageLazyLoading:
+    """
+    Similar to `VoxelStorage` but uses lazy loading via numpy npz files.
+
+    Notes:
+        * Once  written, npz storages will not support modification via ``__setitem__``.
+        * Key of types other than int are not supported. Internally, keys are converted to string,
+          as required by npz, and then always converted to int for "external" use (e.g. :attr:`~keys`).
+        * Call :attr:`~close` when opening an existing npz file.
+    """
+
+    def __init__(self, path: str, overwrite: bool = False):
+        if not path.endswith('.npz'):
+            path = path + '.npz'
+        self.path = path
+        self._dc_intern = {}
+        if os.path.isfile(path):
+            if overwrite:
+                os.remove(path)
+            else:
+                self.pull()
+
+    def pull(self):
+        self._dc_intern = np.load(self.path)
+
+    def push(self):
+        np.savez(self.path, **self._dc_intern)
+
+    def __setitem__(self, key: int, value: np.ndarray):
+        """
+
+        Args:
+            key: Segment ID.
+            value: Voxel coordinates.
+        """
+        # npz only allows string keys
+        self._dc_intern[str(key)] = value
+
+    def __getitem__(self, item: int) -> np.ndarray:
+        """
+        Voxels corresponding to `item` (supervoxel ID).
+
+        Args:
+            item: Segment ID.
+
+        Returns:
+            Voxel coordinates belonging to ID `item`.
+        """
+        # npz only allows string keys
+        return self._dc_intern[str(item)]
+
+    def __contains__(self, item: int) -> bool:
+        """
+        npz only allows string IDs.
+
+        Args:
+            item: Integer key.
+
+        Returns:
+            True if item in storage.
+        """
+        return str(item) in self._dc_intern
+
+    def __len__(self):
+        return len(self._dc_intern)
+
+    def keys(self):
+        for k in self._dc_intern.keys():
+            yield int(k)
+
+    def close(self):
+        if isinstance(self._dc_intern, np.lib.npyio.NpzFile):
+            self._dc_intern.close()
 
 class MeshStorage(StorageClass):
     """

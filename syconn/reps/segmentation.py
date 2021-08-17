@@ -412,7 +412,8 @@ class SegmentationObject(SegmentationBase):
         Path to the voxel storage. See :class:`~syconn.backend.storage.VoxelStorageDyn`
         for details.
         """
-        return self.segobj_dir + "/voxel.pkl"
+        # file type is inferred by either VoxelStorageLazyLoading or VoxelStorageDyn
+        return self.segobj_dir + "/voxel"
 
     #                                                                 PROPERTIES
     @property
@@ -505,9 +506,15 @@ class SegmentationObject(SegmentationBase):
     def voxels_exist(self) -> bool:
         if self.version == 'tmp':
             return False
-        voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                disable_locking=True)  # look-up only, PS 12Dec2018
-        return self.id in voxel_dc
+        if self.type in ['syn', 'syn_ssv']:
+            voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            exists = self.id in voxel_dc
+            voxel_dc.close()
+        else:
+            voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                       disable_locking=True)
+            self.id in voxel_dc
+        return exists
 
     @property
     def voxels(self) -> np.ndarray:
@@ -735,13 +742,13 @@ class SegmentationObject(SegmentationBase):
             3D array of the all voxels which belong to this supervoxel.
         """
         # syn_ssv do not have a segmentation KD; voxels are cached in their VoxelStorage
-        if self.type == 'syn_ssv':
+        if self.type in ['syn', 'syn_ssv']:
             vxs_list = self.voxel_list - self.bounding_box[0]
             voxels = np.zeros(self.bounding_box[1] - self.bounding_box[0] + 1, dtype=np.bool)
             voxels[vxs_list[..., 0], vxs_list[..., 1], vxs_list[..., 2]] = True
         else:
             if voxel_dc is None:
-                voxel_dc = VoxelStorage(self.voxel_path, read_only=True, disable_locking=True)
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True, disable_locking=True)
             voxels = voxel_dc.get_voxel_data_cubed(self.id)[0]
         if self.voxel_caching:
             self._voxels = voxels
@@ -1145,8 +1152,11 @@ class SegmentationObject(SegmentationBase):
                 this object.
         """
         if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                    disable_locking=True)
+            if self.type in ['syn', 'syn_ssv']:
+                voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            else:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                           disable_locking=True)
 
         if self.id not in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
@@ -1156,6 +1166,11 @@ class SegmentationObject(SegmentationBase):
         if isinstance(voxel_dc, VoxelStorageDyn):
             self._rep_coord = voxel_dc.object_repcoord(self.id)
             return
+        elif isinstance(voxel_dc, VoxelStorageLazyLoading):
+            self._rep_coord = voxel_dc[self.id][len(voxel_dc[self.id]) // 2]  # any rep coord
+            return
+        else:
+            raise ValueError(f'Invalid voxel storage class: {type(voxel_dc)}')
 
         bin_arrs, block_offsets = voxel_dc[self.id]
         block_offsets = np.array(block_offsets)
@@ -1209,8 +1224,11 @@ class SegmentationObject(SegmentationBase):
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
         """
         if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                    disable_locking=True)
+            if self.type in ['syn', 'syn_ssv']:
+                voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            else:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                           disable_locking=True)
         if not isinstance(voxel_dc, VoxelStorageDyn):
             _ = self.load_voxels(voxel_dc=voxel_dc)
         else:
@@ -1226,8 +1244,11 @@ class SegmentationObject(SegmentationBase):
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
         """
         if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                    disable_locking=True)
+            if self.type in ['syn', 'syn_ssv']:
+                voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            else:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                           disable_locking=True)
         if not isinstance(voxel_dc, VoxelStorageDyn):
             _ = self.load_voxels(voxel_dc=voxel_dc)
         else:

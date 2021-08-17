@@ -16,7 +16,7 @@ from . import rep_helper as rh
 from .rep_helper import surface_samples
 from .. import global_params
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
-    VoxelStorage, SkeletonStorage, VoxelStorageDyn
+    VoxelStorage, SkeletonStorage, VoxelStorageDyn, VoxelStorageLazyLoading
 from ..handler.basics import chunkify
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_imap
@@ -201,9 +201,10 @@ def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
-    elif so.type in ['syn_ssv', 'syn', 'cs', 'cs_ssv']:
-        voxel_dc = VoxelStorageDyn(so.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
-        voxel_list = voxel_dc.get_voxel_cache(so.id)
+    elif so.type in ['syn', 'syn_ssv']:
+        voxel_dc = VoxelStorageLazyLoading(so.voxel_path)
+        voxel_list = voxel_dc[so.id]
+        voxel_dc.close()
     else:
         voxel_dc = VoxelStorageDyn(so.voxel_path, read_only=True, disable_locking=True)
         bin_arrs, block_offsets = voxel_dc[so.id]

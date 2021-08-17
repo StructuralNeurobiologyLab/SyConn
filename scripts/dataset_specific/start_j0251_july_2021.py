@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # currently using `dill` package to support lambda expressions, a weak feature. Make
     #  sure all dependencies within the lambda expressions are imported in
     #  `batchjob_object_segmentation.py` (here: numpy)
-    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype('u1'),
+    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).SLURMastype('u1'),
                                       vc=lambda x: (x == 3).astype('u1'),
                                       sj=lambda x: (x == 2).astype('u1'))
 
