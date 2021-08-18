@@ -43,6 +43,7 @@ def test_VoxelStorageLazyLoading():
     assert 10 in vx_dc_lazy
     np.array_equal(vx_dc_lazy[10], arr)
     assert len(vx_dc_lazy) == 1
+    os.remove(test_p)
 
 
 def test_BinarySearchStore():
@@ -50,8 +51,9 @@ def test_BinarySearchStore():
     n_shards = 5
     n_elements = int(1e6)
     max_int = int(2e6)  # choice becomes slow for large max values
+    max_int_attr = int(1e12)
     ids = np.random.choice(max_int, n_elements, replace=False).astype(np.uint64)
-    attr = dict(ssv_ids=np.random.choice(max_int, n_elements, replace=False).astype(np.uint64))
+    attr = dict(ssv_ids=np.random.randint(1, max_int_attr, n_elements).astype(np.uint64))
     tf = tempfile.TemporaryFile()
     bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
     ixs_sample = np.random.permutation(len(ids))[:1000]
@@ -64,6 +66,60 @@ def test_BinarySearchStore():
     assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
     assert np.max(ids) == bss.id_array[-1], 'Maxima do not match.'  # captured by test below, but important detail
     assert np.array_equal(bss.id_array, np.sort(ids)), "Sort failed."
+    del bss
+    tf.close()
+
+
+def get_attr_newinstances(args):
+    tf, samples, key = args
+    binstore = BinarySearchStore(tf)
+    return binstore.get_attributes(samples, key)
+
+
+def get_attr(args):
+    bss, samples, key = args
+    return bss.get_attributes(samples, key)
+
+
+def test_BinarySearchStore_multiprocessed():
+    np.random.seed(0)
+    n_shards = 5
+    n_elements = int(2e6)
+    n_queries = int(1e3)  # single process query becomes slow for >=1e5
+    max_int = int(9e6)  # choice becomes slow for large max values
+    max_int_attr = int(1e12)
+    ids = np.random.choice(max_int, n_elements, replace=False).astype(np.uint64)
+    attr = dict(ssv_ids=np.random.randint(1, max_int_attr, n_elements).astype(np.uint64))
+    test_p = f"{dir_path}/.binstore"
+    start = time.time()
+    bss = BinarySearchStore(test_p, ids, attr, n_shards=n_shards, overwrite=True)
+    print(f'build BSS: {(time.time() - start):.2f} s')
+    ixs_sample = np.random.permutation(len(ids))[:n_queries]
+    ids_samples = ids[ixs_sample]
+
+    start = time.time()
+    attrs = bss.get_attributes(ids_samples, 'ssv_ids')
+    print(f'get_attr_orig: {(time.time() - start):.2f}')
+
+    from syconn.mp.mp_utils import start_multiprocess
+    start = time.time()
+    attrs_multi = start_multiprocess(
+        get_attr_newinstances, [(test_p, ch, 'ssv_ids') for ch in np.array_split(ids_samples, 5)], nb_cpus=5,
+        debug=True)
+    print(f'get_attr_newinstances: {(time.time() - start):.2f}')
+    attrs_multi = np.concatenate(attrs_multi)
+    assert np.array_equal(attrs_multi, attrs)
+
+    start = time.time()
+    attrs_multi = start_multiprocess(
+        get_attr, [(bss, ch, 'ssv_ids') for ch in np.array_split(ids_samples, 5)], nb_cpus=5,
+        debug=False)
+    print(f'get_attr_pickle: {(time.time() - start):.2f} s')
+    attrs_multi = np.concatenate(attrs_multi)
+    assert np.array_equal(attrs_multi, attrs)
+
+    del bss
+    os.remove(test_p)
 
 
 # TODO: requires revision
@@ -505,4 +561,5 @@ def remove_files_after_test(file_name):
 
 
 if __name__ == '__main__':
-    test_VoxelStorageLazyLoading()
+    test_BinarySearchStore()
+    test_BinarySearchStore_multiprocessed()

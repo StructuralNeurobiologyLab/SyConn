@@ -750,3 +750,17 @@ class BinarySearchStore:
         self._h5_file.close()
         self._h5_file = None
         return data
+
+
+def bss_get_attr_helper(args):
+    """
+    Helper function to query attributes from a BinarySearchStore instance.
+
+    Args:
+        args: BinarySearchStore, query_ids, attribute key.
+
+    Returns:
+        Query result.
+    """
+    bss, samples, key = args
+    return bss.get_attributes(samples, key)

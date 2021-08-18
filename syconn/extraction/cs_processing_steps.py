@@ -258,7 +258,7 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids > ssd.mapping_lookup_reverse.id_array[-1]] = 0
-    mapping_dc = ssd.sv2ssv_ids(np.unique(sv_ids.flatten()))
+    mapping_dc = ssd.sv2ssv_ids(np.unique(sv_ids.flatten()), nb_cpus=sm.cpu_count())
     log_extraction.debug('Generated sv-ssv mapping dict.')
     def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
     # np.vectorize is not more efficient/concurrent, just a more convenient "map"
