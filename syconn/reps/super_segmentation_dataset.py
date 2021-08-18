@@ -26,7 +26,7 @@ from .super_segmentation_object import SuperSegmentationObject
 from .. import global_params
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
-from ..backend.storage import BinarySearchStore
+from ..backend.storage import BinarySearchStore, bss_get_attr_helper
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 
@@ -306,24 +306,30 @@ class SuperSegmentationDataset(SegmentationBase):
                 self._mapping_dict = {}
         return self._mapping_dict
 
-    def sv2ssv_ids(self, ids: np.ndarray) -> Dict[int, int]:
+    def sv2ssv_ids(self, ids: np.ndarray, nb_cpus=1) -> Dict[int, int]:
         """
         Use :attr:`~mapping_lookup_reverse` to query the cell ID for a given array of supervoxel IDs.
         IDs that are not in :attr:`~sv_ids` will not be added to the output dict.
 
         Args:
-            ids: IDs to find the corresponding cell ID.
+            ids: Unique IDs to find the corresponding cell ID.
+            nb_cpus:
 
         Returns:
             Dictionary with supervoxel ID as key and cell ID as value.
         """
         assert np.ndim(ids) == 1
-        lookup = dict()
         # explicitly cast to uint64 because if `ids` is a list of python int intersect auto-casts to float
         queries = np.intersect1d(ids, self.sv_ids).astype(np.uint64)
-        for sv_id, ssv_id in zip(queries, self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
-            lookup[sv_id] = ssv_id
-        return lookup
+        log_reps.debug(f'Finished intersection of {len(ids)} query IDs.')
+        if nb_cpus <= 1:
+            query_res = self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')
+        else:
+            params = [(self.mapping_lookup_reverse, ch, 'ssv_ids') for ch in np.array_split(queries, nb_cpus)]
+            query_res = sm.start_multiprocess(bss_get_attr_helper, params, nb_cpus=nb_cpus, debug=nb_cpus <= 1)
+            query_res = np.concatenate(query_res)
+        log_reps.debug('Finished queries.')
+        return dict(zip(queries, query_res))
     
     @property
     def mapping_lookup_reverse(self) -> BinarySearchStore:
