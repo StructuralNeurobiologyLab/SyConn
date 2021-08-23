@@ -449,7 +449,8 @@ if elektronn3_avail:
 
     class CloudDataSemseg(Dataset):
         def __init__(self, source_dir=None, npoints=12000, transform: Callable = Identity(),
-                     train=True, batch_size=2, use_subcell=True, ctx_size=8000, mask_borders_with_id=None):
+                     train=True, batch_size=2, use_subcell=True, ctx_size=8000, mask_borders_with_id=None,
+                     remap_dict: Optional[dict] = None):
             if source_dir is None:
                 # source_dir = '/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/'
                 # ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
@@ -477,10 +478,14 @@ if elektronn3_avail:
             self._batch_size = batch_size
             self.transform = transform
             self.mask_borders_with_id = mask_borders_with_id
+            self.remap_dict = remap_dict
 
         def __getitem__(self, item):
             item = np.random.randint(0, len(self.fnames))
             sample_pts, sample_feats, out_labels = self.load_sample(item)
+            if self.remap_dict is not None:
+                for k, v in self.remap_dict.items():
+                    out_labels[out_labels == k] = v
             pts = torch.from_numpy(sample_pts).float()
             feats = torch.from_numpy(sample_feats).float()
             lbs = torch.from_numpy(out_labels).long()

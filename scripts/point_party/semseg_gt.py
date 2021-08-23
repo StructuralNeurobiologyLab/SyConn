@@ -281,17 +281,7 @@ j0251: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 
        'nr': 7, 'in': 8, 'p': 9, 'st': 10, 'ignore': 11, 'merger': 12, 'pure_dendrite': 13,
        'pure_axon': 14}
 """
-# j0251 mappings
-label_mappings = dict(fine=[(7, 5), (8, 5), (9, 5), (10, 6)],
-                      # map nr, in, p, neck to "neck" (1) and st, head to "head" (2).
-                      dnh=[(7, 1), (8, 1), (9, 1), (5, 1), (10, 2), (6, 2)],
-                      # map bouton to 1 and terminal to 2
-                      abt=[(3, 1), (4, 2)],
-                      # map all dendritic compartments to dendrite (0) and all axonic to axon (1)
-                      ads=[(7, 0), (8, 0), (9, 0), (5, 0), (10, 0), (6, 0), (3, 1), (4, 1)],
-                      )
-
-# j0251 ignore labels
+# j0251 ignore labels - is applied before label_mappings from below!
 label_remove = dict(
     # ignore "ignore", merger, pure dendrite and pure axon (TODO: what are those?!)
     fine=[11, 12, 13, 14, 15, -1],
@@ -302,6 +292,16 @@ label_remove = dict(
     # ignore same as in "fine"
     ads=[11, 12, 13, 14, 15, -1],
 )
+
+# j0251 mappings
+label_mappings = dict(fine=[(7, 5), (8, 5), (9, 5), (10, 6)],  # st (10; stubby) to "head"
+                      # map nr, in, p, neck to "neck" (1) and head, st (10; stubby) to "head" (2)., dendrite stays 0
+                      dnh=[(7, 1), (8, 1), (9, 1), (5, 1), (10, 2), (6, 2)],
+                      # map axon to 0, bouton to 1 and terminal to 2
+                      abt=[(1, 0), (3, 1), (4, 2)],
+                      # map all dendritic compartments to dendrite (0) and all axonic to axon (1)
+                      ads=[(7, 0), (8, 0), (9, 0), (5, 0), (10, 0), (6, 0), (3, 1), (4, 1)],
+                      )
 
 class_nums = dict(fine=7, dnh=3, abt=3, ads=3)
 target_names = dict(fine=['dendrite', 'axon', 'soma', 'bouton', 'terminal', 'neck', 'head'],

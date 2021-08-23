@@ -323,7 +323,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     log_extraction.debug(f'Filtering relevant synapses done.')
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
-    n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
+    n_used_paths = min(global_params.config.ncore_total * 8, len(storage_location_ids),
                        len(rel_ssv_with_syn_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
@@ -422,68 +422,70 @@ def _combine_and_split_syn_thread(args):
 
         voxel_list = np.concatenate(voxel_list)
         for this_cc in ccs:
-            this_cc_mask = np.array(list(this_cc))
-            # retrieve the index of the syn objects selected for this CC
-            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
-                                                       return_counts=True)
-            # the weight is important
-            this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
-            if np.sum(this_syn_ids_cnt) < cell_obj_cnf['min_obj_vx']['syn_ssv']:
-                continue
-            this_attr = syn_attr_list[this_syn_ixs]
-            this_vx = voxel_list[this_cc_mask]
-            syn_ssv = sd_syn_ssv.get_segmentation_object(syn_ssv_id)
-            if (os.path.abspath(syn_ssv.attr_dict_path)
-                    != os.path.abspath(base_dir + "/attr_dict.pkl")):
-                raise ValueError(f'Path mis-match!')
-            synssv_attr_dc = dict(neuron_partners=ssv_ids)
-            voxel_dc[syn_ssv_id] = this_vx
-            synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
-            synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
-            synssv_attr_dc["size"] = len(this_vx)
-            # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
-            if mesh_min_obj_vx < synssv_attr_dc["size"]:
-                syn_ssv._mesh = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
-                mesh_dc[syn_ssv.id] = syn_ssv.mesh
-                synssv_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
-                synssv_attr_dc["mesh_area"] = syn_ssv.mesh_area
-            else:
-                zero_mesh = [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),
-                             np.zeros((0,), dtype=np.float32)]
-                mesh_dc[syn_ssv.id] = zero_mesh
-                synssv_attr_dc["mesh_bb"] = synssv_attr_dc["bounding_box"] * scaling
-                synssv_attr_dc["mesh_area"] = 0
-            # aggregate syn properties
-            syn_props_agg = {}
-            # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
-            for dc in this_attr:
-                for k in ['id_cs_ratio', 'cs_id', 'sym_prop', 'asym_prop']:
-                    syn_props_agg.setdefault(k, []).append(dc[k])
-            # rename and delete old entry
-            syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
-            del syn_props_agg['cs_id']
+            # do not process synapse again if job has been restarted
+            if syn_ssv_id not in attr_dc:
+                this_cc_mask = np.array(list(this_cc))
+                # retrieve the index of the syn objects selected for this CC
+                this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
+                                                           return_counts=True)
+                # the weight is important
+                this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
+                if np.sum(this_syn_ids_cnt) < cell_obj_cnf['min_obj_vx']['syn_ssv']:
+                    continue
+                this_attr = syn_attr_list[this_syn_ixs]
+                this_vx = voxel_list[this_cc_mask]
+                syn_ssv = sd_syn_ssv.get_segmentation_object(syn_ssv_id)
+                if (os.path.abspath(syn_ssv.attr_dict_path)
+                        != os.path.abspath(base_dir + "/attr_dict.pkl")):
+                    raise ValueError(f'Path mis-match!')
+                synssv_attr_dc = dict(neuron_partners=ssv_ids)
+                voxel_dc[syn_ssv_id] = this_vx
+                synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
+                synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
+                synssv_attr_dc["size"] = len(this_vx)
+                # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
+                if mesh_min_obj_vx < synssv_attr_dc["size"]:
+                    syn_ssv._mesh = calc_contact_syn_mesh(syn_ssv, voxel_dc=voxel_dc, **syn_meshing_kws)[0]
+                    mesh_dc[syn_ssv.id] = syn_ssv.mesh
+                    synssv_attr_dc["mesh_bb"] = syn_ssv.mesh_bb
+                    synssv_attr_dc["mesh_area"] = syn_ssv.mesh_area
+                else:
+                    zero_mesh = [np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),
+                                 np.zeros((0,), dtype=np.float32)]
+                    mesh_dc[syn_ssv.id] = zero_mesh
+                    synssv_attr_dc["mesh_bb"] = synssv_attr_dc["bounding_box"] * scaling
+                    synssv_attr_dc["mesh_area"] = 0
+                # aggregate syn properties
+                syn_props_agg = {}
+                # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
+                for dc in this_attr:
+                    for k in ['id_cs_ratio', 'cs_id', 'sym_prop', 'asym_prop']:
+                        syn_props_agg.setdefault(k, []).append(dc[k])
+                # rename and delete old entry
+                syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
+                del syn_props_agg['cs_id']
 
-            # use the fraction of 'syn' voxels used for this connected component, i.e. 'this_agg_syn_weights', as weight
-            # agglomerate the syn-to-cs ratio as a weighted sum
-            syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
+                # use the fraction of 'syn' voxels used for this connected component, i.e. 'this_agg_syn_weights', as weight
+                # agglomerate the syn-to-cs ratio as a weighted sum
+                syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
 
-            # 'syn_ssv' synapse type as weighted sum of the 'syn' fragment types
-            sym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['sym_prop']))
-            asym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['asym_prop']))
-            syn_props_agg['sym_prop'] = sym_prop
-            syn_props_agg['asym_prop'] = asym_prop
+                # 'syn_ssv' synapse type as weighted sum of the 'syn' fragment types
+                sym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['sym_prop']))
+                asym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['asym_prop']))
+                syn_props_agg['sym_prop'] = sym_prop
+                syn_props_agg['asym_prop'] = asym_prop
 
-            if sym_prop + asym_prop == 0:
-                sym_ratio = -1
-            else:
-                sym_ratio = sym_prop / float(asym_prop + sym_prop)
-            syn_props_agg["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > cell_obj_cnf['sym_thresh'] else 1
-            syn_props_agg["syn_sign"] = syn_sign
+                if sym_prop + asym_prop == 0:
+                    sym_ratio = -1
+                else:
+                    sym_ratio = sym_prop / float(asym_prop + sym_prop)
+                syn_props_agg["syn_type_sym_ratio"] = sym_ratio
+                syn_sign = -1 if sym_ratio > cell_obj_cnf['sym_thresh'] else 1
+                syn_props_agg["syn_sign"] = syn_sign
 
-            # add syn_ssv dict to AttributeStorage
-            synssv_attr_dc.update(syn_props_agg)
-            attr_dc[syn_ssv_id] = synssv_attr_dc
+                # add syn_ssv dict to AttributeStorage
+                synssv_attr_dc.update(syn_props_agg)
+                attr_dc[syn_ssv_id] = synssv_attr_dc
             if use_new_subfold:
                 syn_ssv_id += np.uint(1)
                 if syn_ssv_id - base_id >= div_base:
