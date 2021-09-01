@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     shape_j0251 = np.array([27119, 27350, 15494])
 
-    cube_size = (np.array([1024, 1024, 512]) * 1).astype(np.int32)
+    cube_size = (np.array([1024, 1024, 1024]) * 1).astype(np.int32)
 
     cube_offset = ((shape_j0251 - cube_size) // 2).astype(np.int32)
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int32)
@@ -40,6 +40,7 @@ if __name__ == '__main__':
         ('batch_proc_system', None),
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
+        ('generate_cs_ssv', False),
         ('nnodes_total', 17),
         ('use_point_models', True),
         ('meshes', {'use_new_meshing': True}),
@@ -79,9 +80,9 @@ if __name__ == '__main__':
     # currently using `dill` package to support lambda expressions, a weak feature. Make
     #  sure all dependencies within the lambda expressions are imported in
     #  `batchjob_object_segmentation.py` (here: numpy)
-    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype(np.uint8),
-                                      vc=lambda x: (x == 3).astype(np.uint8),
-                                      sj=lambda x: (x == 2).astype(np.uint8))
+    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype('u1'),
+                                      vc=lambda x: (x == 3).astype('u1'),
+                                      sj=lambda x: (x == 2).astype('u1'))
 
     # Preparing data
     # --------------------------------------------------------------------------

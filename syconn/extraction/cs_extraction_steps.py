@@ -210,7 +210,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             cs_worker_mapping[worker_nr] = cs_ids_curr
     else:
         results = start_multiprocess_imap(_contact_site_extraction_thread,
-                                          multi_params, verbose=False, debug=False)
+                                          multi_params, verbose=False, debug=False, use_dill=True)
         for worker_nr, worker_res in tqdm.tqdm(results, leave=False):
             syn_ids_curr = np.array(worker_res['syn'], dtype=np.uint64)
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)

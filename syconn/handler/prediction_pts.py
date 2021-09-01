@@ -1928,7 +1928,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     mpath = os.path.expanduser(mpath)
     if os.path.isdir(mpath):
         # multiple models
-        mpaths = glob.glob(mpath + '*.pth')
+        mpaths = glob.glob(mpath + '*/*.pth')
     else:
         # single model
         mpaths = [mpath]
@@ -1969,7 +1969,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
             batchsizes[ctx] = int(batchsizes[ctx]*default_kwargs['bs'])
         default_kwargs['bs'] = batchsizes
     out_dc = predict_pts_plain(ssd_kwargs,
-                               model_loader=get_cpmt_model_pts,
+                               model_loader=get_cmpt_model_pts,
                                loader_func=pts_loader_cpmt,
                                pred_func=pts_pred_cmpt,
                                postproc_func=pts_postproc_cpmt,
@@ -1983,7 +1983,52 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
         raise ValueError('Invalid output during compartment prediction.')
 
 
-def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: Optional[List] = None):
+def get_cpmt_model_pts_OLD(mpath: Optional[str] = None, device='cuda', pred_types: Optional[List] = None):
+    """ Loads multiple models (or only one), depending on ``pred_types``. Models which should be used
+        must contain one of the pred_types in their names. If ``mpath`` points to a single model, this
+        model must contain 'cmpt' in its name.
+
+    Args:
+        mpath: Path to model folder (containing multiple models) or to single model file. Models should
+            have one of the pred_types in their names, a single model must contain 'cmpt' in its name.
+        device: Device onto which the models should get transfered.
+        pred_types: List of prediction types, e.g. ['ads', 'abt', dnh'] for axon, dendrite, soma; ...
+    """
+    if mpath is None:
+        mpath = global_params.config.mpath_compartment_pts
+    mpath = os.path.expanduser(mpath)
+    if os.path.isdir(mpath):
+        # multiple models
+        mpaths = glob.glob(mpath + '*/*.pth')
+    else:
+        # single model, must contain 'cmpt' in its name
+        mpaths = [mpath]
+    if pred_types is None:
+        pred_types = ['cmpt']
+    else:
+        pred_types = pred_types
+    models = {}
+    from elektronn3.models.convpoint import SegBig
+    # for each pred_type, check if there is a corresponding model and load it
+    for p_t in pred_types:
+        for path in mpaths:
+            if p_t in path:
+                mkwargs = get_cmpt_kwargs(path)[0]
+                if p_t in models:
+                    raise ValueError(f"Found multiple models for prediction type {p_t}.")
+                # TODO: Remove hardcoding of model parameters
+                if p_t == 'dnh' or p_t == 'abt':
+                    m = SegBig(**mkwargs, reductions=[1024, 512, 256, 64, 16, 8],
+                               neighbor_nums=[32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16]).to(device)
+                else:
+                    m = SegBig(**mkwargs).to(device)
+                m.load_state_dict(torch.load(path)['model_state_dict'])
+                # save models in dict, e.g. {'ads': ads-m, 'abt': abt-m, 'dnh': dnh-m}
+                models[p_t] = m
+    return models
+
+
+def get_cmpt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: Optional[List] = None):
     """ Loads multiple models (or only one), depending on ``pred_types``. Models which should be used
         must contain one of the pred_types in their names. If ``mpath`` points to a single model, this
         model must contain 'cmpt' in its name.
@@ -2008,20 +2053,22 @@ def get_cpmt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: O
     else:
         pred_types = pred_types
     models = {}
-    from elektronn3.models.convpoint import SegBig
+
+    # Model selection
+    from elektronn3.models.lcp_adapt import ConvAdaptSeg
+    from lightconvpoint.utils.network import get_search, get_conv
+    from torch import nn
+    search = 'SearchQuantized'
+    conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=True)
+    act = nn.ReLU
     # for each pred_type, check if there is a corresponding model and load it
     for p_t in pred_types:
         for path in mpaths:
             if p_t in path:
-                mkwargs = get_cmpt_kwargs(path)[0]
                 if p_t in models:
                     raise ValueError(f"Found multiple models for prediction type {p_t}.")
-                # TODO: Remove hardcoding of model parameters
-                if p_t == 'dnh' or p_t == 'abt':
-                    m = SegBig(**mkwargs, reductions=[1024, 512, 256, 64, 16, 8],
-                               neighbor_nums=[32, 32, 32, 16, 8, 8, 4, 8, 8, 8, 16, 16, 16]).to(device)
-                else:
-                    m = SegBig(**mkwargs).to(device)
+                m = ConvAdaptSeg(5, 3, get_conv(conv), get_search(search), kernel_num=64,
+                                 architecture=None, activation=act, norm='gn').to(device)
                 m.load_state_dict(torch.load(path)['model_state_dict'])
                 # save models in dict, e.g. {'ads': ads-m, 'abt': abt-m, 'dnh': dnh-m}
                 models[p_t] = m

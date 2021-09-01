@@ -307,7 +307,6 @@ def map_synssv_objects(synssv_version: Optional[str] = None, log: Optional[Logge
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(map_synssv_objects_thread, multi_params, nb_cpus=nb_cpus)
-
     else:
         _ = qu.batchjob_script(multi_params, "map_synssv_objects",
                                remove_jobfolder=True, log=log)

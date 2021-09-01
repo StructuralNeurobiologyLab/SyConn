@@ -187,7 +187,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              load_from_kd_overlaycubes, transf_func_kd_overlay])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(transform_func, multi_params, nb_cpus=nb_cpus, debug=False)
+        results = sm.start_multiprocess_imap(transform_func, multi_params, nb_cpus=nb_cpus, debug=False,
+                                             use_dill=True)
 
         results_as_list = []
         for result in results:

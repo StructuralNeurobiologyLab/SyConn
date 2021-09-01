@@ -71,7 +71,7 @@ if __name__ == '__main__':
     # currently using `dill` package to support lambda expressions, a weak feature. Make
     #  sure all dependencies within the lambda expressions are imported in
     #  `batchjob_object_segmentation.py` (here: numpy)
-    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).SLURMastype('u1'),
+    cellorganelle_transf_funcs = dict(mi=lambda x: (x == 1).astype('u1'),
                                       vc=lambda x: (x == 3).astype('u1'),
                                       sj=lambda x: (x == 2).astype('u1'))
 
@@ -147,19 +147,29 @@ if __name__ == '__main__':
     # exec_skeleton.run_skeleton_generation()
     # ftimer.stop()
 
-    log.info('Step 5/9 - Synapse detection')
-    ftimer.start('Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
-                                 transf_func_sj_seg=cellorganelle_transf_funcs['sj'])
+    # log.info('Step 5/9 - Synapse detection')
+    # ftimer.start('Synapse detection')
+    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
+    #                              transf_func_sj_seg=cellorganelle_transf_funcs['sj'])
+    # ftimer.stop()
+
+    log.info('Step 7/9 - Morphology extraction')
+    ftimer.start('Morphology extraction')
+    exec_inference.run_morphology_embedding()
     ftimer.stop()
 
-    # log.info('Step 5.5/9 - Contact detection')
-    # ftimer.start('Contact detection')
-    # if global_params.config['generate_cs_ssv']:
-    #     exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
-    # else:
-    #     log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
-    # ftimer.stop()
+    # Process contact sites only with some nodes
+    global_params.config['slurm']['exclude_nodes'] = ['wb02', 'wb03', 'wb04', 'wb05', 'wb06', 'wb07', 'wb08', 'wb09',
+                                                      'wb10', 'wb11']
+    global_params.config.write_config()
+    time.sleep(10)  # wait for changes to apply
+    log.info('Step 5.5/9 - Contact detection')
+    ftimer.start('Contact detection')
+    if global_params.config['generate_cs_ssv']:
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    else:
+        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
+    ftimer.stop()
 
     # log.info('Step 6/9 - Compartment prediction')
     # ftimer.start('Compartment predictions')
@@ -171,15 +181,6 @@ if __name__ == '__main__':
     # # TODO: this step can be launched in parallel with the morphology extraction!
     # ftimer.start('Spine head volume estimation')
     # exec_syns.run_spinehead_volume_calc()
-    # ftimer.stop()
-    #
-    # # Used multi-views until here! Now use point models
-    # global_params.config['use_point_models'] = True
-    # global_params.config.write_config()
-    # time.sleep(10)  # wait for changes to apply
-    # log.info('Step 7/9 - Morphology extraction')
-    # ftimer.start('Morphology extraction')
-    # exec_inference.run_morphology_embedding()
     # ftimer.stop()
     #
     # log.info('Step 8/9 - Celltype analysis')

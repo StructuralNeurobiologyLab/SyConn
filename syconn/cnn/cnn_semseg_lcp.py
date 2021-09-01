@@ -88,7 +88,7 @@ if cellshape_only:
 
 if name is None:
     name = f'semseg_pts_nb{npoints}_ctx{ctx}_{gt_type}_nclass' \
-           f'{num_classes[gt_type]}_ptconv_BN_strongerWeighted_noKernelSep'
+           f'{num_classes[gt_type]}_ptconv_GN_strongerWeighted_noKernelSep'
     if not normalize_pts:
         name += '_NonormPts'
     if cellshape_only:
@@ -119,7 +119,7 @@ search = 'SearchQuantized'
 conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_pts)
 act = nn.ReLU
 model = ConvAdaptSeg(input_channels, num_classes[gt_type], get_conv(conv), get_search(search), kernel_num=64,
-                     architecture=None, activation=act, norm='bn')
+                     architecture=None, activation=act, norm='gn')
 
 name += f'_eval{eval_nr}'
 # model = nn.DataParallel(model)
