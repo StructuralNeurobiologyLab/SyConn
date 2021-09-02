@@ -2,6 +2,8 @@ from __future__ import print_function
 import argparse
 import os
 import numpy as np
+import threading
+import time
 from knossos_utils import KnossosDataset
 
 from syconn.handler.logger import log_main as logger
@@ -33,46 +35,40 @@ def configure_backend():
 
 
 class SyConnClient(object):
-    """Client used to visualize the segmented and image data with cell
-    skeletons, cell meshes and organelle meshes. Contains embedded 
-    :class:`neuroglancer.viewer.Viewer` 
+    """Base client with a configurable viewer state -- raw
+    and segmentation volumes, skeletons, cell and organelle meshes, 
+    and segment properties
 
-    :param backend: to retrieve the skeleton and mesh data in 
-        neuroglancer.LocalVolume
-    :type backend: SyConnBackend
-    :param seg_path: path of the segmentation data 
-        (global_params.config.kd_seg_path)
-    :type seg_path: str
-    :param organelles: command line arg; supported organelles
-    :type organelles: list
-    :param clargs: command line args; used for retrieving <HOST> and 
-        <PORT> 
-    :type clargs: dict
-
-    .. note:: One client instance corresponds to one neuroglancer 
-        viewer.
+    :return: Base class for neuroglancer client
+    :rtype: SyConnClient   
     """
 
-    def __init__(self, params, organelles, token=None):
-        
+    def __init__(self, params, organelles, token):
+        """Initialize viewer
+
+        :param params: configuration parameters for neuroglancer server
+        :type params: neuroglancer.NeuroConfig
+        :param organelles: organelle meshes to be displayed
+        :type organelles: list
+        :param token: unique token for the client (40 character hex)
+        :type token: str
+        """
+
         self.acquisition = params.acquisition
         self.version = params.version
         # warn the user for no organelles
         if organelles == []:
             logger.info('No organelles selected')
         
-        viewer = self.viewer = neuroglancer.Viewer(token=token, allow_credentials=True)
-        logger.info('Neuroglancer viewer object initialized')
+        viewer = self.viewer = neuroglancer.Viewer(token=token)
         
         # configure viewer
         with viewer.txn() as s:
-            if self.acquisition == "example_cube":
-                self.configure_viewer(params["backend"], s, raw_dataset=params["segmentation"], seg_dataset=params["segmentation"],
-                                organelles=organelles)
+            self.configure_viewer(s, organelles)
 
-            else:
-                self.configure_viewer(params["backend"], s, raw_dataset=params["image"], seg_dataset=params["segmentation"],
-                                organelles=organelles)
+    @property
+    def token(self):
+        return self.viewer.token
 
     @property
     def seg_name(self):
@@ -83,31 +79,28 @@ class SyConnClient(object):
     @property
     def raw_name(self):
         """Image name"""
+
         if "example_cube" in self.acquisition:
             return self.acquisition + '_' + self.version
 
         return "j0251_72_clahe2"
 
-    def configure_viewer(self, backend: SyConnBackend, state, raw_dataset=None, seg_dataset=None, organelles=[]):
+    def configure_viewer(self, state, organelles):
         """
-        Configures the Syconn client so it parses the desired data to 
-        Neuroglancer Viewer. Layer visibility depends on ordering. Last
-        layer overrides the side panel visibility of all layers.
+        Configures the viewer state with the desired image and
+        segmentation volumes, skeletons, cell and organelle meshes.
         
-        :param backend: SyConnBackend
-        :param state: neuroglancer.viewer_state.ViewerState
-        :param data: numpy.ndarray (e.g KnossosDataset)
-        :param dimensions: neuroglancer.CoordinateSpace 
-            (viewer/layer dimensions)
+        :param state: state of the viewer (layers, sources, etc.)
+        :type state: neuroglancer.ViewerState
+        :param organelles: organelle meshes to be displayed
+        :type organelles: list
 
         .. note::
-
-           The precomputed source uses http://syconn.esc.mpcdf.mpg.de/ 
-           in the production environment. For a local tornado 
-           development environment, we use http://localhost:[PORT]/.
-           Additionally, if flask is used in the development 
-           environment (cross-origin source), configure flask-CORS in 
-           neuroglancer/python/neuroglancer/flask_server.py
+            Layer visibility depends on ordering. Last
+            layer overrides the side panel visibility of all layers.
+            The precomputed source uses http://syconn.esc.mpcdf.mpg.de/ 
+            in the production environment. For a local tornado 
+            development environment, we use http://localhost:[PORT]/.
         """
 
         if config.dev_environ:
@@ -119,7 +112,7 @@ class SyConnClient(object):
             source = f'http://syconn.esc.mpcdf.mpg.de'
 
         def append_organelle_layer(state, organelle):
-            """
+            """Creates a layer for the given organelle mesh
             Organelle mesh colors referenced from 
             SyConn/syconn/analysis/syconn_knossos_viewer.py#L878
             """
@@ -151,9 +144,6 @@ class SyConnClient(object):
             state.selected_layer.layer = name
             state.selected_layer.visible = False
 
-        # set local volume dimensions 
-        scales = raw_dataset.scale
-
         # raw image
         state.layers.append(
             name=self.raw_name,
@@ -166,8 +156,6 @@ class SyConnClient(object):
 
         state.selected_layer.layer = self.raw_name
         state.selected_layer.visible = False
-
-        scales = seg_dataset.scale
         
         # segmentation 
         state.layers.append(
@@ -177,7 +165,7 @@ class SyConnClient(object):
                     f'precomputed://' + source + '/volume/segmentation', # segmentation volume
                     f'precomputed://' + source + '/sv', # ssv mesh
                     f'precomputed://' + source + '/skeletons', # ssv skeleton
-                    # f'precomputed://' + source + '/properties',
+                    f'precomputed://' + source + '/properties', # segment properties
                 ],
                 mesh_silhouette_rendering=2,
             )
@@ -205,6 +193,8 @@ if __name__ == '__main__':
     Start the SyConn client with the desired Viewer and provide
     segmentation and raw data to the Neuroglancer Tornado server
     Supported organelles = ('mi', 'sj', 'vc')
+    
+    TODO: SyConn client is generalized. This needs to be changed
     
     To run client: 
     python -i cli.py --wd=<WORKING_DIRECTORY> --host=<HOST> 

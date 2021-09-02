@@ -7,10 +7,10 @@ import time
 from timeit import default_timer as timer
 from bs4 import BeautifulSoup as Soup
 from knossos_utils import KnossosDataset
+from numpy.core.fromnumeric import size
 
 from syconn.analysis.cli import configure_backend
 from syconn.analysis.cli import SyConnClient
-from syconn.analysis.utils import handle_layer_args
 from syconn.handler.logger import log_main as log_gate
 from syconn.handler.prediction import str2int_converter, int2str_converter
 from syconn import global_params
@@ -27,53 +27,42 @@ def get_segmentation_layer(layers):
             return i, layer
 
 class PropertyFilter(SyConnClient):
-    """Invokes SyConnClient with ssv_ids filtering based on the properties 
-    -- cell type, mitochondria count, ssv size, synapse.
+    """Combines neuroglancer client (SyConnClient) with property
+    filtering to create a complete viewer.
 
-    Cell type, mitochondria count and ssv size are provided as a segment query
-    in the 'seg.' tab of Neuroglancer viewer that triggers a state change. 
-    This is captured to retrieve a new set of ssv_ids. Finally a new viewer
-    state is created with the segment query set to the new ssv_ids. 
-    Following are the query formats:
+    :param SyConnClient: Base class for neuroglancer client
+    :type SyConnClient: 
+    :return: Neuroglancer client with property filtering
+    :rtype: PropertyFilter
 
-    - [celltype]_pg[page_num] -> filters by the cell type and divides the
+    .. class variables::
+        :cvar properties: properties with operator-operand pair
+        :type properties: tuple
+        :cvar master_pattern: query format for specifying all the properties
+        :type master_pattern: str
+        :cvar ct_pattern: cell type pattern
+        :type ct_pattern: re.Pattern
+        :cvar property_filter: operator-operand pair type pattern
+        :type property_filter: re.Pattern
+        :cvar page_pattern: page pattern
+        :type page_pattern: re.Pattern
+        :cvar PAGE_SIZE: max number of ssv_ids displayed in the side panel
+        :type PAGE_SIZE: int
+        :cvar syn_type: maps compartment value to pre- or post-synaptic
+        :type syn_type: dict
+
+    .. filtering pattern::
+        [celltype]_pg[page_num] -> filters by the cell type and divides the
         resulting ssv_ids across pages (cached)
-    - [celltype]_[>|<][mito_count]_[>|<][ssv_size]_pg[page_num] -> filters
+
+        [celltype]_[>|<][mito_count]_[>|<][ssv_size]_pg[page_num] -> filters
         by the cell type, mitochondria count and ssv size, and divides the
         resulting ssv_ids across pages (if required)  
-    
-    To filter with the synapse property, select a segment (ssv_id) and press
-    key 'p'. This will render the synaptic partner in terms of synapse area, 
-    probability and axon -> dendrite and axon -> soma connections, and
-    center the viewer at the synapse position (representation coordinates).
-
-    :cvar properties: properties with operator-operand pair
-    :type properties: tuple
-    :cvar master_pattern: query format for specifying all the properties
-    :type master_pattern: str
-    :cvar ct_pattern: cell type format
-    :type ct_pattern: re.Pattern
-    :cvar property_filter: properties format with operator and value
-    :type property_filter: re.Pattern
-    :cvar page_pattern: page format
-    :type page_pattern: re.Pattern
-    :cvar PAGE_SIZE: max number of ssv_ids displayed in the side panel
-    :type PAGE_SIZE: int
-    :cvar syn_type: maps compartment to pre- or post-synaptic
-    :type syn_type: dict
-
-    :param backend: to retrieve the skeleton, mesh and cell types
-    :type backend: SyConnBackend
-    :param seg_dataset: segmentation data for neuroglancer.LocalVolume
-    :type seg_dataset: KnossosDataset
-    :param organelles: command line argument; supported organelles (mi, vc, sj)
-    :type organelles: list
-    """
+    """    
 
     properties = ('mi', 'size')
-    # don't forget to update here, if properties number increases
-    # master_pattern = r'^([a-zA-Z]{2,4}|#)((_((>|<)[0-9]+|#)){2})?_(pg[1-9][0-9]{0,3})$'
-    master_pattern = r'^([a-zA-Z]{2,4})?_?(mito[>|<|=][0-9][0-9]{0,3})?_?(size[>|<][1-9][0-9]{1,6})?_?(pg[1-9][0-9]{0,3})?$' # TODO(hashir): Independent property querying 
+    # don't forget to update here, if additional properties are added
+    master_pattern = r'^([a-zA-Z]{2,4})?_?(mito[>|<|=][0-9][0-9]{0,3})?_?(size[>|<][1-9][0-9]{1,6})?_?(pg[1-9][0-9]{0,3})?$'
     ct_pattern = re.compile(r'^([a-zA-Z]{2,4})')
     property_filter = re.compile(r'_((>|<)[0-9]+)')
     page_pattern = re.compile(r'pg[1-9][0-9]{0,3}$')
@@ -85,11 +74,20 @@ class PropertyFilter(SyConnClient):
     }
 
     def __init__(self, params, organelles, token=None):
+        """Initializes the base client and property filter
+
+        :param params: configuration parameters for neuroglancer server
+        :type params: neuroglancer.NeuroConfig
+        :param organelles: organelle meshes to be displayed
+        :type organelles: list
+        :param token: unique token for the client (40 character hex)
+        :type token: str
+        """        
+
         super().__init__(params, organelles, token)
 
         self.params = params
         self.version = params.version
-        self._token = token
 
         self.gt_type = "ctgt"
         if params.acquisition == "j0251":
@@ -101,28 +99,39 @@ class PropertyFilter(SyConnClient):
         self.ssv_ids = params["ssvs"]
         self.cur_message = None
 
-        # dict of CT indices in the ssv_ids array
+        # dict of cell type indices in the ssv_ids array
         self.CTmask = {ct: [] for ct in self.CTs}
         logger.info(f"Available filter properties {self.__class__.properties}")
 
         # add action handler for finding synaptic partner
         self.viewer.actions.add('show-largest-synaptic-connection', self._handle_select)
+        self.viewer.actions.add('take-screenshot', self._take_screenshot)
 
-        # bind action to key
+        # bind actions to keys
         with self.viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['keyp'] = 'show-largest-synaptic-connection'
+            s.input_event_bindings.data_view['keys'] = 'take-screenshot' # TODO(hashir): inbuilt screenshot capture
         
         # defer callback necessary to avoid deadlock 
         self.viewer.shared_state.add_changed_callback(
             lambda: self.viewer.defer_callback(self.on_state_changed)
         )
 
-    @property
-    def token(self):
-        return self._token
+    def _take_screenshot(self, action_state):
+        """
+        Takes a screenshot of the current viewport.
+
+        :param action_state: current state of the viewer
+        :type action_state: neuroglancer.viewer_config_state.ActionState
+
+        TODO(hashir): re-implement this
+        """
+
+        logger.info("Taking screenshot...")
+        self.viewer.screenshot(size=[1280, 720])
 
     def _handle_select(self, action_state):
-        """Action handler for synaptic filtering [keyp]
+        """Action handler for synaptic filtering [keyp].
         
         :param action_state: current state of the viewer
         :type action_state: neuroglancer.viewer_config_state.ActionState
@@ -143,8 +152,9 @@ class PropertyFilter(SyConnClient):
         message = 'Loading synaptic partner for selected ssv {}'.format(ssv_id)
 
         if message != self.cur_message:
-            with self.viewer.config_state.txn() as cfs:
-                cfs.status_messages['status'] = message
+            with self.viewer.config_state.txn() as s:
+                s.status_messages['status'] = message
+                
             self.cur_message = message
 
         with self.viewer.txn() as s:
@@ -369,7 +379,7 @@ class PropertyFilter(SyConnClient):
                     logger.info(f"Storing ids mask of cell type {celltype} in memory")
                     start = timer()
                     self.CTmask[celltype] = np.where(
-                        self.params["celltype_cnn_e3s"] == str2int_converter(celltype, self.gt_type))[0]
+                        self.params["celltypes"] == str2int_converter(celltype, self.gt_type))[0]
                     end = timer()
                     logger.debug(f"Loaded cell type ids mask after {(end - start):.3f} seconds")
 
@@ -534,9 +544,11 @@ class PropertyFilter(SyConnClient):
 
 
 if __name__ == "__main__":
+    """TODO: PropertyFilter is generalized. This needs to be changed."""
+       
     ap = argparse.ArgumentParser()
     neuroglancer.cli.add_server_arguments(ap)
-    handle_layer_args(ap)
+    # handle_layer_args(ap)
     args = ap.parse_args()
     neuroglancer.cli.handle_server_arguments(args)
 
