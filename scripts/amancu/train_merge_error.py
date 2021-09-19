@@ -16,10 +16,9 @@ elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import SegSmall
-# from elektronn3.models.randla_net import RandLANet
 from elektronn3.models.lcp_adapt import ConvAdaptSeg
-from elektronn3.modules.loss import FocalLoss
 from lightconvpoint.utils.network import get_search, get_conv
+from elektronn3.modules.loss import FocalLoss
 from elektronn3.training import Trainer3d, Backup, metrics
 
 # PARSE PARAMETERS #
@@ -27,11 +26,13 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--model', type=str, default='segsmall', help='Model to use: segsmall/randla')
-parser.add_argument('--r', type=int, default=1000, help='Radius of cs neighborhood')
+parser.add_argument('--model', type=str, default='lcp', help='Model to use: segsmall/lcp/randla')
+parser.add_argument('--r', type=int, default=1000, help='Radius of merger positive labeling  neighborhood')
 parser.add_argument('--opt', type=str, default='Adam', help='Chosen optimizer: Adam/SGD')
 parser.add_argument('--lr', type=str, default='StepLR', help='Chosen learning rate: StepLR/ExponentialLR/CyclicLR/ConstantLR')
 parser.add_argument('--conv', type=str, default='ConvPoint', help='Convolution type for lcp')
+parser.add_argument('--arch', type=str, default=None, help='Architecture type of model')
+parser.add_argument('--resume', type=str, default=None,  help='Path to pretrained model state dict from which to resume training.')
 parser.add_argument('--bs', type=int, default=4, help='Batch size')
 parser.add_argument('--sp', type=int, default=10000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
@@ -65,6 +66,8 @@ radius = args.r
 opt = args.opt
 learning_rate = args.lr
 conv = args.conv
+arch = args.arch
+resume = args.resume
 batch_size = args.bs
 npoints = args.sp
 scale_norm = args.scale_norm
@@ -75,11 +78,10 @@ use_bias = args.use_bias
 lr = 2e-3
 lr_stepsize = 100
 lr_dec = 0.995
-max_steps = 1000000
+max_steps = 290000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
-cellshape_only = True
 use_syntype = False
 dr = 0.2
 track_running_stats = False
@@ -87,10 +89,7 @@ use_norm = 'gn'
 
 # 'no_merge': 0, 'merge_error': 1
 num_classes = 2
-use_subcell = False
-if cellshape_only:
-    use_subcell = False
-    use_syntype = False
+
 act = 'relu'
 
 if name is None:
@@ -108,26 +107,13 @@ else:
 
 print(f'Running on device: {device}')
 
-# set paths
+# set save path
 if save_root is None:
-    save_root = f'/wholebrain/scratch/amancu/mergeError/trainings/{modelselect}/see'
-    # save_root = '/wholebrain/scratch/amancu/mergeError/'
+    save_root = f'/wholebrain/scratch/amancu/mergeError/trainings/{modelselect}/see/'
 
-# CREATE NETWORK AND PREPARE DATA SET
-architecture_2048 = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
-                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
-                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 512},
-                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
-                     {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
-                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
-                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
-                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
-                     {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
-                     {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
-                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
-architecture_large = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+# Architecture select for LightConvPoint
+if arch == 'archLrg':
+    architecture = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
                       {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
                       {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
                       {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
@@ -140,31 +126,31 @@ architecture_large = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
                       {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
-
-
+else:
+    architecture = None
 
 # Model selection
+model = None
 if modelselect == 'lcp':
     search = 'SearchQuantized'
-    # conv = dict(layer='ConvPoint', kernel_separation=False)
     convol = dict(layer=conv, kernel_separation=False)
     layer = convol['layer']
-
-    ##TODO CHANGE NAME HERE
-    name += f'_{layer}_{search}_architectureLarge'
+    name += f'_{layer}_{search}_{arch}'
     act = nn.ReLU
     model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
-                         architecture=architecture_large, activation=act, norm='gn')
-# if modelselect == 'randla':
-#     model = RandLANet(input_channels, num_classes + 1, dropout_p=dr)
-else:
-    model = SegSmall(input_channels, num_classes + 1, dropout=dr, use_norm=use_norm,
-                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
-
+                         architecture=architecture, activation=act, norm='gn')
+if modelselect == 'randla':
+    from elektronn3.models.randla_net import RandLANet
+    model = RandLANet(input_channels, num_classes, dropout_p=dr)
 
 print(f'Using model {modelselect}')
 
 model.to(device)
+
+if args.resume is not None:  # Load pretrained network params
+    model.load_state_dict(torch.load(os.path.expanduser(resume), map_location=device)['model_state_dict'])
+    name += '_run2'
+
 
 example_input = (torch.ones(batch_size, npoints, input_channels).to(device),
                  torch.ones(batch_size, npoints, 3).to(device))
@@ -199,7 +185,7 @@ valid_ds = CloudFalseMergeLoader(radius=radius, npoints=npoints, transform=valid
 
 # PREPARE AND START TRAINING #
 
-# set up optimization
+# set up optimizer
 if opt == 'Adam':
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     name += '_Adam'
@@ -212,7 +198,7 @@ elif opt == 'SGD':
     )
     name += '_SGD'
 
-# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
+# set up learning rate scheduler
 if learning_rate == 'StepLR':
     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     name += '_StepLR'
@@ -230,21 +216,20 @@ elif learning_rate == 'CyclicLR':
         step_size_up=2000,
         cycle_momentum=True,
         mode='exp_range',
-        # gamma=0.99994,
+        gamma=0.99997,
     )
     name += '_CyclicLR'
-# set weight of the masking label at context boarders to 0
-# class weight for foreground label greater
 
-# adapt class weights according to radius
+# adapt class weights for the merge error task
 weights = [1,2]
+
+# uncomment for desired  loss!
 
 # name += f'_weights{weights[0]},{weights[1]}_FocalLoss'
 name += f'_weights{weights[0]},{weights[1]}_CrossEntropy'
 
 class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
 
-# TODO: change this
 # criterion = FocalLoss(weight=class_weights, ignore_index=num_classes).to(device)
 criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
 valid_metrics = {  # mean metrics
@@ -254,16 +239,12 @@ valid_metrics = {  # mean metrics
     'val_DSC_mean': metrics.DSC(),
     'val_IoU_mean': metrics.IoU(),
 }
-if num_classes > 2:
-    # Add separate per-class accuracy metrics only if there are more than 2 classes
-    valid_metrics.update({
-        f'val_IoU_c{i}': metrics.Accuracy(i)
-        for i in range(num_classes)
-    })
 
 # Create trainer
 # it seems pytorch 1.1 does not support batch_size=None to enable batched dataloader, instead
 # using batch size 1 with custom collate_fn
+
+# for LCP models
 if modelselect == 'lcp':
     trainer = Trainer3d(
         model=model,
@@ -273,7 +254,7 @@ if modelselect == 'lcp':
         train_dataset=train_ds,
         valid_dataset=valid_ds,
         batchsize=1,
-        num_workers=8,
+        num_workers=4,
         valid_metrics=valid_metrics,
         save_root=save_root,
         enable_save_trace=enable_save_trace,
@@ -286,6 +267,7 @@ if modelselect == 'lcp':
         tqdm_kwargs={'disable': False},
         lcp_flag=True
     )
+# for randla
 else:
     trainer = Trainer3d(
         model=model,
@@ -293,16 +275,15 @@ else:
         optimizer=optimizer,
         device=device,
         train_dataset=train_ds,
-        valid_dataset=None,
+        valid_dataset=valid_ds,
         batchsize=1,
-        num_workers=8,
+        num_workers=4,
         valid_metrics=valid_metrics,
         save_root=save_root,
         enable_save_trace=enable_save_trace,
         exp_name=name,
         schedulers={"lr": lr_sched},
-        num_classes=num_classes + 1,
-        # example_input=example_input,
+        num_classes=num_classes,
         dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
         nbatch_avg=5,
         tqdm_kwargs={'disable': False},

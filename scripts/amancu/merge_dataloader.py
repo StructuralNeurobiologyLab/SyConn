@@ -12,9 +12,6 @@ import numpy as np
 class CloudFalseMergeLoader(Dataset):
     def __init__(self, source_dir=None, radius=50, npoints=20000, transform: Callable = Identity(),
                      train=True, batch_size=1, ctx_size=20000, mask_borders_with_id=None, source_node_labels=(0,1)):
-        if source_dir is None:
-            source_dir = f'/ssdscratch/songbird/j0251/rag_flat_Jan2019_v2'
-        self.source_dir = source_dir
         self.hclouds = f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{radius}/Hybridcloud/'
 
         # get all Hybridcloud files
@@ -32,7 +29,6 @@ class CloudFalseMergeLoader(Dataset):
 
         appen = f'{self.train_limit} cell samples for training' if self.train else f'{len(self.fnames) - self.train_limit} cell samples for validation'
         print(f'Using radius {radius} and ' + appen)
-
 
     def __getitem__(self, item):
 

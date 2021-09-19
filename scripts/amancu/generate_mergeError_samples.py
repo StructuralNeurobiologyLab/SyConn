@@ -30,9 +30,6 @@ from morphx.classes.hybridmesh import HybridCloud
 filtered_cs_ids_path = os.path.expanduser('~/mergeError/filtered_cs_ids_5000_100000.npy')
 lookup_cellpair2cs_path = os.path.expanduser('~/mergeError/lookup_cellpair2cs.pkl')
 
-# filtered_cs_ids_path = '/wholebrain/scratch/amancu/mergeError/filtered_cs_ids_5000_100000.npy'
-# lookup_cellpair2cs_path = '/wholebrain/scratch/amancu/mergeError/lookup_cellpair2cs.pkl'
-
 #####################################################################
 ''' Change pt radius here before running '''
 #####################################################################
@@ -71,15 +68,10 @@ def find_vertNearestNeighbor(merged_cell, cs_verts: np.ndarray, radius):
     one = np.uint(1)
     vertex_labels = np.zeros(shape=(len(cell_vertices),), dtype=np.uint)
     np.put(vertex_labels, vert_neighbors, one)
-    # print(f'what labels does it contain {np.unique(vertex_labels, axis=0)}')
 
     colors = np.full(shape=(len(cell_vertices), 4,), fill_value=GREY)
-    # print(f'shapes {cell_vertices.shape} and colors {colors.shape}')
     vert_neighbors = np.array([[x] for x in vert_neighbors])
     np.put_along_axis(colors, vert_neighbors, RED, axis=0)
-
-    # print(f'what colors does it contain {np.unique(colors, axis=0)}')
-    # colors=[]
 
     return cell_vertices, vertex_labels, colors
 
@@ -100,7 +92,7 @@ def find_nodeNearestNeighbor(merged_cell, cs_coord_list):
         ixs = np.array(ixs[0])
         node_labels[ixs] = int(0)
 
-    # find small cube around artificial merger and set it to 1 (true merger)
+    # find small circle around artificial merger and set it to 1 (true merger)
     for cs_coord in cs_coord_list:
         # ixs = kdtree.query_ball_point(cs_coord, r=2e3)
         ixs = kdtree.query_ball_point(cs_coord, r=skelmerger_radius, workers=2)
@@ -109,7 +101,6 @@ def find_nodeNearestNeighbor(merged_cell, cs_coord_list):
             continue
         node_labels[ixs] = int(1)
 
-    # write out annotated skeletons to ['merger_gt']
     return merged_cell_nodes, node_labels
 
 
@@ -185,12 +176,6 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
                 if hc.save2pkl(os.path.expanduser(
                         f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(radius)}/Hybridcloud/sso_{cell1}_{cell2}.pkl')):
                     log.info('HybridCloud not written')
-        # mesh2obj_file_colors(os.path.expanduser(
-        #     f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/Verts/csMergePts_{cell1}_{cell2}.ply'),
-        #     [np.array([]), merged_cell.mesh[1], np.array([])], colors)
-        # mesh2obj_file_colors(os.path.expanduser(
-        #     f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{int(cs_ptMerger_radius)}/csMergePts_{cell1}_{cell2}.ply'),
-        #     [np.array([]), merged_cell.mesh[1], np.array([])], colors)
         del hc
         gc.collect()
 
@@ -304,7 +289,6 @@ if __name__ == '__main__':
     proc_slices = []
 
     for i_proc in range(n_proc):
-        # TODO ADD OFFSET "nr_samples + ..." HERE - chunkstart and chunkend FOR TEST DATA
         chunkstart = int(offset + (i_proc * chunksize))
         # make sure to include the division remainder for the last process
         chunkend = int(offset + (i_proc + 1) * chunksize) if i_proc < n_proc - 1 else int(offset + nr_samples)
