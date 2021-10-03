@@ -104,6 +104,17 @@ cell_objects:
     er: 0.5 # arbitrary placeholder, to be adjusted
     golgi: 0.5 # arbitrary placeholder, to be adjusted
 
+  # If True, the probability map, from which the object segmentation is generated is masked with the extracellular space
+  # (ECS) before the thresholding and connected components generation, i.e. if the prediction yields non-zero
+  # probabilities in ECS for the corresponding organelle, they are set to zero in the ECS for the further steps in
+  # object segmentation, like thresholding.
+  ecs_masking:
+    mi: False
+    sj: False
+    vc: False
+    er: False
+    golgi: False
+
   # if object segmentation is generated from probability map or a binary mask and extract_morph_op (see below) contains
   # binary_erosion, then the segmentation is computed via watershed. The seeds are computed via connected compontents
   # on the eroded binary mask (as many erosion as defined in extract_morph_op).

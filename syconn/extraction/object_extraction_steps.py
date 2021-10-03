@@ -250,6 +250,7 @@ def _object_segmentation_thread(args):
     # e.g. {'sj': ['binary_closing', 'binary_opening'], 'mi': [], 'cell': []}
     morph_ops = global_params.config['cell_objects']['extract_morph_op']
     min_seed_vx = global_params.config['cell_objects']['min_seed_vx']
+    ecs_masking = global_params.config['cell_objects']['ecs_masking']
     scaling = np.array(global_params.config['scaling'])
     struct = get_aniso_struct(scaling)
     nb_cc_list = []
@@ -325,6 +326,13 @@ def _object_segmentation_thread(args):
                                                 mag=1).swapaxes(0, 2)
                 tmp_data[membrane_data > 255 * .4] = 0
                 del membrane_data
+
+            elif hdf5_name in ecs_masking and ecs_masking[hdf5_name]:
+                kd_seg = kd_factory(global_params.config.kd_seg_path)
+                cell_seg = kd_seg.load_seg(size=size, offset=box_offset,
+                                           mag=1).swapaxes(0, 2)
+                tmp_data[cell_seg == 0] = 0
+
             if thresholds[nb_hdf5_name] != 0 and not load_from_kd_overlaycubes:
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
