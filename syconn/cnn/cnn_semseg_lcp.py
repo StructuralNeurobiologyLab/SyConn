@@ -72,10 +72,10 @@ use_syntype = False
 # ads: axon dendrite soma
 # abt: axon bouton terminal
 # fine: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-gt_type = 'dnh'
+gt_type = 'ads'
 num_classes = {'ads': 3, 'abt': 3, 'dnh': 3, 'fine': 7}
 ignore_l = num_classes[gt_type]  # num_classes is also used as ignore label
-remap_dicts = {'ads': {3: 1, 4: 1, 5: 2, 6: 2},
+remap_dicts = {'ads': {3: 1, 4: 1, 5: 0, 6: 0},
                'abt': {0: ignore_l, 2: ignore_l, 5: ignore_l, 6: ignore_l, 1: 0, 3: 1, 4: 2},
                'dnh': {1: ignore_l, 2: ignore_l, 3: ignore_l, 4: ignore_l, 5: 1, 6: 2},
                'fine': {}}

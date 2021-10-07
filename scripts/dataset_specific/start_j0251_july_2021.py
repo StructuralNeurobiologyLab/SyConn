@@ -129,9 +129,9 @@ if __name__ == '__main__':
     # mesh_bb = sd.load_numpy_data('mesh_bb')  # N, 2, 3
     # mesh_bb = np.linalg.norm(mesh_bb[:, 1] - mesh_bb[:, 0], axis=1)
     # filtered_ids = sd.ids[mesh_bb > global_params.config['min_cc_size_ssv']]
-    # rag_sub_g.add_edges_from([[el, el] for el in sd.ids])
-    # log.info('{} SVs were added to the RAG after applying the size '
-    #          'filter.'.format(len(filtered_ids)))
+    # rag_sub_g.add_edges_from([[el, el] for el in filtered_ids)
+    # log.info('{} SVs were added to the RAG after applying BBD size '
+    #          'filter (min. BBD = {global_params.config['min_cc_size_ssv']} nm).'.format(len(filtered_ids)))
     # nx.write_edgelist(rag_sub_g, global_params.config.init_svgraph_path)
     #
     # exec_init.run_create_rag(graph_node_dtype=np.uint32)
@@ -171,6 +171,9 @@ if __name__ == '__main__':
         log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
 
+    global_params.config['slurm']['exclude_nodes'] = []
+    global_params.config.write_config()
+    time.sleep(10)  # wait for changes to apply
     # log.info('Step 6/9 - Compartment prediction')
     # ftimer.start('Compartment predictions')
     # exec_inference.run_semsegaxoness_prediction()
