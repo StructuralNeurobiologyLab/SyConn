@@ -109,7 +109,7 @@ class SyConnClient(object):
             source = f'http://{host}:{port}'
         
         else:
-            source = f'http://syconn.esc.mpcdf.mpg.de'
+            source = f'https://syconn.esc.mpcdf.mpg.de'
 
         def append_organelle_layer(state, organelle):
             """Creates a layer for the given organelle mesh

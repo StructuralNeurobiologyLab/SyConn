@@ -87,6 +87,7 @@ class PropertyFilter(SyConnClient):
         super().__init__(params, organelles, token)
 
         self.params = params
+        self.acquisition = params.acquisition
         self.version = params.version
 
         self.gt_type = "ctgt"
@@ -105,30 +106,38 @@ class PropertyFilter(SyConnClient):
 
         # add action handler for finding synaptic partner
         self.viewer.actions.add('show-largest-synaptic-connection', self._handle_select)
-        self.viewer.actions.add('take-screenshot', self._take_screenshot)
+        self.viewer.actions.add('share-viewer', self._generate_viewer_link)
 
         # bind actions to keys
         with self.viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['keyp'] = 'show-largest-synaptic-connection'
-            s.input_event_bindings.data_view['keys'] = 'take-screenshot' # TODO(hashir): inbuilt screenshot capture
+            s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
         
         # defer callback necessary to avoid deadlock 
         self.viewer.shared_state.add_changed_callback(
             lambda: self.viewer.defer_callback(self.on_state_changed)
         )
 
-    def _take_screenshot(self, action_state):
+    def _generate_viewer_link(self, action_state):
         """
-        Takes a screenshot of the current viewport.
+        Generates a link to the current viewport.
 
         :param action_state: current state of the viewer
         :type action_state: neuroglancer.viewer_config_state.ActionState
-
-        TODO(hashir): re-implement this
         """
 
-        logger.info("Taking screenshot...")
-        self.viewer.screenshot(size=[1280, 720])
+        from neuroglancer import url_state
+        from urllib.parse import unquote
+
+        logger.info("Generating viewer link...")
+        encoded_url = url_state.to_url(self.viewer.state, prefix=f"https://syconn.esc.mpcdf.mpg.de/share/{self.acquisition}/{self.version}/")
+        url = unquote(encoded_url)
+        # remove ! in url
+        url_without_exclamation = re.sub("[!]", "", url)
+        # replace hash with another character so that it can be reversed later
+        url_without_hash = re.sub("[#]", "ß", url_without_exclamation)
+
+        logger.info(url_without_hash)
 
     def _handle_select(self, action_state):
         """Action handler for synaptic filtering [keyp].
