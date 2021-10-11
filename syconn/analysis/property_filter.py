@@ -133,7 +133,7 @@ class PropertyFilter(SyConnClient):
         encoded_url = url_state.to_url(self.viewer.state, prefix=f"https://syconn.esc.mpcdf.mpg.de/share/{self.acquisition}/{self.version}/")
         url = unquote(encoded_url)
         # remove ! in url
-        url_without_exclamation = re.sub("[!]", "", url)
+        url_without_exclamation = re.sub("[!]", "ä", url)
         # replace hash with another character so that it can be reversed later
         url_without_hash = re.sub("[#]", "ß", url_without_exclamation)
 
