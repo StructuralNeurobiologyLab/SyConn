@@ -277,9 +277,7 @@ class SuperSegmentationObject(SegmentationBase):
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
             for other_dataset in other_datasets:
-                other_version = \
-                    int(re.findall(r"[\d]+",
-                                   os.path.basename(other_dataset))[-1])
+                other_version = int(re.findall(r"[\d]+", os.path.basename(other_dataset))[-1])
                 if max_version < other_version:
                     max_version = other_version
 

@@ -598,7 +598,9 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
+    cs_version = cs_sd.version
     rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd)
+    del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
     n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
@@ -623,8 +625,9 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
 
     rel_csssv_to_cs_ids_items_chunked = chunkify(rel_ssv_with_cs_ids_items, n_used_paths)
     multi_params = [(wd, rel_csssv_to_cs_ids_items_chunked[ii], voxel_rel_paths[ii],
-                     cs_sd.version, sd_cs_ssv.version) for
+                     cs_version, sd_cs_ssv.version) for
                     ii in range(n_used_paths)]
+    del rel_ssv_with_cs_ids_items, rel_csssv_to_cs_ids_items_chunked, voxel_rel_paths_2stage, voxel_rel_paths
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
@@ -1175,8 +1178,8 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     if global_params.config.working_dir is not None or rfc_path_out is not None:
         if rfc_path_out is None:
             model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
-            log(f'Working directory is set to {global_params.config.working_dir} - '
-                f'trained RFC will be dumped at {model_base_dir}.')
+            log.info(f'Working directory is set to {global_params.config.working_dir} - '
+                     f'trained RFC will be dumped at {model_base_dir}.')
             os.makedirs(model_base_dir, exist_ok=True)
             rfc_path_out = global_params.config.mpath_syn_rfc
         else:
@@ -1361,7 +1364,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     return rfc, v_features, v_labels
 
 
-def synssv_o_features(synssv_o: segmentation.SegmentationObject):
+def synssv_o_features(synssv_o: segmentation.SegmentationObject) -> list:
     """
     Collects syn_ssv feature for synapse prediction using an RFC.
 
@@ -1373,8 +1376,7 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject):
     -------
     List
     """
-    features = [synssv_o.size, synssv_o.mesh_area,
-                synssv_o.attr_dict["id_cs_ratio"]]
+    features = [synssv_o.size, synssv_o.mesh_area]
 
     partner_ids = synssv_o.attr_dict["neuron_partners"]
     for i_partner_id, partner_id in enumerate(partner_ids):
@@ -1385,8 +1387,8 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject):
     return features
 
 
-def synssv_o_featurenames():
-    return ['size_vx', 'mesh_area_um2', 'id_cs_ratio', 'n_mi_objs_neuron1',
+def synssv_o_featurenames() -> list:
+    return ['size_vx', 'mesh_area_um2', 'n_mi_objs_neuron1',
             'n_mi_vxs_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
             'n_mi_objs_neuron2', 'n_mi_vxs_neuron2', 'n_vc_objs_neuron2',
             'n_vc_vxs_neuron2']

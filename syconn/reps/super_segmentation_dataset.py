@@ -348,7 +348,8 @@ class SuperSegmentationDataset(SegmentationBase):
         ids = np.array(ids, dtype=np.uint64)
         ssv_ids = np.array(ssv_ids, dtype=np.uint64)
         BinarySearchStore(
-            self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids), overwrite=self.overwrite)
+            self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids),
+            overwrite=self.overwrite)
 
     @property
     def ssv_ids(self) -> np.ndarray:

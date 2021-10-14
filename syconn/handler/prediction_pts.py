@@ -638,8 +638,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                     if len(sample_feats) > 0 or npoints_ssv == 0:
                         break
                     if sn_cnt >= len(source_nodes_all):
-                        msg = (f'Crould not find context with > 0 vertices during batch generation of {ssv} '
-                               f'in method "pts_loader_scalar_infer".')
+                        msg = (f'Crould not find context with > 0 vertices during batch '
+                               f'generation of {ssv} in method "pts_loader_scalar_infer".')
                         log_handler.error(msg)
                         raise ValueError(msg)
                     source_node = source_nodes_all[sn_cnt]
@@ -1158,7 +1158,7 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
         source_nodes = np.max(idcs, axis=1)
         batchsize = min(len(source_nodes), batchsize)
         n_batches = int(np.ceil(len(source_nodes) / batchsize))
-        npoints_ssv = min(len(hc.vertices), npoints)
+        npoints_ssv = max(min(len(hc.vertices), npoints), 1)
         if len(source_nodes) % batchsize != 0:
             source_nodes = np.concatenate([np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize),
                                            source_nodes])
