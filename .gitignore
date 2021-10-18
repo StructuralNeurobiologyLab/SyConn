@@ -74,3 +74,6 @@ target/
 # VS Code
 /.vscode
 /syconn/.vscode
+
+# Misc data files
+*.npy

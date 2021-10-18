@@ -1292,6 +1292,7 @@ def int2str_converter(label: int, gt_type: str) -> str:
     Returns: str
 
     """
+    logger = log_main
     if type(label) == str:
         label = int(label)
     if gt_type == "axgt":
@@ -1336,17 +1337,34 @@ def int2str_converter(label: int, gt_type: str) -> str:
         try:
             return l_dc[label]
         except KeyError:
-            print('Unknown label "{}"'.format(label))
-            return -1
+            logger.error('Unknown label "{}"'.format(label))
+            return "None"
     elif gt_type == 'ctgt_j0251':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9)
+        
         int2str_label = {v: k for k, v in str2int_label.items()}
-        return int2str_label[label]
+
+        try:
+            return int2str_label[label]
+
+        except KeyError:
+            logger.error('Cell type unknown for ssv id {}'.format(label))
+            return "None"
+
+        # return int2str_label[label]
     elif gt_type == 'ctgt_j0251_v2':
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9, NGF=10)
         int2str_label = {v: k for k, v in str2int_label.items()}
-        return int2str_label[label]
+        
+        try:
+            return int2str_label[label]
+        
+        except KeyError:
+            logger.error('Cell type unknown for ssv id {}'.format(label))
+            return "None"
+
+        # return int2str_label[label]
     else:
         raise ValueError("Given ground truth type is not valid.")

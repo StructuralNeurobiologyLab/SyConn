@@ -56,11 +56,11 @@ class SyConnBackend(object):
         self.synthresh = synthresh
         self.axodend_only = axodend_only
         # flat array representation of all synapses
-        self.conn_dict = conn.load_cached_data_dict()
-        self.logger.info('In memory cache of synapses initialized.')
+        # self.conn_dict = conn.load_cached_data_dict()
+        # self.logger.info('In memory cache of synapses initialized.')
         # directed networkx graph of connectivity
-        self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
-        self.logger.info('Connectivity graph initialized.')
+        # self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
+        # self.logger.info('Connectivity graph initialized.')
 
     def ssv_mesh(self, ssv_id):
         """
@@ -78,7 +78,7 @@ class SyConnBackend(object):
             'vertices': mesh[1],                    # num, x, y ,z
             'indices': mesh[0]}                     # triangles
         dtime = time.time() - start
-        self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
+        self.logger.debug('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
         return mesh
 
     def ssv_ind(self, ssv_id):
@@ -179,7 +179,7 @@ class SyConnBackend(object):
         """
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh indices'
-                         ''.format(ssv_id, obj_type))
+                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
@@ -194,8 +194,8 @@ class SyConnBackend(object):
         # Now assumes all object meshes do already exist
         mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
-        self.logger.info('Got ssv {} {} mesh indices after'
-                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
+        self.logger.debug('Got ssv {} {} mesh indices after'
+                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return {'ind': mesh[0].tolist()}
 
     def ssv_obj_vert(self, ssv_id, obj_type):
@@ -222,8 +222,8 @@ class SyConnBackend(object):
         # if not existent, create mesh
         mesh = ssv.load_mesh(obj_type)
         dtime = time.time() - start
-        self.logger.info('Got ssv {} {} mesh vertices after'
-                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
+        self.logger.debug('Got ssv {} {} mesh vertices after'
+                        ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return {'vert': mesh[1].tolist()}
 
     def ssv_obj_norm(self, ssv_id, obj_type):
@@ -291,16 +291,18 @@ class SyConnBackend(object):
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
             label = int2str_converter(l, gt_type=gt_type)
-            certainty = ssv.certainty_celltype()
+            # certainty = ssv.certainty_celltype()
         elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             l = ssv.attr_dict["celltype_cnn"]
             label = ct_label_dc[l]
-            certainty = 'nan'
+            # certainty = 'nan'
         else:
             log_gate.warning("Celltype prediction not present in attribute "
                              "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
-        return {'ct': label, 'certainty': certainty}
+        return label
+        # return {'ct': label}
+        # return {'ct': label, 'certainty': certainty}
 
     def ssvs_of_ct(self, ct: str):
         """
