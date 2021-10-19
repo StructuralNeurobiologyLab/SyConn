@@ -138,7 +138,20 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     else:
         target_dir_func = rep_helper.subfold_from_ix_OLD
 
-    # Initital contact site extraction
+    # check for existing SDs
+    sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+                                              obj_type='syn', version=0)
+    sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+                                             obj_type='cs', version=0)
+    if os.path.exists(sd_syn.path) or os.path.exists(sd_cs.path):
+        if overwrite:
+            shutil.rmtree(sd_syn.path, ignore_errors=True)
+            shutil.rmtree(sd_cs.path, ignore_errors=True)
+        else:
+            raise FileExistsError(f'Overwrite was set to False, but SegmentationDataset "syn" or'
+                                  f' "cs" already exists.')
+
+    # Initial contact site extraction
     cd_dir = global_params.config.temp_path + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
     cset = chunky.ChunkDataset()
@@ -274,10 +287,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
                            n_cores=1, remove_jobfolder=True)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
-    sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
-                                              obj_type='syn', version=0)
-    sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
-                                             obj_type='cs', version=0)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
     procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
              Process(target=dataset_analysis, args=(sd_cs,), kwargs=da_kwargs)]

@@ -153,29 +153,29 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         n_worker_postproc: Number of postproc worker.
         model_loader_kwargs: Additional keyword arguments for the model loader.
     """
-    # try:
-    if model_loader_kwargs is None:
-        model_loader_kwargs = dict()
-    m = model_loader(mpath, device, **model_loader_kwargs)
-    stops_received = set()
-    while True:
-        try:
-            inp = q_in.get_nowait()
-            if 'STOP' in inp:
-                if inp not in stops_received:
-                    stops_received.add(inp)
-                else:
-                    q_in.put_nowait(inp)
-                    time.sleep(np.random.randint(25) / 10)
-                if len(stops_received) == n_worker_load:
-                    break
+    try:
+        if model_loader_kwargs is None:
+            model_loader_kwargs = dict()
+        m = model_loader(mpath, device, **model_loader_kwargs)
+        stops_received = set()
+        while True:
+            try:
+                inp = q_in.get_nowait()
+                if 'STOP' in inp:
+                    if inp not in stops_received:
+                        stops_received.add(inp)
+                    else:
+                        q_in.put_nowait(inp)
+                        time.sleep(np.random.randint(25) / 10)
+                    if len(stops_received) == n_worker_load:
+                        break
+                    continue
+            except queues.Empty:
+                time.sleep(0.25)
                 continue
-        except queues.Empty:
-            time.sleep(0.25)
-            continue
-        pred_func(m, inp, q_out, d_out, q_progress, device, bs)
-    # except Exception as e:
-    #     log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
+            pred_func(m, inp, q_out, d_out, q_progress, device, bs)
+    except Exception as e:
+        log_handler.error(f'Error during worker_pred "{str(model_loader)}" or "{str(pred_func)}": {str(e)}')
     for _ in range(n_worker_postproc):
         q_out.put(f'STOP{worker_cnt}')
     log_handler.debug(f'Pred worker {worker_cnt} done.')
@@ -197,24 +197,23 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
         kwargs = q_loader.get()
         if kwargs is None:
             break
-        # try:
-        res = loader_func(**kwargs)
-        for el in res:
-            dt = 0
-            while True:
-                if dt > 60:
-                    log_handler.error(f'Loader {worker_cnt}: Locked for {dt} s.')
-                    break
-                try:
-                    q_out.put_nowait(el)
-                    break
-                except queues.Full:
-                    time.sleep(0.25)
-                    dt += 1
-
-        # except Exception as e:
-        #     log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
-        #     break
+        try:
+            res = loader_func(**kwargs)
+            for el in res:
+                dt = 0
+                while True:
+                    if dt > 60:
+                        log_handler.error(f'Loader {worker_cnt}: Locked for {dt} s.')
+                        break
+                    try:
+                        q_out.put_nowait(el)
+                        break
+                    except queues.Full:
+                        time.sleep(0.25)
+                        dt += 1
+        except Exception as e:
+            log_handler.error(f'Error during loader_func {str(loader_func)}: {str(e)}')
+            break
 
     time.sleep(1)
     for _ in range(n_worker_pred):
@@ -624,49 +623,53 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                 np.random.seed(np.uint32(hash(frozenset((ssv_id, n_samples, ii)))))
             batch = np.zeros((n_samples, npoints_ssv, 3))
             batch_f = np.zeros((n_samples, npoints_ssv, len(feat_dc)))
-            cnt = 0
-            curr_batch_ixs = rand_ixs[ii]
-            source_nodes_batch = source_nodes_all[curr_batch_ixs]
-            node_ids_batch = node_ids_all[curr_batch_ixs]
-            for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
-                node_ids = node_ids.astype(np.int32)
-                # This might be slow
-                sn_cnt = 1
-                while True:
-                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+            if len(hc.vertices) == 0:
+                log_handler.warning(f'Could not find any mesh vertex in {ssv}.')
+                cnt = n_samples
+            else:
+                cnt = 0
+                curr_batch_ixs = rand_ixs[ii]
+                source_nodes_batch = source_nodes_all[curr_batch_ixs]
+                node_ids_batch = node_ids_all[curr_batch_ixs]
+                for source_node, node_ids in zip(source_nodes_batch, node_ids_batch):
+                    node_ids = node_ids.astype(np.int32)
+                    # This might be slow
+                    sn_cnt = 1
+                    while True:
+                        hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                        sample_feats = hc_sub.features
+                        if len(sample_feats) > 0 or npoints_ssv == 0:
+                            break
+                        if sn_cnt >= len(source_nodes_all):
+                            msg = (f'Crould not find context with > 0 vertices during batch '
+                                   f'generation of {ssv} in method "pts_loader_scalar_infer".')
+                            log_handler.error(msg)
+                            raise ValueError(msg)
+                        source_node = source_nodes_all[sn_cnt]
+                        if use_ctx_sampling:
+                            node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
+                        else:
+                            node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                        sn_cnt += 1
                     sample_feats = hc_sub.features
-                    if len(sample_feats) > 0 or npoints_ssv == 0:
-                        break
-                    if sn_cnt >= len(source_nodes_all):
-                        msg = (f'Crould not find context with > 0 vertices during batch '
-                               f'generation of {ssv} in method "pts_loader_scalar_infer".')
-                        log_handler.error(msg)
-                        raise ValueError(msg)
-                    source_node = source_nodes_all[sn_cnt]
-                    if use_ctx_sampling:
-                        node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
-                    else:
-                        node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                    sn_cnt += 1
-                sample_feats = hc_sub.features
-                sample_pts = hc_sub.vertices
-                # make sure there is always the same number of points within a batch
-                sample_ixs = np.arange(len(sample_pts))
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(len(sample_pts), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                hc_sub._vertices = sample_pts
-                hc_sub._features = sample_feats
-                if transform is not None:
-                    transform(hc_sub)
-                batch[cnt] = hc_sub.vertices
-                batch_f[cnt] = hc_sub.features
-                cnt += 1
+                    sample_pts = hc_sub.vertices
+                    # make sure there is always the same number of points within a batch
+                    sample_ixs = np.arange(len(sample_pts))
+                    sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                    sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                    npoints_add = npoints_ssv - len(sample_pts)
+                    idx = np.random.choice(len(sample_pts), npoints_add)
+                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                    # one hot encoding
+                    sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                    hc_sub._vertices = sample_pts
+                    hc_sub._features = sample_feats
+                    if transform is not None:
+                        transform(hc_sub)
+                    batch[cnt] = hc_sub.vertices
+                    batch_f[cnt] = hc_sub.features
+                    cnt += 1
             assert cnt == n_samples
             yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
 
@@ -744,61 +747,65 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
             ixs = np.ones((batchsize,), dtype=np.uint64) * ssv.id
-            cnt = 0
-            source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
-            if draw_local:
-                # only use half of the nodes and choose a close-by node as root for similar context retrieval
-                source_nodes = source_nodes[::2]
-                sn_new = []
-                g = hc.graph(simple=False)
-                for n in source_nodes:
-                    sn_new.append(n)
-                    # just choose any node within the cell randomly
-                    if np.isinf(draw_local_dist):
-                        sn_new.append(np.random.randint(0, len(hc.nodes)))
-                    else:
-                        paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
-                        neighs = np.array(list(paths.keys()), dtype=np.int32)
-                        sn_new.append(np.random.choice(neighs, 1)[0])
-                source_nodes = sn_new
-            for source_node in source_nodes:
-                cnt_ctx = 0
-                while True:
-                    if cnt_ctx > 2*len(source_nodes):
-                        raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
-                    cnt_ctx += 1
-                    if use_ctx_sampling:
-                        node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
-                    else:
-                        node_ids = bfs_vertices(hc, source_node, npoints_ssv)
-                    hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                    sample_feats = hc_sub.features
-                    if len(sample_feats) > 0:
-                        break
-                    source_node = np.random.choice(source_nodes)
+            if len(hc.vertices) == 0:
+                log_handler.warning(f'Could not find any mesh vertex in {ssv}.')
+                cnt = batchsize
+            else:
+                cnt = 0
+                source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
+                if draw_local:
+                    # only use half of the nodes and choose a close-by node as root for similar context retrieval
+                    source_nodes = source_nodes[::2]
+                    sn_new = []
+                    g = hc.graph(simple=False)
+                    for n in source_nodes:
+                        sn_new.append(n)
+                        # just choose any node within the cell randomly
+                        if np.isinf(draw_local_dist):
+                            sn_new.append(np.random.randint(0, len(hc.nodes)))
+                        else:
+                            paths = nx.single_source_dijkstra_path(g, n, draw_local_dist)
+                            neighs = np.array(list(paths.keys()), dtype=np.int32)
+                            sn_new.append(np.random.choice(neighs, 1)[0])
+                    source_nodes = sn_new
+                for source_node in source_nodes:
+                    cnt_ctx = 0
+                    while True:
+                        if cnt_ctx > 2*len(source_nodes):
+                            raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
+                        cnt_ctx += 1
+                        if use_ctx_sampling:
+                            node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
+                        else:
+                            node_ids = bfs_vertices(hc, source_node, npoints_ssv)
+                        hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                        sample_feats = hc_sub.features
+                        if len(sample_feats) > 0:
+                            break
+                        source_node = np.random.choice(source_nodes)
 
-                sample_feats = hc_sub.features
-                sample_pts = hc_sub.vertices
-                # shuffling
-                sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add duplicated points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(len(sample_pts), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                hc_sub._vertices = sample_pts
-                hc_sub._features = sample_feats
-                if transform is not None:
-                    transform(hc_sub)
-                batch[cnt] = hc_sub.vertices
-                batch_f[cnt] = hc_sub.features
-                cnt += 1
+                    sample_feats = hc_sub.features
+                    sample_pts = hc_sub.vertices
+                    # shuffling
+                    sample_ixs = np.arange(len(sample_pts))
+                    np.random.shuffle(sample_ixs)
+                    sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+                    sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+                    # add duplicated points before applying the transform if sample_pts
+                    # has less points than npoints_ssv
+                    npoints_add = npoints_ssv - len(sample_pts)
+                    idx = np.random.choice(len(sample_pts), npoints_add)
+                    sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                    sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                    # one hot encoding
+                    sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+                    hc_sub._vertices = sample_pts
+                    hc_sub._features = sample_feats
+                    if transform is not None:
+                        transform(hc_sub)
+                    batch[cnt] = hc_sub.vertices
+                    batch_f[cnt] = hc_sub.features
+                    cnt += 1
             assert cnt == batchsize
             yield ixs, (batch_f, batch)
 
@@ -2121,7 +2128,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=6, npredictor=3, npostproc=4, bs=batchsizes)
+    default_kwargs = dict(nloader=6, npredictor=2, npostproc=4, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
@@ -2536,6 +2543,7 @@ def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
         d_mask = (ads == 0).reshape(-1)
         abt[abt == 1] = 3
         abt[abt == 2] = 4
+        abt[abt == 0] = 1
         dnh[dnh == 1] = 6
         dnh[dnh == 2] = 5
         ads[a_mask] = abt[a_mask]
