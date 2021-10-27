@@ -121,9 +121,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         raise ImportError(msg)
     kd = basics.kd_factory(global_params.config.kd_seg_path)
     if cube_shape is None:
-        cube_shape = (256, 256, 256)
-    if chunk_size is None:
-        chunk_size = (512, 512, 512)
+        cube_shape = (128, 128, 128)
     if np.any(np.array(chunk_size) % np.array(cube_shape)):
         raise ValueError(f'Chunk size ({chunk_size}) must be divisible by cube shape ({cube_shape}).')
     if max_n_jobs is None:
@@ -169,19 +167,20 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
 
-    # todo remove?
     # init KD for syn and cs
-    #for ot in ['cs', 'syn']:
-    #    path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_seg/"
-    #    if os.path.isdir(path_kd):
-    #        log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
-    #        shutil.rmtree(path_kd)
-    #    target_kd = knossosdataset.KnossosDataset()
-    #    target_kd._cube_shape = cube_shape
-    #    scale = np.array(global_params.config['scaling'])
-    #    target_kd.scales = [scale, ]
-    #    target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-    #                                      mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+
+    for ot in ['cs', 'syn']:
+        for cur_id in range(2):
+            path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_{cur_id}_seg/"
+            if os.path.isdir(path_kd):
+                log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
+                shutil.rmtree(path_kd)
+            target_kd = knossosdataset.KnossosDataset()
+            target_kd._cube_shape = cube_shape
+            scale = np.array(global_params.config['scaling'])
+            target_kd.scales = [scale, ]
+            target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+                                              mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
 
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
@@ -348,9 +347,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                          'must differ.')
 
     # init target KD for cs and syn segmentation
-    # todo remove?
-    #kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
-    #kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
+    kd_cs_0 = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_0_seg/")
+    kd_cs_1 = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_1_seg/")
+    kd_syn_0 = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_0_seg/")
+    kd_syn_1 = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_1_seg/")
 
     # init. synaptic junction (sj) KD
     kd_sj = basics.kd_factory(global_params.config.kd_sj_path)
@@ -470,15 +470,27 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             tuple_dicts[7],
             tuple_dicts[8])
 
-        # todo remove
-        #kd_cs.save_seg(offset=offset + overlap, mags=[1, ],
-        #               data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
-        #               data_mag=1)
+        cs_0_data = contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2)
+        print(f'cs_0_data.shape={cs_0_data.shape}, cs_0_data.dtype={cs_0_data.dtype}')
+
+        kd_cs_0.save_seg(offset=offset + overlap, mags=[1, ],
+                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2),
+                       data_mag=1)
+        kd_cs_1.save_seg(offset=offset + overlap, mags=[1, ],
+                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 1].swapaxes(0, 2),
+                       data_mag=1)
+
         ## syn segmentation contains the intersecting voxels between SJ and CS
-        #contacts[sj_d == 0] = 0
-        #kd_syn.save_seg(offset=offset + overlap, mags=[1, ],
-        #                data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap].swapaxes(0, 2),
-        #                data_mag=1)
+        contacts[sj_d == 0] = 0
+
+        syn_0_data = contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2)
+        print(f'syn_0_data.shape={syn_0_data.shape}, syn_0_data.dtype={syn_0_data.dtype}')
+        kd_syn_0.save_seg(offset=offset + overlap, mags=[1, ],
+                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2),
+                        data_mag=1)
+        kd_syn_1.save_seg(offset=offset + overlap, mags=[1, ],
+                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 1].swapaxes(0, 2),
+                        data_mag=1)
 
         # overlap was removed; use correct offset for the analysis of the object properties
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
