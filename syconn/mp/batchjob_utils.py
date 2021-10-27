@@ -66,6 +66,84 @@ username = getpass.getuser()
 python_path_global = sys.executable
 
 
+def batchjob_path_to_out(params: list, name: str,
+                        batchjob_folder: Optional[str] = None,
+                        n_cores: int = 1, additional_flags: str = '',
+                        suffix: str = "", job_name: str = "default",
+                        script_folder: Optional[str] = None,
+                        max_iterations: int = 10,
+                        python_path: Optional[str] = None,
+                        disable_batchjob: bool = False,
+                        use_dill: bool = False,
+                        remove_jobfolder: bool = False,
+                        log: Logger = None, sleep_time: Optional[int] = None,
+                        show_progress: bool = True, overwrite: bool = False,
+                        exclude_nodes: Optional[list] = None):
+    """
+    Submits batch jobs to process a list of parameters `params` with a python
+    script on the specified environment (either None, SLURM or QSUB; run
+    ``global_params.config['batch_proc_system']`` to get the active system).
+
+    Notes:
+        * The memory available for each job is coupled to the number of cores
+          per job (`n_cores`).
+
+    Todo:
+        * Add sbatch array support -> faster submission
+        * Make script specification more generic
+
+    Args:
+        params: List of all parameter sets to be processed.
+        name: Name of batch job submitted via the batch processing system.
+        batchjob_folder: Directory which contains all submission relevant files,
+            e.g. bash scripts, logs, output files, .. Defaults to
+            ``"{}/{}_folder{}/".format(global_params.config.qsub_work_folder, name, suffix)``.
+        n_cores: Number of cores used for each job.
+        additional_flags: Used to set additional parameters for each job. To
+            allocate one GPU for each worker use: ``additional_flags=--gres=gpu:1``.
+        suffix: Suffix added to `batchjob_folder`.
+        job_name: Name of the jobs submitted via the batch processing system.
+            Defaults to a random string of 8 letters.
+        script_folder: Directory where to look for the script which is executed.
+            Looks for ``QSUB_{name}.py``.
+        max_iterations: Maximum number of retries of failed jobs.
+        python_path: Path to python binary.
+        disable_batchjob: Use single node multiprocessing.
+        use_dill: Use dill to enable pickling of lambda expressions.
+            remove_jobfolder: Remove `batchjob_folder` after successful termination.
+        remove_jobfolder:
+        log: Logger.
+        sleep_time: Sleep duration before checking batch job states again.
+        show_progress: Only used if ``disabled_batchjob=True``.
+        overwrite:
+        exclude_nodes: Nodes to exclude during job submission.
+    """
+
+    max_submit = 1500
+
+    starttime = datetime.datetime.today().strftime("%m.%d")
+    # Parameter handling
+    if n_cores is None:
+        n_cores = 1
+    if sleep_time is None:
+        sleep_time = 5
+    if python_path is None:
+        python_path = python_path_global
+
+    if job_name == "default":
+        with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
+            letters = string.ascii_lowercase
+            job_name = "".join([letters[le] for le in np.random.randint(0, len(letters), 8)])
+
+    if batchjob_folder is None:
+        batchjob_folder = f"{global_params.config.qsub_work_folder}/{name}{suffix}_{job_name}/"
+    batchjob_folder = batchjob_folder.rstrip('/')
+
+    path_to_out = "%s/out/" % batchjob_folder
+
+    return path_to_out
+
+
 def batchjob_script(params: list, name: str,
                     batchjob_folder: Optional[str] = None,
                     n_cores: int = 1, additional_flags: str = '',
@@ -118,6 +196,9 @@ def batchjob_script(params: list, name: str,
         overwrite:
         exclude_nodes: Nodes to exclude during job submission.
     """
+
+    max_submit = 750
+
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
     if n_cores is None:
@@ -208,153 +289,160 @@ def batchjob_script(params: list, name: str,
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
 
-    # Submit jobs
-    pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1, leave=False)
-    dtime_sub = 0
-    start_all = time.time()
-    job_exec_dc = {}
-    job2slurm_dc = {}  # stores mapping of internal to SLURM job ID
-    slurm2job_dc = {}  # stores mapping of SLURM to internal job ID
-    for job_id in range(len(params)):
-        this_storage_path = path_to_storage + "job_%d.pkl" % job_id
-        this_sh_path = path_to_sh + "job_%d.sh" % job_id
-        this_out_path = path_to_out + "job_%d.pkl" % job_id
-        job_log_path = path_to_log + "job_%d.log" % job_id
-        job_err_path = path_to_err + "job_%d.log" % job_id
+    params_chunked = [params[xx:xx + max_submit] for xx in range(0, len(params), max_submit)]
+    job_id = -1
+    for idx, cur_params in enumerate(params_chunked, start=1):
+        print(f'Submitting job chunk {idx} / {len(params_chunked)}')
+        # Submit jobs
+        pbar = tqdm.tqdm(total=len(cur_params), miniters=1, mininterval=1, leave=False)
+        dtime_sub = 0
+        start_all = time.time()
+        job_exec_dc = {}
+        job2slurm_dc = {}  # stores mapping of internal to SLURM job ID
+        slurm2job_dc = {}  # stores mapping of SLURM to internal job ID
+        for cur_params_idx in range(len(cur_params)):
+            job_id += 1
+            this_storage_path = path_to_storage + "job_%d.pkl" % job_id
+            this_sh_path = path_to_sh + "job_%d.sh" % job_id
+            this_out_path = path_to_out + "job_%d.pkl" % job_id
+            job_log_path = path_to_log + "job_%d.log" % job_id
+            job_err_path = path_to_err + "job_%d.log" % job_id
 
-        with open(this_sh_path, "w") as f:
-            f.write("#!/bin/bash -l\n")
-            f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
-                python_path, path_to_script, this_storage_path,
-                this_out_path, global_params.config.working_dir))
+            with open(this_sh_path, "w") as f:
+                f.write("#!/bin/bash -l\n")
+                f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
+                    python_path, path_to_script, this_storage_path,
+                    this_out_path, global_params.config.working_dir))
 
-        with open(this_storage_path, "wb") as f:
-            for param in params[job_id]:
-                if use_dill:
-                    dill.dump(param, f)
-                else:
-                    pkl.dump(param, f)
+            with open(this_storage_path, "wb") as f:
+                for param in cur_params[cur_params_idx]:
+                    if use_dill:
+                        dill.dump(param, f)
+                    else:
+                        pkl.dump(param, f)
 
-        os.chmod(this_sh_path, 0o744)
-        cmd_exec = "{0} --output={1} --error={2} --time={3} --job-name={4} {5}".format(
-            additional_flags, job_log_path, job_err_path, global_params.config.batchjob_max_time, job_name,
-            this_sh_path)
-        if job_id == 0:
-            log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
-        job_exec_dc[job_id] = cmd_exec
-        job_cmd = f'sbatch --cpus-per-task={n_cores} {cmd_exec}'
-        start = time.time()
-        max_relaunch_cnt = 0
-        while True:
-            process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
-            out_str, err = process.communicate()
-            if process.returncode != 0:
-                if max_relaunch_cnt == 5:
-                    msg = f'Could not launch job with ID {job_id} and command "{job_cmd}".'
-                    log_batchjob.error(msg)
-                    raise RuntimeError(msg)
-                log_batchjob.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
-                               f'for the {max_relaunch_cnt}. time.'
-                               f'Attempting again in 5s. Error raised: {err}')
-                max_relaunch_cnt += 1
-                time.sleep(5)
-            else:
-                break
-
-        slurm_id = int(re.findall(r'(\d+)', out_str.decode())[0])
-        job2slurm_dc[job_id] = slurm_id
-        slurm2job_dc[slurm_id] = job_id
-        dtime_sub += time.time() - start
-        time.sleep(0.01)
-
-    # wait for jobs to be in SLURM memory
-    time.sleep(10)
-    # requeue failed jobs for `max_iterations`-times
-    js_dc = jobstates_slurm(job_name, starttime)
-    requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
-    nb_completed_compare = 0
-    last_failed = 0
-    while True:
-        nb_failed = 0
-        # get internal job ids from current job dict
-        job_ids = np.array(list(slurm2job_dc.values()))
-        # get states of slurm jobs with the same ordering as 'job_ids'
-        try:
-            job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
-        except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
-            log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
-                                 f'again, SLURM cache may not have been updated yet.')
-            time.sleep(5)
-            js_dc = jobstates_slurm(job_name, starttime)
-            job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
-        # all jobs which are not running, completed or pending have failed for
-        # some reason (states: failed, out_out_memory, ..).
-        for j in job_ids[(job_states != 'COMPLETED') & (job_states != 'PENDING')
-                         & (job_states != 'RUNNING')]:
-            if requeue_dc[j] == max_iterations:
-                nb_failed += 1
-                continue
-            # restart job
-            if requeue_dc[j] == cpus_per_node:  # TODO: use global_params NCORES_PER_NODE
-                log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
-                                     f'which already was assigned the maximum number '
-                                     f'of available CPUs.')
-            requeue_dc[j] = min(requeue_dc[j] + 1, cpus_per_node - n_cores)  # n_cores is the base number of cores
-            new_core_init = requeue_dc[j] - 1  # do not increase if failed first time
-            # increment number of cores by one.
-            job_cmd = f'sbatch --cpus-per-task={new_core_init + n_cores} {job_exec_dc[j]}'
+            os.chmod(this_sh_path, 0o744)
+            cmd_exec = "{0} --output={1} --error={2} --time={3} --job-name={4} {5}".format(
+                additional_flags, job_log_path, job_err_path, global_params.config.batchjob_max_time, job_name,
+                this_sh_path)
+            if job_id == 0:
+                print(f'Starting jobs with command "{cmd_exec}".')
+                log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
+            job_exec_dc[job_id] = cmd_exec
+            job_cmd = f'sbatch --cpus-per-task={n_cores} {cmd_exec}'
+            start = time.time()
             max_relaunch_cnt = 0
-            err_msg = None
-            if time.time() - last_failed > 5:
-                # if a job failed within the last 5 seconds, do not print the error
-                # message (assume same error)
-                try:
-                    with open(f"{path_to_err}/job_{j}.log") as f:
-                        err_msg = f.read()
-                except FileNotFoundError as e:
-                    err_msg = f'FileNotFoundError: {e}'
-                last_failed = time.time()
-                if 'exceeded memory limit' in err_msg:
-                    err_msg = None  # do not report message of OOM errors
             while True:
                 process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
                 out_str, err = process.communicate()
                 if process.returncode != 0:
                     if max_relaunch_cnt == 5:
-                        raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) '
-                                           f'and command "{job_cmd}".')
-                    log_batchjob.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
-                                         f'with command "{job_cmd}" for the {max_relaunch_cnt}. '
-                                         f'time. Attempting again in 5s. Error raised: {err}')
+                        msg = f'Could not launch job with ID {job_id} and command "{job_cmd}".'
+                        log_batchjob.error(msg)
+                        raise RuntimeError(msg)
+                    log_batchjob.warning(f'Could not launch job with ID {job_id} with command "{job_cmd}"'
+                                   f'for the {max_relaunch_cnt}. time.'
+                                   f'Attempting again in 5s. Error raised: {err}')
                     max_relaunch_cnt += 1
                     time.sleep(5)
                 else:
                     break
-            slurm_id = int(re.findall(r'(\d+)', out_str.decode())[0])
-            slurm_id_orig = job2slurm_dc[j]
-            del slurm2job_dc[slurm_id_orig]
-            job2slurm_dc[j] = slurm_id
-            slurm2job_dc[slurm_id] = j
-            log_batchjob.info(f'Requeued job {j} ({requeue_dc[j]}/{max_iterations}). SLURM IDs: {slurm_id} (new), '
-                              f'{slurm_id_orig} (old).')
-            if err_msg is not None:
-                log_batchjob.warning(f'Job {j} failed with: {err_msg}')
-        nb_completed = np.sum(job_states == 'COMPLETED')
-        pbar.update(nb_completed - nb_completed_compare)
-        nb_completed_compare = nb_completed
-        nb_finished = nb_completed + nb_failed
-        # check actually running files
-        if nb_finished == len(params):
-            break
-        time.sleep(sleep_time)
-        js_dc = jobstates_slurm(job_name, starttime)
-    pbar.close()
 
-    dtime_all = time.time() - start_all
-    dtime_all = str_delta_sec(dtime_all)
-    log_batchjob.info(f"All jobs ({name}, {job_name}) have finished after "
-                      f"{dtime_all} ({dtime_sub:.1f}s submission): "
-                      f"{nb_completed} completed, {nb_failed} failed.")
+            slurm_id = int(re.findall(r'(\d+)', out_str.decode())[0])
+            job2slurm_dc[job_id] = slurm_id
+            slurm2job_dc[slurm_id] = job_id
+            dtime_sub += time.time() - start
+            time.sleep(0.01)
+
+        # wait for jobs to be in SLURM memory
+        time.sleep(10)
+        # requeue failed jobs for `max_iterations`-times
+        js_dc = jobstates_slurm(job_name, starttime)
+        requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
+        nb_completed_compare = 0
+        last_failed = 0
+        while True:
+            nb_failed = 0
+            # get internal job ids from current job dict
+            job_ids = np.array(list(slurm2job_dc.values()))
+            # get states of slurm jobs with the same ordering as 'job_ids'
+            try:
+                job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
+            except KeyError as e:  # sometimes new SLURM job is not yet in the SLURM cache.
+                log_batchjob.warning(f'Did not find state of worker {e}\nFetching worker states '
+                                     f'again, SLURM cache may not have been updated yet.')
+                time.sleep(5)
+                js_dc = jobstates_slurm(job_name, starttime)
+                job_states = np.array([js_dc[k] for k in slurm2job_dc.keys()])
+            # all jobs which are not running, completed or pending have failed for
+            # some reason (states: failed, out_out_memory, ..).
+            for j in job_ids[(job_states != 'COMPLETED') & (job_states != 'PENDING')
+                             & (job_states != 'RUNNING')]:
+                if requeue_dc[j] == max_iterations:
+                    nb_failed += 1
+                    continue
+                # restart job
+                if requeue_dc[j] == cpus_per_node:  # TODO: use global_params NCORES_PER_NODE
+                    log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
+                                         f'which already was assigned the maximum number '
+                                         f'of available CPUs.')
+                requeue_dc[j] = min(requeue_dc[j] + 1, cpus_per_node - n_cores)  # n_cores is the base number of cores
+                new_core_init = requeue_dc[j] - 1  # do not increase if failed first time
+                # increment number of cores by one.
+                job_cmd = f'sbatch --cpus-per-task={new_core_init + n_cores} {job_exec_dc[j]}'
+                max_relaunch_cnt = 0
+                err_msg = None
+                if time.time() - last_failed > 5:
+                    # if a job failed within the last 5 seconds, do not print the error
+                    # message (assume same error)
+                    try:
+                        with open(f"{path_to_err}/job_{j}.log") as f:
+                            err_msg = f.read()
+                    except FileNotFoundError as e:
+                        err_msg = f'FileNotFoundError: {e}'
+                    last_failed = time.time()
+                    if 'exceeded memory limit' in err_msg:
+                        err_msg = None  # do not report message of OOM errors
+                while True:
+                    process = subprocess.Popen(job_cmd, shell=True, stdout=subprocess.PIPE)
+                    out_str, err = process.communicate()
+                    if process.returncode != 0:
+                        if max_relaunch_cnt == 5:
+                            raise RuntimeError(f'Could not launch job with ID {j} ({job2slurm_dc[j]}) '
+                                               f'and command "{job_cmd}".')
+                        log_batchjob.warning(f'Could not re-launch job with ID {j} ({job2slurm_dc[j]}) '
+                                             f'with command "{job_cmd}" for the {max_relaunch_cnt}. '
+                                             f'time. Attempting again in 5s. Error raised: {err}')
+                        max_relaunch_cnt += 1
+                        time.sleep(5)
+                    else:
+                        break
+                slurm_id = int(re.findall(r'(\d+)', out_str.decode())[0])
+                slurm_id_orig = job2slurm_dc[j]
+                del slurm2job_dc[slurm_id_orig]
+                job2slurm_dc[j] = slurm_id
+                slurm2job_dc[slurm_id] = j
+                log_batchjob.info(f'Requeued job {j} ({requeue_dc[j]}/{max_iterations}). SLURM IDs: {slurm_id} (new), '
+                                  f'{slurm_id_orig} (old).')
+                if err_msg is not None:
+                    log_batchjob.warning(f'Job {j} failed with: {err_msg}')
+            nb_completed = np.sum(job_states == 'COMPLETED')
+            pbar.update(nb_completed - nb_completed_compare)
+            nb_completed_compare = nb_completed
+            nb_finished = nb_completed + nb_failed
+            # check actually running files
+            if nb_finished == len(cur_params):
+                break
+            time.sleep(sleep_time)
+            js_dc = jobstates_slurm(job_name, starttime)
+        pbar.close()
+
+        dtime_all = time.time() - start_all
+        dtime_all = str_delta_sec(dtime_all)
+        log_batchjob.info(f"All jobs for this job chunk ({name}, {job_name}) have finished after "
+                          f"{dtime_all} ({dtime_sub:.1f}s submission): "
+                          f"{nb_completed} completed, {nb_failed} failed.")
+
     out_files = [fn for fn in glob.glob(path_to_out + "job_*.pkl") if re.search(r'job_(\d+).pkl', fn)]
     if len(out_files) < len(params):
         msg = f'Batch processing error during execution of {name} in job ' \
@@ -363,6 +451,7 @@ def batchjob_script(params: list, name: str,
         raise ValueError(msg)
     if remove_jobfolder:
         _delete_folder_daemon(batchjob_folder, log_batchjob, job_name)
+
     return path_to_out
 
 
