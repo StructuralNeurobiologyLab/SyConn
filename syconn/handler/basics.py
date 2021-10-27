@@ -824,6 +824,7 @@ def cset_cube_of_interest_parms(
         if len(h5_contents) != 1:
             raise Exception('Please provide a h5 file containing exactly one array as mask.')
         mask_arr = h5_contents[0]
+        mask_arr = np.swapaxes(mask_arr, 0, 2)
         mask_mag = mask_mag
     else:
         assert False, 'Incorrect cube of interest config should have been caught on config init.'
