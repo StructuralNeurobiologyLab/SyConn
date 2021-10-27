@@ -116,6 +116,7 @@ def generate_subcell_kd_from_proba(
     cd = chunky.ChunkDataset()
     cd.initialize(kd, size, chunk_size, cd_dir, box_coords=offset, fit_box_size=True, mask_arr=mask_arr,
                   mask_mag=mask_mag)
+
     log.info('Started object extraction of cellular organelles "{}" from '
              '{} chunks.'.format(", ".join(subcell_names), len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co)) for co in subcell_names}
@@ -354,6 +355,7 @@ def from_probabilities_to_kd(
 
     time_start = time.time()
     chunky.save_dataset(cset)
+    n_cores = 3
     oes.export_cset_to_kd_batchjob(
         target_kd_paths, cset, '{}_stitched_components'.format(filename),
         hdf5names, stride=cset.chunk_size, as_raw=False, orig_dtype=np.uint64, unified_labels=False, log=log,
