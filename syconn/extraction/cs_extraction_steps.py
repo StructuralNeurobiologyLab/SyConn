@@ -199,7 +199,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     # Maps worker IDs to contact sites encountered by the respective worker (Nx2 ndarray, or empty ndarray)
     cs_worker_mapping = dict()  # type: Dict[int, np.ndarray]
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log, use_dill=True)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log, use_dill=True, n_cores=3)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -580,6 +580,8 @@ def _write_props_to_syn_thread(args):
         for worker_id, obj_ids in cs_workers_tmp.items():
             # CS IDs of interest - found by worker worker_id, and belonging to current storage folder (in other words,
             # we're mapping from a chunking in voxel space to a chunking in ID space).
+            if obj_ids.size == 0:
+                continue
             current_chunk_relevant_ids = [tuple(xx) for xx in _row_wise_intersect(obj_ids, obj_keys)]
             if current_chunk_relevant_ids:
                 params.append([dir_props, worker_id, current_chunk_relevant_ids])
