@@ -348,6 +348,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     dir_props = f"{global_params.config.temp_path}/tmp_props/"
     dir_meshes = f"{global_params.config.temp_path}/tmp_meshes/"
     # remove previous temporary results.
+
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
@@ -385,6 +386,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     # needed for caching target storage folder for all objects
     all_ids = {k: [] for k in list(kd_organelle_paths.keys()) + ['sv']}
 
+    c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
+
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
             multi_params, "map_subcell_extract_props", n_cores=n_cores)
@@ -398,11 +402,11 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
             # memory consumption of list is about 0.25
             cell_prop_worker[worker_nr] = list(set().union(*ref_mesh_dc['sv'].values()))
             all_ids['sv'].extend(cell_prop_worker[worker_nr])
-        c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+
         with open(c_mesh_worker_dc, 'wb') as f:
             pkl.dump(cell_mesh_workers, f, protocol=4)
         del cell_mesh_workers
-        c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
+
         with open(c_prop_worker_dc, 'wb') as f:
             pkl.dump(cell_prop_worker, f, protocol=4)
 
@@ -422,6 +426,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                 subcell_prop_workers[ii][worker_nr] = list(set().union(*ref_mesh_dc[
                     organelle].values()))
                 all_ids[organelle].extend(subcell_prop_workers[ii][worker_nr])
+
         for ii, organelle in enumerate(kd_organelle_paths):
             all_ids[organelle] = np.unique(all_ids[organelle])
             sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
@@ -454,11 +459,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                     organelle].values()))
                 all_ids[organelle].extend(subcell_prop_workers[ii][worker_nr])
         del results
-        c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
         with open(c_mesh_worker_dc, 'wb') as f:
             pkl.dump(cell_mesh_workers, f, protocol=4)
         del cell_mesh_workers
-        c_prop_worker_dc = "{}/c_prop_worker_dict.pkl".format(global_params.config.temp_path)
         with open(c_prop_worker_dc, 'wb') as f:
             pkl.dump(cell_prop_worker, f, protocol=4)
         del cell_prop_worker
@@ -488,10 +491,9 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         dict_paths_tmp.append(dest_p)
     _ = sm.start_multiprocess_imap(_cache_storage_paths, params_cache,
                                    nb_cpus=global_params.config['ncores_per_node'])
-    del all_ids, params_cache
+    del params_cache, all_ids
 
     dict_paths_tmp += [c_mesh_worker_dc, c_prop_worker_dc]
-    step_names.append("extract and map segmentation objects")
     all_times.append(time.time() - start)
 
     # reduce step
@@ -530,6 +532,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
         # todo need to use something else here if mem is a problem.
         #n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
+        n_cores = 2
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=n_cores)
 
@@ -567,7 +570,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         # todo need to use something else here if mem is a problem.
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
         #n_cores = 1 if np.prod(size) < 2e12 else 2
-        n_cores = 1
+        n_cores = 20
         qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
