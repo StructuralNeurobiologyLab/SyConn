@@ -8,7 +8,7 @@
 import shutil
 import os
 import glob
-from typing import Optional, Union
+from typing import Optional, Union, Tuple
 
 import numpy as np
 
@@ -22,10 +22,11 @@ from syconn.mp import batchjob_utils as qu
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
 from syconn.mp.mp_utils import start_multiprocess_imap
-from syconn.handler.basics import load_pkl2obj, write_obj2pkl, cset_cube_of_interest_parms
+from syconn.handler.basics import load_pkl2obj, write_obj2pkl, cset_cube_of_interest_parms, kd_factory
 
 
-def run_skeleton_generation(map_myelin: Optional[bool] = None, ncores_skelgen: int = 2):
+def run_skeleton_generation(map_myelin: Optional[bool] = None, ncores_skelgen: int = 2,
+                            cube_size: Optional[np.ndarray] = None):
     """
 
     Args:
@@ -35,7 +36,7 @@ def run_skeleton_generation(map_myelin: Optional[bool] = None, ncores_skelgen: i
     """
     if global_params.config.use_kimimaro:
         # volume-based
-        run_kimimaro_skeletonization(map_myelin=map_myelin, ncores_skelgen=ncores_skelgen)
+        run_kimimaro_skeletonization(map_myelin=map_myelin, ncores_skelgen=ncores_skelgen, cube_size=cube_size)
     else:
         # SSV-based skeletonization on mesh vertices, not centered. Does not require cube_of_interest_bb
         run_skeleton_generation_fallback(map_myelin=map_myelin)
@@ -156,8 +157,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(global_params.config['paths']['kd_seg'])
+    kd = kd_factory(global_params.config['paths']['kd_seg'])
     cd = ChunkDataset()
     # TODO: cube_size should be voxel size dependent
     if cube_size is None:
