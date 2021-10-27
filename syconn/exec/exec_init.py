@@ -256,11 +256,12 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
     log.info('Converting the predictions of the following cellular organelles to'
              ' KnossosDatasets: {}.'.format(global_params.config['process_cell_organelles']))
     start = time.time()
+
     oew.generate_subcell_kd_from_proba(
         global_params.config['process_cell_organelles'],
         chunk_size=chunk_size_kdinit, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-        log=log, n_chunk_jobs=max_n_jobs, overwrite=overwrite)
+        log=log, n_chunk_jobs=max_n_jobs, overwrite=overwrite, n_cores=2)
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
@@ -291,7 +292,7 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
              ''.format(time.time() - start))
 
 
-def run_create_rag(graph_node_dtype=None):
+def run_create_rag(graph_node_dtype=None, is_prefiltered=False):
     # TODO: use BinarySearchStore
     """
     If ``global_params.config.prior_astrocyte_removal==True``:
@@ -310,56 +311,77 @@ def run_create_rag(graph_node_dtype=None):
     if graph_node_dtype is None:
         graph_node_dtype = np.uint64
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
+    log.info(f'Reading graph from edge list at {global_params.config.init_svgraph_path}')
     G = nx.read_edgelist(global_params.config.init_svgraph_path, nodetype=graph_node_dtype)
     if 0 in G.nodes():
         G.remove_node(0)
         log.warning('Found background node 0 in original graph. Removing.')
-    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint64)
-    log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
-    # add single SV connected components to initial graph
+    log.info(f"Found {G.number_of_nodes()} SVs in initial RAG.")
     sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir, cache_properties=['size'])
-    diff = np.setdiff1d(sd.ids, all_sv_ids_in_rag)
-    log.info(f'Found {len(diff)} single-element connected component SVs which were missing in initial RAG.')
-    for ix in diff:
-        G.add_edge(ix, ix)
 
-    log.debug("Found {} SVs in initial RAG after adding size-one connected "
-              "components.".format(G.number_of_nodes()))
+    if not is_prefiltered:
+        all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint64)
+        # add single SV connected components to initial graph
 
-    # remove small connected components
-    sv_size_dict = {}
-    bbs = sd.load_numpy_data('bounding_box') * sd.scaling
-    for ii in range(len(sd.ids)):
-        sv_size_dict[sd.ids[ii]] = bbs[ii]
-    try:
-        ccsize_dict = create_ccsize_dict(G, sv_size_dict)
-    except ValueError as e:
-        raise ValueError from e
-    log.debug("Finished preparation of SSV size dictionary based "
-              "on bounding box diagonal of corresponding SVs.")
-    before_cnt = G.number_of_nodes()
-    # explicit copy needed, as G is modified in the  loop
-    for ix in tqdm.tqdm(list(G.nodes()), total=before_cnt, desc='CC size filter'):
-        if ccsize_dict[ix] <= global_params.config['min_cc_size_ssv']:
-            G.remove_node(ix)
-            continue
+        diff = np.setdiff1d(sd.ids, all_sv_ids_in_rag)
+        log.info(f'Found {len(diff)} single-element connected component SVs which were missing in initial RAG.')
+        for ix in tqdm.tqdm(diff):
+            G.add_edge(ix, ix)
+
+        log.debug("Found {} SVs in initial RAG after adding size-one connected "
+                  "components.".format(G.number_of_nodes()))
+
+        # remove small connected components
+        sv_size_dict = {}
+        bbs = sd.load_numpy_data('bounding_box') * sd.scaling
+        for ii in range(len(sd.ids)):
+            sv_size_dict[sd.ids[ii]] = bbs[ii]
         try:
-            sd.get_segmentation_object(ix)
-        except KeyError:
-            # This can occur if some IDs in the connected component are not present in the dataset, despite the
-            # component having a large enough size due to the IDs that are contained. This can happen when operating
-            # on some restricted region of interest without having changed the corresponding merge graph.
-            G.remove_node(ix)
+            ccsize_dict = create_ccsize_dict(G, sv_size_dict)
+        except ValueError as e:
+            raise ValueError from e
+        log.debug("Finished preparation of SSV size dictionary based "
+                  "on bounding box diagonal of corresponding SVs.")
+        before_cnt = G.number_of_nodes()
+        # explicit copy needed, as G is modified in the  loop
+        for ix in tqdm.tqdm(list(G.nodes()), total=before_cnt, desc='CC size filter'):
+            if ccsize_dict[ix] <= global_params.config['min_cc_size_ssv']:
+                G.remove_node(ix)
+                continue
+            try:
+                sd.get_segmentation_object(ix)
+            except KeyError:
+                # This can occur if some IDs in the connected component are not present in the dataset, despite the
+                # component having a large enough size due to the IDs that are contained. This can happen when operating
+                # on some restricted region of interest without having changed the corresponding merge graph.
+                G.remove_node(ix)
+        log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
+                 f"{global_params.config['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
+                 f"{nx.number_connected_components(G)} CCs.")
+    else:
+        log.info(f"No additional RAG filtering performed. Final RAG contains {G.number_of_nodes()} SVs in "
+                 f"{nx.number_connected_components(G)} CCs.")
+
     # TODO: check if this loop (despite cache_properties=['size'], see above) is limiting speed
     total_size = 0
+    missing_ids = []
     for n in tqdm.tqdm(G.nodes(), total=G.number_of_nodes(), desc='Total size'):
-        total_size += sd.get_segmentation_object(n).size
+        try:
+            total_size += sd.get_segmentation_object(n).size
+        except KeyError:
+            missing_ids.append(n)
     total_size_cmm = np.prod(sd.scaling) * total_size / 1e18
-    log.info(f"Removed {before_cnt - G.number_of_nodes()} SVs from RAG because of size (bounding box diagonal <= "
-             f"{global_params.config['min_cc_size_ssv']} nm). Final RAG contains {G.number_of_nodes()} SVs in "
-             f"{nx.number_connected_components(G)} CCs ({total_size_cmm} mm^3; {total_size / 1e9} Gvx).")
+    log.info(f"Size of objects in RAG: {total_size_cmm} mm^3; {total_size / 1e9} Gvx.")
+
+    if missing_ids:
+        log.warning(f'Graph contains {len(missing_ids)} IDs that were not found in the dataset. These will be removed.')
+        for n in tqdm.tqdm(missing_ids, desc='Removing IDs'):
+            G.remove_node(n)
+
+    print(f'Writing graph to {global_params.config.pruned_svgraph_path}')
     nx.write_edgelist(G, global_params.config.pruned_svgraph_path)
+    print(f'Writing connected components to {global_params.config.pruned_svagg_list_path}')
     with open(global_params.config.pruned_svagg_list_path, 'w') as f:
         for cc in nx.connected_components(G):
             f.write(','.join([str(el) for el in cc]) + '\n')
