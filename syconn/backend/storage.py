@@ -447,7 +447,7 @@ class VoxelStorageLazyLoading:
         self._dc_intern = np.load(self.path)
 
     def push(self):
-        np.savez(self.path, **self._dc_intern)
+        np.savez_compressed(self.path, **self._dc_intern)
 
     def __setitem__(self, key: int, value: np.ndarray):
         """
@@ -494,6 +494,7 @@ class VoxelStorageLazyLoading:
     def close(self):
         if isinstance(self._dc_intern, np.lib.npyio.NpzFile):
             self._dc_intern.close()
+
 
 class MeshStorage(StorageClass):
     """

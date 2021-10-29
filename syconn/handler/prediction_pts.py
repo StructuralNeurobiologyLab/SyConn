@@ -516,6 +516,15 @@ def _load_ssv_hc(args):
     if not ssv.load_skeleton():
         raise ValueError(f'Couldnt find skeleton of {ssv}')
     if map_myelin:
+        added_new_skel_keys = False
+        if 'myelin' not in ssv.skeleton:
+            ssv.skeleton['myelin'] = map_myelin2coords(ssv.skeleton['nodes'], mag=4)
+            added_new_skel_keys = True
+        if 'myelin_avg10000' not in ssv.skeleton:
+            majorityvote_skeleton_property(ssv, 'myelin')
+            added_new_skel_keys = True
+        if added_new_skel_keys:
+            ssv.save_skeleton()
         _, _, myelinated = ssv._pred2mesh(ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['myelin_avg10000'],
                                           return_color=False)
         myelinated = myelinated.astype(np.bool)
@@ -2321,40 +2330,43 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
                     idcs_list = []
                     arr_list.append((batch, batch_f, batch_mask, idcs_list))
                 # generate contexts
-                cnt = 0
-                for node_arr in node_arrs[ii::n_batches]:
-                    hc_sub, idcs_sub = extract_subset(hc, node_arr)
-                    # replace subsets with zero vertices by another subset (this is probably very rare)
-                    ix = 0
-                    while len(hc_sub.vertices) == 0:
-                        if ix >= len(hc.nodes):
-                            raise IndexError(f'Could not find suitable context in {ssv} during "pts_loader_cpmt".')
-                        elif ix >= len(node_arrs):
-                            # if the cell fragment, represented by hc, is small and its skeleton not well centered,
-                            # it can happen that all extracted sub-skeletons do not contain any vertex. in that case
-                            # use any node of the skeleton
-                            sn = np.random.randint(0, len(hc.nodes))
-                            hc_sub, idcs_sub = extract_subset(hc, context_splitting_kdt(hc, sn, ctx))
-                        else:
-                            hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
-                        ix += 1
-                    # fill batches with sampled and transformed subsets
-                    for ix, p_t in enumerate(ctx_size[ctx]):
-                        hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
-                        # get vertex indices respective to total hc
-                        global_idcs = idcs_sub[idcs_sample.astype(int)]
-                        # prepare masks for filtering sv vertices
-                        bounds = hc.obj_bounds['sv']
-                        sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
-                        hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
-                        if transform is not None:
-                            transform[p_t](hc_sample)
-                        arr_list[ix][0][cnt] = hc_sample.vertices
-                        arr_list[ix][1][cnt] = hc_sample.features
-                        # masks get used later when mapping predictions back onto the cell surface during postprocessing
-                        arr_list[ix][2][cnt] = sv_mask
-                        arr_list[ix][3].append(global_idcs[sv_mask])
-                    cnt += 1
+                if len(hc.vertices) == 0:
+                    log_handler.warning(f'Could not find any mesh vertex in {ssv}.')
+                else:
+                    cnt = 0
+                    for node_arr in node_arrs[ii::n_batches]:
+                        hc_sub, idcs_sub = extract_subset(hc, node_arr)
+                        # replace subsets with zero vertices by another subset (this is probably very rare)
+                        ix = 0
+                        while len(hc_sub.vertices) == 0:
+                            if ix >= 2 * len(hc.nodes):
+                                raise IndexError(f'Could not find context in {ssv} during "pts_loader_cpmt".')
+                            elif ix >= len(node_arrs):
+                                # if the cell fragment, represented by hc, is small and its skeleton not well centered,
+                                # it can happen that all extracted sub-skeletons do not contain any vertex. in that case
+                                # use any node of the skeleton
+                                sn = np.random.randint(0, len(hc.nodes))
+                                hc_sub, idcs_sub = extract_subset(hc, context_splitting_kdt(hc, sn, ctx))
+                            else:
+                                hc_sub, idcs_sub = extract_subset(hc, node_arrs[ix])
+                            ix += 1
+                        # fill batches with sampled and transformed subsets
+                        for ix, p_t in enumerate(ctx_size[ctx]):
+                            hc_sample, idcs_sample = clouds.sample_cloud(hc_sub, npoints[p_t])
+                            # get vertex indices respective to total hc
+                            global_idcs = idcs_sub[idcs_sample.astype(int)]
+                            # prepare masks for filtering sv vertices
+                            bounds = hc.obj_bounds['sv']
+                            sv_mask = np.logical_and(global_idcs < bounds[1], global_idcs >= bounds[0])
+                            hc_sample.set_features(label_binarize(hc_sample.features, classes=np.arange(len(feat_dc))))
+                            if transform is not None:
+                                transform[p_t](hc_sample)
+                            arr_list[ix][0][cnt] = hc_sample.vertices
+                            arr_list[ix][1][cnt] = hc_sample.features
+                            # masks get used later when mapping predictions back onto the cell surface during postprocessing
+                            arr_list[ix][2][cnt] = sv_mask
+                            arr_list[ix][3].append(global_idcs[sv_mask])
+                        cnt += 1
                 batch_progress = ii + 1
                 # return samples with same ctx, but possibly different sampling and transform
                 for ix, p_t in enumerate(ctx_size[ctx]):
@@ -2399,8 +2411,12 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
                 out = out[masks]
             res.append(out)
     # batch_progress: (batch_progress, n_batches, p_t, pred_types), or (batch_progress, n_batches, p_t)
-    res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
-               batch_progress=batch_progress, idcs_voxel=idcs_voxel)
+    if len(res) == 0 or len(idcs_list) == 0:
+        res = dict(idcs=np.zeros((0, 1)), preds=np.zeros((0, 1)),
+                   batch_progress=batch_progress, idcs_voxel=np.zeros((0, 1)))
+    else:
+        res = dict(idcs=np.concatenate(idcs_list), preds=np.concatenate(res),
+                   batch_progress=batch_progress, idcs_voxel=idcs_voxel)
     q_cnt.put_nowait(1./batch_progress[1]/len(batch_progress[3]))
     pred_types = batch_progress[3]
 
@@ -2464,6 +2480,9 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     ld = sso.label_dict('vertex')
     for p_t in pred_types:
         preds[p_t] = np.concatenate(preds[p_t])
+        if len(preds[p_t]) == 0:
+            ld[p_t] = np.zeros((0, 1))
+            continue
         preds_idcs[p_t] = np.concatenate(preds_idcs[p_t])
         pred_labels = np.ones((len(voxel_idcs), 1))*-1
         evaluate_preds(preds_idcs[p_t], preds[p_t], pred_labels)
@@ -2472,7 +2491,11 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
         sso_preds[voxel_idcs] = pred_labels
         # save prediction in the vertex prediction attributes of the sso, keyed by their prediction type.
         ld[p_t] = sso_preds
+
     # TODO: use single array for all compartment predictions in the entire pipeline
+    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
+    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
+
     # convert to conventional
     # 'axoness' (0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5: background, 6: unpredicted)
     # and
@@ -2493,9 +2516,6 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     sp_pred[cmpt_preds == 6] = 2  # neck to neck
     sp_pred[cmpt_preds == -1] = 5  # unpredicted to unpredicted
 
-    pred_key_sp = sso.config['spines']['semseg2mesh_spines']['semseg_key']
-    pred_key_ax = sso.config['compartments']['view_properties_semsegax']['semseg_key']
-
     ld[pred_key_ax] = ax_pred.astype(np.int32)
     ld[pred_key_sp] = sp_pred.astype(np.int32)
     del ld['dnh']
@@ -2503,8 +2523,11 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     del ld['ads']
     ld.push()
     sso.load_skeleton()
-    node_preds = sso.semseg_for_coords(sso.skeleton['nodes'], pred_key_sp, **sso.config['spines']['semseg2coords_spines'])
-    sso.skeleton[pred_key_sp] = node_preds  # skeleton key will be saved to file with `semsegaxoness2skel` call below
+    if len(cmpt_preds) == 0:
+        sso.skeleton[pred_key_sp] = np.zeros((len(sso.skeleton['nodes']), 1))
+    else:
+        node_preds = sso.semseg_for_coords(sso.skeleton['nodes'], pred_key_sp, **sso.config['spines']['semseg2coords_spines'])
+        sso.skeleton[pred_key_sp] = node_preds  # skeleton key will be saved to file with `semsegaxoness2skel` call below
     map_properties = sso.config['compartments']['map_properties_semsegax']
     max_dist = sso.config['compartments']['dist_axoness_averaging']
     semsegaxoness2skel(sso, map_properties, pred_key_ax, max_dist)
@@ -2674,7 +2697,6 @@ def add_myelin(ssv: SuperSegmentationObject, hc: HybridCloud, average: bool = Tr
     types = np.zeros(len(hc.vertices))
     types[myel_vertices] = 1
     hc.set_types(types)
-
 
 
 # Backport of https://github.com/python/cpython/pull/4819

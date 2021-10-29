@@ -3536,20 +3536,31 @@ def semsegaxoness_predictor(args) -> List[int]:
 def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
                        pred_key: str, max_dist: int):
     """
-
+    Populate the following two skeleton keys:
+        * "{}_avg{}".format(pred_key, max_dist)
+        * "{}_avg{}_comp_maj".format(pred_key, max_dist)
     Args:
         sso: SuperSegmentationObject.
         map_properties: Properties used to map the vertex predictions to the skeleton nodes.
         pred_key: Used for retrieving vertex labels and to store the mapped node labels in the skeleton.
         max_dist: Distance used for majority vote in ``majorityvote_skeleton_property``.
 
+    Notes:
+        * Node predictions will be zero if no mesh vertices are available or no nodes exist.
+
     Returns:
 
     """
     if sso.skeleton is None:
         sso.load_skeleton()
-    if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
-        print(f"Skeleton of {sso} has zero nodes.")
+    if sso.skeleton is None:
+        log_reps.warning(f"Skeleton of {sso} hdoes not exist.")
+        return
+    if len(sso.skeleton["nodes"]) == 0 or len(sso.mesh[1]) == 0:
+        log_reps.warning(f"Skeleton of {sso} has zero nodes or no mesh vertices.")
+        sso.skeleton["{}_avg{}".format(pred_key, max_dist)] = np.zeros((len(sso.skeleton['nodes']), 1))
+        sso.skeleton["{}_avg{}_comp_maj".format(pred_key, max_dist)] = np.zeros((len(sso.skeleton['nodes']), 1))
+        sso.save_skeleton()
         return
     # vertex predictions
     node_preds = sso.semseg_for_coords(

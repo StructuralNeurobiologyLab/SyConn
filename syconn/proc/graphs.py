@@ -5,7 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import itertools
-from typing import List, Any, Optional
+from typing import List, Any, Optional, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
@@ -13,8 +13,9 @@ import tqdm
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 from scipy import spatial
 
+if TYPE_CHECKING:
+    from ..reps.super_segmentation import SuperSegmentationObject
 from .. import global_params
-from . import log_proc
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 
 
@@ -239,9 +240,6 @@ def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = F
         curr_bbs = [bbs[n] for n in cc if n in bbs]
         if len(curr_bbs) == 0:
             raise ValueError(f'Could not find a single bounding box for connected component with IDs: {cc}.')
-            # log_proc.warn(f'Could not find a single bounding box for connected component with IDs: {cc}. '
-            #               f'Setting size to zero')
-            # cc_size = 0
         else:
             curr_bbs = np.concatenate(curr_bbs)
             cc_size = np.linalg.norm(np.max(curr_bbs, axis=0) -

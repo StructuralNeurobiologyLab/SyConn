@@ -22,7 +22,10 @@ from scipy import spatial
 from sklearn import ensemble
 from sklearn.model_selection import cross_val_predict
 from sklearn import metrics
-import open3d as o3d
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 
 from . import log_extraction
 from .. import global_params
@@ -785,8 +788,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
                                      ssd_version: Optional[str] = None,
                                      n_jobs: Optional[int] = None,
                                      debug: bool = False, log: Logger = None,
-                                     max_rep_coord_dist_nm: Optional[float] = None,
-                                     max_vert_dist_nm: Optional[float] = None):
+                                     max_rep_coord_dist_nm: Optional[float] = None):
     """
     Map sub-cellular objects of the synaptic partners of 'syn_ssv' objects and stores
     them in their attribute dict.
@@ -795,8 +797,10 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
     :class:`~syconn.reps.segmentation.SegmentationObject`:
         * 'n_mi_objs_%d':
         * 'n_mi_vxs_%d':
-        * 'n_mi_objs_%d':
-        * 'n_mi_vxs_%d':
+        * 'min_dst_mi_nm_%d':
+        * 'n_vc_objs_%d':
+        * 'n_vc_vxs_%d':
+        * 'min_dst_vc_nm_%d':
 
     Args:
         wd:
@@ -806,7 +810,6 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
         debug:
         log:
         max_rep_coord_dist_nm:
-        max_vert_dist_nm:
 
     Returns:
 
@@ -815,8 +818,6 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
         n_jobs = global_params.config.ncore_total * 4
     if max_rep_coord_dist_nm is None:
         max_rep_coord_dist_nm = global_params.config['cell_objects']['max_rep_coord_dist_nm']
-    if max_vert_dist_nm is None:
-        max_vert_dist_nm = global_params.config['cell_objects']['max_vx_dist_nm']  # TODO: rename in config
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
 
@@ -824,7 +825,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
 
     for ids_small_chunk in chunkify(ssd.ssv_ids, n_jobs):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk,
-                             max_rep_coord_dist_nm, max_vert_dist_nm])
+                             max_rep_coord_dist_nm])
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
@@ -870,9 +871,10 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
     Returns:
 
     """
+    max_vert_dist_nm = global_params.config['cell_objects']['max_vert_dist_nm']
     # TODO: add global overwrite kwarg
     overwrite = True
-    wd, obj_version, ssd_version, ssv_ids, max_rep_coord_dist_nm, max_vert_dist_nm = args
+    wd, obj_version, ssd_version, ssv_ids, max_rep_coord_dist_nm = args
     use_new_subfold = global_params.config.use_new_subfold
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
@@ -904,12 +906,16 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
         n_mi_vxs = np.zeros((n_synssv,), dtype=np.int32)
         n_vc_objs = np.zeros((n_synssv,), dtype=np.int32)
         n_vc_vxs = np.zeros((n_synssv,), dtype=np.int32)
+        min_dst_mi = np.zeros((n_synssv,), dtype=np.float32)
+        min_dst_vc = np.zeros((n_synssv,), dtype=np.float32)
         cache_dc['synssv_ids'] = synssv_ids
         if n_synssv == 0:
             cache_dc['n_mi_objs'] = n_mi_objs
             cache_dc['n_mi_vxs'] = n_mi_vxs
             cache_dc['n_vc_objs'] = n_vc_objs
             cache_dc['n_vc_vxs'] = n_vc_vxs
+            cache_dc['min_dst_mi_nm'] = min_dst_mi
+            cache_dc['min_dst_vc_nm'] = min_dst_vc
             cache_dc.push()
             continue
         # start = time.time()
@@ -962,15 +968,19 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
                 vc = vcs[jj]
                 vc._size = vc_sizes[ix]
                 vc._mesh = md_vc[vc.id]
-            n_mi_objs[ii], n_mi_vxs[ii] = _map_objects_from_synssv(synssv_obj, mis, max_vert_dist_nm)
-            n_vc_objs[ii], n_vc_vxs[ii] = _map_objects_from_synssv(synssv_obj, vcs, max_vert_dist_nm)
+            n_mi_objs[ii], n_mi_vxs[ii], min_dst_mi[ii] = _map_objects_from_synssv(
+                synssv_obj, mis, max_vert_dist_nm['mi'])
+            n_vc_objs[ii], n_vc_vxs[ii], min_dst_vc[ii] = _map_objects_from_synssv(
+                synssv_obj, vcs, max_vert_dist_nm['vc'])
         # dts['map_verts'] += time.time() - start
 
         # start = time.time()
         cache_dc['n_mi_objs'] = n_mi_objs
         cache_dc['n_mi_vxs'] = n_mi_vxs
+        cache_dc['min_dst_mi_nm'] = min_dst_mi
         cache_dc['n_vc_objs'] = n_vc_objs
         cache_dc['n_vc_vxs'] = n_vc_vxs
+        cache_dc['min_dst_vc_nm'] = min_dst_vc
         cache_dc.push()
         # dts['directio'] += time.time() - start
 
@@ -992,10 +1002,11 @@ def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2
 
     Returns:
         Number of SegmentationObjects with >0 vertices, approximated number of
-        object voxels within `max_vert_dist_nm`.
+        object voxels within `max_vert_dist_nm` and minimal distance
+        (in nm; maximum value: 1e12 nm in case no object is present).
     """
     synssv_kdtree = spatial.cKDTree(synssv_o.voxel_list[::sample_fact] * synssv_o.scaling)
-
+    min_dist = 1e12  # in nm
     n_obj_vxs = []
     for obj in seg_objs:
         # use mesh vertices instead of voxels
@@ -1004,7 +1015,8 @@ def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2
         ds, _ = synssv_kdtree.query(obj_vxs, distance_upper_bound=max_vert_dist_nm)
         # surface fraction of subcellular object which is close to synapse
         close_frac = np.sum(ds < np.inf) / len(obj_vxs)
-
+        if np.min(ds) < min_dist:
+            min_dist = np.min(ds)
         # estimate number of voxels by close-by surface area fraction times total number of voxels
         n_obj_vxs.append(close_frac * obj.size)
 
@@ -1013,7 +1025,7 @@ def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2
     n_objects = np.sum(n_obj_vxs > 0)
     n_vxs = np.sum(n_obj_vxs)
 
-    return n_objects, n_vxs
+    return n_objects, n_vxs, min_dist
 
 
 def _objects_from_cell_to_syn_dict(args):
@@ -1050,6 +1062,8 @@ def _objects_from_cell_to_syn_dict(args):
                 map_dc[f'n_mi_vxs_{ii}'] = cache_dc['n_mi_vxs'][index]
                 map_dc[f'n_vc_objs_{ii}'] = cache_dc['n_vc_objs'][index]
                 map_dc[f'n_vc_vxs_{ii}'] = cache_dc['n_vc_vxs'][index]
+                map_dc[f'min_dst_mi_nm_{ii}'] = cache_dc['min_dst_mi_nm'][index]
+                map_dc[f'min_dst_vc_nm_{ii}'] = cache_dc['min_dst_vc_nm'][index]
             synssv_o.attr_dict.update(map_dc)
             this_attr_dc[synssv_id] = synssv_o.attr_dict
         this_attr_dc.push()
@@ -1382,16 +1396,18 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject) -> list:
     for i_partner_id, partner_id in enumerate(partner_ids):
         features.append(synssv_o.attr_dict["n_mi_objs_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_mi_vxs_%d" % i_partner_id])
+        features.append(synssv_o.attr_dict["min_dst_mi_nm_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_vc_objs_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_vc_vxs_%d" % i_partner_id])
+        features.append(synssv_o.attr_dict["min_dst_vc_nm_%d" % i_partner_id])
     return features
 
 
 def synssv_o_featurenames() -> list:
     return ['size_vx', 'mesh_area_um2', 'n_mi_objs_neuron1',
-            'n_mi_vxs_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
-            'n_mi_objs_neuron2', 'n_mi_vxs_neuron2', 'n_vc_objs_neuron2',
-            'n_vc_vxs_neuron2']
+            'n_mi_vxs_neuron1', 'min_dst_mi_nm_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
+            'min_dst_vc_nm_neuron1', 'n_mi_objs_neuron2', 'n_mi_vxs_neuron2',
+            'min_dst_mi_nm_neuron2', 'n_vc_objs_neuron2', 'n_vc_vxs_neuron2', 'min_dst_vc_nm_neuron2']
 
 
 def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] = None,

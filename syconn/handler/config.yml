@@ -77,6 +77,7 @@ versions:
 # Cell object properties
 cell_objects:
   # size threshold applied during object extraction
+  # TODO add size threshold for ssv?!
   min_obj_vx:
     mi: 500
     sj: 100
@@ -152,7 +153,9 @@ cell_objects:
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
   # organelles to syn_ssv
-  max_vx_dist_nm: 2000  # TODO: rename to max_vert_dist_nm
+  max_vert_dist_nm:
+    mi: 1000
+    vc: 500
   max_rep_coord_dist_nm: 4000
   # RFC probability used for classifying whether syn or not
   thresh_synssv_proba: 0.5
@@ -192,6 +195,7 @@ meshes:
   meshing_props_points:
     cs_ssv:
       depth: 10  # detail level used in create_from_point_cloud_poisson (open3d)
+      # TODO: the vertex size needs to be adapted in order to reduce storage consumption
       vertex_size: 20  # in nm; used for downsizing initial points
       voxel_size_simplify: 20  # in nm; used for mesh simplification
       min_vert_num: 10  # minimum number of vertices in a single connected component mesh
