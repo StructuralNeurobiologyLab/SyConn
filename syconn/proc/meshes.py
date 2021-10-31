@@ -529,7 +529,7 @@ def _mesh_loader(so):
 
 def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplices: int = 3,
                    nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
-                   cmap: Optional = None, alpha: float = 1.0, use_new_subfold: bool = True):
+                   cmap: Optional[Iterable[tuple]] = None, alpha: float = 1.0, use_new_subfold: bool = True):
     """
     Merge meshes of SegmentationObjects. This will cache :py:class:`~syconn.reps.segmentation.SegmentationObject`.
 
