@@ -495,6 +495,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
     dict_paths_tmp += [c_mesh_worker_dc, c_prop_worker_dc]
     all_times.append(time.time() - start)
+    step_names.append("extract and map segmentation objects")
 
     # reduce step
     start = time.time()
