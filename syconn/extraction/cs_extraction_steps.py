@@ -19,6 +19,7 @@ from typing import Optional, Dict, List, Tuple, Union, Callable
 
 from multiprocessing import Process
 
+from PIL import Image
 import numpy as np
 import scipy.ndimage
 import tqdm
@@ -168,7 +169,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     os.makedirs(dir_props)
 
     # init KD for syn and cs
-
     for ot in ['cs', 'syn']:
         for cur_id in range(2):
             path_kd = f"{global_params.config.working_dir}/knossosdatasets/{ot}_{cur_id}_seg/"
@@ -432,9 +432,11 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
         # returns rep. coords, bounding box and size for every ID in contacts
         # used to get location of every contact site to perform closing operation
+
         _, bb_dc, _ = find_object_properties_cs_64bit(contacts)
         (bb_dc, ) = _nested_dicts_to_tuple_dicts((bb_dc, ))
         n_closings = overlap
+
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
             obj_start -= n_closings
@@ -445,10 +447,10 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
             binary_mask = (np.all(sub_vol == ix, axis=-1)).astype(np.int8, copy=False)
-            res = scipy.ndimage.binary_closing(
-                binary_mask, iterations=n_closings)
+            res = scipy.ndimage.binary_closing(binary_mask, iterations=n_closings)
             # reduce fragmenting of contact sites
-            res = scipy.ndimage.binary_dilation(res, iterations=cs_dilation)
+            if cs_dilation > 0:
+                res = scipy.ndimage.binary_dilation(res, iterations=cs_dilation)
             # only update background or the object itself and do not remove object voxels (res == 1), e.g. at boundary
             proc_mask = ((binary_mask == 1) | (sub_vol[..., 0] == 0)) & (res == 1)
             contacts[new_obj_slices][proc_mask] = res[proc_mask, np.newaxis] * ix
@@ -471,25 +473,25 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             tuple_dicts[8])
 
         cs_0_data = contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2)
-        print(f'cs_0_data.shape={cs_0_data.shape}, cs_0_data.dtype={cs_0_data.dtype}')
+        cs_1_data = contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 1].swapaxes(0, 2)
 
         kd_cs_0.save_seg(offset=offset + overlap, mags=[1, ],
-                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2),
+                       data=cs_0_data,
                        data_mag=1)
         kd_cs_1.save_seg(offset=offset + overlap, mags=[1, ],
-                       data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 1].swapaxes(0, 2),
+                       data=cs_1_data,
                        data_mag=1)
 
         ## syn segmentation contains the intersecting voxels between SJ and CS
         contacts[sj_d == 0] = 0
 
         syn_0_data = contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2)
-        print(f'syn_0_data.shape={syn_0_data.shape}, syn_0_data.dtype={syn_0_data.dtype}')
+        syn_1_data = contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 1].swapaxes(0, 2)
         kd_syn_0.save_seg(offset=offset + overlap, mags=[1, ],
-                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 0].swapaxes(0, 2),
+                        data=syn_0_data,
                         data_mag=1)
         kd_syn_1.save_seg(offset=offset + overlap, mags=[1, ],
-                        data=contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap, 1].swapaxes(0, 2),
+                        data=syn_1_data,
                         data_mag=1)
 
         # overlap was removed; use correct offset for the analysis of the object properties
