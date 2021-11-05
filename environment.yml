@@ -88,5 +88,8 @@ dependencies:
     # training scripts
     - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
 
+    # point models
+    - git+https://github.com/StructuralNeurobiologyLab/LightConvPoint.git
+
       #for skeletonisation
     - fill-voids
