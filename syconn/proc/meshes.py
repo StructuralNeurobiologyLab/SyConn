@@ -20,7 +20,10 @@ from scipy.ndimage import zoom
 from scipy.ndimage.morphology import binary_erosion
 from sklearn.decomposition import PCA
 from zmesh import Mesher
-from vigra.filters import gaussianGradient
+try:
+    from vigra.filters import gaussianGradient
+except ImportError:
+    pass  # for sphinx build
 try:
     import open3d as o3d
 except ImportError:
