@@ -90,6 +90,8 @@ dependencies:
 
     # point models
     - git+https://github.com/StructuralNeurobiologyLab/LightConvPoint.git
+    - torch-geometric =1.7.0
+    - torch-sparse =0.6.7
 
       #for skeletonisation
     - fill-voids
