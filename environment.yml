@@ -8,13 +8,16 @@ channels:
   - defaults
   - menpo
   - open3d-admin
+  - pyg
 dependencies:
   # From -c pytorch
-  - pytorch <=1.5.1  # (provide backwards compat. to trained models)
+  - pytorch >=1.8  # (provide backwards compat. to trained models)
   - torchvision
+  - pyg
+  - pytorch-sparse
 
   # From conda-forge and defaults
-  - python >=3.7  # (3.6 should also work)
+  - python >= 3.7  # (3.6 should also work)
   - pip
   - lemon
   - vigra
@@ -26,16 +29,14 @@ dependencies:
   - h5py > 3
   - matplotlib
   - tqdm
-  - scipy
   - networkx <= 2.5.1
   - m2r
   - lz4
   - flask
   - fasteners
-  - numpy <= 1.21
+  - numpy
   - coloredlogs
-  - # lemon=1.3.1=1  lead to import error of vigra: 'ImportError: libemon.so.1.3.1: cannot open shared object file: No such file or directory'
-  - lemon=1.3.1=he9d42e9_3
+  - scipy = 1.6
   - termcolor
   # fix version due to stored RFC models.
   - scikit-learn = 0.24.1
@@ -53,7 +54,7 @@ dependencies:
   # for pandas xls support
   - xlrd >= 1.0.0
    # >= 7 raises "cannot import name 'PILLOW_VERSION' from 'PIL'" with torchvision=0.3.0
-  - pillow < 7
+  - pillow
 
   # From -c menpo
   - osmesa
@@ -82,16 +83,15 @@ dependencies:
     - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx
 
-    # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
-    - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
-
     # training scripts
     - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
 
-    # point models
-    - git+https://github.com/StructuralNeurobiologyLab/LightConvPoint.git
-    - torch-geometric =1.7.0
-    - torch-sparse =0.6.7
+    # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
+    - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
 
-      #for skeletonisation
+      # point models
+    - git+https://github.com/StructuralNeurobiologyLab/LightConvPoint.git
+
+    #for skeletonisation
     - fill-voids
+
