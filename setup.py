@@ -65,7 +65,7 @@ setup(
     python_requires='>=3.6, <4',
     package_data={'syconn': ['handler/config.yml']},
     include_package_data=True,
-    tests_require=['pytest', 'pytest-cov', 'pytest-runner'],
+    tests_require=['pytest', 'pytest-cov'],
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [

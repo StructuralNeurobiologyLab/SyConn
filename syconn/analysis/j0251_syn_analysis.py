@@ -171,7 +171,7 @@ def syn_fracs(proba_thresh_syn: float = 0.8, proba_thresh_celltype: float = None
               ct_label_post: str = 'MSN', nsyns_min: int = 10, max_rel_weight: float = 0.3):
     """
     Experimental.
-    Mesh are in µm^2, spine head vol in µm^3 and vx in [1].
+    Mesh area in µm^2, spine head vol in µm^3 and vx in [1].
     Args:
         proba_thresh_syn: Synapse probability. Filters synapses below threshold.
         proba_thresh_celltype: Cell type probability. Filters cells below threshold.

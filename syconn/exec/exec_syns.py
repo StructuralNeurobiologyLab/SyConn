@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, Callable
 
 import numpy as np
 
@@ -62,7 +62,8 @@ def run_matrix_export():
 
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
-                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None):
+                       cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
+                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -72,7 +73,9 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         * 'syn': Objects representing the overlap between 'cs' and the initial
           synaptic junction predictions. Note: These objects effectively represent
           synapse fragments between supervoxels.
-        * 'syn_ssv': Agglomerated 'syn' objects based on the supervoxel graph.
+        * 'syn_ssv': Final synapse objects. Agglomerated 'syn' objects based on the supervoxel graph.
+        * 'cs_ssv': Final contact site objects. Agglomerated 'cs' objects based on the supervoxel graph.
+            Only processed if `generate_cs_ssv` is set to True in the config.
 
     Args:
         chunk_size: The size of processed cubes.
@@ -81,10 +84,10 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
         max_n_jobs: Number of parallel jobs.
         cube_of_interest_bb: Defines the bounding box of the cube to process.
             By default this is set to (np.zoers(3); kd.boundary).
+        overwrite:
+        transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
+            sj foreground.
     """
-    if max_n_jobs is None:
-        max_n_jobs = global_params.config.ncore_total * 2
-
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
 
@@ -92,18 +95,25 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     kd = kd_factory(kd_seg_path)
 
     if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
+        try:
+            cube_of_interest_bb = global_params.config.entries['cube_of_interest_bb']
+            if cube_of_interest_bb is None:
+                cube_of_interest_bb = np.array([np.zeros(3, dtype=np.int32), kd.boundary])
+            else:
+                cube_of_interest_bb = np.array(cube_of_interest_bb)
+        except KeyError:
+            cube_of_interest_bb = np.array([np.zeros(3, dtype=np.int32), kd.boundary])
 
-    # create KDs and SDs for syn and cs
+    # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-                              cube_of_interest_bb=cube_of_interest_bb,
-                              n_folders_fs=n_folders_fs)
-    log.info('SegmentationDataset of type "cs" and "syn" was generated.')
+                              cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
+                              n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
+    log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
 
-    # create SD of type 'syn_ssv'
+    # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
-                              log=log, n_folders_fs=n_folders_fs)
+                              log=log, n_folders_fs=n_folders_fs, overwrite=overwrite)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
@@ -115,9 +125,11 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     n_sym = np.sum(syn_sign == -1)
     n_asym = np.sum(syn_sign == 1)
     del syn_sign
+
+    dataset_vol = np.abs(cube_of_interest_bb[1] - cube_of_interest_bb[0]) * kd.scale
     log.info(f'SegmentationDataset of type "syn_ssv" was generated with {len(sd_syn_ssv.ids)} '
              f'objects, {n_sym} symmetric, {n_asym} asymmetric and '
-             f'{(len(sd_syn_ssv.ids) / np.prod(kd.boundary * kd.scale) * 1e9):0.4f} synapses / µm^3.')
+             f'{(len(sd_syn_ssv.ids) / np.prod(dataset_vol) * 1e9):0.4f} synapses / µm^3.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
     cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
@@ -134,6 +146,31 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     map_synssv_objects(log=log)
     log.info('Finished.')
+
+
+def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
+    """
+    Create agglomerated contact site objects between cells. For this, 'cs' objects need to be extracted.
+
+    Args:
+        n_folders_fs: Number of folders used to create the folder structure in
+            each :class:`~syconn.reps.segmentation.SegmentationDataset`.
+        overwrite:
+    """
+    # create SD of type 'cs_ssv' -> cell-cell contact sites
+    log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
+                             overwrite=True)
+    cps.combine_and_split_cs(global_params.config.working_dir,
+                             log=log, n_folders_fs=n_folders_fs,
+                             overwrite=overwrite)
+    sd_cs_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
+                                    obj_type='cs_ssv')
+    # recompute=False: size, bounding box, rep_coord and mesh properties
+    # have already been processed in combine_and_split_syn
+    dataset_analysis(sd_cs_ssv, compute_meshprops=False, recompute=False)
+    log.info(f'SegmentationDataset of type "cs_ssv" was generated with {len(sd_cs_ssv.ids)} '
+             f'objects.')
+    del sd_cs_ssv
 
 
 def run_spinehead_volume_calc():

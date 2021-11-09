@@ -26,7 +26,7 @@ from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 
 
 def run_skeleton_generation(cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
-                            map_myelin: Optional[bool] = None):
+                            map_myelin: Optional[bool] = None, ncores_skelgen: int = 2):
     """
 
     Args:
@@ -34,10 +34,12 @@ def run_skeleton_generation(cube_of_interest_bb: Optional[Union[tuple, np.ndarra
             coord, upper coord)
         map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
+        ncores_skelgen: Number of cores used during skeleton generation.
     """
     if global_params.config.use_kimimaro:
         # volume-based
-        run_kimimaro_skeletonization(cube_of_interest_bb=cube_of_interest_bb, map_myelin=map_myelin)
+        run_kimimaro_skeletonization(cube_of_interest_bb=cube_of_interest_bb, map_myelin=map_myelin,
+                                     ncores_skelgen=ncores_skelgen)
     else:
         # SSV-based skeletonization on mesh vertices, not centered. Does not require cube_of_interest_bb
         run_skeleton_generation_fallback(map_myelin=map_myelin)
@@ -129,7 +131,7 @@ def run_skeleton_axoness():
 
 def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None,
                                  cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None,
-                                 ds: Optional[np.ndarray] = None):
+                                 ds: Optional[np.ndarray] = None, ncores_skelgen: int = 2):
     """
     Generate the cell reconstruction skeletons with the kimimaro tool. functions are in
     proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
@@ -142,6 +144,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
             un-centered skeletons in cell compartments with big diameters. In mag 1 voxels.
         cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
         ds: Downsampling.
+        ncores_skelgen: Number of cores used during skeleton generation.
     """
     if not os.path.exists(global_params.config.temp_path):
         os.mkdir(global_params.config.temp_path)
@@ -169,7 +172,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     else:
         cube_of_interest_bb = np.array([[0, 0, 0], kd.boundary], dtype=np.int32)
 
-    dataset_size = (cube_of_interest_bb[1] - cube_of_interest_bb[0])
+    dataset_size = cube_of_interest_bb[1] - cube_of_interest_bb[0]
 
     if np.all(cube_size > dataset_size):
         cube_size = dataset_size
@@ -178,9 +181,9 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
                   box_coords=cube_of_interest_bb[0], fit_box_size=True)
     multi_params = [(cube_size, offs, ds) for offs in chunkify_successive(
         list(cd.coord_dict.keys()), max(1, len(cd.coord_dict) // max_n_jobs))]
-    # high memory load
+
     out_dir = qu.batchjob_script(multi_params, "kimimaroskelgen", log=log, remove_jobfolder=False,
-                                 n_cores=2, max_iterations=10)
+                                 n_cores=ncores_skelgen)
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -201,8 +204,7 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
     # create SSV skeletons, requires SV skeletons!
     log.info('Merging cube-wise skeletons of {} SSVs.'.format(len(ssd.ssv_ids)))
     # high memory load
-    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=1,
-                       max_iterations=10)
+    qu.batchjob_script(multi_params, "kimimaromerge", log=log, remove_jobfolder=True, n_cores=1)
 
     if map_myelin:
         map_myelin_global()

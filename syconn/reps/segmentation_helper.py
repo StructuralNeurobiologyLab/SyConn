@@ -16,7 +16,7 @@ from . import rep_helper as rh
 from .rep_helper import surface_samples
 from .. import global_params
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
-    VoxelStorage, SkeletonStorage
+    VoxelStorage, SkeletonStorage, VoxelStorageDyn, VoxelStorageLazyLoading
 from ..handler.basics import chunkify
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_imap
@@ -83,17 +83,14 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
     Assembles id list by iterating over all voxel / attribute dicts,
     otherwise (very slow).
     """
-    if os.path.exists(sd.path_ids):
-        sd._ids = np.load(sd.path_ids)
-    else:
+    sd._ids = sd.load_numpy_data('id')
+    if sd._ids is None:
         paths = glob.glob(sd.so_storage_path + "/*/*/*/") + \
                 glob.glob(sd.so_storage_path + "/*/*/") + \
                 glob.glob(sd.so_storage_path + "/*/")
         sd._ids = []
         for path in paths:
-            if os.path.exists(path + "voxel.pkl"):
-                this_ids = list(VoxelStorage(path + "voxel.pkl", read_only=True).keys())
-            elif os.path.exists(path + "attr_dict.pkl"):
+            if os.path.exists(path + "attr_dict.pkl"):
                 this_ids = list(AttributeDict(path + "attr_dict.pkl", read_only=True).keys())
             else:
                 this_ids = []
@@ -204,8 +201,12 @@ def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
+    elif so.type in ['syn', 'syn_ssv']:
+        voxel_dc = VoxelStorageLazyLoading(so.voxel_path)
+        voxel_list = voxel_dc[so.id]
+        voxel_dc.close()
     else:
-        voxel_dc = VoxelStorage(so.voxel_path, read_only=True, disable_locking=True)
+        voxel_dc = VoxelStorageDyn(so.voxel_path, read_only=True, disable_locking=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
         voxel_list = []
@@ -418,8 +419,7 @@ def find_missing_sv_attributes(sd: 'SegmentationDataset', attr_key: str, n_cores
     """
     multi_params = chunkify(sd.so_dir_paths, 100)
     params = [(ps, attr_key) for ps in multi_params]
-    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
-                                  debug=False)
+    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores, debug=False)
     return np.concatenate(res)
 
 
@@ -535,6 +535,7 @@ def prepare_so_attr_cache(sd: 'SegmentationDataset', so_ids: np.ndarray, attr_ke
         SegmentatonObect in `so_ids`.
     """
     attr_cache = {k: dict() for k in attr_keys}
+    # TODO: Use BinarySearchStore
     soid2ix = {so_id: sd.soid2ix[so_id] for so_id in so_ids}
     sd._soid2ix = None  # free memory
     for attr in attr_keys:

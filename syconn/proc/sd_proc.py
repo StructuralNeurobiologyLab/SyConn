@@ -25,6 +25,7 @@ from ..mp import mp_utils as sm
 from ..proc.meshes import mesh_chunk, find_meshes
 from ..reps import rep_helper
 from ..reps import segmentation
+from ..extraction.find_object_properties import map_subcell_extract_props as map_subcell_extract_props_func
 
 from multiprocessing import Process
 import pickle as pkl
@@ -135,10 +136,10 @@ def _dataset_analysis_collect(args):
     attribute, out_files, n_ids, sd_path = args
     # start_multiprocess_imap obeys parameter order and therefore the
     # collected attributes will share the same ordering.
-    params = list(basics.chunkify([(p, attribute) for p in out_files],
-                                  global_params.config['ncores_per_node'] * 2))
+    n_jobs = min(len(out_files), global_params.config['ncores_per_node'] * 4)
+    params = list(basics.chunkify([(p, attribute) for p in out_files], n_jobs))
     tmp_res = sm.start_multiprocess_imap(
-        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'], debug=False)
+        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
     if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
                      'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
         tmp_res = [el for lst in tmp_res for el in lst]  # flatten lists
@@ -322,14 +323,13 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         chunk_size = [512, 512, 512]
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int32), kd.boundary]
-    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
+    size = cube_of_interest_bb[1] - cube_of_interest_bb[0]
     offset = cube_of_interest_bb[0]
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
     cd = chunky.ChunkDataset()
-    cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
-    chunk_list, _ = oew.calculate_chunk_numbers_for_box(cd, offset=offset,
-                                                        size=size)
+    cd.initialize(kd, size, chunk_size, cd_dir,
+                  box_coords=offset, fit_box_size=True)
+
     sv_sd = segmentation.SegmentationDataset(
         working_dir=global_params.config.working_dir, obj_type="sv",
         version=0, n_folders_fs=n_folders_fs)
@@ -357,14 +357,14 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
     # extract mapping
     start = time.time()
-    # random assignment to improve workload balance
-    np.random.seed(0)
-    np.random.shuffle(chunk_list)
-    multi_params = list(basics.chunkify_successive(
-        chunk_list, np.max([len(chunk_list) // n_chunk_jobs, 1])))
-    multi_params = [(chs, chunk_size, kd_seg_path, kd_organelle_paths,
+    # create chunk list represented by offset and unique ID
+    ch_list = [(off, ch_id) for ch_id, off in enumerate(list(cd.coord_dict.keys()))]
+    # create chunked chunk list
+    ch_list = [ch for ch in basics.chunkify_successive(ch_list, max(1, len(cd.coord_dict) // n_chunk_jobs))]
+
+    multi_params = [(ch, chunk_size, kd_seg_path, kd_organelle_paths,
                      worker_nr, global_params.config.allow_mesh_gen_cells)
-                    for worker_nr, chs in enumerate(multi_params)]
+                    for worker_nr, ch in enumerate(ch_list)]
 
     # results contain meshing information
     cell_mesh_workers = dict()
@@ -374,7 +374,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
     # needed for caching target storage folder for all objects
     all_ids = {k: [] for k in list(kd_organelle_paths.keys()) + ['sv']}
 
-    # TODO: refactor write-out (and read in batchjob_enabled)
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(
             multi_params, "map_subcell_extract_props", n_cores=n_cores)
@@ -396,7 +395,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         with open(c_prop_worker_dc, 'wb') as f:
             pkl.dump(cell_prop_worker, f, protocol=4)
 
-        all_ids['sv'] = np.unique(all_ids['sv']).astype(np.uint32)
+        all_ids['sv'] = np.unique(all_ids['sv'])
         del cell_prop_worker
 
         # Collect organelle worker info
@@ -406,14 +405,14 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                 worker_nr, ref_mesh_dc = pkl.load(f)
             # iterate over each subcellular structure
             for ii, organelle in enumerate(kd_organelle_paths):
-                organelle = global_params.config['existing_cell_organelles'][ii]
+                organelle = global_params.config['process_cell_organelles'][ii]
                 for chunk_id, subcell_ids in ref_mesh_dc[organelle].items():
                     subcell_mesh_workers[ii][chunk_id] = (worker_nr, subcell_ids)
                 subcell_prop_workers[ii][worker_nr] = list(set().union(*ref_mesh_dc[
                     organelle].values()))
                 all_ids[organelle].extend(subcell_prop_workers[ii][worker_nr])
         for ii, organelle in enumerate(kd_organelle_paths):
-            all_ids[organelle] = np.unique(all_ids[organelle]).astype(np.uint32)
+            all_ids[organelle] = np.unique(all_ids[organelle])
             sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
                 global_params.config.temp_path, organelle)
             with open(sc_mesh_worker_dc, 'wb') as f:
@@ -452,10 +451,10 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         with open(c_prop_worker_dc, 'wb') as f:
             pkl.dump(cell_prop_worker, f, protocol=4)
         del cell_prop_worker
-        all_ids['sv'] = np.unique(all_ids['sv']).astype(np.uint32)
+        all_ids['sv'] = np.unique(all_ids['sv'])
 
         for ii, organelle in enumerate(kd_organelle_paths):
-            all_ids[organelle] = np.unique(all_ids[organelle]).astype(np.uint32)
+            all_ids[organelle] = np.unique(all_ids[organelle])
             sc_mesh_worker_dc = "{}/sc_{}_mesh_worker_dict.pkl".format(
                 global_params.config.temp_path, organelle)
             with open(sc_mesh_worker_dc, 'wb') as f:
@@ -518,7 +517,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        n_cores = 1 if np.prod(cube_of_interest_bb) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sc", script_folder=None,
                            remove_jobfolder=True, n_cores=n_cores)
 
@@ -554,7 +553,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params, debug=False)
     else:
         # hacky, but memory load gets high at that size, prevent oom events of slurm and other system relevant parts
-        n_cores = 1 if np.prod(global_params.config['cube_of_interest_bb']) < 2e12 else 2
+        n_cores = 1 if np.prod(size) < 2e12 else 2
         qu.batchjob_script(multi_params, "write_props_to_sv", remove_jobfolder=True, n_cores=n_cores)
     dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
@@ -579,7 +578,6 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
 
 def _map_subcell_extract_props_thread(args):
-    from syconn.reps.find_object_properties_C import map_subcell_extract_propsC
     chunks = args[0]
     chunk_size = args[1]
     kd_cell_p = args[2]
@@ -591,10 +589,6 @@ def _map_subcell_extract_props_thread(args):
     worker_dir_props = f"{global_params.config.temp_path}/tmp_props/props_{worker_nr}/"
     os.makedirs(worker_dir_props, exist_ok=True)
     kd_cell = basics.kd_factory(kd_cell_p)
-    cd_dir = f"{global_params.config.temp_path}/chunkdatasets/tmp/"
-    cd = chunky.ChunkDataset()
-    cd.initialize(kd_cell, kd_cell.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
     kd_subcells = {k: basics.kd_factory(kd_subcell_p) for k, kd_subcell_p in kd_subcell_ps.items()}
     n_subcell = len(kd_subcells)
 
@@ -623,9 +617,7 @@ def _map_subcell_extract_props_thread(args):
     # iterate over chunks and store information in property dicts for
     # subcellular and cellular structures
     start_all = time.time()
-    for ch_cnt, ch_id in enumerate(chunks):
-        ch = cd.chunk_dict[ch_id]
-        offset, size = ch.coordinates.astype(np.int32), ch.size
+    for offset, ch_id in chunks:
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         subcell_d = []
         obj_ids_bdry = dict()
@@ -635,7 +627,7 @@ def _map_subcell_extract_props_thread(args):
         for organelle in kd_subcell_ps:
             start = time.time()
             kd_sc = kd_subcells[organelle]
-            subc_d = kd_sc.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+            subc_d = kd_sc.load_seg(size=chunk_size, offset=offset, mag=1).swapaxes(0, 2)
             # get objects that are not purely inside this chunk
             obj_bdry = np.concatenate(
                 [subc_d[0].flat, subc_d[:, 0].flat, subc_d[:, :, 0].flat, subc_d[-1].flat,
@@ -647,13 +639,13 @@ def _map_subcell_extract_props_thread(args):
             subcell_d.append(subc_d[None,])
         subcell_d = np.concatenate(subcell_d)
         start = time.time()
-        cell_d = kd_cell.load_seg(size=size, offset=offset, mag=1).swapaxes(0, 2)
+        cell_d = kd_cell.load_seg(size=chunk_size, offset=offset, mag=1).swapaxes(0, 2)
         dt_times_dc['data_io'] += time.time() - start
 
         start = time.time()
         # extract properties and mapping information
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = \
-            map_subcell_extract_propsC(cell_d, subcell_d)
+            map_subcell_extract_props_func(cell_d, subcell_d)
         dt_times_dc['prop_dicts_extract'] += time.time() - start
 
         # remove objects that are purely inside this chunk and smaller than the size threshold
@@ -1209,7 +1201,7 @@ def _write_props_to_sv_thread(args):
                 start = time.time()
                 verts = mesh[1].reshape(-1, 3)
                 if len(verts) > 0:
-                    mesh_bb = [np.min(verts, axis=0), np.max(verts, axis=0)]
+                    mesh_bb = np.array([np.min(verts, axis=0), np.max(verts, axis=0)], dtype=np.float32)
                     del verts
                     this_attr_dc[sv_id]["mesh_bb"] = mesh_bb
                     this_attr_dc[sv_id]["mesh_area"] = mesh_area_calc(mesh)
@@ -1266,13 +1258,13 @@ def merge_prop_dicts(prop_dicts: List[List[dict]],
         if offset is not None:
             # update chunk offset  # TODO: could be done at the end of the map_extract cython code
             for k in el[0]:
-                el[0][k] = (el[0][k] + offset).astype(np.int32)
+                el[0][k] = [el[0][k][ii] + offset[ii] for ii in range(3)]
         tot_rc.update(el[0])  # just overwrite existing elements
         for k, v in el[1].items():
             if offset is None:
-                bb = np.array(v, dtype=np.int32)
+                bb = v
             else:
-                bb = (v + offset).astype(np.int32)
+                bb = [[v[0][ii] + offset[ii] for ii in range(3)], [v[1][ii] + offset[ii] for ii in range(3)]]
             # collect all bounding boxes to enable efficient data loading
             tot_bb[k].append(bb)
         for k, v in el[2].items():

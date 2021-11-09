@@ -27,7 +27,7 @@ from ..mp import batchjob_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..proc.image import apply_morphological_operations, get_aniso_struct
 from ..reps import segmentation, rep_helper as rh
-from ..reps.rep_helper import find_object_properties
+from .find_object_properties import find_object_properties
 
 try:
     import vigra
@@ -170,7 +170,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         n_erosions = 0
         for k, v in morph_ops.items():
             v = np.array(v)
-            # factor 2: erodes both sides; aniso: morphology operation kernel is laterally increased by this factor
+            # factor 2: erodes both sides; aniso: morphological operation kernel is laterally increased by this factor
             n_erosions = max(n_erosions, 2 * aniso * np.sum(v == 'binary_erosion'))
         overlap = np.max([overlap, [n_erosions, n_erosions, n_erosions // aniso]], axis=0).astype(np.int32)
 
@@ -187,8 +187,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              load_from_kd_overlaycubes, transf_func_kd_overlay])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(transform_func, multi_params,
-                                             nb_cpus=nb_cpus, debug=debug)
+        results = sm.start_multiprocess_imap(transform_func, multi_params, nb_cpus=nb_cpus, debug=False,
+                                             use_dill=True)
 
         results_as_list = []
         for result in results:
@@ -328,14 +328,17 @@ def _object_segmentation_thread(args):
             if thresholds[nb_hdf5_name] != 0 and not load_from_kd_overlaycubes:
                 tmp_data = np.array(tmp_data > thresholds[nb_hdf5_name], dtype=np.uint8)
 
-            if hdf5_name in morph_ops:  # returns identity if len(morph_ops) == 0
-                mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
-                                                          mop_kwargs=dict(structure=struct))
-                if hdf5_name in morph_ops and 'binary_erosion' in morph_ops[hdf5_name][-1]:
-                    # combine remaining fragments
-                    markers = apply_morphological_operations(scipy.ndimage.label(mop_data)[0],
-                                                             ['binary_closing']).astype(np.uint32)
-                    # remove small fragments and 0; this will also delete objects bigger than min_size as
+            if hdf5_name in morph_ops:
+                if 'binary_erosion' in morph_ops[hdf5_name]:
+                    first_erosion_ix = morph_ops[hdf5_name].index('binary_erosion')
+                    tmp_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name][:first_erosion_ix],
+                                                              mop_kwargs=dict(structure=struct))
+                    # apply erosion operations to generate watershed seeds
+                    markers = apply_morphological_operations(tmp_data.copy(),
+                                                             morph_ops[hdf5_name][first_erosion_ix:],
+                                                             mop_kwargs=dict(structure=struct))
+                    markers = scipy.ndimage.label(markers)[0].astype(np.uint32)
+                    # remove small fragments and 0; this might also delete objects bigger than min_size as
                     # this threshold is applied after N binary erosion!
                     if hdf5_name in min_seed_vx and min_seed_vx[hdf5_name] > 1:
                         min_size = min_seed_vx[hdf5_name]
@@ -360,6 +363,8 @@ def _object_segmentation_thread(args):
                     this_labels_data = skimage.segmentation.watershed(-distance, markers, mask=tmp_data)
                     max_label = np.max(this_labels_data)
                 else:
+                    mop_data = apply_morphological_operations(tmp_data.copy(), morph_ops[hdf5_name],
+                                                              mop_kwargs=dict(structure=struct))
                     this_labels_data, max_label = scipy.ndimage.label(mop_data)
             else:
                 this_labels_data, max_label = scipy.ndimage.label(tmp_data)
@@ -444,13 +449,11 @@ def _make_unique_labels_thread(func_args):
 
         for nb_hdf5_name in range(len(hdf5names)):
             hdf5_name = hdf5names[nb_hdf5_name]
+            cc_data_list[nb_hdf5_name] = cc_data_list[nb_hdf5_name].astype(np.uint64)
             matrix = cc_data_list[nb_hdf5_name]
             matrix[matrix > 0] += this_max_nb_dict[hdf5_name]
 
-        compression.save_to_h5py(cc_data_list,
-                                 chunk.folder + filename +
-                                 "_unique_components%s.h5"
-                                 % suffix, hdf5names)
+        compression.save_to_h5py(cc_data_list, chunk.folder + filename + "_unique_components%s.h5" % suffix, hdf5names)
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
@@ -742,7 +745,7 @@ def _apply_merge_list_thread(args):
                       offset[1]: this_shape[1] - offset[1],
                       offset[2]: this_shape[2] - offset[2]]
             this_cc = id_changer[this_cc]
-            cc_data_list[nb_hdf5_name] = np.array(this_cc, dtype=np.uint32)
+            cc_data_list[nb_hdf5_name] = this_cc
 
         compression.save_to_h5py(cc_data_list,
                                  chunk.folder + filename +
@@ -888,7 +891,9 @@ def _extract_voxels_thread(args):
                 try:
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
-                except:
+                except Exception as e:
+                    log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                      f' precision: {str(e)}')
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 
@@ -1084,6 +1089,8 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
     -------
 
     """
+    if overlaydataset_path is None:
+        raise ValueError('This processing option is deprecated!')
     if dataset_names is None:
         dataset_names = hdf5names
 
@@ -1141,7 +1148,7 @@ def _extract_voxels_combined_thread(args):
                             '`VoxelStorageDyn` storing less data redundantly '
                             'use KnossosDataset as segmentation source '
                             '(see kwarg `overlaydataset_path`).')
-        return _extract_voxels_combined_thread_OLD(args)
+        raise RuntimeError('This processing option is deprecated!')
     else:
         return _extract_voxels_combined_thread_NEW(args)
 
@@ -1171,7 +1178,9 @@ def _extract_voxels_combined_thread_NEW(args):
             try:
                 this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                 mag=1).swapaxes(0, 2)
-            except:
+            except Exception as e:
+                log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                  f' precision: {str(e)}')
                 this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                 datatype=np.uint32, mag=1).swapaxes(0, 2)
             # returns 3 dicts: rep coord, bounding box, size
@@ -1234,7 +1243,9 @@ def _extract_voxels_combined_thread_OLD(args):
                 try:
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     mag=1).swapaxes(0, 2)
-                except:
+                except Exception as e:
+                    log_handler.error(f'Exception caught when loading segmentation data with uint64'
+                                      f' precision: {str(e)}')
                     this_segmentation = kd.load_seg(size=chunk.size, offset=chunk.coordinates,
                                                     datatype=np.uint32, mag=1).swapaxes(0, 2)
 
@@ -1274,7 +1285,8 @@ def _extract_voxels_combined_thread_OLD(args):
 def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1,
                                offset=None, size=None, stride=(4 * 128, 4 * 128, 4 * 128),
                                overwrite=False, as_raw=False, fast_downsampling=False,
-                               n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None):
+                               n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None,
+                               compresslevel=None):
     """
     Batchjob version of :class:`knossos_utils.chunky.ChunkDataset.export_cset_to_kd`
     method, see ``knossos_utils.chunky`` for details.
@@ -1300,6 +1312,7 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
         unified_labels:
         orig_dtype:
         log:
+        compresslevel: Compression level in case segmentation data is written for (seg.sz.zip files).
 
     Returns:
 
@@ -1335,7 +1348,8 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
     multi_params = basics.chunkify(multi_params, n_max_job)
     multi_params = [[coords, stride, cset.path_head_folder, target_kd_paths, name,
                      hdf5names, as_raw, unified_labels, 1, orig_dtype,
-                     fast_downsampling, overwrite] for coords in multi_params]
+                     fast_downsampling, overwrite,
+                     compresslevel] for coords in multi_params]
 
     job_suffix = "_" + "_".join(hdf5names)
     qu.batchjob_script(
@@ -1358,6 +1372,8 @@ def _export_cset_as_kds_thread(args):
     nb_threads = args[8]
     orig_dtype = args[9]
     fast_downsampling = args[10]
+    overwrite = args[11]
+    compresslevel = args[12]
 
     cset = chunky.load_dataset(cset_path, update_paths=True)
 
@@ -1392,4 +1408,4 @@ def _export_cset_as_kds_thread(args):
                         fast_resampling=fast_downsampling)
         else:
             kd.save_seg(offset=coords, mags=kd.available_mags, data=data_list, data_mag=1,
-                        fast_resampling=fast_downsampling)
+                        fast_resampling=fast_downsampling, compresslevel=compresslevel)

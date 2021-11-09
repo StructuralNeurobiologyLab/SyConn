@@ -35,6 +35,12 @@ To update the environment, e.g. if the environment file changed, use:
 
     conda env update --name syco --file environment.yml --prune
 
+If you encounter
+
+     /lib64/libm.so.6: version `GLIBC_2.27' not found
+
+with open3d, you need to upgrade your system or downgrade open3d to `<=0.9`.
+
 ## Example run
 Place the example and model data (provided upon request) in `SyConn/examples/`,
 cd to `SyConn/examples/` and run

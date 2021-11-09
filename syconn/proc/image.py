@@ -21,7 +21,11 @@ from sklearn.decomposition import PCA
 from scipy import spatial, sparse, ndimage
 import tqdm
 from typing import List, Optional, Union
-import fill_voids
+# TODO: use mocking (try-except needed for sphinx build)
+try:
+    import fill_voids
+except ImportError:
+    pass
 
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):

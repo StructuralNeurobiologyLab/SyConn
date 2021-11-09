@@ -6,35 +6,37 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import itertools
-import warnings
+import copy
 from collections import Counter
-from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
+import time
+from typing import Optional, List, Tuple, Dict, Union, Iterable, TYPE_CHECKING, Iterator
 
 import numpy as np
 import tqdm
 from numba import jit
 from plyfile import PlyData, PlyElement
-from scipy import spatial, ndimage
+from scipy import spatial
 from scipy.ndimage import zoom
-from scipy.ndimage.morphology import binary_closing, binary_dilation
-from skimage import measure
+from scipy.ndimage.morphology import binary_erosion
 from sklearn.decomposition import PCA
 from zmesh import Mesher
+try:
+    from vigra.filters import gaussianGradient
+except ImportError:
+    pass  # for sphinx build
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 
 from .image import apply_pca
 from .. import global_params
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn, VoxelStorageLazyLoading
 from ..handler.basics import write_data2kzip, data2kzip
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
 from ..reps.segmentation_helper import load_so_meshes_bulk
-
-try:
-    import vtki
-
-    __vtk_avail__ = True
-except ImportError:
-    __vtk_avail__ = False
+from syconn.extraction.in_bounding_boxC import in_bounding_box
 
 from skimage.measure import mesh_surface_area
 
@@ -53,21 +55,15 @@ except ImportError as e:
     log_proc.error('ImportError. Could not import openmesh. '
                    'Writing meshes as `.obj` files will not be'
                    ' possible. {}'.format(e))
-try:
-    from .in_bounding_boxC import in_bounding_box
-except ImportError:
-    from .in_bounding_box import in_bounding_box
-
-    log_proc.error('ImportError. Could not import `in_boundinb_box` from '
-                   '`syconn/proc.in_bounding_boxC`. Fallback to numba jit.')
 if TYPE_CHECKING:
     from ..reps import segmentation
     from ..reps import super_segmentation_object
 
-__all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
-           'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
+__all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'calc_contact_syn_mesh',
+           'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip', 'gen_mesh_voxelmask',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
-           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes', 'find_meshes']
+           'mesh_area_calc', 'mesh2obj_file', 'calc_rot_matrices', 'merge_someshes', 'find_meshes',
+           ]
 
 
 class MeshObject(object):
@@ -820,7 +816,7 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
 
     Returns: np.array
         Majority label of each face / triangle in mesh indices;
-        triangulation is assumed. If majority class has n=1, majority label is
+        Triangle faces are assumed. If majority class has n=1, majority label is
         set to -1.
 
     """
@@ -1062,116 +1058,6 @@ def mesh2obj_file(dest_path: str, mesh: List[np.ndarray],
     openmesh.write_mesh(dest_path, mesh_obj)
 
 
-def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
-                  decimate_mesh=0, gradient_direction='descent',
-                  force_single_cc=False):
-    """
-    Calculates triangulation of point cloud or dense volume using marching cubes
-    by building dense matrix (in case of a point cloud) and applying marching
-    cubes.
-
-    Args:
-        pts: np.array
-            [N, 3] or [N, M, O] (dtype: uint8, bool)
-        downsampling: Tuple[int]
-            Magnitude of downsampling, e.g. 1, 2, (..) which is applied to pts
-            for each axis
-        n_closings: int
-            Number of closings applied before mesh generation
-        single_cc: bool
-            Returns mesh of biggest connected component only
-        decimate_mesh: float
-            Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
-            vertices
-        gradient_direction: str
-            defines orientation of triangle indices. '?' is needed for KNOSSOS
-            compatibility.
-        force_single_cc: bool
-            If True, performans dilations until only one foreground CC is present
-            and then erodes with the same number to maintain size.
-
-    Returns: array, array, array
-        indices [M, 3], vertices [N, 3], normals [N, 3]
-
-    """
-    if boundaryDistanceTransform is None:
-        raise ImportError('"boundaryDistanceTransform" could not be imported from VIGRA. '
-                          'Please install vigra, see SyConn documentation.')
-    assert type(downsampling) in (tuple, list), "Downsampling has to be of type 'tuple' or list"
-    assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
-        "Point cloud used for mesh generation has wrong shape."
-    if pts.ndim == 2:
-        if np.max(pts) <= 1:
-            msg = "Currently this function only supports point " \
-                  "clouds with coordinates >> 1."
-            log_proc.error(msg)
-            raise ValueError(msg)
-        offset = np.min(pts, axis=0)
-        pts -= offset
-        pts = (pts / downsampling).astype(np.uint32)
-        # add zero boundary around object
-        margin = n_closings + 5
-        pts += margin
-        bb = np.max(pts, axis=0) + margin
-        volume = np.zeros(bb, dtype=np.float32)
-        volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
-    else:
-        volume = pts
-        if np.any(np.array(downsampling) != 1):
-            ndimage.zoom(volume, downsampling, order=0)
-        offset = np.array([0, 0, 0])
-    if n_closings > 0:
-        volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
-        if force_single_cc:
-            n_dilations = 0
-            while True:
-                labeled, nb_cc = ndimage.label(volume)
-                if nb_cc == 1:  # does not count background
-                    break
-                # pad volume to maintain margin at boundary and correct offset
-                volume = np.pad(volume, [(1, 1), (1, 1), (1, 1)],
-                                mode='constant', constant_values=0)
-                offset -= 1
-                volume = binary_dilation(volume, iterations=1).astype(np.float32)
-                n_dilations += 1
-    else:
-        volume = volume.astype(np.float32)
-    if single_cc:
-        labeled, nb_cc = ndimage.label(volume)
-        cnt = Counter(labeled[labeled != 0])
-        l, occ = cnt.most_common(1)[0]
-        volume = np.array(labeled == l, dtype=np.float32)
-    # InterpixelBoundary, OuterBoundary, InnerBoundary
-    dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary")
-    dt[volume == 1] *= -1
-    volume = gaussianSmoothing(dt, 1)
-    if np.sum(volume < 0) == 0 or np.sum(volume > 0) == 0:  # less smoothing
-        volume = gaussianSmoothing(dt, 0.5)
-    try:
-        verts, ind, norm, _ = measure.marching_cubes_lewiner(
-            volume, 0, gradient_direction=gradient_direction)
-    except Exception as e:
-        raise ValueError(e)
-    if pts.ndim == 2:  # account for [5, 5, 5] offset
-        verts -= margin
-    verts = np.array(verts) * downsampling + offset
-    if decimate_mesh > 0:
-        if not __vtk_avail__:
-            msg = "vtki not installed. Please install vtki."
-            log_proc.error(msg)
-            raise ImportError(msg)
-        ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind], axis=1)
-        mesh = vtki.PolyData(verts, ind.flatten())
-        mesh.decimate(decimate_mesh, volume_preservation=True)
-        # remove face sizes again
-        ind = mesh.faces.reshape((-1, 4))[:, 1:]
-        verts = mesh.points
-        mo = MeshObject("", ind, verts)
-        # compute normals
-        norm = mo.normals.reshape((-1, 3))
-    return [np.array(ind, dtype=np.int64), verts, norm]
-
-
 def mesh_area_calc(mesh):
     """
 
@@ -1184,3 +1070,158 @@ def mesh_area_calc(mesh):
     """
     return mesh_surface_area(mesh[1].reshape(-1, 3),
                              mesh[0].reshape(-1, 3)) / 1e6
+
+
+def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scale: np.ndarray,
+                       vertex_size: float = 10, boundary_struct: Optional[np.ndarray] = None,
+                       depth: int = 10, compute_connected_components: bool = True,
+                       voxel_size_simplify: Optional[float] = None,
+                       min_vert_num: int = 200, overlap: int = 1, verbose: bool = False,
+                       nb_neighbors: int = 20, std_ratio: float = 2.0) \
+        -> Union[List[np.ndarray], List[List[np.ndarray]]]:
+    """
+    Args:
+        voxel_iter: Iterator of binary voxel mask (3D cube) and cube offset (in voxels).
+        scale: Size of voxels in `mask_list` in nm (x, y, z).
+        vertex_size: In nm. Resolution used to simplify mesh.
+        boundary_struct: Connectivity of kernel used to determine boundary
+        depth: http://www.open3d.org/docs/latest/tutorial/Advanced/surface_reconstruction.html#Poi
+            sson-surface-reconstruction :
+            "An important parameter of the function is depth that defines the depth of the octree
+            used for the surface reconstruction and hence implies the resolution of the resulting
+            triangle mesh. A higher depth value means a mesh with more details."
+        compute_connected_components: Compute connected components of mesh. Return list of meshes.
+        voxel_size_simplify: Voxel size in nm when applying `simplify_vertex_clustering`. Defaults to `vertex_size`.
+        min_vert_num: Minimum number of vertices of the connected component meshes (only applied if
+            `compute_connected_components=True`).
+        overlap: Overlap between adjacent masks in `mask_list`.
+        verbose: Extra stdout output.
+        nb_neighbors: Number of neighbors used to calculate distance mean and standard deviation. See
+            http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
+        std_ratio: Standard deviation of distance between points used as threshold for filtering. See
+            http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
+
+    Notes: Use `voxel_iter` with cubes that have 1-voxel-overlap to guarantee that segmentation instance boundaries
+        that align with the 3D  array border are identified correctly.
+
+    Returns:
+        Flat Index/triangle, vertex and normals array of the mesh. List[ind, vert, norm] if
+        ``compute_connected_components=True``.
+    """
+    if voxel_size_simplify is None:
+        voxel_size_simplify = vertex_size
+    if boundary_struct is None:
+        # 26-connected
+        boundary_struct = np.ones((3, 3, 3))
+    pts, norm = [], []
+    for m, off in tqdm.tqdm(voxel_iter, disable=not verbose, desc='VoxelLoad'):
+        bndry = m.astype(np.float32) - binary_erosion(m, boundary_struct, iterations=1)
+        if overlap > 0:
+            m = m[overlap:-overlap, overlap:-overlap, overlap:-overlap]
+            bndry = bndry[overlap:-overlap, overlap:-overlap, overlap:-overlap]
+        try:
+            grad = gaussianGradient(m.astype(np.float32), 3)  # sigma=3
+        except RuntimeError:  # PreconditionViolation (current mask cube is smaller than kernel)
+            m = np.pad(m, 10)
+            grad = gaussianGradient(m.astype(np.float32), 3)[10:-10, 10:-10, 10:-10]
+        # mult. by -1 to make normals point outwards
+        mag = -np.linalg.norm(grad, axis=-1)
+        grad[mag != 0] /= mag[mag != 0][..., None]
+        nonzero_mask = np.nonzero(bndry)
+        if np.abs(mag[nonzero_mask]).min() == 0:
+            log_proc.warn('Found zero gradient during mesh generation.')
+        pts_ = np.transpose(nonzero_mask) + off + overlap
+        pts.append(pts_)
+        norm_ = grad[nonzero_mask]
+        norm.append(norm_)
+    norm = np.concatenate(norm)
+    pts = np.concatenate(pts) * scale
+    assert norm.shape == pts.shape, 'Incorrect shapes for normals and points.'
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(pts)
+    pcd.normals = o3d.utility.Vector3dVector(norm)
+    pcd = pcd.voxel_down_sample(voxel_size=vertex_size)  # reduce number of points
+    # TODO: add to config
+    pcd.remove_statistical_outlier(nb_neighbors=nb_neighbors, std_ratio=std_ratio)
+    pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(
+        radius=4*np.max(scale), max_nn=30))
+    # # TODO: use orient_normals_consistent_tangent_plane as soon as open3d>0.10 is working
+    # pcd.orient_normals_consistent_tangent_plane(100)
+    mesh, _ = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=depth)
+
+    # ball pivoting is slow
+    # radii = np.array([1, 2, 3, 4], dtype=np.float32) * vertex_size
+    # mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
+    #     pcd, o3d.utility.DoubleVector(radii.tolist()))
+
+    mesh = mesh.simplify_vertex_clustering(
+        voxel_size=voxel_size_simplify,
+        contraction=o3d.geometry.SimplificationContraction.Quadric)
+
+    if compute_connected_components:
+        triangle_clusters, cluster_n_triangles, cluster_area = (
+            mesh.cluster_connected_triangles())
+        # # TODO: remove explicit numpy conversion as soon as open3d>0.9 is working
+        triangle_clusters = np.array(triangle_clusters)
+        cluster_n_triangles = np.array(cluster_n_triangles)
+        # # TODO: use select_by_index as soon as open3d>0.9 is working
+        # triangles_to_remove = cluster_n_triangles[triangle_clusters] < min_vert_num
+        # mesh.remove_triangles_by_mask(triangles_to_remove)
+        # mesh = [mesh.select_by_index[np.transpose(np.nonzero(triangle_clusters == ix))] for ix in
+        #         range(len(cluster_n_triangles))]
+        mesh_ = []
+        for ii in range(len(cluster_n_triangles)):
+            if cluster_n_triangles[ii] < min_vert_num:
+                continue
+            m = copy.deepcopy(mesh)
+            m.remove_triangles_by_mask(triangle_clusters != ii)
+            mesh_.append(m)
+        mesh = mesh_
+    else:
+        mesh = [mesh]
+    for ii in range(len(mesh)):
+        m = mesh[ii]
+        verts = np.asarray(m.vertices).flatten()
+        verts[verts < 0] = 0
+        mesh[ii] = [np.asarray(m.triangles).flatten(), verts, np.asarray(m.vertex_normals).flatten()]
+    return mesh
+
+
+def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
+                          voxel_dc: Optional[Union[VoxelStorageLazyLoading, VoxelStorageDyn]] = None,
+                          **gen_kwgs) -> Union[List[np.ndarray], List[List[np.ndarray]]]:
+    """
+
+    Args:
+        segobj:
+        voxel_dc:
+        **gen_kwgs:
+
+    Returns:
+
+    """
+    assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
+    if segobj._voxel_list is None:
+        if segobj.type == 'cs':
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
+            voxels = np.array(voxel_dc.get_voxel_cache(segobj.id), dtype=np.uint32)
+        else:
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageLazyLoading(segobj.voxel_path)
+            voxels = np.array(voxel_dc[segobj.id], dtype=np.uint32)
+    else:
+        voxels = np.array(segobj._voxel_list, dtype=np.uint32)
+    abs_offset = np.min(voxels, axis=0)
+    # reduce offset by one -> voxels in 3D cube will have an additional offset of 1 which creates a border of 0s.
+    voxels -= abs_offset - 1
+    id_mask = np.zeros(np.max(voxels, axis=0) + 2, dtype=np.bool)
+    id_mask[voxels[:, 0], voxels[:, 1], voxels[:, 2]] = True
+    return gen_mesh_voxelmask(zip([id_mask], [abs_offset - 1]), segobj.scaling, overlap=0, **gen_kwgs)
+
+
+def calc_cell_mesh_from_points(segobj: 'segmentation.SegmentationObject', **gen_kwgs) \
+        -> Union[List[np.ndarray], List[List[np.ndarray]]]:
+    voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
+    voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
+    return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1, compute_connected_components=False, **gen_kwgs)

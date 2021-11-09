@@ -2,13 +2,18 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 
-from syconn.reps.rep_helper import find_object_properties
-from syconn.extraction.cs_extraction_steps import detect_cs
+from syconn.extraction.find_object_properties import detect_cs, detect_cs_64bit, detect_seg_boundaries, \
+    find_object_properties, find_object_properties_cs_64bit
 import numpy as np
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
 from syconn.reps.rep_helper import colorcode_vertices
+from syconn.reps.connectivity_helper import cs_id_to_partner_ids_vec, cs_id_to_partner_inverse
 from scipy import spatial
+
+# test cube properties
+cube_size = 5
+stencil = np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32)
 
 
 def test_find_object_properties():
@@ -47,9 +52,10 @@ def test_find_object_properties():
             "Bounding box dictionary mismatch."
 
 
-def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
+def _helpertest_detect_cs(distance_between_cube, stencil, cube_size, test_func=detect_cs):
     """
-    Assert statement fails if detect_cs() method does not work properly
+    Assert statement fails if test_func method does not work properly (
+    func:`~syconn.extraction.cs_extraction_steps.detect_cs`).
 
     Args:
         distance_between_cube: Distance between cubes of two different ids
@@ -59,10 +65,40 @@ def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
     Returns:
 
     """
+    sample, expected_ids_low, expected_ids_high = _gen_sample_seg(distance_between_cube, stencil, cube_size)
+    edge_id_output_sample = test_func(sample)
+    higher_id_array = np.asarray(edge_id_output_sample, np.uint32)                       #retracts 32 bit cell id of higher value
+    lower_id_array = np.asarray(edge_id_output_sample, np.uint64) // (2 ** 32)           #retracts 32 bit cell id of lower value
+
+    assert np.array_equal(np.array(expected_ids_high, np.uint32), np.array(higher_id_array, np.uint32)), \
+        "higher value cell id array do not match"
+    assert np.array_equal(np.array(expected_ids_low, np.uint32), np.array(lower_id_array, np.uint32)), \
+        "lower value cell id array do not match"
+
+
+def _helpertest_detect_cs_64bit(distance_between_cube, stencil, cube_size):
+    """
+    Assert statement fails if test_func method does not work properly (
+    func:`~syconn.extraction.cs_extraction_steps.detect_cs`).
+
+    Args:
+        distance_between_cube: Distance between cubes of two different ids
+        stencil: Generic stencil size
+        cube_size: Generic cube size of two different ids
+
+    Returns:
+
+    """
+    sample, expected_ids_low, expected_ids_high = _gen_sample_seg(distance_between_cube, stencil, cube_size)
+    cs = detect_cs_64bit(sample)
+    assert np.array_equal(np.array(expected_ids_high, np.uint32), cs[..., 1]), \
+        "higher value cell id array do not match"
+    assert np.array_equal(np.array(expected_ids_low, np.uint32), cs[..., 0]), \
+        "lower value cell id array do not match"
+
+
+def _gen_sample_seg(distance_between_cube, stencil, cube_size):
     assert (np.amax(distance_between_cube) > cube_size), "Distance between cubes should be grater than cube size"
-    stencil = stencil
-    cube_size = cube_size                                                                #cube size
-    distance_between_cube = distance_between_cube                                        #distance between cube
     offset = stencil // 2                                                                #output offset adjustment due to stencil size
     a = np.amax(offset + 1)                                                              #co-ordinate of topmost corner of first cube
     edge_s = np.amax(stencil + distance_between_cube + cube_size)  # data cube size
@@ -71,35 +107,66 @@ def _helpertest_detect_cs(distance_between_cube, stencil, cube_size):
     d = distance_between_cube                                                            #dummy variable
     sample[a:a+c, a:a+c, a:a+c] = 4                                                      #cell_id cube 1
     sample[a+d[0]:a+d[0]+c, a+d[1]:a+d[1]+c, a+d[2]:a+d[2]+c] = 5                        #cell_id cube 2
-    edge_id_output_sample = detect_cs(sample)
-    higher_id_array = np.asarray(edge_id_output_sample, np.uint32)                       #retracts 32 bit cell id of higher value
-    lower_id_array = np.asarray(edge_id_output_sample, np.uint64) // (2 ** 32)           #retracts 32 bit cell id of lower value
+
     counter = d - offset                                                                 #checks if distance between cubes is longer than stencil size
     output_offset = np.maximum(0, counter)                                               #adjusts output offset accordingly
     output_shape = np.array(sample.shape + np.array([1, 1, 1]) - stencil)
     o_o = output_offset                                                                  #dummy variable for output cube size
     o = offset                                                                           #dummy variable for offset due to stencil size
 
-    output_id = np.zeros((output_shape[0], output_shape[1], output_shape[2]), dtype=np.uint32)
+    otuput_mask = np.zeros((output_shape[0], output_shape[1], output_shape[2]), dtype=np.uint32)
 
-    output_id[a-o[0]+o_o[0]:a+c-o[0], a-o[1]+o_o[1]:a+c-o[1], a-o[2]+o_o[2]:a+c-o[2]] = 1
-    output_id[a+d[0]-o[0]:a+d[0]+c-o[0]-o_o[0], a+d[1]-o[1]:a+d[1]+c-o[1]-o_o[1], a+d[2]-o[2]:a+d[2]+c-o[2]-o_o[2]] = 1
-    output_id[a-o[0]+1:a+c-o[0]-1, a-o[1]+1:a+c-o[1]-1, a-o[2]+1:a+c-o[2]-1] = 0
-    output_id[a+d[0]-o[0]+1:a+d[0]+c-o[0]-1, a+d[1]-o[1]+1:a+d[1]+c-o[1]-1, a+d[2]-o[2]+1:a+d[2]+c-o[2]-1] = 0
-
-    assert np.array_equal(np.array(5*output_id, np.uint32), np.array(higher_id_array, np.uint32)), \
-        "higher value cell id array do not match"
-    assert np.array_equal(np.array(4*output_id, np.uint32), np.array(lower_id_array, np.uint32)), \
-        "lower value cell id array do not match"
+    otuput_mask[a-o[0]+o_o[0]:a+c-o[0], a-o[1]+o_o[1]:a+c-o[1], a-o[2]+o_o[2]:a+c-o[2]] = 1
+    otuput_mask[a+d[0]-o[0]:a+d[0]+c-o[0]-o_o[0], a+d[1]-o[1]:a+d[1]+c-o[1]-o_o[1], a+d[2]-o[2]:a+d[2]+c-o[2]-o_o[2]] = 1
+    otuput_mask[a-o[0]+1:a+c-o[0]-1, a-o[1]+1:a+c-o[1]-1, a-o[2]+1:a+c-o[2]-1] = 0
+    otuput_mask[a+d[0]-o[0]+1:a+d[0]+c-o[0]-1, a+d[1]-o[1]+1:a+d[1]+c-o[1]-1, a+d[2]-o[2]+1:a+d[2]+c-o[2]-1] = 0
+    return sample, 4 * otuput_mask, 5 * otuput_mask
 
 
 def test_detect_cs():
-    _helpertest_detect_cs(np.array([0, 6, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs(np.array([6, 0, 0]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs(np.array([0, 0, 6]),
-                   np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
+    _helpertest_detect_cs(np.array([0, 6, 0]), stencil, cube_size)
+    _helpertest_detect_cs(np.array([6, 0, 0]), stencil, cube_size)
+    _helpertest_detect_cs(np.array([0, 0, 6]), stencil, cube_size)
+
+
+def test_detect_cs_64bit():
+    _helpertest_detect_cs_64bit(np.array([0, 6, 0]), stencil, cube_size)
+    _helpertest_detect_cs_64bit(np.array([6, 0, 0]), stencil, cube_size)
+    _helpertest_detect_cs_64bit(np.array([0, 0, 6]), stencil, cube_size)
+
+
+def test_find_object_properties_cs_64bit():
+    sample = np.zeros((20, 20, 20), dtype=np.uint64)
+    sample[5, 5, 5] = cs_id_to_partner_inverse([100, 200])
+    sample[19, 15, 5] = cs_id_to_partner_inverse([50, 200])
+    sample[11, 3, 9] = cs_id_to_partner_inverse([1, 50])
+    rep_coords1, bounding_boxes1, sizes1 = find_object_properties(sample)
+    sample = np.array([cs_id_to_partner_ids_vec([k])[0] for k in sample.flatten()],
+                      dtype=np.uint64).reshape((20, 20, 20, 2))
+    rep_coords2, bounding_boxes2, sizes2 = find_object_properties_cs_64bit(sample)
+    for k in sizes1:  # keys are tuples of IDs
+        # get properties from 32 bit extraction method
+        s1 = sizes1[k]
+        r1 = rep_coords1[k]
+        b1 = bounding_boxes1[k]
+        # get properties from 64 bit extraction method
+        id1, id2 = cs_id_to_partner_ids_vec([k])[0]
+        s2 = sizes2[id1][id2]
+        r2 = rep_coords2[id1][id2]
+        b2 = bounding_boxes2[id1][id2]
+        assert s1 == s2, f'Size mis-match (32 bit vs 64 bit): {s1} vs. {s2}'
+        assert np.all(r1 == r2), f'Coordinate mis-match (32 bit vs 64 bit): {r1} vs. {r2}'
+        assert np.all(b1 == b2), f'Bounding box mis-match (32 bit vs 64 bit): {b1} vs. {b2}'
+
+
+def test_boundary_gen():
+    bdry = detect_seg_boundaries(np.arange(1000).reshape((10, 10, 10))).flatten()
+    # background IDs (0) are not inspected
+    assert bdry[0] == 0
+    # all IDs > 0 must have been detected as boundary
+    assert np.all(bdry[1:])
+    bdry = detect_seg_boundaries(np.zeros((10, 10, 10)))
+    assert np.all(~bdry)
 
 
 def test_chunk_weighted():
@@ -142,8 +209,4 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
 
 
 if __name__ == '__main__':
-    test_chunk_weighted()
-    test_colorcode_vertices(5, 50)
-    _helpertest_detect_cs(np.array([0, 6, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs(np.array([6, 0, 0]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
-    _helpertest_detect_cs(np.array([0, 0, 6]), np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32), 5)
+    test_find_object_properties_cs_64bit()

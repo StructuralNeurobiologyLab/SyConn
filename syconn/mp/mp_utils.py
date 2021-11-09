@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 import multiprocessing.pool
 import time
+import dill
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from typing import Callable, List, Union
@@ -19,7 +20,8 @@ MyPool = multiprocessing.Pool
 
 
 def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs: int,
-                     use_kwargs: bool = False, front_num: int = 0, show_progress: bool = True) -> list:
+                     use_kwargs: bool = False, front_num: int = 0, show_progress: bool = True,
+                     use_dill: bool = False) -> list:
     """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
      A parallel version of the map function with a progress bar.
 
@@ -34,6 +36,7 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
             Useful for catching bugs.
         n_jobs:
         show_progress: show progress
+        use_dill:
 
     Returns:
         [function(array[0]), function(array[1]), ...]
@@ -48,7 +51,9 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
     pool = ProcessPoolExecutor(max_workers=n_jobs)
     try:
         # Pass the elements of array into function
-        if use_kwargs:
+        if use_dill:
+            futures = [pool.submit(_run_dill_encoded, (dill.dumps((function, a)))) for a in array[front_num:]]
+        elif use_kwargs:
             futures = [pool.submit(function, **a) for a in array[front_num:]]
         else:
             futures = [pool.submit(function, a) for a in array[front_num:]]
@@ -78,6 +83,11 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
             raise Exception(e)
             out.append(e)
     return front + out
+
+
+def _run_dill_encoded(payload):
+    fun, args = dill.loads(payload)
+    return fun(args)
 
 
 def start_multiprocess(func: Callable, params: list, debug: bool = False,
@@ -129,7 +139,8 @@ def start_multiprocess(func: Callable, params: list, debug: bool = False,
 
 def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True,
-                            ignore_cpu_cnt=False):
+                            ignore_cpu_cnt=False, desc: str = None,
+                            use_dill: bool = False):
     """
 
     Args:
@@ -140,6 +151,8 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
         nb_cpus:
         show_progress:
         ignore_cpu_cnt:
+        desc: Task description. Used for progress bar.
+        use_dill:
 
     Returns:
         list of function returns.
@@ -150,6 +163,11 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
         cpu_cnt = 999999999
     else:
         cpu_cnt = cpu_count()
+    if desc is None:
+        if hasattr(func, '__name__'):
+            desc = f'{func.__name__}'
+        else:
+            desc = str(func)
     nb_cpus = min(nb_cpus, len(params), cpu_cnt)
 
     if debug:
@@ -161,12 +179,13 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        result = parallel_process(params, func, nb_cpus, show_progress=show_progress)
+        result = parallel_process(params, func, nb_cpus, show_progress=show_progress, use_dill=use_dill)
     else:
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
                              miniters=1, mininterval=1, unit='job',
-                             unit_scale=True, dynamic_ncols=False)
+                             unit_scale=True, dynamic_ncols=False,
+                             desc=desc)
             result = []
             for p in params:
                 result.append(func(p))
