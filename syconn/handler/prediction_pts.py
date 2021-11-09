@@ -182,15 +182,17 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                                     break
                             except queues.Empty:
                                 break
+                        # shuffle to break symmetry
+                        np.random.shuffle(stops_received_notneeded)
                         for el in stops_received_notneeded:
                             q_in.put_nowait(el)
-                        if len(stops_received_notneeded) > 0:
+                        if (time.time() - start_time > 3600 / 2) and len(stops_received_notneeded) > 0:
                             log_handler.debug(
                                 f'Worker pred {worker_cnt} got STOP handles {stops_received_notneeded} multiple '
                                 f'times. Putting it back to the queue.')
                             # prevent freeze in case two loader keep pulling the same STOP item over and over.
                             time.sleep(np.random.randint(35) / 10)
-                            stops_received_notneeded = []
+                        stops_received_notneeded = []
                     if len(stops_received) == n_worker_load:
                         break
                     continue
@@ -272,8 +274,7 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
                 if show_progress:
                     pbar.close()
                 if cnt_loder_done != nloader:
-                    log_handler.error(f'Only {cnt_loder_done}/{nloader} loader finished.')
-                    sys.exit(1)
+                    log_handler.warning(f'Only {cnt_loder_done}/{nloader} loader finished.')
                 break
             if show_progress:
                 pbar.update(res)
@@ -424,7 +425,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         else:
             ssv_ids = np.array(ssv_ids, np.uint64)
         ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
-                                            nb_cpus=None, desc='Size-sorting')
+                                            nb_cpus=None, desc='Size-sorting', show_progress=False)
         ssv_sizes = np.array(ssv_sizes)
         sorted_ix = np.argsort(ssv_sizes)[::-1]
         ssv_ids = ssv_ids[sorted_ix]
@@ -864,6 +865,15 @@ def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
     ssv_kwargs, model_inp, batch_progress, n_batches = inp
     n_samples = len(model_inp[0])
     res = []
+    # Prevent silent crash with zero sized inputs
+    if model_inp[0].size == 0:
+        inp_sh = np.array(model_inp[0].shape)
+        inp_sh[inp_sh == 0] = 1
+        model_inp0 = np.zeros(inp_sh, dtype=np.float32)
+        inp_sh = np.array(model_inp[1].shape)
+        inp_sh[inp_sh == 0] = 1
+        model_inp1 = np.zeros(inp_sh, dtype=np.float32)
+        model_inp = (model_inp0, model_inp1)
     for ii in range(0, int(np.ceil(n_samples / bs))):
         low = bs * ii
         high = bs * (ii + 1)
@@ -1436,15 +1446,13 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
             if curr_ix == res['n_batches']:
                 break
         except Exception as e:
-            print(f'ERROR during "pts_postproc_embedding" of {sso}: {str(e)}')
-            log_handler.error(f'ERROR during "pts_postproc_embedding" of {sso}: {str(e)}')
+            log_handler.error(f'Exception during "pts_postproc_embedding" of {sso}: {str(e)}')
             raise Exception from e
 
     node_embedding = np.concatenate(node_embedding)
     node_coords = np.concatenate(node_coords)
 
     # map inference sites of latent vecs to skeleton node locations via nearest neighbor
-    # TODO: perform interpolation?
     sso.load_skeleton()
     hull_tree = spatial.cKDTree(node_coords)
     dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
@@ -2041,7 +2049,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
         use_myelin = True
     else:
         use_myelin = False
-    default_kwargs = dict(nloader=8, npredictor=4, npostproc=2, bs=10, loader_kwargs=dict(
+    default_kwargs = dict(nloader=10, npredictor=2, npostproc=2, bs=10, loader_kwargs=dict(
         n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True,
         use_myelin=use_myelin))
     postproc_kwargs = dict(pred_key=pred_key)
@@ -2090,7 +2098,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         use_syntype = False
     if '_cellshapeOnly' in mpath:
         cellshape_only = True
-    default_kwargs = dict(nloader=8, npredictor=4, bs=10, npostproc=2,
+    default_kwargs = dict(nloader=10, npredictor=2, bs=20, npostproc=2,
                           loader_kwargs=dict(redundancy=20, map_myelin=map_myelin, use_syntype=use_syntype,
                                              cellshape_only=cellshape_only),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
@@ -2166,7 +2174,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=6, npredictor=2, npostproc=4, bs=batchsizes)
+    default_kwargs = dict(nloader=8, npredictor=2, npostproc=4, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')
