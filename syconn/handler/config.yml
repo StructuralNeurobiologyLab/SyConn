@@ -12,7 +12,7 @@ pyopengl_platform: 'egl'
 version:
 
 # KnossosDataset for 'sj' type is required to exist, but it is not needed to be processed like 'mi', ..
-process_cell_organelles: ['mi', 'vc']#, 'er', 'golgi']
+process_cell_organelles: ['mi', 'vc']#, 'er', 'golgi']  # 'sj'
 syntype_avail: False
 
 # Compute backend: 'SLURM', None

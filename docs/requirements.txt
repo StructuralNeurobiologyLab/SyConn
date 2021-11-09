@@ -15,6 +15,7 @@ networkx
 lz4
 flask
 fasteners
+pandas
 numpy <= 1.21
 coloredlogs
 termcolor

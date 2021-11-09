@@ -315,7 +315,7 @@ def gt_generation(kzip_paths, out_path, version: str = None, overwrite=True):
     params = [(p, out_path, version, overwrite) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=True)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=False)
 
 
 if __name__ == "__main__":
