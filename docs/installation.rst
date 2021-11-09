@@ -48,3 +48,5 @@ try to install lemon from scratch or via conda::
 
 
 If glibc >= 2.27 is available on you compute environment you can relax the open3d and pytorch versio. restriction.
+
+Also see the dumps of environment yaml files in the example folder.

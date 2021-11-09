@@ -188,12 +188,12 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
-    log.info('Step 1/9 - Predicting sub-cellular structures')
-    ftimer.start('Dense predictions')
+    # log.info('Step 1/9 - Predicting sub-cellular structures')
+    # ftimer.start('Dense predictions')
     # exec_dense_prediction.predict_myelin()
     # exec_dense_prediction.predict_cellorganelles()
     # exec_dense_prediction.predict_synapsetype()
-    ftimer.stop()
+    # ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     ftimer.start('SD generation')

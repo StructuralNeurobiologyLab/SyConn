@@ -68,7 +68,6 @@ def anno_skeleton2np(a_obj, scaling, verbose=False):
     a_node_labels[a_node_labels == 13] = 0  # convert to dendrite
     a_node_labels[a_node_labels == 14] = 1  # convert to axon
     # remove labels on branches that are only at the soma
-
     # propagate labels, nodes with no label get label from nearest node with label
     if -1 in a_node_labels:
         if verbose:
@@ -130,12 +129,11 @@ def labels2mesh(args):
     a_node_coords_orig = np.array(a_node_coords)
 
     # remove nodes with ignore labels
-    for l_remove in label_remove['fine']:
+    for l_remove in label_remove[TARGET_LABELS]:
         a_node_coords = a_node_coords[(a_node_labels != l_remove)]
         a_node_labels = a_node_labels[(a_node_labels != l_remove)]
         a_node_coords_orig = a_node_coords_orig[(a_node_labels_orig != l_remove)]
         a_node_labels_orig = a_node_labels_orig[(a_node_labels_orig != l_remove)]
-
     # remap labels
     for orig, new in label_mapping:
         a_node_labels[a_node_labels == orig] = new
@@ -153,8 +151,8 @@ def labels2mesh(args):
     # TODO: use graph traversal approach
     dists, ixs = kdt.query(nodes, distance_upper_bound=1000)
     node_labels[dists == np.inf] = 0
+    raise()
     node_orig_labels[dists != np.inf] = a_node_labels_orig[ixs[dists != np.inf]]
-
     kdt = cKDTree(a_node_coords)
     # load cell and cell organelles
     # _ = sso._load_obj_mesh('syn_ssv', rewrite=True)
@@ -317,16 +315,16 @@ def gt_generation(kzip_paths, out_path, version: str = None, overwrite=True):
     params = [(p, out_path, version, overwrite) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=False)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=True)
 
 
 if __name__ == "__main__":
-    TARGET_LABELS = 'ads'  # 'fine'
+    TARGET_LABELS = 'fine'  # 'ads'
     # j0251 GT refined
     global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
 
-    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_06_30_more_samples/"
-    destination = data_path + '/hc_out_2021_07_ads/'
+    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/valid/"
+    destination = data_path + '/hc_out_2021_11_fine/'
     os.makedirs(destination, exist_ok=True)
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
 

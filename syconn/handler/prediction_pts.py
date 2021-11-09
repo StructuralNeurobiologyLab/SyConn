@@ -17,6 +17,7 @@ import time
 import glob
 from collections import defaultdict
 from multiprocessing import Process, Queue, Manager, queues
+import logging
 from typing import Iterable, Union, Optional, Tuple, Callable, List
 import morphx.processing.clouds as clouds
 import networkx as nx
@@ -158,20 +159,46 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
             model_loader_kwargs = dict()
         m = model_loader(mpath, device, **model_loader_kwargs)
         stops_received = set()
+        stops_received_notneeded = list()
+        start_time = time.time()
         while True:
             try:
                 inp = q_in.get_nowait()
-                if 'STOP' in inp:
+                if 'STOP' in inp and isinstance(inp, str):
                     if inp not in stops_received:
                         stops_received.add(inp)
                     else:
-                        q_in.put_nowait(inp)
-                        time.sleep(np.random.randint(25) / 10)
+                        stops_received_notneeded.append(inp)
+                        while True:
+                            try:
+                                inp = q_in.get_nowait()
+                                if 'STOP' in inp and isinstance(inp, str):
+                                    if inp not in stops_received:
+                                        stops_received.add(inp)
+                                    else:
+                                        stops_received_notneeded.append(inp)
+                                else:
+                                    pred_func(m, inp, q_out, d_out, q_progress, device, bs)
+                                    break
+                            except queues.Empty:
+                                break
+                        for el in stops_received_notneeded:
+                            q_in.put_nowait(el)
+                        if len(stops_received_notneeded) > 0:
+                            log_handler.debug(
+                                f'Worker pred {worker_cnt} got STOP handles {stops_received_notneeded} multiple '
+                                f'times. Putting it back to the queue.')
+                            # prevent freeze in case two loader keep pulling the same STOP item over and over.
+                            time.sleep(np.random.randint(35) / 10)
+                            stops_received_notneeded = []
                     if len(stops_received) == n_worker_load:
                         break
                     continue
             except queues.Empty:
-                time.sleep(0.25)
+                time.sleep(1)
+                if (time.time() - start_time > 3600 / 2) and len(stops_received) > 0:
+                    log_handler.warning(f'Worker pred {worker_cnt} stuck with {len(stops_received)} '
+                                        f'STOP signals: {stops_received}')
                 continue
             pred_func(m, inp, q_out, d_out, q_progress, device, bs)
     except Exception as e:
@@ -238,7 +265,7 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
     cnt_loder_done = 0
     while True:
         if q_progress.empty():
-            time.sleep(0.25)
+            time.sleep(0.5)
         else:
             res = q_progress.get_nowait()
             if res is None:  # final stop
@@ -397,7 +424,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         else:
             ssv_ids = np.array(ssv_ids, np.uint64)
         ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
-                                            nb_cpus=None)
+                                            nb_cpus=None, desc='Size-sorting')
         ssv_sizes = np.array(ssv_sizes)
         sorted_ix = np.argsort(ssv_sizes)[::-1]
         ssv_ids = ssv_ids[sorted_ix]
@@ -607,7 +634,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             del feat_dc['sv_myelin']
     for ssv_id in ssv_ids:
         redundancy_ssv = int(redundancy)
-        n_batches = int(np.ceil(redundancy_ssv / batchsize))
+        n_batches = max(int(np.ceil(redundancy_ssv / batchsize)), 1)
         ssv = ssd.get_super_segmentation_object(ssv_id)
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin))
         ssv.clear_cache()
@@ -650,7 +677,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                         if len(sample_feats) > 0 or npoints_ssv == 0:
                             break
                         if sn_cnt >= len(source_nodes_all):
-                            msg = (f'Crould not find context with > 0 vertices during batch '
+                            msg = (f'Could not find context with > 0 vertices during batch '
                                    f'generation of {ssv} in method "pts_loader_scalar_infer".')
                             log_handler.error(msg)
                             raise ValueError(msg)
@@ -2071,6 +2098,8 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
+
+    log_handler.debug(f'Starting "predict_celltype_ssd" with {len(ssv_ids)} cells.')
     out_dc = predict_pts_plain(ssd_kwargs, get_celltype_model_pts, pts_loader_scalar_infer, pts_pred_scalar,
                                postproc_func=pts_postproc_scalar, mpath=mpath, ssv_ids=ssv_ids,
                                show_progress=show_progress, **loader_kwargs, **default_kwargs)

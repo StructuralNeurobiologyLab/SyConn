@@ -48,9 +48,12 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
 
     sso = ssd.get_super_segmentation_object(sso_id)
     scaling = sso.scaling
-    a_coords, a_edges, a_labels, a_labels_raw, graph, a_node_labels_orig = \
-        anno_skeleton2np(file, scaling, verbose=False, convert_to_morphx=convert_to_morphx)
-
+    try:
+        a_coords, a_edges, a_labels, a_labels_raw, graph, a_node_labels_orig = \
+            anno_skeleton2np(file, scaling, verbose=False, convert_to_morphx=convert_to_morphx)
+    except Exception as e:
+        print(f'Could not load annotation file "{file}" due to error: {str(e)}')
+        return
     indices, vertices, _ = sso.mesh
     vertices = vertices.reshape((-1, 3))
     # TODO: voxelize requires adaption of indices in the case of convert_to_morphx=False
@@ -118,8 +121,8 @@ def process_file(file: str, o_path: str, ctype: str, convert_to_morphx: bool = F
 if __name__ == '__main__':
     # set convert_to_morphx = False to only generate new colorings of kzips
     convert_to_morphx = False
-    a_path = '/wholebrain/scratch/jklimesch/gt/j0251/21_03_13_annotations_refinment_round1/raw/'
-    o_path = '/wholebrain/scratch/pschuber/compartments_j0251/hybrid_clouds_refined01/'
+    a_path = '/wholebrain/scratch/pschuber/tmp/to_colorize/'
+    o_path = '/wholebrain/scratch/pschuber/tmp/colored//'
     if not os.path.exists(o_path):
         os.makedirs(o_path)
     files = os.listdir(a_path)
