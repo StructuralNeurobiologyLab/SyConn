@@ -9,9 +9,11 @@ channels:
   - menpo
   - open3d-admin
   - pyg
+  - nvidia
 dependencies:
+  - nvidia::cudatoolkit=10.2
   # From -c pytorch
-  - pytorch >=1.8  # (provide backwards compat. to trained models)
+  - pytorch::pytorch >=1.8,<=1.9  # can be > 1.9 if glibc >=2.27 is available
   - torchvision
   - pyg
   - pytorch-sparse
@@ -57,10 +59,10 @@ dependencies:
   - pillow
 
   # From -c menpo
-  - osmesa
+  - menpo::osmesa
 
   # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
-  - open3d = 0.9.0
+  - open3d-admin::open3d = 0.9.0
 
   # For tests (optional):
   - pytest
