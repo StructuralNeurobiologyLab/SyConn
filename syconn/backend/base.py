@@ -18,9 +18,8 @@ try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:  # TODO: check in global_params.py
+try:
     import fasteners
-
     LOCKING = True
 except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
@@ -138,7 +137,8 @@ class FSBase(StorageBase):
             max_nb_attempts: Number of total attempts
         """
         super(FSBase, self).__init__(cache_decomp)
-        if not LOCKING or global_params.config['disable_locking']:
+        if not LOCKING and not disable_locking:
+            log_extraction.warning('Locking could not be enabled due to missing "fasteners" package.')
             disable_locking = True
         self.read_only = read_only
         self.a_lock = None

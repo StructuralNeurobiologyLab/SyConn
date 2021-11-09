@@ -242,30 +242,29 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 def test_compression_and_decompression_for_mesh_dict():
     test_p = _setup_testfile('test3')
 
-    if not global_params.config['disable_locking']:
-        try:
-            md = MeshStorage(test_p, read_only=False, disable_locking=False)
-            md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
-                     np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
+    try:
+        md = MeshStorage(test_p, read_only=False, disable_locking=False)
+        md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
+                 np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
 
-            logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
-            logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))
+        logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
+        logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))
 
-            md.push()
+        md.push()
 
-        except Exception as e:
-            logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 1 ' + str(e))
-            raise AssertionError
+    except Exception as e:
+        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 1 ' + str(e))
+        raise AssertionError
 
-        # checks if lock release after saving works by saving a second time without acquiring lock
-        try:
-            md.push()
-            logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ')
-            raise AssertionError
-        except Exception as e:
-            assert str(e) == "Unable to release an unacquired lock"
+    # checks if lock release after saving works by saving a second time without acquiring lock
+    try:
+        md.push()
+        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ')
+        raise AssertionError
+    except Exception as e:
+        assert str(e) == "Unable to release an unacquired lock"
 
-        logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
+    logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 
     # checks mesh dict compression with highest entropy data
     md = MeshStorage(test_p, read_only=False)

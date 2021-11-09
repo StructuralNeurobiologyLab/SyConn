@@ -38,9 +38,6 @@ log_level: 10  # INFO: 20, DEBUG: 10
 # will be stored at wd + '/logs/'.
 disable_file_logging: True
 
-# File locking - deprecated.
-disable_locking: True
-
 # Data paths
 paths:
   kd_seg:

@@ -30,7 +30,11 @@ if __name__ == '__main__':
                         help='Level of logging (INFO, DEBUG).')
     parser.add_argument('--overwrite', dest='overwrite', action='store_true',
                         help='Overwrite generated data.')
-    parser.set_defaults(overwrite=False)
+    parser.add_argument('--run_server', help='Run syconn KNOSSOS server after processing.',
+                        dest='run_server', action='store_true')
+    parser.add_argument('--prior_astrocyte_removal', help='Separate astrocytes from neurons.',
+                        dest='prior_astrocyte_removal', action='store_true')
+    parser.set_defaults(overwrite=False, run_server=False, prior_astrocyte_removal=False)
     args = parser.parse_args()
     example_cube_id = int(args.example_cube)
     log_level = args.log_level
@@ -42,9 +46,8 @@ if __name__ == '__main__':
     experiment_name = 'j0126_example'
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
-    prior_astrocyte_removal = False
     key_val_pairs_conf = [
-        ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
+        ('glia', {'prior_astrocyte_removal': args.prior_astrocyte_removal}),
         ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
@@ -80,6 +83,7 @@ if __name__ == '__main__':
     else:
         chunk_size = (512, 512, 256)
     n_folders_fs = 100
+
     n_folders_fs_sc = 100
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
@@ -135,7 +139,7 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    if not prior_astrocyte_removal:
+    if not args.prior_astrocyte_removal:
         shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
@@ -269,7 +273,8 @@ if __name__ == '__main__':
 
     time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-             'can be analyzed via the KNOSSOS-SyConn plugin at '
-             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    if args.run_server:
+        log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+                 'can be analyzed via the KNOSSOS-SyConn plugin at '
+                 '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+        os.system(f'syconn.server --working_dir={example_wd} --port=10001')
