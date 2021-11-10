@@ -2,9 +2,9 @@ import os
 import re
 import pickle as pkl
 
-base = os.path.expanduser('~/working_dir/paper/dnh_matrix/')
-save_path = os.path.expanduser('~/working_dir/paper/')
-target_path = os.path.expanduser('~/working_dir/paper/')
+base = os.path.expanduser('/wholebrain/scratch/jklimesch/paper/dnh_matrix_update_cmn_ads/models/')
+save_path = os.path.expanduser('/wholebrain/scratch/jklimesch/paper/dnh_matrix_update_cmn_ads/')
+target_path = os.path.expanduser('/wholebrain/scratch/jklimesch/paper/dnh_matrix_update_cmn_ads/')
 dirs = [d for d in os.listdir(base) if os.path.isdir(base + d)]
 
 results = {}

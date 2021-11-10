@@ -13,7 +13,7 @@ def evaluate_syn_thread(args):
     base = args[0]
     path = args[1]
     global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    with open(os.path.expanduser('~/working_dir/gt/syn_gt/converted_v3.pkl'), 'rb') as f:
+    with open(os.path.expanduser('/wholebrain/scratch/jklimesch/gt/syn_gt/converted_v3.pkl'), 'rb') as f:
         data = pkl.load(f)
     files = os.listdir(base + path)
     save_path = ''
@@ -39,7 +39,7 @@ def evaluate_syn_thread(args):
                 preds = pkl.load(f)
 
             # 0: dendrite, 1: axon, 2: soma
-            pc_ads = replace_preds(sso, 'ads', [])
+            pc_ads = replace_preds(sso, 'ads_cmn', [])
             # 0: dendrite, 1: neck, 2: head
             pc_dnh = replace_preds(sso, preds, [])
 
@@ -56,7 +56,7 @@ def evaluate_syn_thread(args):
 
             mask = np.ones((len(coords), 1), dtype=bool)
 
-            # 0: dendrite, 1: axon, 2: head, 3: soma
+            # 0: dendrite, 1: neck, 2: head, 3: other
             for ix in range(len(gt)):
                 if gt[ix] == 1 or gt[ix] == 3:
                     mask[ix] = False

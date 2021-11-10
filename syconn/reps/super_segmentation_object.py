@@ -2153,7 +2153,6 @@ class SuperSegmentationObject(SegmentationBase):
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
-                cols = (cols * 255).astype(np.uint8)
             elif 'axon' in semseg_key:
                 # cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                 #                  [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1],
@@ -2163,10 +2162,14 @@ class SuperSegmentationObject(SegmentationBase):
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.8, 0.8, 0.1, 1], [0.9, 0.9, 0.9, 1],
                                  [0.1, 0.1, 0.9, 1]])
-                cols = (cols * 255).astype(np.uint8)
+            elif 'ads' in semseg_key:
+                # dendrite, axon, soma, bouton, terminal, background, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                                 [0.1, 0.1, 0.1, 1], ])
             else:
                 raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))
+            cols = (cols * 255).astype(np.uint8)
         return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)

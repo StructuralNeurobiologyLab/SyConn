@@ -198,7 +198,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                     continue
             except queues.Empty:
                 time.sleep(1)
-                if (time.time() - start_time > 3600 / 2) and len(stops_received) > 0:
+                if (time.time() - start_time > 4*3600 / 2) and len(stops_received) > 0:
                     log_handler.warning(f'Worker pred {worker_cnt} stuck with {len(stops_received)} '
                                         f'STOP signals: {stops_received}')
                 continue

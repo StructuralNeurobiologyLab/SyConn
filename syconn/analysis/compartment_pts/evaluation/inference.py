@@ -166,7 +166,7 @@ def predict_sso(sso_ids: List[int], wd: str, model_p: str, model_args_p: str, pr
         print("Evaluating predictions...")
         start = time.time()
         evaluate_preds(idcs_preds, preds, pred_labels)
-        print(f"Finished evaluation in {time.time() - start} seconds.")
+        print(f"Finished evaluation in {(time.time() - start):.2f} seconds.")
         sso_vertices = sso.mesh[1].reshape((-1, 3))
         sso_preds = np.ones((len(sso_vertices), 1)) * -1
         sso_preds[voxel_idcs['sv']] = pred_labels
@@ -217,55 +217,63 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 
 if __name__ == '__main__':
-    base = os.path.expanduser('~/working_dir/paper/hierarchy/')
+    # base = os.path.expanduser('~/working_dir/paper/hierarchy/')
+    #
+    # # path_list = [('abt', 180), ('dnh', 390), ('ads', 760)]
+    # path_list = [('abt', 370)]
+    #
+    # # path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
+    # #              ('2020_11_08_2000_2048_cp_cp_q', 90),
+    # #              ('2020_11_08_2000_2048_cp_cp_q_2', 90),
+    # #              ('2020_11_08_8000_2048_cp_cp_q', 480),
+    # #              ('2020_11_08_8000_2048_cp_cp_q_2', 480),
+    # #              ('2020_11_08_8000_8192_cp_cp_q', 300),
+    # #              ('2020_11_08_8000_8192_cp_cp_q_co', 510),
+    # #              ('2020_11_08_8000_8192_cp_cp_q_co_2', 510),
+    # #              ('2020_11_08_8000_8192_cp_cp_q_nn', 450),
+    # #              ('2020_11_08_8000_8192_cp_cp_q_nn_2', 420),
+    # #              ('2020_11_08_8000_32768_cp_cp_q', 120),
+    # #              ('2020_11_08_8000_32768_cp_cp_q_2', 270),
+    # #              ('2020_11_08_24000_32768_cp_cp_q', 570),
+    # #              ('2020_11_08_24000_32768_cp_cp_q_2', 540),
+    # #              ('2020_11_09_2000_2048_cp_cp_q_3', 120),
+    # #              ('2020_11_09_8000_1024_cp_cp_q', 600),
+    # #              ('2020_11_09_8000_1024_cp_cp_q_2', 600),
+    # #              ('2020_11_09_8000_8192_cp_cp_q_2', 360),
+    # #              ('2020_11_09_8000_8192_cp_cp_q_bn', 540),
+    # #              ('2020_11_09_8000_8192_cp_cp_q_bn_2', 570),
+    # #              ('2020_11_11_2000_2048_cp_cp_q_3', 360),
+    # #              ('2020_11_11_8000_1024_cp_cp_q_3', 450),
+    # #              ('2020_11_11_8000_2048_cp_cp_q_3', 450),
+    # #              ('2020_11_11_8000_8192_cp_cp_q_bn_3', 480),
+    # #              ('2020_11_11_8000_8192_cp_cp_q_co_3', 450),
+    # #              ('2020_11_11_8000_32768_cp_cp_q_3', 390),
+    # #              ('2020_11_11_24000_32768_cp_cp_q_3', 480),
+    # #              ('2020_11_16_8000_8192_cp_cp_q_nn_3', 690),
+    # #              ('2020_11_16_8000_8192_cp_cp_q_nn_4', 690)]
+    #
+    # durations = {}
+    # red = 5
+    # for path in path_list:
+    #     print(f'Processing: {path} with redundancy {red}')
+    #     base_path = base + path[0] + '/'
+    #     m_path = base_path + f'models/state_dict_e{path[1]}.pth'
+    #     argscont_path = base_path + 'argscont.pkl'
+    #     duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
+    #                            m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=0,
+    #                            out_p=base_path + f'syn_eval_red{red}/')
+    #
+    #     if path[0] in durations:
+    #         durations[path[0]].append(duration)
+    #     else:
+    #         durations[path[0]] = [duration]
+    # # with open(base + 'timing_border.pkl', 'wb') as f:
+    # #     pkl.dump(durations, f)
 
-    # path_list = [('abt', 180), ('dnh', 390), ('ads', 760)]
-    path_list = [('abt', 370)]
-
-    # path_list = [('2020_10_14_8000_8192_cp_cp_q', 570),
-    #              ('2020_11_08_2000_2048_cp_cp_q', 90),
-    #              ('2020_11_08_2000_2048_cp_cp_q_2', 90),
-    #              ('2020_11_08_8000_2048_cp_cp_q', 480),
-    #              ('2020_11_08_8000_2048_cp_cp_q_2', 480),
-    #              ('2020_11_08_8000_8192_cp_cp_q', 300),
-    #              ('2020_11_08_8000_8192_cp_cp_q_co', 510),
-    #              ('2020_11_08_8000_8192_cp_cp_q_co_2', 510),
-    #              ('2020_11_08_8000_8192_cp_cp_q_nn', 450),
-    #              ('2020_11_08_8000_8192_cp_cp_q_nn_2', 420),
-    #              ('2020_11_08_8000_32768_cp_cp_q', 120),
-    #              ('2020_11_08_8000_32768_cp_cp_q_2', 270),
-    #              ('2020_11_08_24000_32768_cp_cp_q', 570),
-    #              ('2020_11_08_24000_32768_cp_cp_q_2', 540),
-    #              ('2020_11_09_2000_2048_cp_cp_q_3', 120),
-    #              ('2020_11_09_8000_1024_cp_cp_q', 600),
-    #              ('2020_11_09_8000_1024_cp_cp_q_2', 600),
-    #              ('2020_11_09_8000_8192_cp_cp_q_2', 360),
-    #              ('2020_11_09_8000_8192_cp_cp_q_bn', 540),
-    #              ('2020_11_09_8000_8192_cp_cp_q_bn_2', 570),
-    #              ('2020_11_11_2000_2048_cp_cp_q_3', 360),
-    #              ('2020_11_11_8000_1024_cp_cp_q_3', 450),
-    #              ('2020_11_11_8000_2048_cp_cp_q_3', 450),
-    #              ('2020_11_11_8000_8192_cp_cp_q_bn_3', 480),
-    #              ('2020_11_11_8000_8192_cp_cp_q_co_3', 450),
-    #              ('2020_11_11_8000_32768_cp_cp_q_3', 390),
-    #              ('2020_11_11_24000_32768_cp_cp_q_3', 480),
-    #              ('2020_11_16_8000_8192_cp_cp_q_nn_3', 690),
-    #              ('2020_11_16_8000_8192_cp_cp_q_nn_4', 690)]
-
-    durations = {}
+    path = '/wholebrain/scratch/jklimesch/paper/paper_models/2020_09_28_10000_15000_ads_cmnGT/'
     red = 5
-    for path in path_list:
-        print(f'Processing: {path} with redundancy {red}')
-        base_path = base + path[0] + '/'
-        m_path = base_path + f'models/state_dict_e{path[1]}.pth'
-        argscont_path = base_path + 'argscont.pkl'
-        duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
-                               m_path, argscont_path, pred_key=f'{path[0]}_e{path[1]}_red{red}_border', redundancy=red, border_exclusion=0,
-                               out_p=base_path + f'syn_eval_red{red}/')
-
-        if path[0] in durations:
-            durations[path[0]].append(duration)
-        else:
-            durations[path[0]] = [duration]
-    # with open(base + 'timing_border.pkl', 'wb') as f:
-    #     pkl.dump(durations, f)
+    print(f'Processing model "{path}" with redundancy {red}.')
+    m_path = path + f'state_dict_final.pth'
+    argscont_path = path + 'argscont.pkl'
+    duration = predict_sso([141995, 11833344, 28410880, 28479489], "/wholebrain/scratch/areaxfs3/",
+                           m_path, argscont_path, pred_key=f'ads_cmn', redundancy=red, border_exclusion=0)
