@@ -2188,7 +2188,8 @@ class SuperSegmentationObject(SegmentationBase):
             k: int
                 Number of nearest neighbors (NN) during k-NN classification
             ds_vertices: int
-                striding factor for vertices
+                striding factor for vertices, uses ``max(1, ds_vertices // 10)`` if
+                ``len(vertices) < 5e6``.
             ignore_labels: List[int]
                 Vertices with labels in `ignore_labels` will be ignored during
                 majority vote, e.g. used to exclude unpredicted vertices.
@@ -2204,6 +2205,8 @@ class SuperSegmentationObject(SegmentationBase):
             ignore_labels = []
         coords = np.array(coords) * self.scaling
         vertices = self.mesh[1].reshape((-1, 3))
+        if len(vertices) == 0:
+            return np.zeros((0, ), dtype=np.int32)
         if len(vertices) < 5e6:
             ds_vertices = max(1, ds_vertices // 10)
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]

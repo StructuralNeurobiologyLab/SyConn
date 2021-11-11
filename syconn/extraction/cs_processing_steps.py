@@ -139,7 +139,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
-        if len(ssv_synids) == 0:
+        if len(ssv_synids) == 0 or ssv_o.mesh[1].shape[0] == 0:
             cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float32)
             cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int32)
             cache_dc['synssv_ids'] = ssv_synids
