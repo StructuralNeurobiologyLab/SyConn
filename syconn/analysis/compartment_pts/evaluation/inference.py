@@ -219,7 +219,7 @@ def batch_builder(samples: List[Tuple[PointCloud, np.ndarray]], batch_size: int,
 
 
 def predict_sso_thread_dnho(sso_ids: List[int], wd: str, model_p: str, pred_key: str,
-                            redundancy: int, v3: bool = True, out_p: str = None):
+                            redundancy: int, v3: bool = True, out_p: str = None, architecture=None):
     from syconn.handler.prediction_pts import pts_feat_dict, pts_feat_ds_dict
     model_p = os.path.expanduser(model_p)
 
@@ -245,7 +245,7 @@ def predict_sso_thread_dnho(sso_ids: List[int], wd: str, model_p: str, pred_key:
                                       # clouds.Normalization(scale_norm)
                                       ])
     model = ConvAdaptSeg(inp_channels, out_channels, get_conv(conv), get_search(search), kernel_num=64,
-                         architecture=None, activation=act, norm='gn')
+                         architecture=architecture, activation=act, norm='gn')
     try:
         full = torch.load(model_p)
         model.load_state_dict(full)

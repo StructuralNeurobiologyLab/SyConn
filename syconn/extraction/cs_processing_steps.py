@@ -35,6 +35,7 @@ from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import segmentation_helper as seghelp
+from ..reps.super_segmentation_dataset import filter_ssd_by_total_pathlength
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
@@ -273,17 +274,32 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     # TODO: apply with multiple processes and shared mapping_dc
     def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
     # np.vectorize is not concurrent/more efficient than "map", just a more convenient.
-    mapped_sv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
+    mapped_ssv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
     log_extraction.debug(f'Mapped SV IDs to SSV IDs for all {sd_syn.type} objects.')
     del mapping_dc
-    mask = np.all(mapped_sv_ids > 0, axis=1)
+    mask = np.all(mapped_ssv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
-    filtered_mapped_sv_ids = mapped_sv_ids[mask]
+    filtered_mapped_ssv_ids = mapped_ssv_ids[mask]
 
     # this identifies all inter-ssv contact sites
-    mask = (filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1]) != 0
+    mask = filtered_mapped_ssv_ids[:, 0] != filtered_mapped_ssv_ids[:, 1]
     syn_ids = syn_ids[mask]
-    inter_ssv_contacts = filtered_mapped_sv_ids[mask]
+    inter_ssv_contacts = filtered_mapped_ssv_ids[mask]
+    # filter small SSV if min path length was set in config
+    min_path_length_partners = global_params.config['cell_contacts']['min_path_length_partners']
+    if (sd_syn.type == 'cs') and (min_path_length_partners is not None) and (min_path_length_partners > 0):
+        filtered_ssv_ids = filter_ssd_by_total_pathlength(ssd, min_path_length_partners)
+        log_extraction.info(f'Filtering contact sites formed with at least once small cell (min. path length of a '
+                            f'cell {min_path_length_partners} µm). {len(filtered_ssv_ids)} Cells fulfill that '
+                            f'criterion.')
+        # check for every element of inter_ssv_contacts if it is inside filtered_ssv_ids
+        res = np.isin(inter_ssv_contacts.reshape(-1), filtered_ssv_ids).reshape(-1, 2)
+        inter_ssv_contacts = inter_ssv_contacts[np.all(res, axis=1)]
+        if len(inter_ssv_contacts) == 0:
+            log_extraction.warning(f'No contact site found after filtering small cells.')
+        else:
+            log_extraction.info(f'Found {len(inter_ssv_contacts)} supervoxel contact sites (merged, unsplit) between'
+                                f' {len(filtered_ssv_ids)} cells.')
     # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
     # cells
     relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
@@ -585,8 +601,8 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
     return list(nx.connected_components(graph))
 
 
-def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
-                         nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False):
+def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_folders_fs=10000,
+                         log=None, overwrite=False):
     """
     Creates 'cs_ssv' objects from 'cs' objects. Computes connected
     cs-objects on SSV level and re-calculates their attributes (mesh_area, size, ..).

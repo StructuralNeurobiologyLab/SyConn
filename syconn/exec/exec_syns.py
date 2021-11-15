@@ -75,7 +75,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
           synapse fragments between supervoxels.
         * 'syn_ssv': Final synapse objects. Agglomerated 'syn' objects based on the supervoxel graph.
         * 'cs_ssv': Final contact site objects. Agglomerated 'cs' objects based on the supervoxel graph.
-            Only processed if `generate_cs_ssv` is set to True in the config.
+            Only processed if ``['cell_contacts']['generate_cs_ssv']`` is set to True in the config.
 
     Args:
         chunk_size: The size of processed cubes.

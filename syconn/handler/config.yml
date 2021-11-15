@@ -51,7 +51,10 @@ paths:
   init_svgraph:
   use_new_subfold:
 
-generate_cs_ssv: True
+cell_contacts:
+  generate_cs_ssv: True
+  # minimum skeleton path length of cells. Contact sites between cells with a lower path length will be filtered out
+  min_path_length_partners: 0  # in µm
 
 # min. connected component size of glia nodes/SV after thresholding glia proba
 min_cc_size_ssv: 5000  # in nm; L1-norm on vertex bounding box
