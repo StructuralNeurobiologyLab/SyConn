@@ -111,6 +111,9 @@ def _collect_properties_from_ssv_partners_thread(args):
     """
     Helper function of 'collect_properties_from_ssv_partners'.
 
+    Notes:
+        * SSV objects that do not have any mesh vertex will be assigned zero values for all properties.
+
     Parameters
     ----------
     args : Tuple
@@ -119,6 +122,7 @@ def _collect_properties_from_ssv_partners_thread(args):
     wd, obj_version, ssd_version, ssv_ids = args
 
     semseg2coords_kwargs = global_params.config['spines']['semseg2coords_spines']
+    n_embedding = global_params.config['tcmn']['ndim_embedding']
 
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
@@ -140,12 +144,12 @@ def _collect_properties_from_ssv_partners_thread(args):
                         (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
         if len(ssv_synids) == 0 or ssv_o.mesh[1].shape[0] == 0:
-            cache_dc['partner_spineheadvol'] = np.zeros((0,), dtype=np.float32)
-            cache_dc['partner_axoness'] = np.zeros((0,), dtype=np.int32)
+            cache_dc['partner_spineheadvol'] = np.zeros((len(ssv_synids),), dtype=np.float32)
+            cache_dc['partner_axoness'] = np.zeros((len(ssv_synids),), dtype=np.int32)
             cache_dc['synssv_ids'] = ssv_synids
-            cache_dc['partner_spiness'] = np.zeros((0,), dtype=np.int32)
-            cache_dc['partner_celltypes'] = np.zeros((0,), dtype=np.int32)
-            cache_dc['latent_morph'] = np.zeros((0,), dtype=np.float32)
+            cache_dc['partner_spiness'] = np.zeros((len(ssv_synids),), dtype=np.int32)
+            cache_dc['partner_celltypes'] = np.zeros((len(ssv_synids),), dtype=np.int32)
+            cache_dc['latent_morph'] = np.zeros([len(ssv_synids), n_embedding], dtype=np.float32)
             cache_dc.push()
             continue
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
@@ -207,7 +211,8 @@ def _from_cell_to_syn_dict(args):
 
                 index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
                 if len(index) != 1:
-                    msg = "useful error message"
+                    msg = f"Could not find synssv with ID {synssv_id} in 'cache_syn.pkl' of {ssv_o}."
+                    log_extraction.error(msg)
                     raise ValueError(msg)
                 index = index[0][0]
                 axoness.append(cache_dc['partner_axoness'][index])
@@ -233,11 +238,11 @@ def _delete_all_cache_dc(args):
         os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
 
 
-# code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
 def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
                         ssd: super_segmentation.SuperSegmentationDataset) -> Dict[int, list]:
     """
-    This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs) that do not need to be agglomerated.
+    This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs)
+    that do not need to be agglomerated.
 
     Notes:
         * Also applicable to cs.
@@ -257,7 +262,7 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     syn_ids = sd_syn.ids.copy()
 
     sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
-    log_extraction.debug('Generated supervoxel IDs for all syn objects.')
+    log_extraction.debug(f'Generated supervoxel IDs for all {sd_syn.type} objects.')
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids > ssd.mapping_lookup_reverse.id_array[-1]] = 0
@@ -269,7 +274,7 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
     # np.vectorize is not concurrent/more efficient than "map", just a more convenient.
     mapped_sv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
-    log_extraction.debug('Mapped SV IDs to SSV IDs for all syn objects.')
+    log_extraction.debug(f'Mapped SV IDs to SSV IDs for all {sd_syn.type} objects.')
     del mapping_dc
     mask = np.all(mapped_sv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
@@ -282,12 +287,12 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
     # cells
     relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
-    log_extraction.debug('Filtered intra-cell syn objects and created syn_ssv IDs.')
+    log_extraction.debug(f'Filtered intra-cell {sd_syn.type} objects and created {sd_syn.type}_ssv IDs.')
     # create lookup from SSV-wide synapses to SV syn. objects
     ssv_to_syn_ids_dc = defaultdict(list)
     for i_entry in range(len(relevant_ssv_ids_enc)):
         ssv_to_syn_ids_dc[relevant_ssv_ids_enc[i_entry]].append(syn_ids[i_entry])
-    log_extraction.debug('Created cell-pair syn object lists for subsequent split and agglomeration.')
+    log_extraction.debug(f'Created cell-pair {sd_syn.type} object lists for subsequent split and agglomeration.')
     return ssv_to_syn_ids_dc
 
 
@@ -606,7 +611,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None,
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
-    n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
+    n_used_paths = min(global_params.config.ncore_total * 30, len(storage_location_ids),
                        len(rel_ssv_with_cs_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)

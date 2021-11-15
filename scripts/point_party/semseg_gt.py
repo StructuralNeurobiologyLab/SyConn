@@ -95,7 +95,10 @@ def labels2mesh(args):
             out_path: path to folder where output should be saved.
     """
     kzip_path, out_path, version, overwrite = args
-    sso_id = int(re.findall(r"_(\d+)", os.path.split(kzip_path)[1])[0])
+    if global_params.wd == '/wholebrain/scratch/areaxfs3/':
+        sso_id = int(re.findall(r"(\d+).\d+.k.zip", os.path.split(kzip_path)[1])[0])
+    else:
+        sso_id = int(re.findall(r"_(\d+)", os.path.split(kzip_path)[1])[0])
     sso = SuperSegmentationObject(sso_id, version=version)
     assert sso.attr_dict_exists
     path2pkl = f'{out_path}/sso_{sso_id}.pkl'
@@ -151,12 +154,16 @@ def labels2mesh(args):
     # TODO: use graph traversal approach
     dists, ixs = kdt.query(nodes, distance_upper_bound=1000)
     node_labels[dists == np.inf] = 0
-    raise()
+
     node_orig_labels[dists != np.inf] = a_node_labels_orig[ixs[dists != np.inf]]
     kdt = cKDTree(a_node_coords)
     # load cell and cell organelles
     # _ = sso._load_obj_mesh('syn_ssv', rewrite=True)
-    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
+    if global_params.wd == '/wholebrain/scratch/areaxfs3/':
+        # syn_ssv do not exists there yet
+        meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
+    else:
+        meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
     feature_map = dict(pts_feat_dict)
 
     obj_names = ['sv', 'mi', 'vc', 'syn_ssv']
@@ -315,20 +322,20 @@ def gt_generation(kzip_paths, out_path, version: str = None, overwrite=True):
     params = [(p, out_path, version, overwrite) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=False)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=True)
 
 
 if __name__ == "__main__":
     TARGET_LABELS = 'fine'  # 'ads'
-    # j0251 GT refined
-    global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
-
-    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/valid/"
-    destination = data_path + '/hc_out_2021_11_fine/'
-    os.makedirs(destination, exist_ok=True)
-    file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-
-    gt_generation(file_paths, destination, overwrite=False)
+    # # j0251 GT refined
+    # global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
+    #
+    # data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/valid/"
+    # destination = data_path + '/hc_out_2021_11_fine/'
+    # os.makedirs(destination, exist_ok=True)
+    # file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
+    #
+    # gt_generation(file_paths, destination, overwrite=False)
 
     # -------- OLD ------------
     # # axon GT
@@ -338,8 +345,9 @@ if __name__ == "__main__":
     #
     # gt_generation(file_paths, destination)
 
-    # # spine GT
-    # global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    # data_path = data_path + "/sparse_gt/spgt/"
-    # file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-    # gt_generation(file_paths, destination, version='spgt')
+    # spine GT
+    data_path = "/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/"
+    destination = data_path + '/pkl_files/'
+    global_params.wd = "/wholebrain/scratch/areaxfs3/"
+    file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
+    gt_generation(file_paths, destination, version='spgt')
