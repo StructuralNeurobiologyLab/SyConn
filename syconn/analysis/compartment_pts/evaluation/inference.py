@@ -370,6 +370,158 @@ def predict_sso_thread_dnho(sso_ids: List[int], wd: str, model_p: str, pred_key:
     return time.time() - start_total
 
 
+def predict_sso_thread_do(sso_ids: List[int], wd: str, model_p: str, pred_key: str,
+                          redundancy: int, v3: bool = True, out_p: str = None, architecture=None):
+    from syconn.handler.prediction_pts import pts_feat_dict, pts_feat_ds_dict
+    model_p = os.path.expanduser(model_p)
+
+    ssd = SuperSegmentationDataset(working_dir=wd)
+
+    device = torch.device('cuda')
+
+    # load model (lcp = LightConvPoint)
+    # Model selection
+    # TODO: change hardcoded mode parameters
+    normalize_pts = False
+    lcp_flag = True
+    search = 'SearchQuantized'
+    conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_pts)
+    act = torch.nn.ReLU
+    inp_channels = 4
+    out_channels = 2
+    context_size = 15000
+    nb_points = 15000
+    batch_size = 8
+    scale_norm = 5000
+    valid_transform = clouds.Compose([clouds.Center(),
+                                      clouds.Normalization(scale_norm)
+                                      ])
+    model = ConvAdaptSeg(inp_channels, out_channels, get_conv(conv), get_search(search), kernel_num=64,
+                         architecture=architecture, activation=act, norm='gn')
+    try:
+        full = torch.load(model_p)
+        model.load_state_dict(full)
+    except RuntimeError:
+        model.load_state_dict(full['model_state_dict'])
+    model.to(device)
+    model.eval()
+
+    voxel_dc = dict(pts_feat_ds_dict['compartment'])
+    feats = dict(pts_feat_dict)
+    if 'hc' in feats:
+        feats['sv'] = feats['hc']
+        feats.pop('hc')
+    if v3 and 'syn_ssv' in feats:
+        feats['sj'] = feats['syn_ssv']
+        feats.pop('syn_ssv')
+    if v3 and 'syn_ssv' in voxel_dc:
+        voxel_dc['sj'] = voxel_dc['syn_ssv']
+        voxel_dc.pop('syn_ssv')
+    del feats['syn_ssv_asym']
+    del feats['syn_ssv_sym']
+    del feats['sv_myelin']
+    parts = {}
+    for key in feats:
+        parts[key] = (voxel_dc[key], feats[key])
+
+    start_total = time.time()
+    for sso_id in sso_ids:
+        sso = ssd.get_super_segmentation_object(sso_id)
+        vert_dc = {}
+        voxel_idcs = {}
+        offset = 0
+        obj_bounds = {}
+        for ix, k in enumerate(parts):
+            # build cell representation by adding cell surface and possible organelles
+            pcd = o3d.geometry.PointCloud()
+            verts = sso.load_mesh(k)[1].reshape(-1, 3)
+            pcd.points = o3d.utility.Vector3dVector(verts)
+            pcd, idcs = pcd.voxel_down_sample_and_trace(parts[k][0], pcd.get_min_bound(), pcd.get_max_bound())
+            voxel_idcs[k] = np.max(idcs, axis=1)
+            vert_dc[k] = np.asarray(pcd.points)
+            obj_bounds[k] = [offset, offset + len(pcd.points)]
+            offset += len(pcd.points)
+
+        if type(parts['sv'][1]) == int:
+            sample_feats = np.concatenate([[parts[k][1]] * len(vert_dc[k]) for k in parts]).reshape(-1, 1)
+            sample_feats = label_binarize(sample_feats, classes=np.arange(len(parts)))
+        else:
+            feats_dc = {}
+            for key in parts:
+                sample_feats = np.ones((len(vert_dc[key]), len(parts[key][1])))
+                sample_feats[:] = parts[key][1]
+                feats_dc[key] = sample_feats
+            sample_feats = np.concatenate([feats_dc[k] for k in parts])
+
+        sample_pts = np.concatenate([vert_dc[k] for k in parts])
+        if not sso.load_skeleton():
+            raise ValueError(f"Couldn't find skeleton of {sso}")
+        nodes, edges = sso.skeleton['nodes'] * sso.scaling, sso.skeleton['edges']
+        hc = HybridCloud(nodes, edges, vertices=sample_pts, labels=np.ones((len(sample_pts), 1)),
+                         features=sample_feats, obj_bounds=obj_bounds)
+        node_arrs, source_nodes = splitting.split_single(hc, context_size, context_size / redundancy)
+
+        samples = []
+        for ix, node_arr in enumerate(node_arrs):
+            # vertices which correspond to nodes in node_arr
+            sample, idcs_sub = objects.extract_cloud_subset(hc, node_arr)
+            # random subsampling of the corresponding vertices
+            sample, idcs_sample = clouds.sample_cloud(sample, nb_points, padding=None)
+            # indices with respect to the total HybridCloud
+            idcs_global = idcs_sub[idcs_sample.astype(int)]
+            bounds = hc.obj_bounds['sv']
+            sv_mask = np.logical_and(idcs_global < bounds[1], idcs_global >= bounds[0])
+            idcs_global[np.logical_not(sv_mask)] = -1
+            if len(sample.vertices) == 0:
+                continue
+            valid_transform(sample)
+            samples.append((sample, idcs_global))
+
+        preds = []
+        idcs_preds = []
+        with torch.no_grad():
+            batches = batch_builder(samples, batch_size, inp_channels)
+            for batch in batches:
+                pts = batch[0].to(device, non_blocking=True)
+                features = batch[1].to(device, non_blocking=True)
+                # lcp and convpoint use different axis order
+                if lcp_flag:
+                    pts = pts.transpose(1, 2)
+                    features = features.transpose(1, 2)
+                outputs = model(features, pts)
+                if lcp_flag:
+                    outputs = outputs.transpose(1, 2)
+                outputs = outputs.cpu().detach().numpy()
+                for ix in range(batch_size):
+                    preds.append(np.argmax(outputs[ix], axis=1))
+                    idcs_preds.append(batch[2][ix])
+
+        preds = np.concatenate(preds)
+        idcs_preds = np.concatenate(idcs_preds)
+        # filter possible organelles and borders
+        preds = preds[idcs_preds != -1]
+        idcs_preds = idcs_preds[idcs_preds != -1].astype(int) - hc.obj_bounds['sv'][0]
+        pred_labels = np.ones((len(voxel_idcs['sv']), 1)) * -1
+        print("Evaluating predictions...")
+        start = time.time()
+        evaluate_preds(idcs_preds, preds, pred_labels)
+        print(f"Finished evaluation in {(time.time() - start):.2f} seconds.")
+        sso_vertices = sso.mesh[1].reshape((-1, 3))
+        sso_preds = np.ones((len(sso_vertices), 1)) * -1
+        sso_preds[voxel_idcs['sv']] = pred_labels
+        ld = sso.label_dict('vertex')
+        ld[pred_key] = sso_preds
+        if out_p is None:
+            ld.push()
+        else:
+            sso.semseg2mesh(pred_key, dest_path=f'{out_p}/{sso_id}_do.k.zip')
+            if not os.path.exists(out_p):
+                os.makedirs(out_p)
+            with open(os.path.join(out_p, str(sso_id) + '.pkl'), 'wb') as f:
+                pkl.dump(sso_preds, f)
+    return time.time() - start_total
+
+
 if __name__ == '__main__':
     # base = os.path.expanduser('~/working_dir/paper/hierarchy/')
     #

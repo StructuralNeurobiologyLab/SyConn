@@ -240,7 +240,7 @@ def _delete_all_cache_dc(args):
 
 
 def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
-                        ssd: super_segmentation.SuperSegmentationDataset) -> Dict[int, list]:
+                        ssd: super_segmentation.SuperSegmentationDataset, log: Logger) -> Dict[int, list]:
     """
     This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs)
     that do not need to be agglomerated.
@@ -251,31 +251,34 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     Args:
         sd_syn:
         ssd:
+        log:
 
     Returns:
         Lookup from encoded SSV partner IDs (see :py:func:`~syconn.reps.connectivity_helper.sv_id_to_partner_ids_vec`
         for decoding into SSV IDs) to SV syn. object IDs, keys: encoded SSV syn IDs; values: List of SV syn IDs.
 
     """
+    if log is None:
+        log = log_extraction
     # get all cs IDs belonging to syn objects and then retrieve corresponding SVs IDs via bit shift
     # syn objects are just a subset of contact site objects (which originally store the partner IDs) with the same IDs
     # -> not necessary to load the cs_ids.
     syn_ids = sd_syn.ids.copy()
 
     sv_ids = ch.cs_id_to_partner_ids_vec(syn_ids)
-    log_extraction.debug(f'Generated supervoxel IDs for all {sd_syn.type} objects.')
+    log.debug(f'Generated supervoxel IDs for all {sd_syn.type} objects.')
 
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids > ssd.mapping_lookup_reverse.id_array[-1]] = 0
     # this creates a lookup dict for SV to SSV ID only for SV involved in synaptic contacts
     # -> This produces extra overhead when processing flattened SV graphs (SSVs only consist of 1 SV)
     mapping_dc = ssd.sv2ssv_ids(np.unique(sv_ids.flatten()), nb_cpus=sm.cpu_count())
-    log_extraction.debug('Generated sv-ssv mapping dict.')
+    log.debug('Generated sv-ssv mapping dict.')
     # TODO: apply with multiple processes and shared mapping_dc
     def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
     # np.vectorize is not concurrent/more efficient than "map", just a more convenient.
     mapped_ssv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
-    log_extraction.debug(f'Mapped SV IDs to SSV IDs for all {sd_syn.type} objects.')
+    log.debug(f'Mapped SV IDs to SSV IDs for all {sd_syn.type} objects.')
     del mapping_dc
     mask = np.all(mapped_ssv_ids > 0, axis=1)
     syn_ids = syn_ids[mask]
@@ -285,30 +288,32 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     mask = filtered_mapped_ssv_ids[:, 0] != filtered_mapped_ssv_ids[:, 1]
     syn_ids = syn_ids[mask]
     inter_ssv_contacts = filtered_mapped_ssv_ids[mask]
+    # TODO: generalize by adding it as a method parameter and pass config value to the method. Also add a config value
+    #  for syn_ssv!
     # filter small SSV if min path length was set in config
     min_path_length_partners = global_params.config['cell_contacts']['min_path_length_partners']
     if (sd_syn.type == 'cs') and (min_path_length_partners is not None) and (min_path_length_partners > 0):
         filtered_ssv_ids = filter_ssd_by_total_pathlength(ssd, min_path_length_partners)
-        log_extraction.info(f'Filtering contact sites formed with at least once small cell (min. path length of a '
+        log.info(f'Filtering contact sites formed with at least once small cell (min. path length of a '
                             f'cell {min_path_length_partners} µm). {len(filtered_ssv_ids)} Cells fulfill that '
                             f'criterion.')
         # check for every element of inter_ssv_contacts if it is inside filtered_ssv_ids
         res = np.isin(inter_ssv_contacts.reshape(-1), filtered_ssv_ids).reshape(-1, 2)
         inter_ssv_contacts = inter_ssv_contacts[np.all(res, axis=1)]
         if len(inter_ssv_contacts) == 0:
-            log_extraction.warning(f'No contact site found after filtering small cells.')
+            log.warning(f'No contact site found after filtering small cells.')
         else:
-            log_extraction.info(f'Found {len(inter_ssv_contacts)} supervoxel contact sites (merged, unsplit) between'
+            log.info(f'Found {len(inter_ssv_contacts)} supervoxel contact sites (merged, unsplit) between'
                                 f' {len(filtered_ssv_ids)} cells.')
     # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
     # cells
     relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
-    log_extraction.debug(f'Filtered intra-cell {sd_syn.type} objects and created {sd_syn.type}_ssv IDs.')
+    log.debug(f'Filtered intra-cell {sd_syn.type} objects and created {sd_syn.type}_ssv IDs.')
     # create lookup from SSV-wide synapses to SV syn. objects
     ssv_to_syn_ids_dc = defaultdict(list)
     for i_entry in range(len(relevant_ssv_ids_enc)):
         ssv_to_syn_ids_dc[relevant_ssv_ids_enc[i_entry]].append(syn_ids[i_entry])
-    log_extraction.debug(f'Created cell-pair {sd_syn.type} object lists for subsequent split and agglomeration.')
+    log.debug(f'Created cell-pair {sd_syn.type} object lists for subsequent split and agglomeration.')
     return ssv_to_syn_ids_dc
 
 
@@ -623,7 +628,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
     cs_version = cs_sd.version
-    rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd)
+    rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 

@@ -975,10 +975,12 @@ def filter_ssd_by_total_pathlength(ssd: SuperSegmentationDataset, min_edge_lengt
     Returns:
         Array of :class:`~SuperSegmentationObject` that have a total skeleton edge length > `min_edge_length`.
     """
-    # TODO: PS adapt cache key
+    # TODO: @hashirah adapt numpy cache key
     total_path_lengths = ssd.load_numpy_data('total_edge_length')
     if total_path_lengths is not None:
         return ssd.ssv_ids[total_path_lengths >= min_edge_length]
+    if total_path_lengths == 0:
+        return ssd.ssv_ids
     params = [(ch, min_edge_length) for ch in chunkify(ssd.ssv_ids, min(len(ssd.ssv_ids), 1000))]
     filtered_ssv_ids = np.concatenate(sm.start_multiprocess_imap(_filter_ssvs_by_total_pathlength, params))
     return filtered_ssv_ids

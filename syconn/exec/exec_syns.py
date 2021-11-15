@@ -160,6 +160,7 @@ def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
     # create SD of type 'cs_ssv' -> cell-cell contact sites
     log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
+    log.info('Starting cs_ssv dataset generation.')
     cps.combine_and_split_cs(global_params.config.working_dir,
                              log=log, n_folders_fs=n_folders_fs,
                              overwrite=overwrite)

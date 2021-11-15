@@ -39,7 +39,7 @@ def evaluate_syn_thread(args):
                 preds = pkl.load(f)
 
             # 0: dendrite, 1: axon, 2: soma
-            pc_ads = replace_preds(sso, 'ads_cmn', [])
+            pc_ads = replace_preds(sso, 'syn_do_cmn', [])
             # 0: dendrite, 1: neck, 2: head
             pc_dnh = replace_preds(sso, preds, [])
 
@@ -51,7 +51,7 @@ def evaluate_syn_thread(args):
             dist_dnh, ind_dnh = tree_dnh.query(coords, k=nn)
             gt = data[str(sso_id)+'_l']
 
-            pc_ads.save2pkl(os.path.expanduser(save_path_log + f'{sso_id}_ads.pkl'))
+            pc_ads.save2pkl(os.path.expanduser(save_path_log + f'{sso_id}_do.pkl'))
             pc_dnh.save2pkl(os.path.expanduser(save_path_log + f'{sso_id}_dnh.pkl'))
 
             mask = np.ones((len(coords), 1), dtype=bool)
