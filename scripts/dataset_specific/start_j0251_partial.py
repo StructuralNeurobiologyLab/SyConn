@@ -22,7 +22,7 @@ from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction
 
 if __name__ == '__main__':
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
-    working_dir = "/wholebrain/scratch/pschuber/SyConn/j0251_test_partial_2048/"
+    working_dir = "/wholebrain/scratch/pschuber/SyConn/j0251_test_partial_2048_v3/"
     experiment_name = 'j0251'
     scale = np.array([10, 10, 25])
 
@@ -34,15 +34,23 @@ if __name__ == '__main__':
     cube_of_interest_bb = np.array([cube_offset, cube_offset + cube_size], dtype=np.int32)
 
     key_val_pairs_conf = [
-        ('min_cc_size_ssv', 2000),  # minimum bounding box diagonal of cell (fragments) in nm
+        ('min_cc_size_ssv', 4000),  # minimum bounding box diagonal of cell (fragments) in nm
         ('glia', {'prior_astrocyte_removal': False}),
         ('pyopengl_platform', 'egl'),
-        ('batch_proc_system', None),
+        ('batch_proc_system', 'SLURM'),  # 'SLURM'
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
-        ('generate_cs_ssv', False),
+        ('cell_contacts',
+         {'generate_cs_ssv': False,  # cs_ssv: contact site objects between cells
+          'min_path_length_partners': None,
+          }),
         ('nnodes_total', 17),
         ('use_point_models', True),
+        ('cube_of_interest_bb', cube_of_interest_bb.tolist()),
+        ('cell_contacts',
+         {'generate_cs_ssv': False,  # cs_ssv: contact site objects between cells
+          'min_path_length_partners': None,
+          }),
         ('meshes', {'use_new_meshing': True}),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
@@ -165,47 +173,47 @@ if __name__ == '__main__':
     ftimer.start('Synapse detection')
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
                                  transf_func_sj_seg=cellorganelle_transf_funcs['sj'],
-                                 cube_of_interest_bb=cube_of_interest_bb)
+                                 cube_of_interest_bb=cube_of_interest_bb, overwrite=True)
     ftimer.stop()
 
-    log.info('Step 5.5/9 - Contact detection')
-    ftimer.start('Contact detection')
-    if global_params.config['generate_cs_ssv']:
-        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
-    else:
-        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
-    ftimer.stop()
-
-    log.info('Step 6/9 - Compartment prediction')
-    ftimer.start('Compartment predictions')
-    exec_inference.run_semsegaxoness_prediction()
-    if not global_params.config.use_point_models:
-        exec_inference.run_semsegspiness_prediction()
-    ftimer.stop()
-
-    # TODO: this step can be launched in parallel with the morphology extraction!
-    ftimer.start('Spine head volume estimation')
-    exec_syns.run_spinehead_volume_calc()
-    ftimer.stop()
-
-    log.info('Step 7/9 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
-
-    log.info('Step 8/9 - Celltype analysis')
-    ftimer.start('Celltype analysis')
-    exec_inference.run_celltype_prediction()
-    ftimer.stop()
-
-    log.info('Step 9/9 - Matrix export')
-    ftimer.start('Matrix export')
-    exec_syns.run_matrix_export()
-    ftimer.stop()
-
-    time_summary_str = ftimer.prepare_report()
-    log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-             'can be analyzed via the KNOSSOS-SyConn plugin at '
-             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    # log.info('Step 5.5/9 - Contact detection')
+    # ftimer.start('Contact detection')
+    # if global_params.config['cell_contacts']['generate_cs_ssv']:
+    #     exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
+    # else:
+    #     log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
+    # ftimer.stop()
+    #
+    # log.info('Step 6/9 - Compartment prediction')
+    # ftimer.start('Compartment predictions')
+    # exec_inference.run_semsegaxoness_prediction()
+    # if not global_params.config.use_point_models:
+    #     exec_inference.run_semsegspiness_prediction()
+    # ftimer.stop()
+    #
+    # # TODO: this step can be launched in parallel with the morphology extraction!
+    # ftimer.start('Spine head volume estimation')
+    # exec_syns.run_spinehead_volume_calc()
+    # ftimer.stop()
+    #
+    # log.info('Step 7/9 - Morphology extraction')
+    # ftimer.start('Morphology extraction')
+    # exec_inference.run_morphology_embedding()
+    # ftimer.stop()
+    #
+    # log.info('Step 8/9 - Celltype analysis')
+    # ftimer.start('Celltype analysis')
+    # exec_inference.run_celltype_prediction()
+    # ftimer.stop()
+    #
+    # log.info('Step 9/9 - Matrix export')
+    # ftimer.start('Matrix export')
+    # exec_syns.run_matrix_export()
+    # ftimer.stop()
+    #
+    # time_summary_str = ftimer.prepare_report()
+    # log.info(time_summary_str)
+    # log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+    #          'can be analyzed via the KNOSSOS-SyConn plugin at '
+    #          '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # # os.system(f'syconn.server --working_dir={example_wd} --port=10001')

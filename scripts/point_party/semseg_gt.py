@@ -322,20 +322,20 @@ def gt_generation(kzip_paths, out_path, version: str = None, overwrite=True):
     params = [(p, out_path, version, overwrite) for p in kzip_paths]
     # labels2mesh(params[1])
     # start mapping for each kzip in kzip_paths
-    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=True)
+    start_multiprocess_imap(labels2mesh, params, nb_cpus=10, debug=False)
 
 
 if __name__ == "__main__":
     TARGET_LABELS = 'fine'  # 'ads'
-    # # j0251 GT refined
-    # global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
-    #
-    # data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/valid/"
-    # destination = data_path + '/hc_out_2021_11_fine/'
-    # os.makedirs(destination, exist_ok=True)
-    # file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-    #
-    # gt_generation(file_paths, destination, overwrite=False)
+    # j0251 GT refined (Nov 16, 2021)
+    global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
+
+    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/train/"
+    destination = data_path + '/hc_out_2021_11_fine/'
+    os.makedirs(destination, exist_ok=True)
+    file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
+
+    gt_generation(file_paths, destination, overwrite=False)
 
     # -------- OLD ------------
     # # axon GT
@@ -345,9 +345,9 @@ if __name__ == "__main__":
     #
     # gt_generation(file_paths, destination)
 
-    # spine GT
-    data_path = "/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/"
-    destination = data_path + '/pkl_files/'
-    global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
-    gt_generation(file_paths, destination, version='spgt')
+    # # spine GT (CMN paper)
+    # data_path = "/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/"
+    # destination = data_path + '/pkl_files/'
+    # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+    # file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
+    # gt_generation(file_paths, destination, version='spgt')

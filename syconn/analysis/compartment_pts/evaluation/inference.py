@@ -382,7 +382,7 @@ def predict_sso_thread_do(sso_ids: List[int], wd: str, model_p: str, pred_key: s
     # load model (lcp = LightConvPoint)
     # Model selection
     # TODO: change hardcoded mode parameters
-    normalize_pts = False
+    normalize_pts = True
     lcp_flag = True
     search = 'SearchQuantized'
     conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_pts)
@@ -394,7 +394,7 @@ def predict_sso_thread_do(sso_ids: List[int], wd: str, model_p: str, pred_key: s
     batch_size = 8
     scale_norm = 5000
     valid_transform = clouds.Compose([clouds.Center(),
-                                      clouds.Normalization(scale_norm)
+                                      # clouds.Normalization(scale_norm)
                                       ])
     model = ConvAdaptSeg(inp_channels, out_channels, get_conv(conv), get_search(search), kernel_num=64,
                          architecture=architecture, activation=act, norm='gn')

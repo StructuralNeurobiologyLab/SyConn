@@ -39,7 +39,7 @@ def evaluate_syn_thread(args):
                 preds = pkl.load(f)
 
             # 0: dendrite, 1: axon, 2: soma
-            pc_ads = replace_preds(sso, 'syn_do_cmn', [])
+            pc_ads = replace_preds(sso, 'do_cmn', [])
             # 0: dendrite, 1: neck, 2: head
             pc_dnh = replace_preds(sso, preds, [])
 

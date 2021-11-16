@@ -33,5 +33,5 @@ for ix, s in enumerate(names):
     else:
         unique[s] = [f1_scores[ix]]
 
-with open(save_path + f'dnh_matrix_syn_e_final.pkl', 'wb') as f:
+with open(save_path + f'dnh_matrix_syn_e_final_do.pkl', 'wb') as f:
     pkl.dump(unique, f)

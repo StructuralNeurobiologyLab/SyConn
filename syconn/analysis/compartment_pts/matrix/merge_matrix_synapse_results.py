@@ -30,7 +30,7 @@ for d in dirs:
 
     results[d] = dict(report=report, epoch=epoch, errors=errors)
 
-    with open(target_path + 'matrix_data_e_final.pkl', 'wb') as f:
+    with open(target_path + 'matrix_data_e_final_do.pkl', 'wb') as f:
         pkl.dump(results, f)
 
 

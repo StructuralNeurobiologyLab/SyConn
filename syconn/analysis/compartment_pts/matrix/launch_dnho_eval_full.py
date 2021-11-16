@@ -41,7 +41,7 @@ def eval_dnho():
         log.info(f'Predicting ssvs {ssv_ids} from working directory "{wd}".\n'
                  f'prediction key: {pred_key}, redundancy: {red}, model path: {base_dir}')
         duration = predict_sso_thread_dnho(ssv_ids, wd,
-                                           model_p=base_dir + '/state_dict.pth', pred_key=f'dnho_cmn_new',
+                                           model_p=base_dir + '/state_dict.pth', pred_key=pred_key,
                                            redundancy=red, out_p=f'{base_dir}/{pred_key}', architecture=architecture)
         ssd = SuperSegmentationDataset(working_dir=wd)
         vx_cnt = np.sum([ssv.size for ssv in ssd.get_super_segmentation_object(ssv_ids)])
@@ -56,33 +56,22 @@ def eval_dnho():
 
 def predict_do():
     base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_do_'
-                'nclass2_lcp_GN_noKernelSep_NonormPts_eval0')
-    architecture = [dict(ic=-1, oc=1, ks=32, nn=16, np=-1),
-                    dict(ic=1, oc=1, ks=32, nn=16, np=2048),
-                    dict(ic=1, oc=1, ks=32, nn=16, np=1024),
-                    dict(ic=1, oc=1, ks=16, nn=16, np=256),
-                    dict(ic=1, oc=2, ks=16, nn=16, np=64),
-                    dict(ic=2, oc=2, ks=16, nn=16, np=16),
-                    dict(ic=2, oc=2, ks=16, nn=16, np=8),
-                    dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-                    dict(ic=4, oc=2, ks=16, nn=4, np='d'),
-                    dict(ic=4, oc=1, ks=16, nn=4, np='d'),
-                    dict(ic=2, oc=1, ks=32, nn=8, np='d'),
-                    dict(ic=2, oc=1, ks=32, nn=8, np='d'),
-                    dict(ic=2, oc=1, ks=32, nn=8, np='d')]
+                'nclass2_lcp_GN_noKernelSep_AdamW_dice_eval0')
+    architecture = None
     red = 5
-    pred_key = 'syn_do_cmn'
-    log = initialize_logging('dnho_eval', f'{base_dir}/{pred_key}', overwrite=False)
+    pred_key = 'do_cmn'
+    log = initialize_logging('do_eval', f'{base_dir}/{pred_key}', overwrite=False)
 
     log.info(f'Predicting ssvs {ssv_ids} from working directory "{wd}".\n'
              f'prediction key: {pred_key}, redundancy: {red}, model path: {base_dir}')
     duration = predict_sso_thread_do(ssv_ids, wd, model_p=base_dir + '/state_dict.pth',
-                                     pred_key=f'dnho_cmn_new', redundancy=red,
+                                     pred_key=pred_key, redundancy=red,
                                      architecture=architecture)
     ssd = SuperSegmentationDataset(working_dir=wd)
-    vol = np.sum([ssv.size for ssv in ssd.get_super_segmentation_object(ssv_ids)]) * np.prod(ssd.scaling) / 1e9  # in um^3
-    total_inference_speed = vol / duration * 3600  # µm^3/h
+    vx_cnt = np.sum([ssv.size for ssv in ssd.get_super_segmentation_object(ssv_ids)])
+    total_inference_speed = vx_cnt / duration * 3600 * np.prod(ssd.scaling) / 1e9  # in um^3 / H
     log.info(f'Processing speed for "{pred_key}": {total_inference_speed:.2f} µm^3/h')
+    log.info(f'Processing speed for "{pred_key}": {(vx_cnt / 1e9 / duration * 3600):.2f} GVx/h')
 
 
 if __name__ == '__main__':

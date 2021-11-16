@@ -2149,7 +2149,7 @@ class SuperSegmentationObject(SegmentationBase):
         # (last two colors correspond to background and undpredicted vertices (k=0))
         cols = None
         if dest_path is not None:
-            if 'spiness' in semseg_key or 'dnho' in semseg_key:
+            if 'spiness' in semseg_key or 'dnho' in semseg_key or 'do' in semseg_key:
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
