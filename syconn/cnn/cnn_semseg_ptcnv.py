@@ -78,17 +78,20 @@ dr = 0.2
 track_running_stats = False
 use_norm = 'gn'
 
+# dnho: dendrite neck head other (axon/soma)
+# dnh: dendrite neck head
 # ads: axon dendrite soma
 # abt: axon bouton terminal
 # fine: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-gt_type = 'ads'
-num_classes = {'ads': 3, 'abt': 3, 'dnh': 3, 'fine': 7}
+gt_type = 'dnho'
+num_classes = {'ads': 3, 'abt': 3, 'dnh': 3, 'fine': 7, 'dnho': 4}
 ignore_l = num_classes[gt_type]  # num_classes is also used as ignore label
 remap_dicts = {'ads': {3: 1, 4: 1, 5: 0, 6: 0},
                'abt': {0: ignore_l, 2: ignore_l, 5: ignore_l, 6: ignore_l, 1: 0, 3: 1, 4: 2},
                'dnh': {1: ignore_l, 2: ignore_l, 3: ignore_l, 4: ignore_l, 5: 1, 6: 2},
+               'dnho': {4: 3, 2: 3, 1: 3, 5: 1, 6: 2},
                'fine': {}}
-weights = dict(ads=[1, 1, 1], abt=[1, 2, 2], dnh=[1, 2, 2], fine=[1, 1, 1, 2, 8, 4, 8])
+weights = dict(ads=[1, 1, 1], abt=[1, 2, 2], dnh=[1, 2, 2], fine=[1, 1, 1, 2, 8, 4, 8], dnho=[1, 2, 2, 1])
 
 
 use_subcell = True
@@ -99,7 +102,7 @@ act = 'relu'
 
 if name is None:
     name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall_noScale_resume'
+           f'{num_classes}_SegSmall'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -127,7 +130,7 @@ logger.info(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_semseg_j0251_November2021/'
+    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_dnho/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
@@ -168,7 +171,10 @@ valid_transform = clouds.Compose([clouds.Center(),
                                   ])
 
 # mask boarder points with 'num_classes' and set its weight to 0
-source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/train/hc_out_2021_11_fine/'
+if gt_type == 'dnho':
+    source_dir = '/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/pkl_files/'
+else:
+    source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/train/hc_out_2021_11_fine/'
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
                            source_dir=source_dir, remap_dict=remap_dicts[gt_type])

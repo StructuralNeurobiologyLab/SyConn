@@ -1,8 +1,10 @@
 import os
 import pickle as pkl
 
-base = os.path.expanduser('~/working_dir/paper/dnh_matrix/')
-save_path = os.path.expanduser('~/working_dir/paper/')
+base_dir = '/wholebrain/scratch/pschuber/syconn_v2_paper/supplementals/' \
+           'compartment_pts/dnh_matrix_update_cmn_ads/'
+base = os.path.expanduser(f'{base_dir}/models/')
+save_path = os.path.expanduser(base_dir)
 dirs = [d for d in os.listdir(base) if os.path.isdir(base + d)]
 
 f1_scores = []
@@ -11,7 +13,7 @@ for d in dirs:
     files = os.listdir(base + d)
     report_path = ''
     for file in files:
-        if 'syn_e' in file:
+        if 'syn_e_final' in file:
             report_path = os.path.expanduser(base + d + '/' + file + '/')
             break
     with open(report_path + 'log/report.pkl', 'rb') as f:
@@ -31,5 +33,5 @@ for ix, s in enumerate(names):
     else:
         unique[s] = [f1_scores[ix]]
 
-with open(save_path + f'dnh_matrix_syn.pkl', 'wb') as f:
+with open(save_path + f'dnh_matrix_syn_e_final_do.pkl', 'wb') as f:
     pkl.dump(unique, f)

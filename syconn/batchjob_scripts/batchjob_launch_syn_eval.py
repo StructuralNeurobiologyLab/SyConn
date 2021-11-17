@@ -4,7 +4,7 @@ try:
 except ImportError:
     import pickle as pkl
 
-from scripts.jklimesch import evaluate_syn_thread
+from syconn.analysis.compartment_pts.evaluation.evaluate_on_synapses import evaluate_syn_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

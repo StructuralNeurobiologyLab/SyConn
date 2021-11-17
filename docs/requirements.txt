@@ -1,4 +1,4 @@
-m2r2
+myst_parser
 sphinx >=3.0,<=4.2
 sphinx-autodoc-typehints >=1.11,<=1.12
 sphinx_rtd_theme

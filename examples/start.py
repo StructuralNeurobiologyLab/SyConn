@@ -55,7 +55,10 @@ if __name__ == '__main__':
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
-        ('generate_cs_ssv', False),  # cs_ssv: contact site objects between cells
+        ('cell_contacts',
+         {'generate_cs_ssv': False,  # cs_ssv: contact site objects between cells
+          'min_path_length_partners': None,
+          }),
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
@@ -236,7 +239,7 @@ if __name__ == '__main__':
 
     log.info('Step 6.5/9 - Contact detection')
     ftimer.start('Contact detection')
-    if global_params.config['generate_cs_ssv']:
+    if global_params.config['cell_contacts']['generate_cs_ssv']:
         exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
     else:
         log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')

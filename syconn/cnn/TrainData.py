@@ -451,6 +451,20 @@ if elektronn3_avail:
         def __init__(self, source_dir=None, npoints=12000, transform: Callable = Identity(),
                      train=True, batch_size=2, use_subcell=True, ctx_size=8000, mask_borders_with_id=None,
                      remap_dict: Optional[dict] = None):
+            """
+            Args:
+                source_dir:
+                npoints:
+                transform:
+                train:
+                batch_size:
+                use_subcell:
+                ctx_size:
+                mask_borders_with_id: Used as label for context borders (currently disabled) and more importantly
+                    for the ultrastructure points. Ultrastructure points will be relabeled from -1 to
+                    `mask_borders_with_id` after remapping cell surface points according to `remap_dict`.
+                remap_dict: Remap cell surface points labels from key to value according to `remap_dict`.
+            """
             if source_dir is None:
                 # source_dir = '/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/'
                 # ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
@@ -461,12 +475,14 @@ if elektronn3_avail:
                 # self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
                 #                in ssv_ids_proof]
                 source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_06_30_more_samples/hc_out_2021_06/'
+                self.source_dir = source_dir
+                self.fnames = glob.glob(f'{source_dir}/*.pkl')
+                self.fnames = [fname for fname in self.fnames if not '186817352' in fname]
 
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')
-            self.fnames = [fname for fname in self.fnames if not '186817352' in fname]
 
-            print(f'Using {len(self.fnames)} cells for training.')
+            print(f'Using {len(self.fnames)} cells for {"training" if train else "validation"}.')
             if use_subcell:  # TODO: add syntype
                 self._num_obj_types = 4
             else:
@@ -486,6 +502,8 @@ if elektronn3_avail:
             if self.remap_dict is not None:
                 for k, v in self.remap_dict.items():
                     out_labels[out_labels == k] = v
+            if -1 in out_labels:
+                out_labels[out_labels == -1] = self.mask_borders_with_id
             pts = torch.from_numpy(sample_pts).float()
             feats = torch.from_numpy(sample_feats).float()
             lbs = torch.from_numpy(out_labels).long()

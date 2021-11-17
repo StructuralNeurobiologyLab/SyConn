@@ -448,10 +448,14 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
                                    ii in range(3))
             sub_vol = contacts[new_obj_slices]
             binary_mask = (sub_vol == ix).astype(np.int8, copy=False)
-            res = scipy.ndimage.binary_closing(
-                binary_mask, iterations=n_closings)
+            if n_closings > 0:
+                res = scipy.ndimage.binary_closing(
+                    binary_mask, iterations=n_closings)
+            else:
+                res = binary_mask
             # reduce fragmenting of contact sites
-            res = scipy.ndimage.binary_dilation(res, iterations=cs_dilation)
+            if cs_dilation > 0:
+                res = scipy.ndimage.binary_dilation(res, iterations=cs_dilation)
             # only update background or the objects itself and do not remove object voxels (res == 1), e.g. at boundary
             proc_mask = ((binary_mask == 1) | (sub_vol == 0)) & (res == 1)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
