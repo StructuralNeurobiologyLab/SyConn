@@ -92,7 +92,9 @@ class Config(object):
         Reads the content stored in the config file.
         """
         try:
-            self._config = yaml.load(open(self.path_config, 'r'), Loader=yaml.FullLoader)
+            with open(self.path_config, 'r') as f:
+                self._config = yaml.load(f, Loader=yaml.FullLoader)
+                
             self.initialized = True
         except FileNotFoundError:
             pass

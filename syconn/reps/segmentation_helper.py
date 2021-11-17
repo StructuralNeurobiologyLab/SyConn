@@ -316,7 +316,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
         Dictionary with "nodes", "diameters" and "edges".
 
     """
-    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int54), edges=np.zeros((0, 2)),
+    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int64), edges=np.zeros((0, 2)),
                       diameters=np.zeros((0,)).astype(np.int32))
     if not recompute and so.skeleton_exists:
         try:

@@ -415,7 +415,7 @@ class SuperSegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + ".npy"):
             return np.load(self.path + prop_name + ".npy", allow_pickle=True)
         elif os.path.exists(self.path + prop_name + "s.npy"):
-            log_reps.warn(f'Using "s" appendix in numpy cache file '
+            log_reps.warning(f'Using "s" appendix in numpy cache file '
                           f'"{self.path + prop_name + "s.npy"}", this is deprecated.')
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
