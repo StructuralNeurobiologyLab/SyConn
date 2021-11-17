@@ -3374,7 +3374,11 @@ class SuperSegmentationObject(SegmentationBase):
             vx_count = 0
         obj_vol = vx_count * np.prod(self.scaling) / 1e9  # in um^3
         path_length = self.total_edge_length(compartments_of_interest) / 1e3  # in um
-        return obj_vol / path_length
+        
+        if path_length == 0:
+            return 0.0
+        else:
+            return obj_vol / path_length
 
 
 # ------------------------------------------------------------------------------
