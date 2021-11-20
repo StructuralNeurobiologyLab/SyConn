@@ -82,7 +82,9 @@ def annotate_heatmap(im, data=None, valfmt="{x:.2f}",
 if __name__ == '__main__':
     base_dir = '/wholebrain/scratch/pschuber/syconn_v2_paper/supplementals/' \
                'compartment_pts/dnh_matrix_update_cmn_ads/'
-    with open(f'{base_dir}/dnh_matrix_syn_e_final_do.pkl', 'rb') as f:
+    pred_key = 'do_cmn_large'
+
+    with open(f'{base_dir}/dnh_matrix_syn_e_final_{pred_key}.pkl', 'rb') as f:
         data = pkl.load(f)
 
     contexts = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]
@@ -114,4 +116,11 @@ if __name__ == '__main__':
     texts = annotate_heatmap(im, valfmt=matplotlib.ticker.FuncFormatter(func))
     fig.tight_layout()
 
-    plt.savefig(f'{base_dir}/dnh_matrix_e_final_do_YlGn_083_098.eps')
+    plt.savefig(f'{base_dir}/dnh_matrix_e_final_{pred_key}_YlGn_083_098.eps')
+
+    fig, ax = plt.subplots()
+    im, cbar = heatmap(matrix, points, contexts, ax=ax, cmap="YlGn", cbarlabel="f1-score", vmin=0.83, vmax=0.98)
+
+    fig.tight_layout()
+
+    plt.savefig(f'{base_dir}/dnh_matrix_e_final_{pred_key}_nolabels_YlGn_083_098.eps')

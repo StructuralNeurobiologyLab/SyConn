@@ -12,6 +12,7 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 def evaluate_syn_thread(args):
     base = args[0]
     path = args[1]
+    do_pred_key = args[2]
     global_params.wd = "/wholebrain/scratch/areaxfs3/"
     with open(os.path.expanduser('/wholebrain/scratch/jklimesch/gt/syn_gt/converted_v3.pkl'), 'rb') as f:
         data = pkl.load(f)
@@ -39,7 +40,7 @@ def evaluate_syn_thread(args):
                 preds = pkl.load(f)
 
             # 0: dendrite, 1: axon, 2: soma
-            pc_ads = replace_preds(sso, 'do_cmn', [])
+            pc_ads = replace_preds(sso, do_pred_key, [])
             # 0: dendrite, 1: neck, 2: head
             pc_dnh = replace_preds(sso, preds, [])
 
@@ -81,7 +82,8 @@ def evaluate_syn_thread(args):
                     labels = np.concatenate((pc.labels[idcs_ball], np.array([4]).reshape((-1, 1))))
                     pc_local = PointCloud(vertices=verts, labels=labels)
                     pc_local.move(-coords[ix])
-                    pc_local.save2pkl(save_path_examples + f'{sso_id}_{ix}_p{int(result[ix])}_gt{int(gt[ix])}.pkl')
+                    pc_local.save2pkl(save_path_examples + f'{sso_id}_{ix}_p{int(result[ix])}'
+                                                           f'_gt{int(gt[ix])}_{do_pred_key}.pkl')
             mask = mask.reshape(-1)
             if total_gt is None:
                 total_gt = gt.reshape((-1, 1))[mask]
@@ -96,9 +98,9 @@ def evaluate_syn_thread(args):
     targets = [targets[int(i)] for i in unique]
     report = sm.classification_report(total_gt, total_preds, target_names=targets)
     report_dict = sm.classification_report(total_gt, total_preds, target_names=targets, output_dict=True)
-    with open(save_path_log + 'report.txt', 'w') as f:
+    with open(f'{save_path_log}report_{do_pred_key}.txt', 'w') as f:
         f.write(report)
-    with open(save_path_log + 'report.pkl', 'wb') as f:
+    with open(f'{save_path_log}report_{do_pred_key}.pkl', 'wb') as f:
         pkl.dump(report_dict, f)
     print(report)
 

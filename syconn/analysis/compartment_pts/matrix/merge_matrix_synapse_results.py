@@ -8,6 +8,7 @@ base = os.path.expanduser(f'{base_dir}/models/')
 save_path = os.path.expanduser(base_dir)
 target_path = os.path.expanduser(base_dir)
 dirs = [d for d in os.listdir(base) if os.path.isdir(base + d)]
+pred_key = 'do_cmn_large'
 
 results = {}
 for d in dirs:
@@ -20,7 +21,7 @@ for d in dirs:
             # epoch = int(re.findall(r"_e(\d+).", file)[0])
             epoch = 'final'
             break
-    with open(report_path + 'log/report.pkl', 'rb') as f:
+    with open(f'{report_path}log/report_{pred_key}.pkl', 'rb') as f:
         report = pkl.load(f)
 
     errors = os.listdir(report_path + 'examples/')
@@ -30,7 +31,7 @@ for d in dirs:
 
     results[d] = dict(report=report, epoch=epoch, errors=errors)
 
-    with open(target_path + 'matrix_data_e_final_do.pkl', 'wb') as f:
+    with open(f'{target_path}matrix_data_e_final_{pred_key}.pkl', 'wb') as f:
         pkl.dump(results, f)
 
 

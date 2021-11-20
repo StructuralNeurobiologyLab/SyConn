@@ -466,18 +466,7 @@ if elektronn3_avail:
                 remap_dict: Remap cell surface points labels from key to value according to `remap_dict`.
             """
             if source_dir is None:
-                # source_dir = '/wholebrain/songbird/j0126/GT/compartment_gt_2020/2020_05//hc_out_2020_08/'
-                # ssv_ids_proof = [34811392, 26501121, 2854913, 37558272, 33581058, 491527, 16096256, 10919937, 46319619,
-                #                  16113665, 24414208, 18571264, 2734465, 23144450, 15982592, 15933443, 8339462, 18251791,
-                #                  17079297, 31967234, 23400450, 1090051, 3447296, 2091009, 28790786, 14637059, 19449344,
-                #                  12806659, 26331138, 22335491, 26169344, 12179464, 24434691, 18556928, 8003584,
-                #                  27435010]
-                # self.fnames = [fn for fn in self.fnames if int(re.findall(r'(\d+)\.', fn)[0])
-                #                in ssv_ids_proof]
-                source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_06_30_more_samples/hc_out_2021_06/'
-                self.source_dir = source_dir
-                self.fnames = glob.glob(f'{source_dir}/*.pkl')
-                self.fnames = [fname for fname in self.fnames if not '186817352' in fname]
+                raise ValueError('"source_dir" must be given.')
 
             self.source_dir = source_dir
             self.fnames = glob.glob(f'{source_dir}/*.pkl')

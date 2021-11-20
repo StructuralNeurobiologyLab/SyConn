@@ -4,6 +4,7 @@ import os.path
 import open3d as o3d
 import numpy as np
 from scipy.spatial import cKDTree
+from scipy.stats import ks_2samp, ranksums
 import matplotlib.pyplot as plt
 import seaborn as sns
 import tqdm
@@ -11,11 +12,12 @@ import pandas
 import pandas as pd
 from collections import defaultdict
 import pickle as pkl
+import scipy
 
 from typing import Optional
 
 from syconn.mp.mp_utils import start_multiprocess_imap
-from syconn.handler import basics
+from syconn.handler import basics, config
 from syconn import global_params
 from syconn.handler.prediction import int2str_converter, certainty_estimate, str2int_converter
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
@@ -229,7 +231,7 @@ if __name__ == '__main__':
     # print median shift of lower and upper half
     # log-scale vs non log-scale
     # syn requirements
-    prob_thresh = 0.5
+    prob_thresh = 0.8
     # cell requirements
     comp_of_interest = [1, 3, 4]
     max_dist = np.inf  # in µm. Distances will be capped by this value
@@ -241,7 +243,7 @@ if __name__ == '__main__':
           f'max. mito-syn dist. {max_dist} µm, min. path length of cell {min_edge_length // 1e3} µm,'
           f'cell type certainty thresh. {celltype_certainty_thresh}.')
 
-    dest_dir = f'/wholebrain/scratch/pschuber/tmp/syn_mito_analysis/synproba_{prob_thresh}/'
+    dest_dir = f'/wholebrain/scratch/pschuber/syconn_v2_paper/figures/syn_mito_analysis/synproba_{prob_thresh}/'
     os.makedirs(dest_dir, exist_ok=True)
     global_params.wd = '/ssdscratch/songbird/j0251/rag_flat_Jan2019_v3/'
     sd_syn = SegmentationDataset(
@@ -438,26 +440,81 @@ if __name__ == '__main__':
             print(f'{len(ct_syns_lower[:50])} random {ct} synapses lower: {ct_syns_lower[:50]}')
 
             print(f'Found {len(syn_dens_labels[syn_dens_labels == ct])} {ct} cells.')
-            print(f'Mea+-std syn. densitiy: {np.mean(syn_densities_total[syn_dens_labels == ct])} +- '
+            print(f'Mean+-std syn. density: {np.mean(syn_densities_total[syn_dens_labels == ct])} +- '
                   f'{np.std(syn_densities_total[syn_dens_labels == ct])}')
-            print(f'Mea+-std mito. densitiy: {np.mean(mito_densities_total[syn_dens_labels == ct])} +- '
+            print(f'Median, Q1, Q3 of syn. density: {np.median(syn_densities_total[syn_dens_labels == ct])},'
+                  f'{np.quantile(syn_densities_total[syn_dens_labels == ct], 0.25)},'
+                  f'{np.quantile(syn_densities_total[syn_dens_labels == ct], 0.75)}')
+            print(f'Mean+-std mito. density: {np.mean(mito_densities_total[syn_dens_labels == ct])} +- '
                   f'{np.std(mito_densities_total[syn_dens_labels == ct])}')
+
+    # compare inter-celltype (upper)
+    log = config.initialize_logging('kstest_results', f'{dest_dir}/')
+    log.info(f'scipy version: {scipy.__version__}; statistics generated with scipy.stats.ks_2samp(..., '
+             f'alternative="two-sided", mode="asymp")')
+    test_ks_upper_gp_msn = ks_2samp(dists_total_upper[celltype_label_total_upper == 'MSN'],
+                                    dists_total_upper[celltype_label_total_upper == 'GP'],
+                                    alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for GP (upper) vs MSN (upper):\n{test_ks_upper_gp_msn}')
+
+    # compare intra-celltype upper vs. lower
+    test_ks_upper_gp_lower_gp = ks_2samp(dists_total_upper[celltype_label_total_upper == 'GP'],
+                                         dists_total_lower[celltype_label_total_lower == 'GP'],
+                                         alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for GP (upper) vs GP (lower):\n{test_ks_upper_gp_lower_gp}')
+
+    test_ks_upper_msn_lower_msn = ks_2samp(dists_total_upper[celltype_label_total_upper == 'MSN'],
+                                           dists_total_lower[celltype_label_total_lower == 'MSN'],
+                                           alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for MSN (upper) vs MSN (lower):\n{test_ks_upper_msn_lower_msn}')
+
+    # compare upper and lower to control (intra-celltype)
+    test_ks_upper_gp_control = ks_2samp(dists_total_upper[celltype_label_total_upper == 'GP'],
+                                        dsts_control_total[celltype_labels_control_total == 'GP'],
+                                        alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for GP (upper) vs GP (control):\n{test_ks_upper_gp_control}')
+
+    test_ks_lower_gp_control = ks_2samp(dists_total_lower[celltype_label_total_lower == 'GP'],
+                                        dsts_control_total[celltype_labels_control_total == 'GP'],
+                                        alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for GP (lower) vs GP (control):\n{test_ks_lower_gp_control}')
+
+    # use mode='asymp' because it won't finish otherwise
+    test_ks_upper_msn_control = ks_2samp(dists_total_upper[celltype_label_total_upper == 'MSN'],
+                                         dsts_control_total[celltype_labels_control_total == 'MSN'],
+                                         alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for MSN (upper) vs MSN (control):\n{test_ks_upper_msn_control}')
+
+    test_ks_lower_msn_control = ks_2samp(dists_total_lower[celltype_label_total_lower == 'MSN'],
+                                         dsts_control_total[celltype_labels_control_total == 'MSN'],
+                                         alternative='two-sided', mode='asymp')
+    log.info(f'KS test results for MSN (lower) vs MSN (control):\n{test_ks_lower_msn_control}')
+
+    df = pandas.DataFrame(data={'densities': syn_densities_total, 'celltype': syn_dens_labels})
+    log = config.initialize_logging('ranksumtest_results', f'{dest_dir}/')
+    log.info('Using Wilcoxon_rank-sum_test "scipy.stats.ranksums" for GP vs MSN synapse counts')
+    test_rank = ranksums(syn_densities_total[syn_dens_labels == 'MSN'],
+                         syn_densities_total[syn_dens_labels == 'GP'])
+    log.info(f'{test_rank}')
 
     plt.figure(figsize=(2.5, 3.5))
     df = pandas.DataFrame.from_dict(dict(distances=dists_total_upper,
-                          celltype=celltype_label_total_upper))
+                                         celltype=celltype_label_total_upper))
+    df.to_csv(f'{dest_dir}/mito_syn_dist_cum_medianSplit_totalUpper.csv')
     for ct, ls in zip(df['celltype'].unique(), ['-', '-', '-', '-', '-']):
         x, y = ecdf(df[df['celltype'] == ct].distances)
         print(f'{ct}: Distance median upper half {np.median(df[df["celltype"] == ct].distances)}')
         plt.plot(x, y, linestyle=ls, label=ct, c=cmap[cts_to_plot.index(ct)])
     df = pandas.DataFrame.from_dict(dict(distances=dists_total_lower,
                                          celltype=celltype_label_total_lower))
+    df.to_csv(f'{dest_dir}/mito_syn_dist_cum_medianSplit_totalLower.csv')
     for ct, ls in zip(df['celltype'].unique(), ['--', '--', '--', '--', '--']):
         x, y = ecdf(df[df['celltype'] == ct].distances)
         print(f'{ct}: Distance median lower half {np.median(df[df["celltype"] == ct].distances)}')
         plt.plot(x, y, linestyle=ls, label=ct, c=cmap[cts_to_plot.index(ct)])
     df = pandas.DataFrame.from_dict(dict(distances=dsts_control_total,
                                          celltype=celltype_labels_control_total))
+    df.to_csv(f'{dest_dir}/mito_syn_dist_cum_medianSplit_control.csv')
     for ct, ls in zip(df['celltype'].unique(), [':', ':', ':', ':', ':']):
         x, y = ecdf(df[df['celltype'] == ct].distances)
         plt.plot(x, y, linestyle=ls, label=ct, c=cmap[cts_to_plot.index(ct)])
@@ -475,11 +532,13 @@ if __name__ == '__main__':
     plt.figure(figsize=(2.5, 3.5))
     df = pandas.DataFrame.from_dict(dict(distances=np.concatenate([dists_total_upper, dists_total_lower]),
                           celltype=np.concatenate([celltype_label_total_upper, celltype_label_total_lower])))
+    df.to_csv(f'{dest_dir}/mito_syn_dist_cum_alldata.csv')
     for ct, ls in zip(df['celltype'].unique(), ['-', '-', '-', '-', '-']):
         x, y = ecdf(df[df['celltype'] == ct].distances)
         plt.plot(x, y, linestyle=ls, label=ct, c=cmap[cts_to_plot.index(ct)])
     df = pandas.DataFrame.from_dict(dict(distances=dsts_control_total,
                                          celltype=celltype_labels_control_total))
+    df.to_csv(f'{dest_dir}/mito_syn_dist_cum_control.csv')
     for ct, ls in zip(df['celltype'].unique(), [':', ':', ':', ':', ':']):
         x, y = ecdf(df[df['celltype'] == ct].distances)
         plt.plot(x, y, linestyle=ls, label=ct, c=cmap[cts_to_plot.index(ct)])
@@ -542,11 +601,12 @@ if __name__ == '__main__':
     df.to_csv(f'{dest_dir}/syn_count.csv')
     plt.figure()
     # sns.catplot(data=df, y='densities', x='celltype', kind="violin", cut=0)
-    sns.boxplot(data=df, y='densities', x='celltype')
+    bp = sns.boxplot(data=df, y='densities', x='celltype')
     sns.despine()
     plt.xlabel('cell type')
     plt.ylabel('synapse count [µm^-1]')
     plt.tight_layout()
+
     plt.savefig(f'{dest_dir}/syn_count.png', dpi=400)
 
     df = pandas.DataFrame(data={'densities': mito_densities_total, 'celltype': syn_dens_labels})

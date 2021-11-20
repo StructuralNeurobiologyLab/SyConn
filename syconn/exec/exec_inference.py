@@ -95,7 +95,7 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
         ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
-        infere_cell_morphology_ssd(ssv_params)
+        infere_cell_morphology_ssd(ssv_params, mpath=global_params.config.mpath_tnet_pts_wholecell)
     else:
         # split all cells into upper half and lower half (sorted by size)
         half_ix = len(multi_params) // 2

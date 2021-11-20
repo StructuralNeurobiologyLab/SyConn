@@ -9,14 +9,9 @@ from syconn.analysis.compartment_pts.evaluation.evaluate_on_synapses import eval
 
 
 def eval_dnho():
-    # architecture = None
-    # base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_'
-    #             'nb15000_ctx15000_dnho_nclass4_ptconv_GN_strongerWeighted_noKernelSep_eval0/')
-    #
-
     architecture = None
-    base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_'
-                'dnho_nclass4_lcp_GN_noKernelSep_AdamW_dice_eval0/')
+    base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_c'
+                'tx15000_dnho_nclass4_lcp_GN_noKernelSep_AdamW_dice_eval0/')
 
     # architecture = [dict(ic=-1, oc=1, ks=32, nn=16, np=-1),
     #                 dict(ic=1, oc=1, ks=32, nn=16, np=2048),
@@ -31,10 +26,12 @@ def eval_dnho():
     #                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
     #                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
     #                 dict(ic=2, oc=1, ks=32, nn=8, np='d')]
-    # base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_'
-    #             'dnho_nclass4_lcp_GN_noKernelSep_eval0/')
+    # base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_dnho_'
+    #             'nclass4_lcp_GN_noKernelSep_AdamW_dice_large_eval0/')
     red = 5
     pred_key = 'syn_dnho_cmn'
+    if architecture is not None:
+        pred_key += '_large'
     log = initialize_logging('dnho_eval', f'{base_dir}/{pred_key}', overwrite=False)
 
     if 1:
@@ -55,11 +52,33 @@ def eval_dnho():
 
 
 def predict_do():
-    base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_do_'
-                'nclass2_lcp_GN_noKernelSep_AdamW_dice_eval0')
+    base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_dnho_'
+                'nclass4_lcp_GN_noKernelSep_AdamW_CE_eval00/')
     architecture = None
+
+    # base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_do_ncl'
+    #             'ass2_lcp_GN_noKernelSep_AdamW_dice_eval0/')
+    # architecture = None
+
+    # base_dir = ('/wholebrain/scratch/pschuber/e3_trainings/lcp_semseg_j0251_dnho/semseg_pts_nb15000_ctx15000_do_'
+    #             'nclass2_lcp_GN_noKernelSep_AdamW_dice_large_eval0/')
+    # architecture = [dict(ic=-1, oc=1, ks=32, nn=16, np=-1),
+    #                 dict(ic=1, oc=1, ks=32, nn=16, np=2048),
+    #                 dict(ic=1, oc=1, ks=32, nn=16, np=1024),
+    #                 dict(ic=1, oc=1, ks=16, nn=16, np=256),
+    #                 dict(ic=1, oc=2, ks=16, nn=16, np=64),
+    #                 dict(ic=2, oc=2, ks=16, nn=16, np=16),
+    #                 dict(ic=2, oc=2, ks=16, nn=16, np=8),
+    #                 dict(ic=2, oc=2, ks=16, nn=4, np='d'),
+    #                 dict(ic=4, oc=2, ks=16, nn=4, np='d'),
+    #                 dict(ic=4, oc=1, ks=16, nn=4, np='d'),
+    #                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
+    #                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
+    #                 dict(ic=2, oc=1, ks=32, nn=8, np='d')]
     red = 5
     pred_key = 'do_cmn'
+    if architecture is not None:
+        pred_key += '_large'
     log = initialize_logging('do_eval', f'{base_dir}/{pred_key}', overwrite=False)
 
     log.info(f'Predicting ssvs {ssv_ids} from working directory "{wd}".\n'
@@ -77,4 +96,5 @@ def predict_do():
 if __name__ == '__main__':
     ssv_ids = [141995, 11833344, 28410880, 28479489]
     wd = "/wholebrain/scratch/areaxfs3/"
-    predict_do()
+    # predict_do()
+    eval_dnho()

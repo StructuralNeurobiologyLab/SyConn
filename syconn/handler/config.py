@@ -540,7 +540,6 @@ class DynConfig(Config):
             and ``other`` (soma and axon) via 2D projections (-> semantic segmentation).
         """
         return self.model_dir + '/spiness/model.pts'
-        # return self.model_dir + '/spiness/'
 
     @property
     def mpath_axonsem(self) -> str:
@@ -550,7 +549,6 @@ class DynConfig(Config):
             dendrites and somata via 2D projections.
         """
         return self.model_dir + '/axoness_semseg/model.pts'
-        # return self.model_dir + '/axoness_semseg/'
 
     @property
     def mpath_compartment_pts(self) -> str:

@@ -5,7 +5,9 @@ import numpy as np
 if __name__ == '__main__':
     base_dir = '/wholebrain/scratch/pschuber/syconn_v2_paper/supplementals/' \
                'compartment_pts/dnh_matrix_update_cmn_ads/'
-    with open(f'{base_dir}/dnh_matrix_syn_e_final_do.pkl', 'rb') as f:
+    pred_key = 'do_cmn_large'
+
+    with open(f'{base_dir}/dnh_matrix_syn_e_final_{pred_key}.pkl', 'rb') as f:
         data = pkl.load(f)
 
     contexts = [1, 2, 4, 8, 12, 16, 20, 24, 28, 32]
@@ -24,6 +26,6 @@ if __name__ == '__main__':
             if matrix[points_ix][contexts_ix]:
                 scores[str(contexts[contexts_ix]) + '_' + str(points[points_ix])] = np.array(data[f'{contexts[contexts_ix] * 1000}_{points[points_ix]}'])
 
-    with open(f'{base_dir}/dnh_matrix_raw_e_final_do.txt', 'w') as f:
+    with open(f'{base_dir}/dnh_matrix_raw_e_final_{pred_key}.txt', 'w') as f:
         for key in list(scores.keys()):
             f.write(key + ': \t' + str(scores[key]) + '\n')
