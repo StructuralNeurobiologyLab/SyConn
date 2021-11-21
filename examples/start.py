@@ -153,7 +153,6 @@ if __name__ == '__main__':
     del tmp
 
     # INITIALIZE DATA
-    # TODO: switch to streaming confs instead of h5 files
     if not os.path.isdir(global_params.config.kd_sj_path):
         kd = knossosdataset.KnossosDataset()
         kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -259,9 +258,9 @@ if __name__ == '__main__':
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 
-    log.info('Step 8/9 - Morphology extraction')
+    log.info('Step 8/9 - Cell-morphology embeddings')
     ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
+    exec_inference.run_cell_embedding()
     ftimer.stop()
 
     log.info('Step 9/9 - Celltype analysis')

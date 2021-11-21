@@ -23,9 +23,9 @@ from ..reps.segmentation import SegmentationDataset
 from ..reps.super_segmentation_object import SuperSegmentationObject
 
 
-def qsub_glia_splitting():
+def run_glia_splitting():
     """
-    Start glia splitting -> generate final connected components of neuron vs.
+    Start astrocyte splitting -> generate final connected components of neuron vs.
     glia SVs.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
@@ -128,12 +128,14 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
             neuron_g.remove_node(ix)
     log.info("Removed %d neuron CCs because of size." % (before_cnt - len(neuron_g.nodes())))
     ccs = list(nx.connected_components(neuron_g))
-    # Added np.min(list(cc)) to have deterministic SSV ID
-    txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_svgraph_ml.k.zip", txt, "mergelist.txt")
+    cnt_neuron_sv = 0
+    with open(global_params.config.neuron_svagg_list_path, 'w') as f:
+        for cc in ccs:
+            f.write(','.join([str(el) for el in cc]) + '\n')
+            cnt_neuron_sv += len(cc)
     nx.write_edgelist(neuron_g, global_params.config.neuron_svgraph_path)
-    log.info("Nb neuron CCs: {}".format(len(ccs)))
-    log.info("Nb neuron SVs: {}".format(len([n for cc in ccs for n in cc])))
+    log.info(f"Nb neuron CCs: {len(ccs)}")
+    log.info(f"Nb neuron SVs: {cnt_neuron_sv}")
 
     # add glia CCs with single SV
     astrocyte_ids = list(astrocyte_g.nodes())
@@ -154,11 +156,10 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
     total_size_cmm = np.prod(sds.scaling) * total_size / 1e18
     log.info("Glia RAG contains {} SVs in {} CCs ({} mm^3; {} Gvx).".format(
         astrocyte_g.number_of_nodes(), len(ccs), total_size_cmm, total_size / 1e9))
-
+    with open(global_params.config.astrocyte_svagg_list_path, 'w') as f:
+        for cc in ccs:
+            f.write(','.join([str(el) for el in cc]) + '\n')
     nx.write_edgelist(astrocyte_g, global_params.config.astrocyte_svgraph_path())
-    # Added np.min(list(cc)) to have deterministic SSV ID
-    txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
-    write_txt2kzip(global_params.config.working_dir + "/glia/astrocyte_svgraph_ml.k.zip", txt, "mergelist.txt")
 
 
 def transform_rag_edgelist2pkl(rag):

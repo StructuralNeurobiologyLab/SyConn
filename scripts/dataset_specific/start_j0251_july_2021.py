@@ -159,7 +159,7 @@ if __name__ == '__main__':
     #
     # log.info('Step 7/9 - Morphology extraction')
     # ftimer.start('Morphology extraction')
-    # exec_inference.run_morphology_embedding()
+    # exec_inference.run_cell_embedding()
     # ftimer.stop()
 
     # Process contact sites only with some nodes
