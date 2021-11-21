@@ -18,7 +18,7 @@ from syconn.handler.config import initialize_logging
 from syconn.handler.prediction_pts import predict_glia_ssv, predict_celltype_ssd, infere_cell_morphology_ssd, \
     predict_cmpt_ssd
 from syconn.mp import batchjob_utils as qu
-from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, write_astrocyte_svgraph, transform_rag_edgelist2pkl
+from syconn.proc.glia_splitting import run_glia_splitting, collect_glia_sv, write_astrocyte_svgraph, transform_rag_edgelist2pkl
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc.graphs import split_subcc_join
 from syconn.reps.segmentation import SegmentationDataset
@@ -95,7 +95,7 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
     if not qu.batchjob_enabled() and global_params.config.use_point_models:
         ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
         ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in multi_params]
-        infere_cell_morphology_ssd(ssv_params)
+        infere_cell_morphology_ssd(ssv_params, mpath=global_params.config.mpath_tnet_pts_wholecell)
     else:
         # split all cells into upper half and lower half (sorted by size)
         half_ix = len(multi_params) // 2
@@ -355,8 +355,6 @@ def run_astrocyte_splitting():
         Requires :func:`~syconn.exec_init.init_cell_subcell_sds`,
         :func:`~run_astrocyte_rendering` and :func:`~run_astrocyte_prediction`.
     """
-    # TODO: built-in new sv agglomeration list data format
-    raise NotImplementedError('Astrocyte splitting requires refactoring.')
     log = initialize_logging('astrocyte_separation', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     G = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
@@ -369,7 +367,7 @@ def run_astrocyte_splitting():
 
     # first perform glia splitting based on multi-view predictions, results are
     # stored at SuperSegmentationDataset ssv_gliaremoval
-    qsub_glia_splitting()
+    run_glia_splitting()
 
     # collect all neuron and glia SVs and store them in numpy array
     collect_glia_sv()

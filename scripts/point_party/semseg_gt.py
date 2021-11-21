@@ -63,10 +63,6 @@ def anno_skeleton2np(a_obj, scaling, verbose=False):
     g.add_nodes_from([(i, dict(label=a_node_labels[i])) for i in range(len(a_nodes))])
     g.add_edges_from(a_edges)
     a_edges = np.array(g.edges)
-    a_node_labels_orig = np.array(a_node_labels)
-    # use a_end and d_end as axon and dendrite label, but to not use them as starting locations
-    a_node_labels[a_node_labels == 13] = 0  # convert to dendrite
-    a_node_labels[a_node_labels == 14] = 1  # convert to axon
     # remove labels on branches that are only at the soma
     # propagate labels, nodes with no label get label from nearest node with label
     if -1 in a_node_labels:
@@ -84,6 +80,11 @@ def anno_skeleton2np(a_obj, scaling, verbose=False):
                     # all nodes between source and first node with label take on that label
                     path = nx.shortest_path(g, node, ix)
                     a_node_labels[path] = a_node_labels[ix]
+    # keep 13 and 14 in orig labels (so that they will not be used as starting nodes for context generation)
+    a_node_labels_orig = np.array(a_node_labels)
+    # use a_end and d_end as axon and dendrite label, but not as starting locations
+    a_node_labels[a_node_labels == 13] = 0  # convert to dendrite
+    a_node_labels[a_node_labels == 14] = 1  # convert to axon
     return a_node_coords, a_edges, a_node_labels, a_node_labels_raw, g, a_node_labels_orig
 
 
@@ -95,12 +96,15 @@ def labels2mesh(args):
             out_path: path to folder where output should be saved.
     """
     kzip_path, out_path, version, overwrite = args
-    sso_id = int(re.findall(r"_(\d+)", os.path.split(kzip_path)[1])[0])
-    sso = SuperSegmentationObject(sso_id, version=version)
-    assert sso.attr_dict_exists
+    if 'areaxfs3' in global_params.wd:
+        sso_id = int(re.findall(r"(\d+).\d+.k.zip", os.path.split(kzip_path)[1])[0])
+    else:
+        sso_id = int(re.findall(r"_(\d+)", os.path.split(kzip_path)[1])[0])
     path2pkl = f'{out_path}/sso_{sso_id}.pkl'
     if os.path.isfile(path2pkl) and not overwrite:
         return
+    sso = SuperSegmentationObject(sso_id, version=version)
+    assert sso.attr_dict_exists
     # load annotation object
     a_obj = load_skeleton(kzip_path, scaling=sso.scaling)
     if len(a_obj) == 1:
@@ -109,6 +113,8 @@ def labels2mesh(args):
         a_obj = a_obj[str(sso_id)]
     elif 'skeleton' in a_obj:
         a_obj = a_obj["skeleton"]
+    elif 1 in a_obj:  # use first annotation object.. OBDA
+        a_obj = a_obj[1]
     else:
         raise ValueError(f'Could not find annotation skeleton in "{kzip_path}".')
 
@@ -117,16 +123,24 @@ def labels2mesh(args):
 
     # load and prepare sso
     sso.load_attr_dict()
-    # load skeleton (skeletons were already generated before)
-    sso.load_skeleton()
-    skel = sso.skeleton
-    nodes = skel['nodes'] * sso.scaling
-    edges = skel['edges']
 
     # extract node coordinates and labels and remove nodes with label 11 (ignore)
     a_node_coords, a_edges, a_node_labels, a_node_labels_raw, g, a_node_labels_orig = \
         anno_skeleton2np(a_obj, scaling=sso.scaling)
     a_node_coords_orig = np.array(a_node_coords)
+
+    if 'areaxfs3' in global_params.wd:
+        sso.load_skeleton()
+        nodes = sso.skeleton['nodes'] * sso.scaling
+        edges = sso.skeleton['edges']
+    else:
+        # keep the kzip skeleton, as they might contain new edges and nodes
+        nodes = np.array(a_node_coords)
+        sso.skeleton = dict()
+        sso.skeleton['nodes'] = nodes / sso.scaling
+        sso.skeleton['edges'] = np.array(a_edges)
+        sso.skeleton['diameters'] = np.ones((len(nodes), 1))
+        edges = sso.skeleton['edges']
 
     # remove nodes with ignore labels
     for l_remove in label_remove[TARGET_LABELS]:
@@ -151,12 +165,16 @@ def labels2mesh(args):
     # TODO: use graph traversal approach
     dists, ixs = kdt.query(nodes, distance_upper_bound=1000)
     node_labels[dists == np.inf] = 0
-    raise()
+
     node_orig_labels[dists != np.inf] = a_node_labels_orig[ixs[dists != np.inf]]
     kdt = cKDTree(a_node_coords)
     # load cell and cell organelles
     # _ = sso._load_obj_mesh('syn_ssv', rewrite=True)
-    meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
+    if global_params.wd == '/wholebrain/scratch/areaxfs3/':
+        # syn_ssv do not exists there yet
+        meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.sj_mesh]
+    else:
+        meshes = [sso.mesh, sso.mi_mesh, sso.vc_mesh, sso.syn_ssv_mesh]
     feature_map = dict(pts_feat_dict)
 
     obj_names = ['sv', 'mi', 'vc', 'syn_ssv']
@@ -320,10 +338,10 @@ def gt_generation(kzip_paths, out_path, version: str = None, overwrite=True):
 
 if __name__ == "__main__":
     TARGET_LABELS = 'fine'  # 'ads'
-    # j0251 GT refined
+    # j0251 GT refined (Nov 16, 2021)
     global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
 
-    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/valid/"
+    data_path = "/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/train/"
     destination = data_path + '/hc_out_2021_11_fine/'
     os.makedirs(destination, exist_ok=True)
     file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
@@ -338,8 +356,9 @@ if __name__ == "__main__":
     #
     # gt_generation(file_paths, destination)
 
-    # # spine GT
+    # # spine GT (CMN paper)
+    # data_path = "/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/"
+    # destination = data_path + '/pkl_files/'
     # global_params.wd = "/wholebrain/scratch/areaxfs3/"
-    # data_path = data_path + "/sparse_gt/spgt/"
     # file_paths = glob.glob(data_path + '*.k.zip', recursive=False)
     # gt_generation(file_paths, destination, version='spgt')

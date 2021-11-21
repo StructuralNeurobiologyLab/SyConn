@@ -60,7 +60,7 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
     cc_dict = {}
     if apply_ssv_size_threshold:
         g_p = global_params.config.neuron_svgraph_path
-        sv_g = nx.read_edgelist(global_params.config.neuron_svgraph_path, nodetype=np.uint64)
+        sv_g = nx.read_edgelist(g_p, nodetype=np.uint64)
         sd = SegmentationDataset("sv", working_dir=working_dir)
 
         sv_size_dict = {}

@@ -75,7 +75,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
           synapse fragments between supervoxels.
         * 'syn_ssv': Final synapse objects. Agglomerated 'syn' objects based on the supervoxel graph.
         * 'cs_ssv': Final contact site objects. Agglomerated 'cs' objects based on the supervoxel graph.
-            Only processed if `generate_cs_ssv` is set to True in the config.
+            Only processed if ``['cell_contacts']['generate_cs_ssv']`` is set to True in the config.
 
     Args:
         chunk_size: The size of processed cubes.
@@ -160,6 +160,7 @@ def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
     # create SD of type 'cs_ssv' -> cell-cell contact sites
     log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
+    log.info('Starting cs_ssv dataset generation.')
     cps.combine_and_split_cs(global_params.config.working_dir,
                              log=log, n_folders_fs=n_folders_fs,
                              overwrite=overwrite)

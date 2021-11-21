@@ -3,6 +3,7 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
+```{eval-rst}
 Welcome to SyConn's documentation!
 ==================================
 
@@ -12,14 +13,16 @@ For the API documentation please refer to:
    :maxdepth: 1
 
    syconn
+```
 
-.. mdinclude:: doc.md
+```{include} doc.md
+```
 
-
+```{eval-rst}
 Indices and tables
 ------------------
 
 :ref:`genindex`
 :ref:`modindex`
 :ref:`search`
-
+```

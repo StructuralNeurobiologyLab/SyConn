@@ -106,7 +106,7 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
     while True:
         try:
             inp = q_postproc.get_nowait()
-            if 'STOP' in inp:
+            if isinstance(inp, str) and 'STOP' in inp:
                 if inp not in stops_received:
                     stops_received.add(inp)
                 else:
@@ -164,7 +164,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         while True:
             try:
                 inp = q_in.get_nowait()
-                if 'STOP' in inp and isinstance(inp, str):
+                if isinstance(inp, str) and 'STOP' in inp:
                     if inp not in stops_received:
                         stops_received.add(inp)
                     else:
@@ -172,7 +172,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                         while True:
                             try:
                                 inp = q_in.get_nowait()
-                                if 'STOP' in inp and isinstance(inp, str):
+                                if isinstance(inp, str) and 'STOP' in inp:
                                     if inp not in stops_received:
                                         stops_received.add(inp)
                                     else:
@@ -182,21 +182,23 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                                     break
                             except queues.Empty:
                                 break
+                        # shuffle to break symmetry
+                        np.random.shuffle(stops_received_notneeded)
                         for el in stops_received_notneeded:
                             q_in.put_nowait(el)
-                        if len(stops_received_notneeded) > 0:
+                        if (time.time() - start_time > 3600 / 2) and len(stops_received_notneeded) > 0:
                             log_handler.debug(
                                 f'Worker pred {worker_cnt} got STOP handles {stops_received_notneeded} multiple '
                                 f'times. Putting it back to the queue.')
                             # prevent freeze in case two loader keep pulling the same STOP item over and over.
                             time.sleep(np.random.randint(35) / 10)
-                            stops_received_notneeded = []
+                        stops_received_notneeded = []
                     if len(stops_received) == n_worker_load:
                         break
                     continue
             except queues.Empty:
                 time.sleep(1)
-                if (time.time() - start_time > 3600 / 2) and len(stops_received) > 0:
+                if (time.time() - start_time > 4*3600 / 2) and len(stops_received) > 0:
                     log_handler.warning(f'Worker pred {worker_cnt} stuck with {len(stops_received)} '
                                         f'STOP signals: {stops_received}')
                 continue
@@ -272,8 +274,7 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
                 if show_progress:
                     pbar.close()
                 if cnt_loder_done != nloader:
-                    log_handler.error(f'Only {cnt_loder_done}/{nloader} loader finished.')
-                    sys.exit(1)
+                    log_handler.warning(f'Only {cnt_loder_done}/{nloader} loader finished.')
                 break
             if show_progress:
                 pbar.update(res)
@@ -424,7 +425,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         else:
             ssv_ids = np.array(ssv_ids, np.uint64)
         ssv_sizes = start_multiprocess_imap(_size_counter, [(ssv_id, ssd_kwargs) for ssv_id in ssv_ids],
-                                            nb_cpus=None, desc='Size-sorting')
+                                            nb_cpus=None, desc='Size-sorting', show_progress=False)
         ssv_sizes = np.array(ssv_sizes)
         sorted_ix = np.argsort(ssv_sizes)[::-1]
         ssv_ids = ssv_ids[sorted_ix]
@@ -864,6 +865,15 @@ def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
     ssv_kwargs, model_inp, batch_progress, n_batches = inp
     n_samples = len(model_inp[0])
     res = []
+    # Prevent silent crash with zero sized inputs
+    if model_inp[0].size == 0:
+        inp_sh = np.array(model_inp[0].shape)
+        inp_sh[inp_sh == 0] = 1
+        model_inp0 = np.zeros(inp_sh, dtype=np.float32)
+        inp_sh = np.array(model_inp[1].shape)
+        inp_sh[inp_sh == 0] = 1
+        model_inp1 = np.zeros(inp_sh, dtype=np.float32)
+        model_inp = (model_inp0, model_inp1)
     for ii in range(0, int(np.ceil(n_samples / bs))):
         low = bs * ii
         high = bs * (ii + 1)
@@ -914,8 +924,6 @@ def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
 def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = None,
                         da_equals_tan: bool = True) -> Tuple[List[int], List[bool]]:
     """
-    Framework is very similar to what will be needed for semantic segmentation of surface points.
-    Requires adaptions in pts_loader_semseg and correct merge of vertex indices instead of skeleton node cKDTree.
 
     Args:
         ssv_kwargs:
@@ -1436,15 +1444,13 @@ def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str]
             if curr_ix == res['n_batches']:
                 break
         except Exception as e:
-            print(f'ERROR during "pts_postproc_embedding" of {sso}: {str(e)}')
-            log_handler.error(f'ERROR during "pts_postproc_embedding" of {sso}: {str(e)}')
+            log_handler.error(f'Exception during "pts_postproc_embedding" of {sso}: {str(e)}')
             raise Exception from e
 
     node_embedding = np.concatenate(node_embedding)
     node_coords = np.concatenate(node_coords)
 
     # map inference sites of latent vecs to skeleton node locations via nearest neighbor
-    # TODO: perform interpolation?
     sso.load_skeleton()
     hull_tree = spatial.cKDTree(node_coords)
     dists, ixs = hull_tree.query(sso.skeleton["nodes"] * sso.scaling, n_jobs=sso.nb_cpus, k=1)
@@ -1462,6 +1468,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     semantic segmentation tasks, e.g. spine, bouton and functional compartment
     prediction.
+    Output point labels for ultra-structure will be -1.
 
     Args:
         fnames_pkl:
@@ -1470,7 +1477,8 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         ctx_size:
         transform:
         use_subcell:
-        mask_borders_with_id:
+        mask_borders_with_id: Take into account potential label remapping downstream. Setting `mask_borders_with_id` to
+            -1 will tread boundary regions the same way as ultra-structure.
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -1574,245 +1582,11 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
             # TODO: currently only supports type(out_point_label) = int
             # batch_out_l[cnt] = hc_sub.labels[out_pts_mask][idx]
             batch_out_l[cnt] = hc_sub.labels
-            if -1 in batch_out_l[cnt]:
-                assert mask_borders_with_id is not None
-                batch_out_l[cnt][batch_out_l[cnt] == -1] = mask_borders_with_id
             cnt += 1
         assert cnt == batchsize
         # TODO: Add masking if beneficial - for now just use all input points and their labels
         # yield (batch_f, batch), (batch_out, batch_out_l)
         yield batch_f, batch, batch_out_l
-
-
-def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
-                      out_point_label: Optional[List[Union[str, int]]] = None,
-                      batchsize: Optional[int] = None, npoints: Optional[int] = None,
-                      ctx_size: Optional[float] = None, transform: Optional[Callable] = None,
-                      n_out_pts: int = 100, train=False, base_node_dst: float = 10000, use_subcell: bool = True,
-                      ssd_kwargs: Optional[dict] = None) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
-    """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    local point-to-scalar tasks, e.g. morphology embeddings or glia detection.
-
-    Args:
-        ssv_params: SuperSegmentationObject IDs and SSD kwargs for which samples are generated.
-        out_point_label: Either key for sso.skeleton attribute or int (used for all out locations).
-        batchsize: Only used during training.
-        ctx_size:
-        npoints: Number of points used to generate sample context.
-        transform: Transformation/agumentation applied to every sample.
-        n_out_pts: Maximum number of out points.
-        use_subcell: Use points of subcellular structure.
-        train: True, train; False, eval mode:
-            * train: choose `batchsize` random nodes from the SSV skeleton
-              as base points for the context retrieval.
-            * eval: return as many batches (size `batchsize`) as there are base nodes in the SSV
-              skeleton (distance between nodes see `base_node_dst`).
-        base_node_dst: Distance between base nodes for context retrieval during eval mode.
-        ssd_kwargs:
-
-    Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
-        If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
-        the last batch will have output_label=1.
-
-    """
-    if ctx_size is None:
-        ctx_size = 20000
-    # TODO: support node attributes in hybrid cloud graph also
-    if type(out_point_label) == str:
-        raise NotImplementedError
-    feat_dc = dict(pts_feat_dict)
-    del feat_dc['syn_ssv_asym']
-    del feat_dc['syn_ssv_sym']
-    if not use_subcell:
-        del feat_dc['mi']
-        del feat_dc['vc']
-        del feat_dc['syn_ssv']
-    if ssv_params is None:
-        if ssd_kwargs is None:
-            raise ValueError
-        ssv_params = ssd_kwargs
-    if train:
-        # in 1 out 5 events augment the context size by factor [0.6, 1.4] drawn from a normal distribution with mean 1
-        # and std 0.1
-        if np.random.randint(0, 4) == 0:
-            fluct = 1
-        else:
-            fluct = min(max(np.random.randn(1)[0] * 0.1 + 1, 0.6), 1.4)
-        ctx_size_fluct = fluct * ctx_size
-
-    else:
-        ctx_size_fluct = ctx_size
-    for curr_ssv_params in ssv_params:
-        # do not write SSV mesh in case it does not exist (will be build from SV meshes)
-        ssv = SuperSegmentationObject(mesh_caching=False, **curr_ssv_params)
-        if train:
-            hc = _load_ssv_hc_cached((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', None))
-        else:
-            hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'compartment', None))
-        ssv.clear_cache()
-        npoints_ssv = min(len(hc.vertices), npoints)
-        # add a +-10% fluctuation in the number of input and output points
-        npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-        n_out_pts_curr = n_out_pts + npoints_add
-        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
-        npoints_ssv += npoints_add
-        if train:
-            source_nodes = np.random.choice(len(hc.nodes), batchsize, replace=len(hc.nodes) < batchsize)
-        else:
-            # source_nodes = hc.base_points(threshold=base_node_dst, source=len(hc.nodes) // 2)
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-            pcd, idcs = pcd.voxel_down_sample_and_trace(
-                base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
-            source_nodes = np.max(idcs, axis=1)
-            batchsize = min(len(source_nodes), batchsize)
-        n_batches = int(np.ceil(len(source_nodes) / batchsize))
-        if len(source_nodes) % batchsize != 0:
-            source_nodes = np.concatenate(
-                [np.random.choice(source_nodes, batchsize - len(source_nodes) % batchsize), source_nodes])
-        for ii in range(n_batches):
-            batch = np.zeros((batchsize, npoints_ssv, 3))
-            batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
-            # TODO: add vertex indices for quick merge at the end
-            if not train:
-                batch_out_orig = np.zeros((batchsize, n_out_pts_curr, 3))
-            batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
-            cnt = 0
-            for source_node in source_nodes[ii::n_batches]:
-                # create local context
-                node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
-                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                sample_feats = hc_sub.features
-                sample_pts = hc_sub.vertices
-                # get target locations ~1um apart
-                pcd = o3d.geometry.PointCloud()
-                pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                pcd, idcs = pcd.voxel_down_sample_and_trace(
-                    1000, pcd.get_min_bound(), pcd.get_max_bound())
-                base_points = np.max(idcs, axis=1)
-                base_points = np.random.choice(base_points, n_out_pts_curr,
-                                               replace=len(base_points) < n_out_pts_curr)
-                out_coords = hc_sub.nodes[base_points]
-                # sub-sample vertices
-                sample_ixs = np.arange(len(sample_pts))
-                np.random.shuffle(sample_ixs)
-                sample_pts = sample_pts[sample_ixs][:npoints_ssv]
-                sample_feats = sample_feats[sample_ixs][:npoints_ssv]
-                # add duplicate points before applying the transform if sample_pts
-                # has less points than npoints_ssv
-                npoints_add = npoints_ssv - len(sample_pts)
-                idx = np.random.choice(len(sample_pts), npoints_add)
-                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
-                # TODO: batch_out needs to be adapted, also add batch_out_ixs to store the vertex indices for quick
-                #  merge at the end
-                # one hot encoding
-                sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
-                hc_sub._vertices = sample_pts
-                hc_sub._features = sample_feats
-                # apply augmentations
-                if transform is not None:
-                    transform(hc_sub)
-                batch[cnt] = hc_sub.vertices
-                batch_f[cnt] = hc_sub.features
-                batch_out[cnt] = hc_sub.nodes
-                if not train:
-                    batch_out_orig[cnt] = out_coords
-                # TODO: currently only supports type(out_point_label) = int
-                batch_out_l[cnt] = out_point_label
-                cnt += 1
-            assert cnt == batchsize
-            if not train:
-                batch_progress = ii + 1
-                yield curr_ssv_params, (batch_f, batch, batch_out), batch_out_orig, batch_progress, n_batches
-            else:
-                yield curr_ssv_params, (batch_f, batch), (batch_out, batch_out_l)
-
-
-def pts_pred_semseg(m, inp, q_out, d_out, q_cnt, device, bs):
-    """
-
-    Args:
-        m: Model instance.
-        inp: Input as given by the loader_func.
-        q_out:
-        d_out:
-        q_cnt:
-        device:
-        bs:
-
-    Returns:
-
-    """
-    # TODO: is it possible to get 'device' directly from model 'm'?
-    ssv_params, model_inp, out_pts_orig, batch_progress, n_batches = inp
-    res = []
-    with torch.no_grad():
-        for ii in range(0, int(np.ceil(len(model_inp[0]) / bs))):
-            low = bs * ii
-            high = bs * (ii + 1)
-            with torch.no_grad():
-                g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
-                out = m(*g_inp).cpu().numpy()
-            res.append(out)
-    res = dict(t_pts=out_pts_orig, t_l=np.concatenate(res), n_batches=n_batches)
-
-    q_cnt.put_nowait(1. / n_batches)
-    d_out[ssv_params['ssv_id']].put(res)
-    if batch_progress == 1:
-        q_out.put_nowait(ssv_params)
-
-
-def pts_postproc_semseg(ssv_id: int, d_in: dict, working_dir: Optional[str] = None,
-                        version: Optional[str] = None) -> Tuple[List[int], List[bool]]:
-    """
-    Framework is very similar to what will be needed for semantic segmentation of surface points.
-    Requires adaptions in pts_loader_semseg and correct merge of vertex indices instead of skeleton node cKDTree.
-
-    Args:
-        ssv_id:
-        d_in:
-        working_dir:
-        version:
-
-    Returns:
-
-    """
-    curr_ix = 0
-    sso = SuperSegmentationObject(ssv_id=ssv_id, working_dir=working_dir, version=version)
-    sso.load_skeleton()
-    skel = sso.skeleton
-    node_preds = []
-    node_coords = []
-
-    while True:
-        try:
-            # res: [(dict(t_pts=.., t_label, batch_process)]
-            res = d_in[sso.id].get_nowait()
-            curr_ix += 1
-        except queues.Empty:
-            time.sleep(0.25)
-            continue
-        # el['t_l'] has shape (b, num_points, n_classes) -> (n_nodes, 1)
-        node_preds.append(np.argmax(res['t_l'].reshape(-1, 2), axis=1)[..., None])
-        # el['t_pts'] has shape (b, num_points, 3) -> (n_nodes, 3)
-        node_coords.append(res['t_pts'].reshape(-1, 3))
-        if curr_ix == res['n_batches']:
-            break
-    node_preds = np.concatenate(node_preds)
-    node_coords = np.concatenate(node_coords)
-    kdt = cKDTree(node_coords)
-    dists, ixs = kdt.query(skel['nodes'] * sso.scaling, k=10, distance_upper_bound=2000)
-    node_pred = np.ones(len(skel['nodes'])) * -1
-    for ii, nn_dists, nn_ixs in zip(np.arange(len(skel['nodes'])), dists, ixs):
-        nn_ixs = nn_ixs[nn_dists != np.inf]
-        preds = node_preds[nn_ixs].squeeze()
-        node_pred[ii] = collections.Counter(preds).most_common(1)[0][0]
-    # every node has at least one prediction
-    assert np.sum(node_pred == -1) == 0, "Unpredicted skeleton node."
-    return [ssv_id], [True]
 
 
 @functools.lru_cache(maxsize=128)
@@ -2041,7 +1815,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
         use_myelin = True
     else:
         use_myelin = False
-    default_kwargs = dict(nloader=8, npredictor=4, npostproc=2, bs=10, loader_kwargs=dict(
+    default_kwargs = dict(nloader=10, npredictor=2, npostproc=2, bs=10, loader_kwargs=dict(
         n_out_pts=1, base_node_dst=loader_kwargs['ctx_size'] / 2, use_syntype=True, use_subcell=True,
         use_myelin=use_myelin))
     postproc_kwargs = dict(pred_key=pred_key)
@@ -2090,7 +1864,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
         use_syntype = False
     if '_cellshapeOnly' in mpath:
         cellshape_only = True
-    default_kwargs = dict(nloader=8, npredictor=4, bs=10, npostproc=2,
+    default_kwargs = dict(nloader=10, npredictor=2, bs=20, npostproc=2,
                           loader_kwargs=dict(redundancy=20, map_myelin=map_myelin, use_syntype=use_syntype,
                                              cellshape_only=cellshape_only),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
@@ -2166,7 +1940,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     ssd_kwargs = [{'ssv_id': ssv_id, 'working_dir': ssd_kwargs['working_dir']} for ssv_id in ssv_ids]
-    default_kwargs = dict(nloader=6, npredictor=2, npostproc=4, bs=batchsizes)
+    default_kwargs = dict(nloader=8, npredictor=2, npostproc=4, bs=batchsizes)
     if 'bs' in add_kwargs and type(add_kwargs['bs']) == dict:
         raise ValueError('Non default batch size is meant to be a factor which is multiplied with the model'
                          ' dependent batch sizes.')

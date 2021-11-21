@@ -398,7 +398,8 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         return self.mapping_lookup_reverse.id_array
 
-    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False):
+    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False) -> \
+            Optional[np.ndarray]:
         """
         Todo:
             * remove 's' appendix in file names.
@@ -961,3 +962,38 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
                                           overwrite=True, **view_props)
         else:
             ssv.predict_views_embedding(m, pred_key_appendix)
+
+
+def filter_ssd_by_total_pathlength(ssd: SuperSegmentationDataset, min_edge_length: float) -> np.ndarray:
+    """
+    Filter cells concurrently.
+
+    Args:
+        ssd: Cell reconstruction dataset.
+        min_edge_length: Minim skeleton edge length in µm.
+
+    Returns:
+        Array of :class:`~SuperSegmentationObject` that have a total skeleton edge length > `min_edge_length`.
+    """
+    # TODO: @hashirah adapt numpy cache key
+    total_path_lengths = ssd.load_numpy_data('total_edge_length')
+    if total_path_lengths is not None:
+        return ssd.ssv_ids[total_path_lengths >= min_edge_length]
+    if total_path_lengths == 0:
+        return ssd.ssv_ids
+    params = [(ch, min_edge_length) for ch in chunkify(ssd.ssv_ids, min(len(ssd.ssv_ids), 1000))]
+    filtered_ssv_ids = np.concatenate(sm.start_multiprocess_imap(_filter_ssvs_by_total_pathlength, params))
+    return filtered_ssv_ids
+
+
+def _filter_ssvs_by_total_pathlength(args: tuple) -> list:
+    ssv_ids, min_edge_length = args
+    ssv_ids_of_interest = []
+    ssd = SuperSegmentationDataset()
+    for ssv_id in ssv_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        length = ssv.total_edge_length() / 1e3  # nm to µm
+        if length < min_edge_length:
+            continue
+        ssv_ids_of_interest.append(ssv_id)
+    return ssv_ids_of_interest

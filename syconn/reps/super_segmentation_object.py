@@ -2149,11 +2149,10 @@ class SuperSegmentationObject(SegmentationBase):
         # (last two colors correspond to background and undpredicted vertices (k=0))
         cols = None
         if dest_path is not None:
-            if 'spiness' in semseg_key:
+            if 'spiness' in semseg_key or 'dnho' in semseg_key or 'do' in semseg_key:
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
-                cols = (cols * 255).astype(np.uint8)
             elif 'axon' in semseg_key:
                 # cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                 #                  [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1],
@@ -2163,10 +2162,14 @@ class SuperSegmentationObject(SegmentationBase):
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.8, 0.8, 0.1, 1], [0.9, 0.9, 0.9, 1],
                                  [0.1, 0.1, 0.9, 1]])
-                cols = (cols * 255).astype(np.uint8)
+            elif 'ads' in semseg_key:
+                # dendrite, axon, soma, bouton, terminal, background, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                                 [0.1, 0.1, 0.1, 1], ])
             else:
                 raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))
+            cols = (cols * 255).astype(np.uint8)
         return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
@@ -2185,7 +2188,8 @@ class SuperSegmentationObject(SegmentationBase):
             k: int
                 Number of nearest neighbors (NN) during k-NN classification
             ds_vertices: int
-                striding factor for vertices
+                striding factor for vertices, uses ``max(1, ds_vertices // 10)`` if
+                ``len(vertices) < 5e6``.
             ignore_labels: List[int]
                 Vertices with labels in `ignore_labels` will be ignored during
                 majority vote, e.g. used to exclude unpredicted vertices.
@@ -2201,6 +2205,8 @@ class SuperSegmentationObject(SegmentationBase):
             ignore_labels = []
         coords = np.array(coords) * self.scaling
         vertices = self.mesh[1].reshape((-1, 3))
+        if len(vertices) == 0:
+            return np.zeros((0, ), dtype=np.int32)
         if len(vertices) < 5e6:
             ds_vertices = max(1, ds_vertices // 10)
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]

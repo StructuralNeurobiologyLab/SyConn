@@ -1,25 +1,21 @@
 # Documentation
 
 ## Installation
-* Python 3.6/3.7
+* Python 3.7
 * The whole pipeline was designed and tested on Linux systems
-* SyConn functionality is mostly based on the packages
-  [elektronn3](https://github.com/ELEKTRONN/elektronn3) and
-  [knossos-utils](https://github.com/knossos-project/knossos_utils)
-* [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
 Before you can set up SyConn, ensure that the
 [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
 package manager is installed on your system. Then you can install SyConn
 and all of its dependencies into a new conda
 [environment](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html)
-named "syco" by running:
+named "syconn2" by running:
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn
     cd SyConn
-    conda env create -f environment.yml -n syco python=3.7
-    conda activate syco
-    pip install --no-deps -v -e .
+    conda env create -f environment.yml -n syconn2 python=3.7
+    conda activate syconn2
+    pip install -e .
 
 
 The last command will install SyConn in
@@ -28,7 +24,7 @@ mode, which is useful for development on SyConn itself. If you want to
 install it as a regular read-only package instead, replace the last
 command with:
 
-    pip install --no-deps -v .
+    pip install .
 
 
 To update the environment, e.g. if the environment file changed, use:
@@ -51,26 +47,31 @@ The example script analyzes the EM data based on KnossosDatasets (see `knossos_u
 probability maps of sub-cellular structures (mitochondria, vesicle clouds and synaptic junctions) and synapse type
 (inhibitory, excitatory). For adding further cell organelles to this pipeline see [here](cellorganelle_integration.md).
 
-On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
-finished the following analysis steps for an example cube of shape \[2180 2180 1140] after 02h:16min:52s.
+On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (NVidia Quadro RTX 5000) SyConn
+finished the following analysis steps for an example cube of shape \[1100 1100 600] (1.452e-06 mm^3; 0.726 GVx) after 00h:31min:46s.
 
-\[0/8] Preparation                       00h:07min:21s                   5%
+\[1/11]    Preparation                             0d:0h:1min:20s      4.2%
 
-\[1/8] SD generation                     00h:29min:41s                   21%
+\[2/11]    Dense predictions                       0d:0h:1min:2s       3.3%
 
-\[2/8] SSD generation                    00h:01min:28s                   1%
+\[3/11]    SD generation                           0d:0h:3min:55s      12.3%
 
-\[3/8] Neuron rendering                  00h:40min:03s                   29%
+\[4/11]    SSD generation                          0d:0h:0min:33s      1.7%
 
-\[4/8] Synapse detection                 00h:32min:18s                   23%
+\[5/11]    Skeleton generation                     0d:0h:8min:35s      27.0%
 
-\[5/8] Axon prediction                   00h:05min:11s                   3%
+\[6/11]    Synapse detection                       0d:0h:5min:35s      17.6%
 
-\[6/8] Spine prediction                  00h:14min:03s                   10%
+\[7/11]    Contact detection                       0d:0h:0min:0s       0.0%
 
-\[7/8] Celltype analysis                 00h:06min:06s                   4%
+\[8/11]    Compartment predictions                 0d:0h:6min:4s       19.1%
 
-\[8/8] Matrix export                     00h:00min:37s                   0%
+\[9/11]    Morphology extraction                   0d:0h:2min:7s       6.7%
+
+\[10/11]   Celltype analysis                       0d:0h:2min:23s      7.5%
+
+\[11/11]   Matrix export                           0d:0h:0min:7s       0.4%
+
 
 
 ## Example scripts and API usage

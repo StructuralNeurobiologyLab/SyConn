@@ -35,11 +35,15 @@ if __name__ == '__main__':
         ('nnodes_total', 17),
         ('use_point_models', True),
         ('meshes', {'use_new_meshing': True}),
+        ('cell_contacts',
+         {'generate_cs_ssv': False,  # cs_ssv: contact site objects between cells
+          'min_path_length_partners': 50,
+          }),
         ('views', {'use_onthefly_views': True,
                    'use_new_renderings_locs': True,
                    'view_properties': {'nb_views': 3}
                    }),
-        ('slurm', {'exclude_nodes': []}),
+        ('slurm', {'exclude_nodes': ['wb08', 'wb09', 'wb10']}),
         ('cell_objects',
          {'sym_label': 1, 'asym_label': 2,
           'min_obj_vx': {'sv': 1},
@@ -82,31 +86,31 @@ if __name__ == '__main__':
     ftimer = FileTimer(working_dir + '/.timing.pkl')
     ftimer.start('Preparation')
 
-    # Preparing config
-    # currently this is were SyConn looks for the neuron rag
-    if global_params.wd is not None:
-        log.critical('Example run started. Original working directory defined'
-                     ' in `global_params.py` '
-                     'is overwritten and set to "{}".'.format(working_dir))
-
-    generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
-                          kd_vc=vc_kd_path, kd_sj=sj_kd_path, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
-                          key_value_pairs=key_val_pairs_conf, force_overwrite=True)
-
-    global_params.wd = working_dir
-    os.makedirs(global_params.config.temp_path, exist_ok=True)
-    start = time.time()
-
-    # check model existence
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
-                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
-                      'mpath_tnet']:
-        mpath = getattr(global_params.config, mpath_key)
-        if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
-            raise ValueError('Could not find model "{}". Make sure to copy the'
-                             ' "models" folder into the current working '
-                             'directory "{}".'.format(mpath, working_dir))
-    ftimer.stop()
+    # # Preparing config
+    # # currently this is were SyConn looks for the neuron rag
+    # if global_params.wd is not None:
+    #     log.critical('Example run started. Original working directory defined'
+    #                  ' in `global_params.py` '
+    #                  'is overwritten and set to "{}".'.format(working_dir))
+    #
+    # generate_default_conf(working_dir, scale, syntype_avail=syntype_avail, kd_seg=seg_kd_path, kd_mi=mi_kd_path,
+    #                       kd_vc=vc_kd_path, kd_sj=sj_kd_path, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
+    #                       key_value_pairs=key_val_pairs_conf, force_overwrite=True)
+    #
+    # global_params.wd = working_dir
+    # os.makedirs(global_params.config.temp_path, exist_ok=True)
+    # start = time.time()
+    #
+    # # check model existence
+    # for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+    #                   'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+    #                   'mpath_tnet']:
+    #     mpath = getattr(global_params.config, mpath_key)
+    #     if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
+    #         raise ValueError('Could not find model "{}". Make sure to copy the'
+    #                          ' "models" folder into the current working '
+    #                          'directory "{}".'.format(mpath, working_dir))
+    # ftimer.stop()
 
     # # Start SyConn
     # # --------------------------------------------------------------------------
@@ -152,28 +156,29 @@ if __name__ == '__main__':
     # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc,
     #                              transf_func_sj_seg=cellorganelle_transf_funcs['sj'])
     # ftimer.stop()
-
-    log.info('Step 7/9 - Morphology extraction')
-    ftimer.start('Morphology extraction')
-    exec_inference.run_morphology_embedding()
-    ftimer.stop()
+    #
+    # log.info('Step 7/9 - Morphology extraction')
+    # ftimer.start('Morphology extraction')
+    # exec_inference.run_cell_embedding()
+    # ftimer.stop()
 
     # Process contact sites only with some nodes
-    global_params.config['slurm']['exclude_nodes'] = ['wb02', 'wb03', 'wb04', 'wb05', 'wb06', 'wb07', 'wb08', 'wb09',
+    global_params.config['slurm']['exclude_nodes'] = ['wb07', 'wb08', 'wb09',
                                                       'wb10', 'wb11']
     global_params.config.write_config()
     time.sleep(10)  # wait for changes to apply
     log.info('Step 5.5/9 - Contact detection')
     ftimer.start('Contact detection')
-    if global_params.config['generate_cs_ssv']:
+    if global_params.config['cell_contacts']['generate_cs_ssv']:
         exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc)
     else:
         log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
     ftimer.stop()
 
-    global_params.config['slurm']['exclude_nodes'] = []
-    global_params.config.write_config()
-    time.sleep(10)  # wait for changes to apply
+    # global_params.config['slurm']['exclude_nodes'] = []
+    # global_params.config.write_config()
+    # time.sleep(10)  # wait for changes to apply
+    #
     # log.info('Step 6/9 - Compartment prediction')
     # ftimer.start('Compartment predictions')
     # exec_inference.run_semsegaxoness_prediction()
@@ -181,11 +186,10 @@ if __name__ == '__main__':
     #     exec_inference.run_semsegspiness_prediction()
     # ftimer.stop()
     #
-    # # TODO: this step can be launched in parallel with the morphology extraction!
     # ftimer.start('Spine head volume estimation')
     # exec_syns.run_spinehead_volume_calc()
     # ftimer.stop()
-    #
+
     # log.info('Step 8/9 - Celltype analysis')
     # ftimer.start('Celltype analysis')
     # exec_inference.run_celltype_prediction()
