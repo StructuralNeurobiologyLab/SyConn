@@ -79,18 +79,18 @@ dependencies:
     - plyfile
 
     # Pre-release packages
-    - git+https://github.com/ELEKTRONN/elektronn3.git@syconn#egg=elektronn3
-    - git+https://github.com/knossos-project/knossos_utils.git@dev#egg=knossos_utils
-    - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@master#egg=morphx
-
-    # training scripts
-    - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
+    - git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3
+    - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
+    - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
 
     # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
     - git+https://github.com/StructuralNeurobiologyLab/kimimaro.git
 
-      # point models
+    # point models
     - git+https://github.com/StructuralNeurobiologyLab/LightConvPoint.git
+
+#    # training scripts
+#    - git+https://github.com/StructuralNeurobiologyLab/NeuronX.git
 
     #for skeletonisation
     - fill-voids
