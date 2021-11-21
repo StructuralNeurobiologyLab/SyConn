@@ -59,9 +59,9 @@ scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
 
-lr = 2e-3
-lr_stepsize = 100
-lr_dec = 0.996
+lr = 1e-3
+lr_stepsize = 1000
+lr_dec = 0.99
 max_steps = 500000
 
 normalize_pts = True
@@ -73,7 +73,7 @@ use_syntype = False
 # ads: axon dendrite soma
 # abt: axon bouton terminal
 # fine: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-gt_type = 'fine'
+gt_type = 'do'
 num_classes = {'ads': 3, 'abt': 3, 'dnh': 3, 'fine': 7, 'dnho': 4, 'do': 2}
 ignore_l = num_classes[gt_type]  # num_classes is also used as ignore label
 remap_dicts = {'ads': {3: 1, 4: 1, 5: 0, 6: 0},
@@ -92,7 +92,7 @@ if cellshape_only:
 
 if name is None:
     name = f'semseg_pts_nb{npoints}_ctx{ctx}_{gt_type}_nclass' \
-           f'{num_classes[gt_type]}_lcp_GN_noKernelSep_AdamW_dice_large'
+           f'{num_classes[gt_type]}_lcp_GN_noKernelSep_Adam_CE'
     if not normalize_pts:
         name += '_NonormPts'
     if cellshape_only:
@@ -122,20 +122,20 @@ save_root = os.path.expanduser(save_root)
 search = 'SearchQuantized'
 conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_pts)
 act = nn.ReLU
-# architecture = None
-architecture = [dict(ic=-1, oc=1, ks=48, nn=16, np=-1),
-                dict(ic=1, oc=1, ks=48, nn=16, np=2048),
-                dict(ic=1, oc=1, ks=32, nn=16, np=1024),
-                dict(ic=1, oc=1, ks=32, nn=16, np=256),
-                dict(ic=1, oc=2, ks=16, nn=16, np=64),
-                dict(ic=2, oc=2, ks=16, nn=16, np=16),
-                dict(ic=2, oc=2, ks=16, nn=16, np=8),
-                dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-                dict(ic=4, oc=2, ks=16, nn=4, np='d'),
-                dict(ic=4, oc=1, ks=32, nn=4, np='d'),
-                dict(ic=2, oc=1, ks=32, nn=8, np='d'),
-                dict(ic=2, oc=1, ks=32, nn=8, np='d'),
-                dict(ic=2, oc=1, ks=32, nn=8, np='d')]
+architecture = None
+# architecture = [dict(ic=-1, oc=1, ks=48, nn=16, np=-1),
+#                 dict(ic=1, oc=1, ks=48, nn=16, np=2048),
+#                 dict(ic=1, oc=1, ks=32, nn=16, np=1024),
+#                 dict(ic=1, oc=1, ks=32, nn=16, np=256),
+#                 dict(ic=1, oc=2, ks=16, nn=16, np=64),
+#                 dict(ic=2, oc=2, ks=16, nn=16, np=16),
+#                 dict(ic=2, oc=2, ks=16, nn=16, np=8),
+#                 dict(ic=2, oc=2, ks=16, nn=4, np='d'),
+#                 dict(ic=4, oc=2, ks=16, nn=4, np='d'),
+#                 dict(ic=4, oc=1, ks=32, nn=4, np='d'),
+#                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
+#                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
+#                 dict(ic=2, oc=1, ks=32, nn=8, np='d')]
 model = ConvAdaptSeg(input_channels, num_classes[gt_type], get_conv(conv), get_search(search), kernel_num=64,
                      architecture=architecture, activation=act, norm='gn')
 
@@ -174,9 +174,9 @@ valid_transform = clouds.Compose([clouds.Center(),
 if gt_type == 'dnho' or gt_type == 'do':  # no additional validation data
     train_dir = '/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/pkl_files/'
     valid_dir = '/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/pkl_files/'
-else:
+else:  # no additional validation data
     train_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/train/hc_out_2021_11_fine/'
-    valid_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/valid/hc_out_2021_11_fine/'
+    valid_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/train/hc_out_2021_11_fine/'
 
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
@@ -187,7 +187,8 @@ valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=Fal
 # PREPARE AND START TRAINING #
 
 # set up optimization
-optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+# optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # optimizer = torch.optim.SGD(
 #     model.parameters(),
@@ -212,8 +213,8 @@ lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 # set weight of the masking label at context boarders to 0
 class_weights = torch.tensor(weights[gt_type], dtype=torch.float32, device=device)
 assert ignore_l == len(weights[gt_type])  # ignore index needs to be the lasst class
-criterion = DiceLossFancy(weights=class_weights, ignore_index=ignore_l).to(device)  # add zero weight for ignore index
-# criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_l).to(device)
+# criterion = DiceLossFancy(weights=class_weights, ignore_index=ignore_l).to(device)  # add zero weight for ignore index
+criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_l).to(device)
 
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
