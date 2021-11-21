@@ -276,8 +276,7 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                               cube_of_interest_bb: Optional[tuple] = None,
                               chunk_size: Optional[Union[tuple, np.ndarray]] = None,
                               log: Logger = None, overwrite=False):
-    """Replaces `map_objects_to_sv` and parts of `from_ids_to_objects`.
-
+    """
     Extracts segmentation properties for each SV in cell and subcellular segmentation.
     Requires KDs at `kd_seg_path` and `kd_organelle_paths`.
 

@@ -469,6 +469,7 @@ def _combine_and_split_syn_thread(args):
                     raise ValueError(f'Path mis-match!')
                 synssv_attr_dc = dict(neuron_partners=ssv_ids)
                 voxel_dc[syn_ssv_id] = this_vx
+                # TODO: PS use segmentation_helper.calc_center_of_mass here
                 synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
                 synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
                 synssv_attr_dc["size"] = len(this_vx)
@@ -494,8 +495,8 @@ def _combine_and_split_syn_thread(args):
                 syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
                 del syn_props_agg['cs_id']
 
-                # use the fraction of 'syn' voxels used for this connected component, i.e. 'this_agg_syn_weights', as weight
-                # agglomerate the syn-to-cs ratio as a weighted sum
+                # use the fraction of 'syn' voxels used for this connected component,
+                # i.e. 'this_agg_syn_weights', as weight agglomerate the syn-to-cs ratio as a weighted sum
                 syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
 
                 # 'syn_ssv' synapse type as weighted sum of the 'syn' fragment types

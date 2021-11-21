@@ -15,7 +15,7 @@ from scipy import spatial
 from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase, get_unique_subfold_ixs
 from .segmentation_helper import *
 from ..handler.basics import get_filepaths_from_dir, safe_copy, \
-    write_txt2kzip, temp_seed
+    write_txt2kzip
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.config import DynConfig
 from ..proc import meshes
@@ -1171,50 +1171,6 @@ class SegmentationObject(SegmentationBase):
             return
         else:
             raise ValueError(f'Invalid voxel storage class: {type(voxel_dc)}')
-
-        bin_arrs, block_offsets = voxel_dc[self.id]
-        block_offsets = np.array(block_offsets)
-
-        if len(bin_arrs) > 1:
-            sizes = []
-            for i_bin_arr in range(len(bin_arrs)):
-                sizes.append(np.sum(bin_arrs[i_bin_arr]))
-
-            sizes = np.array(sizes)
-            center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
-                                 np.mean(block_offsets[:, 1] * sizes) / self.size,
-                                 np.mean(block_offsets[:, 2] * sizes) / self.size]
-            center_of_gravity = np.array(center_of_gravity)
-
-            dists = spatial.distance.cdist(block_offsets,
-                                           np.array([center_of_gravity]))
-
-            central_block_id = np.argmin(dists)
-        else:
-            central_block_id = 0
-
-        vx = bin_arrs[central_block_id].copy()
-        central_block_offset = block_offsets[central_block_id]
-
-        id_locs = np.where(vx == vx.max())
-        id_locs = np.array(id_locs)
-
-        # downsampling to ensure fast processing - this is deterministic!
-        if len(id_locs[0]) > 1e4:
-            with temp_seed(0):
-                idx = np.random.randint(0, len(id_locs[0]), int(1e4))
-            id_locs = np.array([id_locs[0][idx], id_locs[1][idx], id_locs[2][idx]])
-
-        # calculate COM
-        COM = np.mean(id_locs, axis=1)
-
-        # ensure that the point is contained inside of the object, i.e. use closest existing point to COM
-        kdtree_array = np.swapaxes(id_locs, 0, 1)
-        kdtree = spatial.cKDTree(kdtree_array)
-        dd, ii = kdtree.query(COM, k=1)
-        found_point = kdtree_array[ii, :]
-
-        self._rep_coord = found_point + central_block_offset
 
     def calculate_bounding_box(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """

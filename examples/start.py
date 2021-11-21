@@ -258,7 +258,7 @@ if __name__ == '__main__':
 
     log.info('Step 8/9 - Cell-morphology embeddings')
     ftimer.start('Morphology extraction')
-    exec_inference.run_cell_embedding()
+    exec_inference.run_morphology_embedding()
     ftimer.stop()
 
     log.info('Step 9/9 - Celltype analysis')
