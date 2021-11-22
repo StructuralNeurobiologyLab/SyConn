@@ -153,7 +153,6 @@ if __name__ == '__main__':
     del tmp
 
     # INITIALIZE DATA
-    # TODO: switch to streaming confs instead of h5 files
     if not os.path.isdir(global_params.config.kd_sj_path):
         kd = knossosdataset.KnossosDataset()
         kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -195,12 +194,10 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
-    # log.info('Step 1/9 - Predicting sub-cellular structures')
-    # ftimer.start('Dense predictions')
-    # exec_dense_prediction.predict_myelin()
-    # exec_dense_prediction.predict_cellorganelles()
-    # exec_dense_prediction.predict_synapsetype()
-    # ftimer.stop()
+    log.info('Step 1/9 - Predicting sub-cellular structures')
+    ftimer.start('Dense predictions')
+    exec_dense_prediction.predict_myelin()
+    ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     ftimer.start('SD generation')
@@ -229,7 +226,7 @@ if __name__ == '__main__':
 
     log.info('Step 5/9 - Skeleton generation')
     ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
+    exec_skeleton.run_skeleton_generation(map_myelin=True)
     ftimer.stop()
 
     log.info('Step 6/9 - Synapse detection')
@@ -259,7 +256,7 @@ if __name__ == '__main__':
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 
-    log.info('Step 8/9 - Morphology extraction')
+    log.info('Step 8/9 - Cell-morphology embeddings')
     ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
     ftimer.stop()

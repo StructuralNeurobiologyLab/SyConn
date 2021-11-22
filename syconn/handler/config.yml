@@ -151,7 +151,7 @@ cell_objects:
   # used to agglomerate 'syn' objects (cell supervoxel-based synapse fragments) into 'syn_ssv'
   cs_gap_nm: 250
   # Parameters of agglomerated synapses 'syn_ssv'
-  # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
+  # mapping parameters in 'map_objects_from_synssv_partners'; assignment of cellular
   # organelles to syn_ssv
   max_vert_dist_nm:
     mi: 1000
@@ -171,7 +171,6 @@ meshes:
   # TODO: remove old meshing
   use_new_meshing: True
 
-  # TODO: downsampling for syn_ssv is deprecated
   downsampling:
     sv: [4, 4, 2]
     sj: [2, 2, 1]
@@ -179,8 +178,6 @@ meshes:
     mi: [4, 4, 2]
     er: [2, 2, 1] # arbitrary placeholder, to be adapted
     golgi: [2, 2, 1] # arbitrary placeholder, to be adapted
-    cs: [2, 2, 1]
-    syn_ssv: [2, 2, 1]
 
   # this is also used for cs_ssv and syn_ssv
   mesh_min_obj_vx: 100  # adapt to size threshold
@@ -214,10 +211,6 @@ skeleton:
   use_kimimaro: True
   # If True, allow cell skeleton generation from rendering locations (inaccurate).
   allow_ssv_skel_gen: True
-  # TODO: skeleton RFC not tested for a long time
-  feature_context_rfc: # in nm
-    axoness: 8000
-    spiness: 1000
   kimimaro_merge:
     dust_threshold: 250  # in nm
     tick_threshold: 500  # in nm
@@ -228,7 +221,7 @@ skeleton:
 use_point_models: False
 
 views:
-  use_onthefly_views: True  # TODO: does not yet apply for glia
+  use_onthefly_views: True  # TODO: does not yet apply for astrocytes
   use_new_renderings_locs: True
   # ordering sensitive; 'sj' will be replaced by 'syn_ssv' if use_onthefly_views == True
   subcell_objects: ['mi', 'vc', 'sj']

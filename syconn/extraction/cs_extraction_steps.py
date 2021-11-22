@@ -611,11 +611,7 @@ def _write_props_to_syn_thread(args):
             this_attr_dc[cs_id]["sym_prop"] = sym_prop
             this_attr_dc[cs_id]["asym_prop"] = asym_prop
 
-            cs_ratio_vx = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
-            # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
-            # cs_id is the same as the syn_id, not necessary to store this
             add_feat_dict = {'cs_id': cs_id,
-                             'id_cs_ratio': cs_ratio_vx,
                              'cs_size': size_cs}
             this_attr_dc[cs_id].update(add_feat_dict)
             voxel_dc[cs_id] = bbs

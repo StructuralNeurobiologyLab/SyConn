@@ -17,7 +17,7 @@ except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
     cython_out = None
 
-VERSION = '0.3'
+VERSION = '2.0'
 
 
 def read_readme():

@@ -15,7 +15,7 @@ from scipy import spatial
 from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase, get_unique_subfold_ixs
 from .segmentation_helper import *
 from ..handler.basics import get_filepaths_from_dir, safe_copy, \
-    write_txt2kzip, temp_seed
+    write_txt2kzip
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.config import DynConfig
 from ..proc import meshes
@@ -889,6 +889,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
 
         """
+        _supported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
+        if self.type in _supported_types:
+            raise ValueError(f'"mesh_from_scratch" does not support type "{self.type}". Supported types: '
+                             f'{_supported_types}')
         if ds is None:
             ds = self.config['meshes']['downsampling'][self.type]
         return meshes.get_object_mesh(self, ds, mesher_kwargs=kwargs)
@@ -1172,50 +1176,6 @@ class SegmentationObject(SegmentationBase):
         else:
             raise ValueError(f'Invalid voxel storage class: {type(voxel_dc)}')
 
-        bin_arrs, block_offsets = voxel_dc[self.id]
-        block_offsets = np.array(block_offsets)
-
-        if len(bin_arrs) > 1:
-            sizes = []
-            for i_bin_arr in range(len(bin_arrs)):
-                sizes.append(np.sum(bin_arrs[i_bin_arr]))
-
-            sizes = np.array(sizes)
-            center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
-                                 np.mean(block_offsets[:, 1] * sizes) / self.size,
-                                 np.mean(block_offsets[:, 2] * sizes) / self.size]
-            center_of_gravity = np.array(center_of_gravity)
-
-            dists = spatial.distance.cdist(block_offsets,
-                                           np.array([center_of_gravity]))
-
-            central_block_id = np.argmin(dists)
-        else:
-            central_block_id = 0
-
-        vx = bin_arrs[central_block_id].copy()
-        central_block_offset = block_offsets[central_block_id]
-
-        id_locs = np.where(vx == vx.max())
-        id_locs = np.array(id_locs)
-
-        # downsampling to ensure fast processing - this is deterministic!
-        if len(id_locs[0]) > 1e4:
-            with temp_seed(0):
-                idx = np.random.randint(0, len(id_locs[0]), int(1e4))
-            id_locs = np.array([id_locs[0][idx], id_locs[1][idx], id_locs[2][idx]])
-
-        # calculate COM
-        COM = np.mean(id_locs, axis=1)
-
-        # ensure that the point is contained inside of the object, i.e. use closest existing point to COM
-        kdtree_array = np.swapaxes(id_locs, 0, 1)
-        kdtree = spatial.cKDTree(kdtree_array)
-        dd, ii = kdtree.query(COM, k=1)
-        found_point = kdtree_array[ii, :]
-
-        self._rep_coord = found_point + central_block_offset
-
     def calculate_bounding_box(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
         Calculate supervoxel :py:attr:`~bounding_box`.
@@ -1462,8 +1422,6 @@ class SegmentationDataset(SegmentationBase):
             * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
               :py:attr:`~syconn.global_params.config['cell_objects']['sym_thresh']` .
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
-            * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
-              objects.
     """
 
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,

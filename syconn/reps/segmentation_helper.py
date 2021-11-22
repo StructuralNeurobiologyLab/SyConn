@@ -9,6 +9,7 @@ import os
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable, Any
 
+from scipy import spatial
 import numpy as np
 
 from . import log_reps
@@ -17,7 +18,7 @@ from .rep_helper import surface_samples
 from .. import global_params
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
     VoxelStorage, SkeletonStorage, VoxelStorageDyn, VoxelStorageLazyLoading
-from ..handler.basics import chunkify
+from ..handler.basics import chunkify, temp_seed
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.graphs import create_graph_from_coords
@@ -644,3 +645,29 @@ def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
     skeleton["edges"] = edge_list
     skeleton["diameters"] = np.ones(len(locs))
     return skeleton
+
+
+def calc_center_of_mass(point_arr: np.ndarray) -> np.ndarray:
+    """
+
+    Args:
+        point_arr: Array of points (in nm or at least isotropic).
+
+    Returns:
+        Closest point in `point_arr` to its center of mass.
+    """
+    # downsampling to ensure fast processing - this is deterministic!
+    if len(point_arr) > 1e5:
+        with temp_seed(0):
+            idx = np.random.randint(0, len(point_arr), int(1e5))
+        point_arr = point_arr[idx]
+
+    # calculate mean
+    center_of_mass = np.mean(point_arr, axis=0)
+
+    # ensure that the point is contained inside of the object,
+    # i.e. use closest existing point to center of mass
+    kdtree = spatial.cKDTree(point_arr)
+    dd, ii = kdtree.query(center_of_mass, k=1)
+    center_point = point_arr[ii]
+    return center_point

@@ -19,7 +19,6 @@ from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify, chunkify_weighted, chunkify_successive
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
-from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn import global_params
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.basics import load_pkl2obj, write_obj2pkl
@@ -78,10 +77,6 @@ def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myeli
                        remove_jobfolder=True, n_cores=2)
 
     log.info('Finished skeleton generation.')
-    # # run skeleton feature extraction # Not needed anymore, will be kept in
-    # case skeleton features should remain a feature of SyConn
-    # qu.batchjob_script(multi_params, "preproc_skelfeature",
-    #                    remove_jobfolder=True)
 
 
 def map_myelin_global(max_n_jobs: Optional[int] = None):
@@ -115,18 +110,6 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
     qu.batchjob_script(multi_params, "map_myelin2skel", log=log, remove_jobfolder=True, n_cores=2)
 
     log.info('Finished myelin mapping.')
-
-
-def run_skeleton_axoness():
-    """
-    Prepares the RFC models for skeleton-based axon inference.
-    """
-    # # run skeleton feature extraction # Not needed anymore, will be kept in
-    # case skeleton features should remain a feature of SyConn
-    sbc = SkelClassifier("axoness", working_dir=global_params.config.working_dir)
-    ft_context = [1000, 2000, 4000, 8000, 12000]
-    sbc.generate_data(feature_contexts_nm=ft_context, nb_cpus=global_params.config['ncores_per_node'])
-    sbc.classifier_production(ft_context, nb_cpus=global_params.config['ncores_per_node'])
 
 
 def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None,

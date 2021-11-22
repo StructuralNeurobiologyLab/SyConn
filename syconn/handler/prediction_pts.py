@@ -106,7 +106,7 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
     while True:
         try:
             inp = q_postproc.get_nowait()
-            if 'STOP' in inp:
+            if isinstance(inp, str) and 'STOP' in inp:
                 if inp not in stops_received:
                     stops_received.add(inp)
                 else:
@@ -164,7 +164,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
         while True:
             try:
                 inp = q_in.get_nowait()
-                if 'STOP' in inp and isinstance(inp, str):
+                if isinstance(inp, str) and 'STOP' in inp:
                     if inp not in stops_received:
                         stops_received.add(inp)
                     else:
@@ -172,7 +172,7 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                         while True:
                             try:
                                 inp = q_in.get_nowait()
-                                if 'STOP' in inp and isinstance(inp, str):
+                                if isinstance(inp, str) and 'STOP' in inp:
                                     if inp not in stops_received:
                                         stops_received.add(inp)
                                     else:

@@ -2869,17 +2869,6 @@ class SuperSegmentationObject(SegmentationBase):
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
-    def skel_features(self, feature_context_nm, overwrite=False):
-        features = self._load_skelfeatures(feature_context_nm)
-        if features is None or overwrite:
-            if not "assoc_sj" in self.skeleton:
-                ssh.associate_objs_with_skel_nodes(self)
-            features = ssh.extract_skel_features(self, feature_context_nm=
-            feature_context_nm)
-            self._save_skelfeatures(feature_context_nm, features,
-                                    overwrite=True)
-        return features
-
     def write_axpred_rfc(self, dest_path=None, k=1):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
@@ -2900,50 +2889,6 @@ class SuperSegmentationObject(SegmentationBase):
         self._pred2mesh(self.skeleton["nodes"] * self.scaling,
                         self.skeleton[key], k=k, dest_path=dest_path,
                         ply_fname=key + ".ply")
-
-    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None, max_dist=0, leave_out_classes=()):
-        """
-        Predicting class c
-
-        Parameters
-        ----------
-        sc : SkelClassifier
-            Classifier to predict "axoness" or "spiness" for every node on
-            self.skeleton["nodes"]. Target type is defined in SkelClassifier
-        clf_name : str
-        feature_context_nm : int
-        max_dist : int
-            Defines the maximum path length from a source node for collecting
-            neighboring nodes to calculate an average prediction for
-            the source node.
-        leave_out_classes:
-
-        Returns
-        -------
-
-        """
-        assert sc.target_type in ["axoness", "spiness"]
-        if feature_context_nm is None:
-            feature_context_nm = self.config['skeleton']['feature_context_rfc'][sc.target_type]
-        clf = sc.load_classifier(clf_name, feature_context_nm, production=True,
-                                 leave_out_classes=leave_out_classes)
-        probas = clf.predict_proba(self.skel_features(feature_context_nm))
-        pred = []
-        if max_dist == 0:
-            pred = np.argmax(probas, axis=1)
-        else:
-            for i_node in range(len(self.skeleton["nodes"])):
-                paths = nx.single_source_dijkstra_path(
-                    self.weighted_graph(), i_node, max_dist)
-                neighs = np.array(list(paths.keys()), dtype=np.int64)
-                c = np.argmax(np.sum(probas[neighs], axis=0))
-                pred.append(c)
-
-        pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
-                                          max_dist)
-        self.skeleton[pred_key] = np.array(pred, dtype=np.int32)
-        self.skeleton[pred_key + "_proba"] = np.array(probas, dtype=np.float32)
-        self.save_skeleton(to_object=True, to_kzip=False)
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         """
@@ -3166,11 +3111,6 @@ class SuperSegmentationObject(SegmentationBase):
                              dest_path=dest_path)
 
     # --------------------------------------------------------------- CELL TYPES
-    def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
-                          feature_context_nm=25000):
-        raise DeprecationWarning('This method is deprecated. Use '
-                                 '"predict_nodes" instead!')
-
     def predict_celltype_multiview(self, model, pred_key_appendix, model_tnet=None, view_props=None,
                                    onthefly_views=False, overwrite=True, model_props=None,
                                    verbose: bool = False, save_to_attr_dict: bool = True):
