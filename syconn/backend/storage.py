@@ -4,21 +4,23 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+import os.path
+import shutil
+from collections import defaultdict
+from typing import Any, Tuple, Optional, Union, List, Iterator, Dict
 
 from ..backend import StorageClass
 from ..backend import log_backend
 from ..handler.basics import kd_factory
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
 
+import h5py
+import numpy as np
+
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-
-from collections import defaultdict
-from typing import Any, Tuple, Optional, Union, List
-
-import numpy as np
 
 
 class AttributeDict(StorageClass):
@@ -172,7 +174,7 @@ class VoxelStorageL(StorageClass):
 
 def VoxelStorage(inp, **kwargs):
     """
-    Deprecated storage for voxel data.
+    Alias for :class:`~VoxelStorageDyn`.
 
     Args:
         inp:
@@ -181,13 +183,7 @@ def VoxelStorage(inp, **kwargs):
     Returns:
 
     """
-    obj = VoxelStorageClass(inp, **kwargs)
-    if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
-        obj = VoxelStorageDyn(inp, **kwargs)
-    # # TODO: activate as soon as synapse-detection pipelines is refactored.
-    # else:
-    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
-    #                         ' VoxelStorageDyn.')
+    obj = VoxelStorageDyn(inp, **kwargs)
     return obj
 
 
@@ -242,6 +238,8 @@ class VoxelStorageDyn(CompressedStorage):
 
     def __init__(self, inp: str, voxel_mode: bool = True,
                  voxeldata_path: Optional[str] = None, **kwargs):
+        if not inp.endswith('.pkl'):
+            inp = inp + '.pkl'
         super().__init__(inp, **kwargs)
         self.voxel_mode = voxel_mode
         if 'meta' not in self._dc_intern:
@@ -251,6 +249,8 @@ class VoxelStorageDyn(CompressedStorage):
             self._dc_intern['size'] = defaultdict(int)
         if 'rep_coord' not in self._dc_intern:
             self._dc_intern['rep_coord'] = dict()
+        if 'voxel_cache' not in self._dc_intern:
+            self._dc_intern['voxel_cache'] = dict()
         if voxeldata_path is not None:
             old_p = self._dc_intern['meta']['voxeldata_path']
             new_p = voxeldata_path
@@ -266,6 +266,7 @@ class VoxelStorageDyn(CompressedStorage):
                 raise ValueError(msg)
             kd = kd_factory(voxeldata_path)
             self.voxeldata = kd
+        self._cache_dc = VoxelStorageLazyLoading(inp.replace('.pkl', '.npz'))
 
     def __setitem__(self, key: int, value: Any):
         if self.voxel_mode:
@@ -274,17 +275,28 @@ class VoxelStorageDyn(CompressedStorage):
             return super().__setitem__(key, value)
 
     def __getitem__(self, item: int):
+        return self.get_voxelmask_offset(item)
+
+    def get_voxelmask_offset(self, item: int, overlap: int = 0):
         if self.voxel_mode:
             res = []
             bbs = super().__getitem__(item)
             for bb in bbs:  # iterate over all bounding boxes
-                size = bb[1] - bb[0]
-                off = bb[0]
+                size = bb[1] - bb[0] + 2 * overlap
+                off = bb[0] - overlap
                 curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
                 res.append(curr_mask.swapaxes(0, 2))
             return res, bbs[:, 0]  # (N, 3) --> all offset
         else:
             return super().__getitem__(item)
+
+    def iter_voxelmask_offset(self, item: int, overlap: int = 0) -> Iterator[Tuple[np.ndarray, np.ndarray]]:
+        bbs = super().__getitem__(item)
+        for bb in bbs:  # iterate over all bounding boxes
+            size = bb[1] - bb[0] + 2 * overlap
+            off = bb[0] - overlap
+            curr_mask = self.voxeldata.load_seg(size=size, offset=off, mag=1) == item
+            yield curr_mask.swapaxes(0, 2), bb[0]
 
     def object_size(self, item):
         if not self.voxel_mode:
@@ -309,6 +321,35 @@ class VoxelStorageDyn(CompressedStorage):
         if self.voxel_mode:
             log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
         self._dc_intern['rep_coord'][item] = value
+
+    def push(self):
+        if len(self._cache_dc) > 0:
+            self._cache_dc.push()
+        super().push()
+
+    def set_voxel_cache(self, key: int, voxel_coords: np.ndarray):
+        """
+        This is only used to store the voxels during the synapse extraction step. This method operates independent of
+        :func:`~__setitem__`.
+
+        Args:
+            key: Segment ID.
+            voxel_coords: Voxel coordinates.
+        """
+        self._cache_dc[key] = voxel_coords
+
+    def get_voxel_cache(self, key: int):
+        """
+        Voxels corresponding to item `key` must have been added to store via :func:`~set_voxel_cache`.
+        This implementation operates independent of :func:`~get_voxeldata`.
+
+        Args:
+            key: Segment ID.
+
+        Returns:
+            Voxel coordinates.
+        """
+        return self._cache_dc[key]
 
     def get_voxeldata(self, item: int) -> Tuple[List[np.ndarray], List[np.ndarray]]:
         """
@@ -378,6 +419,81 @@ class VoxelStorageDyn(CompressedStorage):
         obj_elements = list([k for k in self._dc_intern.keys() if (type(k) is str and k.isdigit())
                              or (type(k) is not str)])
         return obj_elements
+
+
+class VoxelStorageLazyLoading:
+    """
+    Similar to `VoxelStorage` but uses lazy loading via numpy npz files.
+
+    Notes:
+        * Once  written, npz storages will not support modification via ``__setitem__``.
+        * Key of types other than int are not supported. Internally, keys are converted to string,
+          as required by npz, and then always converted to int for "external" use (e.g. :attr:`~keys`).
+        * Call :attr:`~close` when opening an existing npz file.
+    """
+
+    def __init__(self, path: str, overwrite: bool = False):
+        if not path.endswith('.npz'):
+            path = path + '.npz'
+        self.path = path
+        self._dc_intern = {}
+        if os.path.isfile(path):
+            if overwrite:
+                os.remove(path)
+            else:
+                self.pull()
+
+    def pull(self):
+        self._dc_intern = np.load(self.path)
+
+    def push(self):
+        np.savez_compressed(self.path, **self._dc_intern)
+
+    def __setitem__(self, key: int, value: np.ndarray):
+        """
+
+        Args:
+            key: Segment ID.
+            value: Voxel coordinates.
+        """
+        # npz only allows string keys
+        self._dc_intern[str(key)] = value
+
+    def __getitem__(self, item: int) -> np.ndarray:
+        """
+        Voxels corresponding to `item` (supervoxel ID).
+
+        Args:
+            item: Segment ID.
+
+        Returns:
+            Voxel coordinates belonging to ID `item`.
+        """
+        # npz only allows string keys
+        return self._dc_intern[str(item)]
+
+    def __contains__(self, item: int) -> bool:
+        """
+        npz only allows string IDs.
+
+        Args:
+            item: Integer key.
+
+        Returns:
+            True if item in storage.
+        """
+        return str(item) in self._dc_intern
+
+    def __len__(self):
+        return len(self._dc_intern)
+
+    def keys(self):
+        for k in self._dc_intern.keys():
+            yield int(k)
+
+    def close(self):
+        if isinstance(self._dc_intern, np.lib.npyio.NpzFile):
+            self._dc_intern.close()
 
 
 class MeshStorage(StorageClass):
@@ -513,3 +629,139 @@ class SkeletonStorage(StorageClass):
                     continue
                 entry[3][k] = v
         self._dc_intern[key] = entry
+
+
+class BinarySearchStore:
+    def __init__(self, fname: str, id_array: Optional[np.ndarray] = None,
+                 attr_arrays: Optional[Dict[str, np.ndarray]] = None, overwrite: bool = False,
+                 n_shards: Optional[int] = None, rdcc_nbytes: int = 5*2**20):
+        """
+        Data structure to store properties (values) of a corresponding ID array (keys). Internally a binary search
+        is used that uses a sorted representation of keys and values to enable sparse look-ups with a much lower
+        memory complexity than python dictionaries.
+        Maximum ID is the last element of :attr:`~id_array`.
+
+        Args:
+            fname: File name.
+            id_array: (Unsorted) ID array.
+            attr_arrays: (Unsorted) attribute arrays, must have the same ordering as ID array.
+            overwrite: Overwrite existing array files.
+            n_shards: Number of shards/chunks the ID and attribute arrays are split into. Defaults to 5.
+            rdcc_nbytes: Size of h5 chunks in bytes. Default is 5 MiB.
+        """
+        self.fname = fname
+        self._h5_file = None
+        if id_array is not None:
+            if attr_arrays is None:
+                raise ValueError('ID array is given, but no attribute array(s).')
+            if isinstance(fname, str) and os.path.isfile(fname):
+                if not overwrite:
+                    raise FileExistsError(f'BinarySearchStore at "{fname}" already exists and overwrite is False."')
+                else:
+                    os.remove(fname)
+            if n_shards is None:
+                n_shards = 5
+            if isinstance(fname, str):
+                os.makedirs(os.path.split(self.fname)[0], exist_ok=True)
+            # sort keys / ID array
+            ixs = np.argsort(id_array)
+            id_array = id_array[ixs]
+            bucket_ranges = []
+            h5_file = h5py.File(fname, 'w', libver='latest', rdcc_nbytes=rdcc_nbytes)
+            grp = h5_file.create_group("ids")
+            for ii, id_sub in enumerate(np.array_split(id_array, n_shards)):
+                bucket_ranges.append((id_sub[0], id_sub[-1]))
+                grp.create_dataset(f'{ii}', data=id_sub)
+            for k, v in attr_arrays.items():
+                v_sorted = v[ixs]
+                grp = h5_file.create_group(k)
+                grp.attrs['shape'] = v_sorted.shape
+                grp.attrs['dtype'] = np.dtype(v_sorted.dtype).str
+                for ii, attr_sub in enumerate(np.array_split(v_sorted, n_shards)):
+                    grp.create_dataset(f'{ii}', data=attr_sub)
+            del ixs
+            h5_file.attrs['bucket_ranges'] = bucket_ranges
+            h5_file.close()
+        else:
+            if isinstance(fname, str) and not os.path.isfile(fname):
+                raise FileNotFoundError(f'Could not find BinarySearchStore at "{self.fname}".')
+
+    @property
+    def n_shards(self) -> int:
+        """
+        Number of shards/chunks the ID and attribute arrays are split into.
+        Returns:
+
+        """
+        with h5py.File(self.fname, 'r', libver='latest') as f:
+            n_shards = len(f.attrs['bucket_ranges'])
+        return n_shards
+
+    @property
+    def id_array(self) -> np.ndarray:
+        """
+
+        Returns:
+            Flat ID array.
+        """
+        ids = []
+        with h5py.File(self.fname, 'r', libver='latest') as f:
+            for bucket_id in range(len(f.attrs['bucket_ranges'])):
+                ids.append(f[f'ids/{bucket_id}'][()])
+        return np.concatenate(ids)
+
+    def _get_bucket_ids(self, obj_ids: np.ndarray) -> np.ndarray:
+        bucket_ids = np.ones(obj_ids.shape, dtype=np.int32) * -1
+        for ii, bucket_range in enumerate(self._h5_file.attrs['bucket_ranges']):
+            bucket_ids[(bucket_range[0] <= obj_ids) & (obj_ids <= bucket_range[1])] = ii
+        if -1 in bucket_ids:
+            raise ValueError(f'IDs {obj_ids[bucket_ids == -1]} not in {self.fname}.')
+        return bucket_ids
+
+    def get_attributes(self, obj_ids: np.ndarray, attr_key: str) -> np.ndarray:
+        """
+        Query attributes of given `obj_ids`. Note that this will not raise an Exception if a ID does not exist in the
+        store, as the lookup uses binary search.
+
+        Args:
+            obj_ids: Object IDs to query.
+            attr_key: Value type obtained from the store.
+
+        Returns:
+            Value array.
+        """
+        self._h5_file = h5py.File(self.fname, 'r', libver='latest')
+        if attr_key not in self._h5_file.keys():
+            raise KeyError(f'Key "{attr_key}" does not exist.')
+        bucket_ids = self._get_bucket_ids(obj_ids)
+        grp = self._h5_file[f'{attr_key}']
+        sh = [len(obj_ids)]
+        if len(grp.attrs['shape']) > 1:
+            sh += list(grp.attrs['shape'])[1:]
+        data = np.zeros(sh, dtype=grp.attrs['dtype'])
+        for bucket_id in np.unique(bucket_ids):
+            ids = self._h5_file[f'ids/{bucket_id}'][()]
+            bucket_mask = bucket_ids == bucket_id
+            queries = obj_ids[bucket_mask]
+            ixs_sort = np.argsort(queries)
+            indices = np.searchsorted(ids, queries[ixs_sort])
+            d = grp[f'{bucket_id}'][indices]
+            # undo sorting using argsort of argsort to match slicing mask on the left
+            data[bucket_mask] = d[np.argsort(ixs_sort)]
+        self._h5_file.close()
+        self._h5_file = None
+        return data
+
+
+def bss_get_attr_helper(args):
+    """
+    Helper function to query attributes from a BinarySearchStore instance.
+
+    Args:
+        args: BinarySearchStore, query_ids, attribute key.
+
+    Returns:
+        Query result.
+    """
+    bss, samples, key = args
+    return bss.get_attributes(samples, key)

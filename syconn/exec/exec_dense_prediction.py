@@ -125,6 +125,7 @@ def predict_er(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
                         target_channels=[(1,)],
                         cube_of_interest=cube_of_interest)
 
+
 def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Generates golgi predictions at every dataset voxel stored in

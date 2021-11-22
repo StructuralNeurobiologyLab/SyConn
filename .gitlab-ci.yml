@@ -45,6 +45,8 @@ cleanup:
 pylint:
   stage: test
   before_script:
+    - source ~/.bashrc
+    - conda activate pysyintegration_m
     - pip install pylint pylint-exit anybadge
   script:
     - mkdir ./pylint

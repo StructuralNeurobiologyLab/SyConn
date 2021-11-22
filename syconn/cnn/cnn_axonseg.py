@@ -123,7 +123,6 @@ if __name__ == "__main__":
     #     weight_decay=0.5e-4,
     #     lr=lr,
     # )
-    # lr_sched = CosineAnnealingWarmRestarts(optimizer, 75000, T_mult=2)
 
     # lr_sched = optim.lr_scheduler.ExponentialLR(optimizer, 0.9998)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)

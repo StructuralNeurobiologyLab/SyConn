@@ -67,3 +67,6 @@ target/
 .idea/
 /.gitignore
 /syconn/version.py
+
+# VSCode
+.vscode/

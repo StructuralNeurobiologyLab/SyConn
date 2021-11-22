@@ -204,7 +204,6 @@ if __name__ == '__main__':
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-    # lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,

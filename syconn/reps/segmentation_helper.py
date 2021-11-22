@@ -9,6 +9,7 @@ import os
 from collections import defaultdict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union, Iterable, Any
 
+from scipy import spatial
 import numpy as np
 
 from . import log_reps
@@ -16,8 +17,8 @@ from . import rep_helper as rh
 from .rep_helper import surface_samples
 from .. import global_params
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage, \
-    VoxelStorage, SkeletonStorage
-from ..handler.basics import chunkify
+    VoxelStorage, SkeletonStorage, VoxelStorageDyn, VoxelStorageLazyLoading
+from ..handler.basics import chunkify, temp_seed
 from ..handler.multiviews import generate_rendering_locs
 from ..mp.mp_utils import start_multiprocess_imap
 from ..proc.graphs import create_graph_from_coords
@@ -83,17 +84,14 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
     Assembles id list by iterating over all voxel / attribute dicts,
     otherwise (very slow).
     """
-    if os.path.exists(sd.path_ids):
-        sd._ids = np.load(sd.path_ids)
-    else:
+    sd._ids = sd.load_numpy_data('id')
+    if sd._ids is None:
         paths = glob.glob(sd.so_storage_path + "/*/*/*/") + \
                 glob.glob(sd.so_storage_path + "/*/*/") + \
                 glob.glob(sd.so_storage_path + "/*/")
         sd._ids = []
         for path in paths:
-            if os.path.exists(path + "voxel.pkl"):
-                this_ids = list(VoxelStorage(path + "voxel.pkl", read_only=True).keys())
-            elif os.path.exists(path + "attr_dict.pkl"):
+            if os.path.exists(path + "attr_dict.pkl"):
                 this_ids = list(AttributeDict(path + "attr_dict.pkl", read_only=True).keys())
             else:
                 this_ids = []
@@ -204,8 +202,12 @@ def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
+    elif so.type in ['syn', 'syn_ssv']:
+        voxel_dc = VoxelStorageLazyLoading(so.voxel_path)
+        voxel_list = voxel_dc[so.id]
+        voxel_dc.close()
     else:
-        voxel_dc = VoxelStorage(so.voxel_path, read_only=True, disable_locking=True)
+        voxel_dc = VoxelStorageDyn(so.voxel_path, read_only=True, disable_locking=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
         voxel_list = []
@@ -315,7 +317,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
         Dictionary with "nodes", "diameters" and "edges".
 
     """
-    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int54), edges=np.zeros((0, 2)),
+    empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int64), edges=np.zeros((0, 2)),
                       diameters=np.zeros((0,)).astype(np.int32))
     if not recompute and so.skeleton_exists:
         try:
@@ -418,8 +420,7 @@ def find_missing_sv_attributes(sd: 'SegmentationDataset', attr_key: str, n_cores
     """
     multi_params = chunkify(sd.so_dir_paths, 100)
     params = [(ps, attr_key) for ps in multi_params]
-    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
-                                  debug=False)
+    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores, debug=False)
     return np.concatenate(res)
 
 
@@ -535,6 +536,7 @@ def prepare_so_attr_cache(sd: 'SegmentationDataset', so_ids: np.ndarray, attr_ke
         SegmentatonObect in `so_ids`.
     """
     attr_cache = {k: dict() for k in attr_keys}
+    # TODO: Use BinarySearchStore
     soid2ix = {so_id: sd.soid2ix[so_id] for so_id in so_ids}
     sd._soid2ix = None  # free memory
     for attr in attr_keys:
@@ -643,3 +645,29 @@ def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
     skeleton["edges"] = edge_list
     skeleton["diameters"] = np.ones(len(locs))
     return skeleton
+
+
+def calc_center_of_mass(point_arr: np.ndarray) -> np.ndarray:
+    """
+
+    Args:
+        point_arr: Array of points (in nm or at least isotropic).
+
+    Returns:
+        Closest point in `point_arr` to its center of mass.
+    """
+    # downsampling to ensure fast processing - this is deterministic!
+    if len(point_arr) > 1e5:
+        with temp_seed(0):
+            idx = np.random.randint(0, len(point_arr), int(1e5))
+        point_arr = point_arr[idx]
+
+    # calculate mean
+    center_of_mass = np.mean(point_arr, axis=0)
+
+    # ensure that the point is contained inside of the object,
+    # i.e. use closest existing point to center of mass
+    kdtree = spatial.cKDTree(point_arr)
+    dd, ii = kdtree.query(center_of_mass, k=1)
+    center_point = point_arr[ii]
+    return center_point
