@@ -889,6 +889,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
 
         """
+        _supported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
+        if self.type in _supported_types:
+            raise ValueError(f'"mesh_from_scratch" does not support type "{self.type}". Supported types: '
+                             f'{_supported_types}')
         if ds is None:
             ds = self.config['meshes']['downsampling'][self.type]
         return meshes.get_object_mesh(self, ds, mesher_kwargs=kwargs)
@@ -1418,8 +1422,6 @@ class SegmentationDataset(SegmentationBase):
             * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
               :py:attr:`~syconn.global_params.config['cell_objects']['sym_thresh']` .
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
-            * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
-              objects.
     """
 
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,

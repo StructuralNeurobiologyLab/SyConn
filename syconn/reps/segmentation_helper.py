@@ -663,7 +663,7 @@ def calc_center_of_mass(point_arr: np.ndarray) -> np.ndarray:
         point_arr = point_arr[idx]
 
     # calculate mean
-    center_of_mass = np.mean(point_arr, axis=1)
+    center_of_mass = np.mean(point_arr, axis=0)
 
     # ensure that the point is contained inside of the object,
     # i.e. use closest existing point to center of mass

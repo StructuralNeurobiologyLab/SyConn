@@ -321,14 +321,15 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                           nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
-    syn-objects on SSV level and aggregates the respective 'syn' attributes
-    ['cs_id', 'id_cs_ratio'].
+    syn-objects on SSV level and aggregates the respective 'syn' attributes ['cs_id', 'asym_prop', 'sym_prop', ].
 
-    All objects of the resulting 'syn_ssv' SegmentationDataset contain the
-    following attributes:
-    ['syn_sign', 'syn_type_sym_ratio', 'asym_prop', 'sym_prop', 'cs_ids',
-    'id_cs_ratio', 'neuron_partners']
-    Note: 'cs_id'/'cs_ids' is the same as syn_id ('syn' are just a subset of 'cs', preserving the IDs).
+    All objects of the resulting 'syn_ssv' SegmentationDataset contain the following attributes:
+    ['syn_sign', 'syn_type_sym_ratio', 'asym_prop', 'sym_prop', 'cs_ids', 'neuron_partners']
+
+    Notes:
+        * 'rep_coord' property is calculated as the voxel (part of the object) closest to the center of mass of
+          all object voxels.
+        * 'cs_id'/'cs_ids' is the same as syn_id ('syn' are just a subset of 'cs', preserving the IDs).
 
 
     Parameters
@@ -469,8 +470,7 @@ def _combine_and_split_syn_thread(args):
                     raise ValueError(f'Path mis-match!')
                 synssv_attr_dc = dict(neuron_partners=ssv_ids)
                 voxel_dc[syn_ssv_id] = this_vx
-                # TODO: PS use segmentation_helper.calc_center_of_mass here
-                synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
+                synssv_attr_dc["rep_coord"] = seghelp.calc_center_of_mass(this_vx * scaling) // scaling
                 synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
                 synssv_attr_dc["size"] = len(this_vx)
                 # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
@@ -489,15 +489,11 @@ def _combine_and_split_syn_thread(args):
                 syn_props_agg = {}
                 # cs_id is the same as syn_id ('syn' are just a subset of 'cs')
                 for dc in this_attr:
-                    for k in ['id_cs_ratio', 'cs_id', 'sym_prop', 'asym_prop']:
+                    for k in ['cs_id', 'sym_prop', 'asym_prop']:
                         syn_props_agg.setdefault(k, []).append(dc[k])
                 # rename and delete old entry
                 syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
                 del syn_props_agg['cs_id']
-
-                # use the fraction of 'syn' voxels used for this connected component,
-                # i.e. 'this_agg_syn_weights', as weight agglomerate the syn-to-cs ratio as a weighted sum
-                syn_props_agg['id_cs_ratio'] = np.sum(this_agg_syn_weights * np.array(syn_props_agg['id_cs_ratio']))
 
                 # 'syn_ssv' synapse type as weighted sum of the 'syn' fragment types
                 sym_prop = np.sum(this_agg_syn_weights * np.array(syn_props_agg['sym_prop']))
@@ -615,6 +611,9 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     In contrast to :func:`~combine_and_split_syn` this method performs connected component analysis on
     the mesh of all cell-cell contacts instead of their voxels.
 
+    Notes:
+        * 'rep_coord' property is calculated as the mesh vertex closest to the center of mass of all mesh vertices.
+
     Parameters
     ----------
     wd :
@@ -727,7 +726,7 @@ def _combine_and_split_cs_thread(args):
             csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
             csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
             csssv_attr_dc["bounding_box"] = cs_ssv.mesh_bb // scaling
-            csssv_attr_dc["rep_coord"] = mesh_cc[1].reshape((-1, 3))[0] // scaling  # take first vertex coordinate
+            csssv_attr_dc["rep_coord"] = seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling
 
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
