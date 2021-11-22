@@ -20,7 +20,6 @@ from . import log_reps
 from .rep_helper import SegmentationBase
 from .segmentation import SegmentationDataset, SegmentationObject
 from .super_segmentation_helper import assemble_from_mergelist
-from .super_segmentation_helper import associate_objs_with_skel_nodes
 from .super_segmentation_helper import view_embedding_of_sso_nocache
 from .super_segmentation_object import SuperSegmentationObject
 from .. import global_params
@@ -527,25 +526,6 @@ class SuperSegmentationDataset(SegmentationBase):
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
                           new_mapping=new_mapping, overwrite=self.overwrite, use_batchjob=use_batchjob)
 
-    def predict_cell_types_skelbased(self, stride: int = 1000, nb_cpus=1):
-        """
-        Not used anymore.
-        """
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir])
-
-        if not qu.batchjob_enabled():
-            sm.start_multiprocess(predict_cell_type_skelbased_thread,
-                                  multi_params, nb_cpus=nb_cpus)
-
-        else:
-            qu.batchjob_script(multi_params, "predict_cell_type_skelbased",
-                               n_cores=nb_cpus, remove_jobfolder=True)
-
     def save_version_dict(self):
         """
         Save the version dictionary to a `.pkl` file.
@@ -832,33 +812,6 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     return voxels
 
 
-def predict_cell_type_skelbased_thread(args):
-    """Skeleton-based celltype prediction"""
-    # TODO: check functionality, use 'predict_nodes'!
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                associate_objs_with_skel_nodes(ssv, ("sj", "mi", "vc"))
-                ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-            except:
-                pass
-
-
 def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
                              new_version: str, target_wd: Optional[str] = None,
                              n_jobs: int = 1, safe: bool = True):
@@ -898,38 +851,6 @@ def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
         old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir, safe=safe)
     log_reps.info("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
-
-
-def preproc_sso_skelfeature_thread(args: Tuple):
-    """
-    Helper function to compute skeleton feature of a cell reconstruction. See
-    :func:`~reps.super_segmentation_object.SuperSegmentationObject.skel_features`
-    for details.
-
-    Args:
-        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
-            initialize the :class:`~syconn.reps.super_segmentation_dataset
-            .SuperSegmentationDataset`.
-    """
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
-            log_reps.warning("Skeleton of SSV %d has zero nodes." % ssv_id)
-            continue
-        for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
-            try:
-                _ = ssv.skel_features(feat_ctx_nm)
-            except IndexError as e:
-                log_reps.error("Error at SSO %d (context: %d).\n%s" % (
-                    ssv.id, feat_ctx_nm, e))
 
 
 def exctract_ssv_morphology_embedding(args: Union[tuple, list]):

@@ -1,10 +1,7 @@
 import sys
-from syconn.handler.prediction import dense_predictor #stored at right location?
+import pickle as pkl
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+from syconn.handler.prediction import dense_predictor
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

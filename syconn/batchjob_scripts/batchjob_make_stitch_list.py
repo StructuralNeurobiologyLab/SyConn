@@ -6,11 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.extraction import cs_processing_steps as cps
+import pickle as pkl
+from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -23,7 +20,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._overlap_mapping_sj_to_cs_thread(args)
+out = oes._make_stitch_list_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

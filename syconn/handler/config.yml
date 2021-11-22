@@ -151,7 +151,7 @@ cell_objects:
   # used to agglomerate 'syn' objects (cell supervoxel-based synapse fragments) into 'syn_ssv'
   cs_gap_nm: 250
   # Parameters of agglomerated synapses 'syn_ssv'
-  # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
+  # mapping parameters in 'map_objects_from_synssv_partners'; assignment of cellular
   # organelles to syn_ssv
   max_vert_dist_nm:
     mi: 1000

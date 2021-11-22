@@ -6,15 +6,9 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import numpy as np
 import os
 import shutil
-import numpy as np
-import shutil
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 from syconn.proc.rendering import render_sso_coords_multiprocessing
 from syconn.handler.basics import chunkify

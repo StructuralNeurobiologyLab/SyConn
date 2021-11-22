@@ -9,11 +9,7 @@ import sys
 import warnings
 warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
 warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
-warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")  # h5py deprecation warning
-try:
-    import cPickle as pkl
-except Exception:
-    import pickle as pkl
+import pickle as pkl
 from syconn.extraction.object_extraction_steps import _export_cset_as_kds_thread
 
 path_storage_file = sys.argv[1]

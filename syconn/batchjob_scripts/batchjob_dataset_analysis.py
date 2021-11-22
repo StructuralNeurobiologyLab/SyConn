@@ -2,16 +2,13 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
+import pickle as pkl
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.extraction import object_extraction_steps as oes
+from syconn.proc import sd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +21,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = oes._apply_merge_list_thread(args)
+out = sd_proc._dataset_analysis_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

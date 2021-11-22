@@ -73,14 +73,12 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
         # run EGL on single node: 20 parallel jobs
         if not qu.batchjob_enabled():
             n_cores = 1
-            n_parallel_jobs = global_params.config['ncores_per_node']
             qu.batchjob_script(multi_params, "render_views", suffix='_small', log=log,
                                additional_flags="--gres=gpu:2", disable_batchjob=True,
                                n_cores=n_cores, remove_jobfolder=True)
         # run on whole cluster
         else:
             n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-            n_parallel_jobs = global_params.config.ngpu_total
             qu.batchjob_script(multi_params, "render_views_egl", suffix='_small', log=log,
                                additional_flags="--gres=gpu:1",
                                n_cores=n_cores, remove_jobfolder=True)

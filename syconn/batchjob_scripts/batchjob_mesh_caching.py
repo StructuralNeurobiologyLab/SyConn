@@ -6,12 +6,10 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
+import pickle as pkl
+from syconn.proc.sd_proc import mesh_chunk
+from syconn import global_params
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +22,14 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = oes._make_stitch_list_thread(args)
+so_chunk_paths = args[0]
+so_kwargs = args[1]
+
+working_dir = so_kwargs['working_dir']
+obj_type = so_kwargs['obj_type']
+global_params.wd = working_dir
+for path in so_chunk_paths:
+    mesh_chunk((path, obj_type))
 
 with open(path_out_file, "wb") as f:
-    pkl.dump(out, f)
+    pkl.dump("0", f)

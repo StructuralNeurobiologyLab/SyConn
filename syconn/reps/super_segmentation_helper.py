@@ -1019,125 +1019,6 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.close()
 
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
-                          obj_types=("sj", "mi", "vc"), downsample_to=None):
-    """
-
-    Args:
-        ssv:
-        feature_context_nm: int
-            effective field for feature statistic 2*feature_context_nm
-        max_diameter:
-        obj_types:
-        downsample_to:
-
-    Returns:
-
-    """
-    node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
-                            dtype=np.int32)
-
-    sizes = {}
-    for obj_type in obj_types:
-        objs = ssv.get_seg_objects(obj_type)
-        sizes[obj_type] = np.array([obj.size for obj in objs],
-                                   dtype=np.int32)
-
-    if downsample_to is not None:
-        if downsample_to > len(ssv.skeleton["nodes"]):
-            downsample_by = 1
-        else:
-            downsample_by = int(len(ssv.skeleton["nodes"]) /
-                                float(downsample_to))
-    else:
-        downsample_by = 1
-
-    features = []
-    for i_node in range(len(ssv.skeleton["nodes"][::downsample_by])):
-        this_i_node = i_node * downsample_by
-        this_features = []
-
-        paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
-                                               this_i_node,
-                                               feature_context_nm)
-        neighs = np.array(list(paths.keys()), dtype=np.int32)
-
-        neigh_diameters = ssv.skeleton["diameters"][neighs]
-        this_features.append(np.mean(neigh_diameters))
-        this_features.append(np.std(neigh_diameters))
-        hist_feat = np.histogram(neigh_diameters, bins=10, range=(0, max_diameter))[0]
-        hist_feat = np.array(hist_feat) / hist_feat.sum()
-        this_features += list(hist_feat)
-        this_features.append(np.mean(node_degrees[neighs]))
-
-        for obj_type in obj_types:
-            neigh_objs = np.array(ssv.skeleton["assoc_%s" % obj_type])[
-                neighs]
-            neigh_objs = [item for sublist in neigh_objs for item in
-                          sublist]
-            neigh_objs = np.unique(np.array(neigh_objs))
-            if len(neigh_objs) == 0:
-                this_features += [0, 0, 0]
-                continue
-
-            this_features.append(len(neigh_objs))
-            obj_sizes = sizes[obj_type][neigh_objs]
-            this_features.append(np.mean(obj_sizes))
-            this_features.append(np.std(obj_sizes))
-
-        # box feature
-        edge_len = feature_context_nm * 2
-        bb = [ssv.skeleton["nodes"][this_i_node], np.array([edge_len, ] * 3)]
-        vol_tot = feature_context_nm ** 3
-        node_density = np.sum(in_bounding_box(ssv.skeleton["nodes"], bb)) / vol_tot
-        this_features.append(node_density)
-
-        features.append(np.array(this_features))
-    return np.array(features)
-
-
-def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
-                                   downsampling=(8, 8, 4)):
-    if ssv.skeleton is None:
-        ssv.load_skeleton()
-
-    for obj_type in obj_types:
-        voxels = []
-        voxel_ids = [0]
-        for obj in ssv.get_seg_objects(obj_type):
-            vl = obj.load_voxel_list_downsampled_adapt(downsampling)
-
-            if len(vl) == 0:
-                continue
-
-            if len(voxels) == 0:
-                voxels = vl
-            else:
-                voxels = np.concatenate((voxels, vl))
-
-            voxel_ids.append(voxel_ids[-1] + len(vl))
-
-        if len(voxels) == 0:
-            ssv.skeleton["assoc_%s" % obj_type] = [[]] * len(
-                ssv.skeleton["nodes"])
-            continue
-
-        voxel_ids = np.array(voxel_ids)
-
-        kdtree = scipy.spatial.cKDTree(voxels * ssv.scaling)
-        balls = kdtree.query_ball_point(ssv.skeleton["nodes"] *
-                                        ssv.scaling, 500)
-        nodes_objs = []
-        for i_node in range(len(ssv.skeleton["nodes"])):
-            nodes_objs.append(list(np.unique(
-                np.sum(voxel_ids[:, None] <= np.array(balls[i_node]),
-                       axis=0) - 1)))
-
-        ssv.skeleton["assoc_%s" % obj_type] = nodes_objs
-
-    ssv.save_skeleton(to_kzip=False, to_object=True)
-
-
 def skelnode_comment_dict(sso):
     comment_dict = {}
     skel = load_skeleton_kzip(sso.skeleton_kzip_path)["skeleton"]
@@ -1873,7 +1754,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views, comp_window, nb_views_mode
 
 
 def view_embedding_of_sso_nocache(sso: 'SuperSegmentationObject', model: 'torch.nn.Module', ws: Tuple[int, int],
-                                  nb_views: int, comp_window: int, pred_key_appendix: str = "",
+                                  nb_views: int, comp_window: Union[int, float], pred_key_appendix: str = "",
                                   verbose: bool = False, overwrite: bool = True,
                                   add_cellobjects: Union[bool, Iterable] = True):
     """

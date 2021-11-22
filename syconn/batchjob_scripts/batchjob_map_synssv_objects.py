@@ -5,13 +5,9 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
+import pickle as pkl
 import sys
-
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.reps.super_segmentation_dataset import predict_cell_type_skelbased_thread
+from syconn.proc import ssd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +20,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = predict_cell_type_skelbased_thread(args)
+out = ssd_proc.map_synssv_objects_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

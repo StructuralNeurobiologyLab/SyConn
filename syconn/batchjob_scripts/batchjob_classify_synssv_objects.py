@@ -6,11 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import sys
+import pickle as pkl
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
 from syconn.extraction import cs_processing_steps as cps
 
 path_storage_file = sys.argv[1]
@@ -24,7 +21,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._map_objects_from_synssv_partners_thread(args)
+out = cps._classify_synssv_objects_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)
