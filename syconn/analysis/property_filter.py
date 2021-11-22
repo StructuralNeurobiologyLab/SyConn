@@ -1,9 +1,11 @@
 import argparse
 import os
 import re
-import numpy as np
 import copy
 import time
+from typing import List, Tuple, Optional
+
+import numpy as np
 from timeit import default_timer as timer
 from bs4 import BeautifulSoup as Soup
 from knossos_utils import KnossosDataset
@@ -11,53 +13,83 @@ from numpy.core.fromnumeric import size
 
 from syconn.analysis.cli import configure_backend
 from syconn.analysis.cli import SyConnClient
-from syconn.handler.logger import log_main as log_gate
+from syconn.handler.logger import log_main as logger
 from syconn.handler.prediction import str2int_converter, int2str_converter
 from syconn import global_params
 
 import neuroglancer
 import neuroglancer.cli
+from neuroglancer.viewer_state import SegmentationLayer
 from neuroglancer.viewer_config_state import SegmentIdMapEntry
+from neuroglancer.config import NeuroConfig
 
-logger = log_gate
 
-def get_segmentation_layer(layers):
+def get_segmentation_layer(layers: List[SegmentationLayer]) -> Tuple[int, SegmentationLayer]:
+    """Returns the index of the segmentation layer and the segmentation
+    layer itself
+
+    Args:
+        layers: list of neuroglancer layers
+
+    Returns:
+        index of the segmentation layer and the segmentation layer itself
+    """
+
     for i, layer in enumerate(layers):
-        if isinstance(layer.layer, neuroglancer.SegmentationLayer):
+        if isinstance(layer.layer, neuroglancer.SegmentationLayer) and layer.name == "j0251_rag_flat_Jan2019_v3":
+            print(layer.name)
             return i, layer
 
+
+def get_celltype(ct: int) -> str:
+    """Returns the celltype name from the celltype id. Adapted from
+    `~syconn.handler.prediction.int2str_converter`
+
+    Args:
+        ct (int): cell type id
+
+    Returns:
+        str: celltype name
+    """    
+
+    int2str_label = {0:'exc', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'int 3', 9: 'int 1', 10: 'int 2'}
+    
+    try:
+        return int2str_label[ct]
+
+    except KeyError:
+        return "Unknown"
+
+
 class PropertyFilter(SyConnClient):
-    """Combines neuroglancer client (SyConnClient) with property
-    filtering to create a complete viewer.
+    """Inherits from SyConnClient and adds custom functionality to the
+    neuroglancer viewer
 
-    :param SyConnClient: Base class for neuroglancer client
-    :type SyConnClient: 
-    :return: Neuroglancer client with property filtering
-    :rtype: PropertyFilter
+    Attributes:
+        params (NeuroConfig): configuration parameters for neuroglancer
+            server
+        acquisition (str): name of the dataset
+        version (str): version of the dataset
+        gt_type (str): name of the ground truth type
+        CTs (list): list of cell types in the dataset
+        ssv_ids (list): list of ssvs
+        cur_message (str): current status message
+        CTmask (dict): dictionary of cell type indices in the ssv_ids 
+            array
 
-    .. class variables::
-        :cvar properties: properties with operator-operand pair
-        :type properties: tuple
-        :cvar master_pattern: query format for specifying all the properties
-        :type master_pattern: str
-        :cvar ct_pattern: cell type pattern
-        :type ct_pattern: re.Pattern
-        :cvar property_filter: operator-operand pair type pattern
-        :type property_filter: re.Pattern
-        :cvar page_pattern: page pattern
-        :type page_pattern: re.Pattern
-        :cvar PAGE_SIZE: max number of ssv_ids displayed in the side panel
-        :type PAGE_SIZE: int
-        :cvar syn_type: maps compartment value to pre- or post-synaptic
-        :type syn_type: dict
+    Note:
+        This class also has a property filter. The properties are 
+        specified in a tuple and follow the specification of the
+        SuperSegmentationDataset (see :class:`~syonn.reps.\
+            super_segmentation_dataset.SuperSegmentationDataset`)
 
-    .. filtering pattern::
-        [celltype]_pg[page_num] -> filters by the cell type and divides the
-        resulting ssv_ids across pages (cached)
-
-        [celltype]_[>|<][mito_count]_[>|<][ssv_size]_pg[page_num] -> filters
-        by the cell type, mitochondria count and ssv size, and divides the
-        resulting ssv_ids across pages (if required)  
+        Filtering is done by specifying one or more of the properties
+        in order in the text field of the viewer. Examples:
+        msn_pg2 -> filters msn cells and displays the second page
+            if there is more than one page
+        msn_mito>100_size>100 -> filters msn cells with number of 
+            mitochondria greater than 100 and size greater than 100000.
+            The size is specified in micrometers.
     """    
 
     properties = ('mi', 'size')
@@ -73,18 +105,16 @@ class PropertyFilter(SyConnClient):
         "soma": "post-synaptic",
     }
 
-    def __init__(self, params, organelles, token=None):
+    def __init__(self, params: NeuroConfig, token: Optional[str]=None, organelles: Optional[list]=None):
         """Initializes the base client and property filter
 
-        :param params: configuration parameters for neuroglancer server
-        :type params: neuroglancer.NeuroConfig
-        :param organelles: organelle meshes to be displayed
-        :type organelles: list
-        :param token: unique token for the client (40 character hex)
-        :type token: str
-        """        
+        Args:
+            params: server configuration
+            token: 40-character hex string. Defaults to None.
+            organelles: list of organelles to be displayed
+        """              
 
-        super().__init__(params, organelles, token)
+        super().__init__(params, token, organelles)
 
         self.params = params
         self.acquisition = params.acquisition
@@ -105,26 +135,38 @@ class PropertyFilter(SyConnClient):
         logger.info(f"Available filter properties {self.__class__.properties}")
 
         # add action handler for finding synaptic partner
-        self.viewer.actions.add('show-largest-synaptic-connection', self._handle_select)
-        self.viewer.actions.add('share-viewer', self._generate_viewer_link)
+        self.viewer.actions.add('show-largest-synaptic-connection', self.get_synaptic_partner)
+        # self.viewer.actions.add('share-viewer', self.generate_viewer_link)
 
         # bind actions to keys
         with self.viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['keyp'] = 'show-largest-synaptic-connection'
-            s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
+            # s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
         
+        # Precomputed segment properties are used now. Uncomment this to use the old segment properties
         # defer callback necessary to avoid deadlock 
-        self.viewer.shared_state.add_changed_callback(
-            lambda: self.viewer.defer_callback(self.on_state_changed)
-        )
+        # self.viewer.shared_state.add_changed_callback(
+        #     lambda: self.viewer.defer_callback(self.on_state_changed)
+        # )
 
-    def _generate_viewer_link(self, action_state):
-        """
-        Generates a link to the current viewport.
+    def update_status_message(self, message: str):
+        """Updates the status message in the viewer
 
-        :param action_state: current state of the viewer
-        :type action_state: neuroglancer.viewer_config_state.ActionState
-        """
+        Args:
+            message (str): message to display
+        """        
+        if message != self.cur_message:
+            with self.viewer.config_state.txn() as s:
+                s.status_messages['status'] = message
+                
+            self.cur_message = message
+
+    def generate_viewer_link(self, action_state):
+        """Generates a link to the current viewer state
+
+        Args:
+            action_state: captures the hotkey action
+        """        
 
         from neuroglancer import url_state
         from urllib.parse import unquote
@@ -137,51 +179,47 @@ class PropertyFilter(SyConnClient):
         # replace hash with another character so that it can be reversed later
         url_without_hash = re.sub("[#]", "ß", url_without_exclamation)
 
+        self.update_status_message(url_without_hash)
+
         logger.info(url_without_hash)
 
-    def _handle_select(self, action_state):
-        """Action handler for synaptic filtering [keyp].
-        
-        :param action_state: current state of the viewer
-        :type action_state: neuroglancer.viewer_config_state.ActionState
-        :return:
-        """
+    def get_synaptic_partner(self, action_state):
+        """Retrieves the synaptic partner of the currently selected 
+        cell
+
+        Args:
+            action_state: captures the hotkey action
+        """        
 
         segment_id = action_state.selected_values.get(self.seg_name) # super().seg_name
 
-        if segment_id is None: 
+        if segment_id is None:
+            message = "No cell selected! Double click on a segment in one of the cross-sectional views"
+            self.update_status_message(message)
             return
         
-        ssv_id = segment_id.value
-
-        # if segment_id.value is a collections.namedtuple (key=ssv_id, value=None, label=celltype), extract the ssv_id
-        if isinstance(ssv_id, SegmentIdMapEntry):
-            ssv_id = ssv_id[0]
+        if isinstance(segment_id.value, int):
+            ssv_id = segment_id.value
+        else:
+            ssv_id = int(segment_id.value.key)
         
-        message = 'Loading synaptic partner for selected ssv {}'.format(ssv_id)
-
-        if message != self.cur_message:
-            with self.viewer.config_state.txn() as s:
-                s.status_messages['status'] = message
-                
-            self.cur_message = message
-
         with self.viewer.txn() as s:
             segments = get_segmentation_layer(s.layers)[1].segments
+            # segments = s.layers[-1].segments  # segmentation layer with skeletons and meshes
             if ssv_id in segments:
+
+                message = f"Loading synaptic partner for the selected cell {ssv_id}"
+                self.update_status_message(message)
+
                 start = time.time()
-                result = self.get_synaptic_partner(ssv_id)
+                result = self._filter_synaptic_partners(ssv_id)
                 dtime = time.time() - start
                 logger.debug('Got synaptic partner after {:.2f}'.format(dtime))
 
                 # if no synaptic partner is found
                 if result == -1:
-                    message = 'No synaptic partner found for the selected ssv {}'.format(ssv_id)
-
-                    if message != self.cur_message:
-                        with self.viewer.config_state.txn() as cfs:
-                            cfs.status_messages['status'] = message
-                        self.cur_message = message
+                    message = 'No synaptic partner found for the selected cell {}'.format(ssv_id)
+                    self.update_status_message(message)
 
                     return
 
@@ -189,24 +227,14 @@ class PropertyFilter(SyConnClient):
                 partner_ssv_id = result["partner_ssv"]
                 ssv_comp = int2str_converter(result["ssv_comp"], "axgt").split('_')[1]
                 partner_ssv_comp = int2str_converter(result["partner_ssv_comp"], "axgt").split('_')[1]
-                ssv_ct = int2str_converter(result["ssv_ct"], self.gt_type)
-                partner_ssv_ct = int2str_converter(result["partner_ssv_ct"], self.gt_type)
+                ssv_ct = get_celltype(result["ssv_ct"])
+                partner_ssv_ct = get_celltype(result["partner_ssv_ct"])
                 rep_coords = result["rep_coords"]
 
                 # add synaptic partner to segment list
                 segments.add(partner_ssv_id)
                 # s.position = np.flip(rep_coords) # use for neuroglancer.LocalVolume source
                 s.position = rep_coords # set position to the representative coordinate
-
-                # TODO(hashir): use bootstrap alert instead of status messages
-                # soup = Soup(open("/home/hashir/neuroglancer/python/neuroglancer/static/index.html"))
-                # container = soup.find(id="neuroglancer-container")
-                # alert_div = soup.new_tag('div')
-                # alert_div['class'] = "alert alert-success mb-0"
-                # alert_div.string = "abcd"
-                # container.insert_before(alert_div)
-                # with open("/home/hashir/neuroglancer/python/neuroglancer/static/index.html", "w") as f:
-                #     f.write(str(soup))
                 
                 # pre-synaptic -> post-synaptic message format
                 if self.__class__.syn_type[ssv_comp] == "pre-synaptic":
@@ -224,22 +252,23 @@ class PropertyFilter(SyConnClient):
                             {self.__class__.syn_type[ssv_comp]} \
                             ({ssv_comp})'
 
-                if message != self.cur_message:
-                    with self.viewer.config_state.txn() as s:
-                        s.status_messages['status'] = message
-                    self.cur_message = message
+                self.update_status_message(message)
+                
             else:
+                message = f"{ssv_id} is not selected. Double-click on the segment to select it"
+                self.update_status_message(message)
                 return
 
-    def get_synaptic_partner(self, ssv_id):
-        """Gets synaptic partner ssv_id, compartment predictions and cell type
-        of synaptic partners and rep. coords of synapse.
+    def _filter_synaptic_partners(self, ssv_id: int) -> dict:
+        """Gets synaptic partner ssv_id, compartment predictions, cell
+        type, and rep. coords of synapse.
 
-        :param ssv_id: segment id
-        :type ssv_id: int
-        :return result: info about the synaptic partners
-        :rtype result: dict, -1
-        """
+        Args:
+            ssv_id: ssv if of the selected cell
+
+        Returns:
+            partners ssv ids, cell types, and compartment predictions
+        """        
 
         partners_ix = np.where(np.any(self.params["neuron_partners"] == ssv_id, axis=1))[0]
         mask = np.ones_like(partners_ix, dtype=bool)
@@ -248,11 +277,11 @@ class PropertyFilter(SyConnClient):
         if not np.any(mask):
             return -1
         
-        mask_axon_den = np.where((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1), True, False) & \
-                np.where((self.params["partner_axoness"][partners_ix][:,0] == 0) | (self.params["partner_axoness"][partners_ix][:,1] == 0), True, False)
+        mask_axon_den = ((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1)) & \
+                        ((self.params["partner_axoness"][partners_ix][:,0] == 0) | (self.params["partner_axoness"][partners_ix][:,1] == 0))
 
-        mask_axon_soma = np.where((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1), True, False) & \
-                np.where((self.params["partner_axoness"][partners_ix][:,0] == 2) | (self.params["partner_axoness"][partners_ix][:,1] == 2), True, False)
+        mask_axon_soma = ((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1)) & \
+                    ((self.params["partner_axoness"][partners_ix][:,0] == 2) | (self.params["partner_axoness"][partners_ix][:,1] == 2))
 
         mask = mask & (mask_axon_den | mask_axon_soma)
         
@@ -273,92 +302,6 @@ class PropertyFilter(SyConnClient):
         }
         
         return result
-
-    def on_state_changed_deprecated(self):
-        """Captures a state change and updates state."""
-
-        ix, segmentation_layer = get_segmentation_layer(self.viewer.state.layers)
-        segment_query = segmentation_layer.segment_query
-        
-        # full pattern match required to avoid response generation
-        if segment_query != None and re.fullmatch(self.__class__.master_pattern, segment_query) != None:
-            logger.info(f'Entered in query: {segment_query}')
-            try:
-                ct_match = next(self.__class__.ct_pattern.finditer(segment_query))
-                celltype = ct_match.group(1).upper() # case insensitive match
-                logger.info(f'Celltype {celltype}')
-                if self.CTmask[celltype] == []:
-                    logger.info(f"Storing ids mask of celltype {celltype} in memory")
-                    start = timer()
-                    self.CTmask[celltype] = np.where(
-                        self.params["celltypes"] == str2int_converter(celltype, self.gt_type))[0]
-                    end = timer()
-                    logger.info(f"Loaded celltype ids mask after {(end - start):.3f} seconds")
-
-            except AttributeError as e:
-                logger.error(e)
-
-            except KeyError as e:
-                logger.error(f"No matching cell type found for {e}")
-
-            except FileNotFoundError as e:
-                logger.error(f"{e} celltype_cnn_e3s.npy not found")            
-
-            # list of (prop_type, operation, threshhold)
-            filter_list = []
-            pageNr = -1
-
-            filter_iter = self.__class__.property_filter.finditer(segment_query)
-            prop_iter = iter(self.__class__.properties)
-
-            #loop through property iterator
-            while True:
-                try:
-                    # get the next item
-                    element = next(filter_iter).group(1)
-                    prop = next(prop_iter)
-                    if element == '#': # jump over missing condition
-                        continue
-                    filter_list.append((prop, element[0], element[1:]))
-
-                except StopIteration:
-                    # if StopIteration is raised, break from loop
-                    break
-
-            page_match = next(iter(self.__class__.page_pattern.finditer(segment_query)))
-            if page_match == None:
-                pageNr = 1
-            else:
-                pageNr = int(page_match.group(0).split("pg")[1])
-            
-            # logger.info('No match found for page property')
-
-            logger.info(f'Filter list: {filter_list}')
-            # get filtered ssv_ids
-            ssv_ids = self.get_state_segment_ids(celltype, filter_list)
-
-            if len(ssv_ids) == 0:
-                return
-
-            if isinstance(ssv_ids[0], np.ndarray):  # split happened
-
-                if pageNr < 1:
-                    logger.error("Numbering of the pages starts at 1.")
-                    return
-
-                if pageNr > len(ssv_ids):
-                    pageNr = len(ssv_ids)
-
-                page = ssv_ids[pageNr - 1]
-
-            else:  # no split
-                page = ssv_ids
-
-            # update segment query and state
-            response = ', '.join(str(ssv_id) for ssv_id in page)
-            new_state = copy.deepcopy(self.viewer.state)
-            new_state.layers[ix].segment_query = response
-            self.viewer.set_state(new_state)
 
     def on_state_changed(self):
         """Captures a state change and updates state. Individual
@@ -473,8 +416,17 @@ class PropertyFilter(SyConnClient):
             new_state.layers[ix].segment_query = response
             self.viewer.set_state(new_state)
 
-    def get_state_segment_ids(self, celltype, filter_list):
+    def get_state_segment_ids(self, celltype, filter_list) -> np.ndarray:
         """Retrieves a subset of ssv_ids based on the query.
+
+        Args:
+            celltype: [description]
+            filter_list: [description]
+
+        Returns:
+            ssv ids of interest
+        """        
+        """
         
         :param celltype: queried cell type
         :type celltype: str
