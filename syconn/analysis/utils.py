@@ -7,6 +7,7 @@ import argparse
 import numpy as np
 
 from syconn import global_params
+from syconn.analysis.backend import SyConnBackend
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.logger import log_main as logger
@@ -14,18 +15,17 @@ from syconn.handler import basics
 from syconn.mp.mp_utils import start_multiprocess_imap
 
 
-def get_encoded_skeleton(backend, ssv_id, scales):
-    """Gets encoded skeleton for ssv_id.
+def get_encoded_skeleton(backend: SyConnBackend, ssv_id: int, scales: Union[list, np.ndarray]) -> bytes:
+    """Gets encoded skeleton for ssv_id. 
 
-    :param backend: 
-    :type backend: SyConnBackend
-    :param ssv_id: 
-    :type ssv_id: int
-    :param scales: KnossosDataset.scale
-    :type scales: numpy.array
-    :return encoded_skeleton:
-    :rtype encoded_skeleton: bytes, -1 (skeleton not available)
-    """
+    Args:
+        backend:
+        ssv_id:
+        scales: voxel size
+
+    Returns:
+        encoded skeleton or -1 (skeleton not available)
+    """    
 
     logger.info('Getting binary encoded skeleton for ssv_id {}'.format(ssv_id))
     
@@ -62,18 +62,17 @@ def get_encoded_skeleton(backend, ssv_id, scales):
     return encoded_skeleton
 
 
-def get_encoded_mesh(backend, ssv_id, obj_type):
-    """Gets encoded mesh of a specific obj type for ssv_id.
+def get_encoded_mesh(backend: SyConnBackend, ssv_id: int, obj_type: str):
+    """Gets encoded mesh of SegmentationObject for ssv_id. 
 
-    :param backend: 
-    :type backend: SyConnBackend
-    :param ssv_id: 
-    :type ssv_id: int
-    :param obj_type: 'sv', 'mi', 'vc', 'sj'
-    :type obj_type: str
-    :return encoded_mesh: 
-    :rtype encoded_mesh: bytes, -1 (mesh not available)
-    """
+    Args:
+        backend: 
+        ssv_id: 
+        obj_type: SegmentationObject ('sv', 'mi', 'vc', 'syn_ssv')
+
+    Returns:
+        encoded mesh or -1 (mesh not available)
+    """    
 
     logger.info('Getting binary encoded {} mesh {}'.format(obj_type, ssv_id))
 
@@ -114,7 +113,16 @@ def get_encoded_mesh(backend, ssv_id, obj_type):
     return encoded_mesh
 
 
-def get_mesh_meta(ssv_id, lod):
+def get_mesh_meta(ssv_id: int, lod: int):
+    """Gets mesh meta data for ssv_id.
+
+    Args:
+        ssv_id: 
+        lod: level of detail
+
+    Returns:
+        json string of mesh meta data
+    """    
     fragments = []
     fragments.append("{}:{}:{}_mesh".format(ssv_id, lod, ssv_id))
     meta = json.dumps({"fragments": fragments})
@@ -123,10 +131,11 @@ def get_mesh_meta(ssv_id, lod):
 
 
 def get_mean_mesh_areas(ssvs: Union[np.ndarray, list]) -> np.ndarray:
-    """Retrieves the mean synapse mesh areas of ssvs. 
+    """Retrieves the mean synapse mesh areas of ssvs. Same ordering as\
+         :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids` 
 
     Args:
-        ssvs (Union[np.ndarray, list]): ssv ids (N,)
+        ssvs: ssv ids (N,)
 
     Returns:
         mean mesh areas (N,)

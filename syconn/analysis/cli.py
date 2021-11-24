@@ -117,9 +117,7 @@ class SyConnClient(object):
         """        
 
         if config.dev_environ:
-            host = config.global_server_args['host']
-            port = config.global_server_args['port']
-            source = f'http://{host}:{port}'
+            source = f'http://localhost:9000'
         
         else:
             source = f'https://syconn.esc.mpcdf.mpg.de'
