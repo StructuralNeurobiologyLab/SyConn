@@ -1098,7 +1098,7 @@ def cnn_axoness2skel(sso: 'super_segmentation.SuperSegmentationObject',
         force_reload: bool
             Reload SV predictions.
         save_skel: bool
-            Save SSV skeleton with prediction attirbutes
+            Save SSV skeleton with prediction attributes
         use_cache: bool
             Write intermediate SV predictions in SSV attribute dict to disk
     Returns:

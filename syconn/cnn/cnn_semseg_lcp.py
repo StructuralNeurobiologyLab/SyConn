@@ -73,7 +73,7 @@ use_syntype = False
 # ads: axon dendrite soma
 # abt: axon bouton terminal
 # fine: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-gt_type = 'do'
+gt_type = 'fine'
 num_classes = {'ads': 3, 'abt': 3, 'dnh': 3, 'fine': 7, 'dnho': 4, 'do': 2}
 ignore_l = num_classes[gt_type]  # num_classes is also used as ignore label
 remap_dicts = {'ads': {3: 1, 4: 1, 5: 0, 6: 0},
@@ -92,7 +92,7 @@ if cellshape_only:
 
 if name is None:
     name = f'semseg_pts_nb{npoints}_ctx{ctx}_{gt_type}_nclass' \
-           f'{num_classes[gt_type]}_lcp_GN_noKernelSep_Adam_CE'
+           f'{num_classes[gt_type]}_lcp_GN_noKernelSep_AdamW_CE_large'
     if not normalize_pts:
         name += '_NonormPts'
     if cellshape_only:
@@ -122,20 +122,20 @@ save_root = os.path.expanduser(save_root)
 search = 'SearchQuantized'
 conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_pts)
 act = nn.ReLU
-architecture = None
-# architecture = [dict(ic=-1, oc=1, ks=48, nn=16, np=-1),
-#                 dict(ic=1, oc=1, ks=48, nn=16, np=2048),
-#                 dict(ic=1, oc=1, ks=32, nn=16, np=1024),
-#                 dict(ic=1, oc=1, ks=32, nn=16, np=256),
-#                 dict(ic=1, oc=2, ks=16, nn=16, np=64),
-#                 dict(ic=2, oc=2, ks=16, nn=16, np=16),
-#                 dict(ic=2, oc=2, ks=16, nn=16, np=8),
-#                 dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-#                 dict(ic=4, oc=2, ks=16, nn=4, np='d'),
-#                 dict(ic=4, oc=1, ks=32, nn=4, np='d'),
-#                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
-#                 dict(ic=2, oc=1, ks=32, nn=8, np='d'),
-#                 dict(ic=2, oc=1, ks=32, nn=8, np='d')]
+# architecture = None
+architecture = [dict(ic=-1, oc=1, ks=48, nn=32, np=-1),
+                dict(ic=1, oc=1, ks=32, nn=32, np=2048),
+                dict(ic=1, oc=1, ks=32, nn=16, np=1024),
+                dict(ic=1, oc=2, ks=32, nn=16, np=256),
+                dict(ic=2, oc=2, ks=16, nn=16, np=128),
+                dict(ic=2, oc=2, ks=16, nn=8, np=64),
+                dict(ic=2, oc=2, ks=16, nn=4, np=32),
+                dict(ic=2, oc=2, ks=16, nn=4, np='d'),
+                dict(ic=4, oc=2, ks=16, nn=8, np='d'),
+                dict(ic=4, oc=1, ks=16, nn=16, np='d'),
+                dict(ic=3, oc=1, ks=16, nn=16, np='d'),
+                dict(ic=2, oc=1, ks=16, nn=16, np='d'),
+                dict(ic=2, oc=1, ks=16, nn=16, np='d')]
 model = ConvAdaptSeg(input_channels, num_classes[gt_type], get_conv(conv), get_search(search), kernel_num=64,
                      architecture=architecture, activation=act, norm='gn')
 
@@ -175,20 +175,21 @@ if gt_type == 'dnho' or gt_type == 'do':  # no additional validation data
     train_dir = '/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/pkl_files/'
     valid_dir = '/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/pkl_files/'
 else:  # no additional validation data
-    train_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/train/hc_out_2021_11_fine/'
-    valid_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_subset/train/hc_out_2021_11_fine/'
+    train_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_rev1/train/hc_out_2021_11_fine/'
+    valid_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_rev1/train/hc_out_2021_11_fine/'
 
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
                            source_dir=train_dir, remap_dict=remap_dicts[gt_type])
-valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
-                           batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
-                           source_dir=valid_dir, remap_dict=remap_dicts[gt_type])
+# valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
+#                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
+#                            source_dir=valid_dir, remap_dict=remap_dicts[gt_type])
+valid_ds = None
 # PREPARE AND START TRAINING #
 
 # set up optimization
-# optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+# optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
 # optimizer = torch.optim.SGD(
 #     model.parameters(),
@@ -231,8 +232,6 @@ if num_classes[gt_type] > 2:
     })
 
 # Create trainer
-# it seems pytorch 1.1 does not support batch_size=None to enable batched dataloader, instead
-# using batch size 1 with custom collate_fn
 trainer = Trainer3d(
     model=model,
     criterion=criterion,
@@ -240,7 +239,7 @@ trainer = Trainer3d(
     device=device,
     train_dataset=train_ds,
     valid_dataset=valid_ds,
-    batchsize=1,
+    batchsize=None,
     num_workers=10,
     valid_metrics=valid_metrics,
     save_root=save_root,
@@ -249,8 +248,8 @@ trainer = Trainer3d(
     schedulers={"lr": lr_sched},
     num_classes=ignore_l,
     # example_input=example_input,
-    dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
-    nbatch_avg=8,
+    dataloader_kwargs=dict(persistent_workers=True),
+    nbatch_avg=4,
     tqdm_kwargs=dict(disable=False),
     lcp_flag=True
 )
