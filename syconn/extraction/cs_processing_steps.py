@@ -295,16 +295,19 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     if (sd_syn.type == 'cs') and (min_path_length_partners is not None) and (min_path_length_partners > 0):
         filtered_ssv_ids = filter_ssd_by_total_pathlength(ssd, min_path_length_partners)
         log.info(f'Filtering contact sites formed with at least once small cell (min. path length of a '
-                            f'cell {min_path_length_partners} µm). {len(filtered_ssv_ids)} Cells fulfill that '
-                            f'criterion.')
+                 f'cell {min_path_length_partners} µm). {len(filtered_ssv_ids)} Cells fulfill that '
+                 f'criterion.')
         # check for every element of inter_ssv_contacts if it is inside filtered_ssv_ids
         res = np.isin(inter_ssv_contacts.reshape(-1), filtered_ssv_ids).reshape(-1, 2)
-        inter_ssv_contacts = inter_ssv_contacts[np.all(res, axis=1)]
+        mask = np.all(res, axis=1)
+        inter_ssv_contacts = inter_ssv_contacts[mask]
+        syn_ids = syn_ids[mask]
+        assert len(inter_ssv_contacts) == len(syn_ids)
         if len(inter_ssv_contacts) == 0:
             log.warning(f'No contact site found after filtering small cells.')
         else:
             log.info(f'Found {len(inter_ssv_contacts)} supervoxel contact sites (merged, unsplit) between'
-                                f' {len(filtered_ssv_ids)} cells.')
+                     f' {len(filtered_ssv_ids)} cells.')
     # get bit shifted combination of SSV partner IDs, used to collect all corresponding synapse IDs between the two
     # cells
     relevant_ssv_ids_enc = np.left_shift(np.max(inter_ssv_contacts, axis=1), 32) + np.min(inter_ssv_contacts, axis=1)
@@ -691,7 +694,7 @@ def _combine_and_split_cs_thread(args):
     cs_ssv_id = base_id
 
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
-    mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
+    mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False, compress=True)
 
     # iterate over cell partners and their contact site IDs (each contact site is between two supervoxels
     # of the partner cells)
@@ -727,7 +730,7 @@ def _combine_and_split_cs_thread(args):
             csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
             csssv_attr_dc["bounding_box"] = cs_ssv.mesh_bb // scaling
             csssv_attr_dc["rep_coord"] = seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling
-
+            csssv_attr_dc["cs_ids"] = list(cs_ids)
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
             # tm = o3d.geometry.TriangleMesh

@@ -25,6 +25,7 @@ from .super_segmentation_object import SuperSegmentationObject
 from .. import global_params
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
+from ..handler import basics
 from ..backend.storage import BinarySearchStore, bss_get_attr_helper
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -489,6 +490,51 @@ class SuperSegmentationDataset(SegmentationBase):
                                                               caching=caching))
         return sso
 
+    def store_total_edge_lengths(self, overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
+        """Stores total edge lengths of all the cells in this dataset 
+        in nanometers. Same ordering as :attr:`~.ssv_ids`.
+
+        Args:
+            overwrite: Overwrite the .npy file. Defaults to False.
+            nb_cpus: CPUs per worker. Defaults to None.
+        """        
+        if nb_cpus is None:
+            import multiprocessing
+            nb_cpus = multiprocessing.cpu_count()
+
+        total_edge_lengths = np.concatenate(sm.start_multiprocess_imap(get_total_edge_lengths, params=list(basics.chunkify_successive(self.ssv_ids, 500)), nb_cpus=nb_cpus), axis=0)
+
+        if not os.path.exists(self.path + "total_edge_length.npy"):
+            np.save(self.path + "total_edge_length.npy", total_edge_lengths)
+
+        if overwrite:
+            np.save(self.path + "total_edge_length.npy", total_edge_lengths)
+
+    def store_path_densities_seg_objs(self, obj_type: str, compartments_of_interest: Optional[list] = None, ax_pred_key: Optional[str] = 'axoness_avg10000', overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
+        """Stores path densities of all the cells in this dataset.
+        Same ordering as :attr:`~.ssv_ids`.
+
+        Args:
+            obj_type: Key to any available sub-cellular structure.
+            compartments_of_interest: Which compartments to take into account for calculation. axon: 1, dendrite: 0, soma: 2
+            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`, only used if `compartments_of_interest` was set. Defaults to 'axoness_avg10000'.
+            overwrite: Overwrite the .npy file. Defaults to False.
+            nb_cpus: CPUs per worker. Defaults to None.
+        """
+        if nb_cpus is None:
+            import multiprocessing
+            nb_cpus = multiprocessing.cpu_count()
+
+        params = [(obj_type, ch, compartments_of_interest, ax_pred_key) for ch in list(basics.chunkify_successive(self.ssv_ids, 500))]
+
+        path_densities = np.concatenate(sm.start_multiprocess_imap(get_path_density_seg_obj, params=params, nb_cpus=nb_cpus), axis=0)
+
+        if not os.path.exists(self.path + obj_type + "_path_density" + ".npy"):
+            np.save(self.path + obj_type + "_path_density" + ".npy", path_densities)
+
+        if overwrite:
+            np.save(self.path + obj_type + "_path_density" + ".npy", path_densities)
+
     def save_dataset_shallow(self, overwrite: bool = False):
         """
         Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict`.
@@ -569,6 +615,8 @@ class SuperSegmentationDataset(SegmentationBase):
         if self._ssoid2ix is None:
             self._ssoid2ix = {k: ix for ix, k in enumerate(self.ssv_ids)}
         self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
+
+    
 
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False, attr_keys: Iterable = (),
@@ -883,6 +931,58 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
                                           overwrite=True, **view_props)
         else:
             ssv.predict_views_embedding(m, pred_key_appendix)
+
+
+def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list]):
+    """Retrieves the total edge lengths of the super-supervoxels' :py:attr:`~skeleton` in nanometers. The compartments used
+    to compute the edge lengths are axon: 1, axon terminals: 3, 4,
+    dendrite: 0, soma: 2.  
+
+    Args:
+        ssv ids:
+
+    Returns:
+        Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
+    """
+    total_edge_lengths = []
+    ssd = SuperSegmentationDataset()
+
+    for ssv_id in ssv_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_skeleton()
+        total_edge_lengths.append(ssv.total_edge_length(compartments_of_interest=[0, 1, 2, 3, 4]))
+
+    return np.array(total_edge_lengths)
+
+
+def get_path_density_seg_obj(args: Union[tuple, list]) -> np.ndarray:
+    """Retrieves the path density of sub-cellular structures of ssvs. 
+
+    Args:
+        *args: `obj_type`: Key to any available sub-cellular structure,\
+            args[0], `ssv_ids`: Cell reconstructin ids, args[1],\
+            `compartments_of_interest`: Which compartments to take\
+                into account for calculation, args[2]. axon: 1, \
+            dendrite: 0, soma: 2, en-passant bouton: 3, terminal bouton: 4, `ax_pred_key`: Key of compartment prediction stored in :attr:`~skeleton`, only used if
+                `compartments_of_interest` was set. .
+
+    Returns:
+        Average volume per path length (um^3 / um) for the ssvs
+    """    
+    obj_type = args[0]
+    ssv_ids = args[1]
+    compartments_of_interest = args[2]
+    ax_pred_key = args[3]
+
+    path_densities = []
+    ssd = SuperSegmentationDataset()
+
+    for ssv_id in ssv_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_skeleton()
+        path_densities.append(ssv.path_density_seg_obj(obj_type, compartments_of_interest=compartments_of_interest, ax_pred_key=ax_pred_key))
+
+    return np.array(path_densities)
 
 
 def filter_ssd_by_total_pathlength(ssd: SuperSegmentationDataset, min_edge_length: float) -> np.ndarray:

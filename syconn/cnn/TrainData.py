@@ -469,7 +469,7 @@ if elektronn3_avail:
                 raise ValueError('"source_dir" must be given.')
 
             self.source_dir = source_dir
-            self.fnames = glob.glob(f'{source_dir}/*.pkl')
+            self.fnames = np.array(glob.glob(f'{source_dir}/*.pkl'))
 
             print(f'Using {len(self.fnames)} cells for {"training" if train else "validation"}.')
             if use_subcell:  # TODO: add syntype
@@ -517,10 +517,10 @@ if elektronn3_avail:
             """
             p = self.fnames[item]
             sample_feats, sample_pts, out_labels = \
-                [*pts_loader_semseg_train([p], self._batch_size, self.num_pts,
-                                          transform=self.transform, ctx_size=self.ctx_size,
-                                          use_subcell=self.use_subcell,
-                                          mask_borders_with_id=self.mask_borders_with_id)][0]
+                pts_loader_semseg_train(p, self._batch_size, self.num_pts,
+                                        transform=self.transform, ctx_size=self.ctx_size,
+                                        use_subcell=self.use_subcell,
+                                        mask_borders_with_id=self.mask_borders_with_id)
             return sample_pts, sample_feats, out_labels
 
 
