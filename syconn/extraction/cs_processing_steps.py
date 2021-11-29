@@ -473,7 +473,7 @@ def _combine_and_split_syn_thread(args):
                     raise ValueError(f'Path mis-match!')
                 synssv_attr_dc = dict(neuron_partners=ssv_ids)
                 voxel_dc[syn_ssv_id] = this_vx
-                synssv_attr_dc["rep_coord"] = seghelp.calc_center_of_mass(this_vx * scaling) // scaling
+                synssv_attr_dc["rep_coord"] = (seghelp.calc_center_of_mass(this_vx * scaling) // scaling).astype(np.int32)
                 synssv_attr_dc["bounding_box"] = np.array([np.min(this_vx, axis=0), np.max(this_vx, axis=0)])
                 synssv_attr_dc["size"] = len(this_vx)
                 # calc_contact_syn_mesh returns a list with a single mesh (for syn_ssv)
@@ -729,7 +729,7 @@ def _combine_and_split_cs_thread(args):
             csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
             csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
             csssv_attr_dc["bounding_box"] = cs_ssv.mesh_bb // scaling
-            csssv_attr_dc["rep_coord"] = seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling
+            csssv_attr_dc["rep_coord"] = (seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling).astype(np.int32)
             csssv_attr_dc["cs_ids"] = list(cs_ids)
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
