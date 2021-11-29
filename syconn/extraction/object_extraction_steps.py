@@ -6,11 +6,9 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import glob
-import itertools
 import os
 import pickle as pkl
 import shutil
-from collections import defaultdict
 
 import networkx as nx
 import numpy as np
@@ -20,14 +18,11 @@ from knossos_utils import chunky
 
 from .block_processing_C import relabel_vol
 from .. import global_params
-from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
 from ..handler import basics, log_handler, compression
 from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..proc.image import apply_morphological_operations, get_aniso_struct
-from ..reps import segmentation, rep_helper as rh
-from .find_object_properties import find_object_properties
 
 try:
     import vigra

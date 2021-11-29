@@ -578,7 +578,7 @@ def _write_props_to_syn_thread(args):
             # write cs to dict
             if cs_props[2][cs_id] < min_obj_vx_dc['cs']:
                 continue
-            rp_cs = cs_props[0][cs_id]
+            rp_cs = np.array(cs_props[0][cs_id], dtype=np.int32)
             bbs_cs = np.concatenate(cs_props[1][cs_id])
             size_cs = cs_props[2][cs_id]
             this_attr_dc_cs[cs_id]["rep_coord"] = rp_cs
@@ -592,7 +592,7 @@ def _write_props_to_syn_thread(args):
             # write syn to dict
             if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
                 continue
-            rp = syn_props[0][cs_id]
+            rp = np.array(syn_props[0][cs_id], dtype=np.int32)
             bbs = np.concatenate(syn_props[1][cs_id])
             size = syn_props[2][cs_id]
             this_attr_dc[cs_id]["rep_coord"] = rp

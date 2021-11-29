@@ -936,7 +936,7 @@ def _write_props_to_sc_thread(args):
                 else:
                     this_attr_dc[sc_id]["mapping_ids"] = []
                     this_attr_dc[sc_id]["mapping_ratios"] = []
-                rp = prop_dict[0][sc_id]
+                rp = np.array(prop_dict[0][sc_id], dtype=np.int32)
                 bbs = np.concatenate(prop_dict[1][sc_id])
                 size = prop_dict[2][sc_id]
                 this_attr_dc[sc_id]["rep_coord"] = rp
@@ -1169,7 +1169,7 @@ def _write_props_to_sv_thread(args):
                     list(mapping_dicts[k][sv_id].keys())
                 this_attr_dc[sv_id][f"mapping_{k}_ratios"] = \
                     list(mapping_dicts[k][sv_id].values())
-            rp = prop_dict[0][sv_id]
+            rp = np.array(prop_dict[0][sv_id], dtype=np.int32)
             bbs = np.concatenate(prop_dict[1][sv_id])
             this_attr_dc[sv_id]["rep_coord"] = rp
             this_attr_dc[sv_id]["bounding_box"] = np.array(
