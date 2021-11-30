@@ -31,7 +31,7 @@ parser.add_argument('--sp', type=int, default=15000, help='Number of sample poin
 parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
-parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=20000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -92,7 +92,7 @@ if cellshape_only:
 
 if name is None:
     name = f'semseg_pts_nb{npoints}_ctx{ctx}_{gt_type}_nclass' \
-           f'{num_classes[gt_type]}_lcp_GN_noKernelSep_AdamW_CE_large'
+           f'{num_classes[gt_type]}_lcp_GN_noKernelSep_AdamW_CE_large_v2'
     if not normalize_pts:
         name += '_NonormPts'
     if cellshape_only:
@@ -124,18 +124,18 @@ conv = dict(layer='ConvPoint', kernel_separation=False, normalize_pts=normalize_
 act = nn.ReLU
 # architecture = None
 architecture = [dict(ic=-1, oc=1, ks=48, nn=32, np=-1),
-                dict(ic=1, oc=1, ks=32, nn=32, np=2048),
+                dict(ic=1, oc=1, ks=48, nn=32, np=2048),
                 dict(ic=1, oc=1, ks=32, nn=16, np=1024),
                 dict(ic=1, oc=2, ks=32, nn=16, np=256),
-                dict(ic=2, oc=2, ks=16, nn=16, np=128),
-                dict(ic=2, oc=2, ks=16, nn=8, np=64),
-                dict(ic=2, oc=2, ks=16, nn=4, np=32),
+                dict(ic=2, oc=2, ks=32, nn=16, np=128),
+                dict(ic=2, oc=2, ks=16, nn=16, np=64),
+                dict(ic=2, oc=2, ks=16, nn=16, np=32),
                 dict(ic=2, oc=2, ks=16, nn=4, np='d'),
-                dict(ic=4, oc=2, ks=16, nn=8, np='d'),
-                dict(ic=4, oc=1, ks=16, nn=16, np='d'),
-                dict(ic=3, oc=1, ks=16, nn=16, np='d'),
-                dict(ic=2, oc=1, ks=16, nn=16, np='d'),
-                dict(ic=2, oc=1, ks=16, nn=16, np='d')]
+                dict(ic=4, oc=2, ks=16, nn=4, np='d'),
+                dict(ic=4, oc=1, ks=32, nn=4, np='d'),
+                dict(ic=3, oc=1, ks=32, nn=8, np='d'),
+                dict(ic=2, oc=1, ks=32, nn=8, np='d'),
+                dict(ic=2, oc=1, ks=48, nn=8, np='d')]
 model = ConvAdaptSeg(input_channels, num_classes[gt_type], get_conv(conv), get_search(search), kernel_num=64,
                      architecture=architecture, activation=act, norm='gn')
 
@@ -181,10 +181,10 @@ else:  # no additional validation data
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
                            source_dir=train_dir, remap_dict=remap_dicts[gt_type])
+valid_ds = None
 # valid_ds = CloudDataSemseg(npoints=npoints, transform=valid_transform, train=False, use_subcell=use_subcell,
 #                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
 #                            source_dir=valid_dir, remap_dict=remap_dicts[gt_type])
-valid_ds = None
 # PREPARE AND START TRAINING #
 
 # set up optimization

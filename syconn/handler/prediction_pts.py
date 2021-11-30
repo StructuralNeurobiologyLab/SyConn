@@ -1822,7 +1822,7 @@ def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key
                                postproc_kwargs=postproc_kwargs, postproc_func=pts_postproc_embedding,
                                show_progress=False, mpath=mpath, **loader_kwargs, **default_kwargs)
     if not np.all(list(out_dc.values())) or len(out_dc) != len(ssv_params):
-        raise ValueError('Invalid output during glia prediction.')
+        raise ValueError('Invalid output during cell morphology extraction.')
 
 
 def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[Iterable[int]] = None,

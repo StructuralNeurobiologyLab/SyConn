@@ -25,19 +25,21 @@ def example_run():
     process = subprocess.Popen(
         ["python", startpy_fname, f"--working_dir={working_dir}"],
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.PIPE,
         universal_newlines=True,
     )
-    out, _ = process.communicate()
+    out, err = process.communicate()
 
     if os.environ.get('syconn_wd') is not None:
         del os.environ['syconn_wd']
     shutil.rmtree(example_wd, ignore_errors=True)
-    return process.returncode
+    return process.returncode if process.returncode == 0 else err
 
 
 def test_example_run():
-    assert example_run() == 0
+    ret = example_run()
+    if ret != 0:
+        raise RuntimeError(ret)
 
 
 if __name__ == '__main__':

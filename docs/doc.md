@@ -38,14 +38,17 @@ If you encounter
 with open3d, you need to upgrade your system or downgrade open3d to `<=0.9`.
 
 ## Example run
-Place the example and model data (provided upon request) in `SyConn/examples/`,
+Place the example data and models (provided upon request) in `~/SyConnData/`,
 cd to `SyConn/examples/` and run
 
     python start.py [--working_dir=..]
 
-The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, 
+The example script analyzes the EM data together with the cell segmentation, 
 probability maps of sub-cellular structures (mitochondria, vesicle clouds and synaptic junctions) and synapse type
 (inhibitory, excitatory). For adding further cell organelles to this pipeline see [here](cellorganelle_integration.md).
+
+The data format for raw image and segmentation data is based on ``KnossosDataset`` 
+(see [knossos_utils](https://github.com/knossos-project/knossos_utils)).
 
 On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (NVidia Quadro RTX 5000) SyConn
 finished the following analysis steps for an example cube of shape \[1100 1100 600] (1.452e-06 mm^3; 0.726 GVx) after 00h:31min:46s.
@@ -73,10 +76,14 @@ finished the following analysis steps for an example cube of shape \[1100 1100 6
 \[11/11]   Matrix export                           0d:0h:0min:7s       0.4%
 
 
-
 ## Example scripts and API usage
 An introduction on how to use the example scripts can be found [here](examples.md)
 and API code examples [here](api.md).
+
+## Flowchart of SyConn
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=2880&amp;h=1200">
+
 
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
@@ -90,7 +97,7 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 (such as lustre, Google Cloud Filestore or AWS Elastic File System).
 
 * Agglomerated supervoxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
- of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
+ of super-SVs are usually defined in a region supervoxel graph which is used to initialize the SuperSegmentationDataset
   ([SSD](super_segmentation_datasets.md)).
 
 * [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951)
@@ -98,13 +105,8 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 
 * [Mesh](meshes.md) generation and representation of supervoxels
 
-* Multi-view representation of neurpn reconstructions for [glia](glia_removal.md) and
+* Multi-view representation of neuron reconstructions for [glia](glia_removal.md) and
  [neuron](neuron_analysis.md) analysis (published in [Nature Communications](https://www.nature.com/articles/s41467-019-10836-3))
-
-
-## Flowchart of SyConn
-
-<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=2880&amp;h=1200">
 
 
 ## Analysis steps

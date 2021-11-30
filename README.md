@@ -25,7 +25,7 @@ We also present more general information about SyConn on our [Website](https://s
 
 Documentation
 -------------
-The documentation including API docs can be found as [readthedocs build](https://syconn.readthedocs.io/en/latest/) or partially as markdown [here](docs/doc.md).
+The documentation including installation procedure, requirements and API docs can be found as [readthedocs build](https://syconn.readthedocs.io/en/latest/) or partially as markdown [here](docs/doc.md).
 
 The Team
 --------
