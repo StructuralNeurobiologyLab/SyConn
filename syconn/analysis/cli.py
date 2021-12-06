@@ -121,6 +121,7 @@ class SyConnClient(object):
         
         else:
             source = f'https://syconn.esc.mpcdf.mpg.de'
+            # source = f'http://localhost:9005'
 
         def append_organelle_layer(state: neuroglancer.ViewerState, organelle: str):
             """Creates a mesh datasource layer for the given organelle
@@ -160,21 +161,16 @@ class SyConnClient(object):
                 )
             )
 
-            # state.selected_layer.layer = name
-            # state.selected_layer.visible = False
-
         # raw image
         state.layers.append(
             name=self.raw_name,
             layer=neuroglancer.ImageLayer(
                 source=[
-                    f'precomputed://' + source + '/volume/image' # raw volume
+                    # f'knossos://' + source + f'/{self.acquisition}/{self.version}/image' # raw volume
+                    f'precomputed://' + source + f'/volume/image'
                 ]
             )
         )
-
-        # state.selected_layer.layer = self.raw_name
-        # state.selected_layer.visible = False
 
         # segmentation 
         state.layers.append(
@@ -209,12 +205,12 @@ class SyConnClient(object):
         # state.layers.append(
         #     name=name,
         #     layer=neuroglancer.SegmentationLayer(
-        #         source=f'knossos://' + source, 
+        #         source=f'knossos://' + source + f'/{self.acquisition}/{self.version}/segmentation', # knossos segmentation
         #     )
         # )
 
         # state.selected_layer.layer = name
-        # state.selected_layer.visible = False
+        # state.selected_layer.visible = True
 
 ##############################################################
 # Retrieve and transform SyConn data to support Neuroglancer #
