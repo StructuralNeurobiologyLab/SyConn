@@ -258,7 +258,7 @@ spines:
   min_edge_dist_spine_graph: 110
 
   # view inference
-  gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
+  gt_path_spineseg:
   # mapping parameters of the semantic segmentation prediction to the cell mesh
   # Note: ``k>0`` means that the predictions are propagated to unpredicted and background labels
   # via nearest neighbors.
@@ -276,7 +276,7 @@ spines:
 # --------- COMPARTMENT PARAMETERS
 compartments:
   dist_axoness_averaging: 10000  # also used for myelin averaging
-  gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'
+  gt_path_axonseg:
 
   # `k=0` will not map predictions to unpredicted vertices -> faster
   # `k` is the parameter used in `semseg2mesh`
