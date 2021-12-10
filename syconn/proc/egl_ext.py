@@ -32,8 +32,7 @@ except OSError:
 # pylint: disable=g-import-not-at-top
 
 from OpenGL import EGL
-#from OpenGL import error
-from six.moves import range
+from OpenGL import error
 
 # From the EGL_EXT_device_enumeration extension.
 EGLDeviceEXT = ctypes.c_void_p

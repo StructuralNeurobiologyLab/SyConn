@@ -21,16 +21,16 @@ other parameters such as `version` and `working_dir`. These are stored in `confi
 the `working_dir` and project wide in `config.global_params` (eg. `working_dir`). 
 
 ```
-sj_sd = SegmentationDataset("sj", working_dir="path/to/wd")
+sd_cell_sv = SegmentationDataset("sv", working_dir="path/to/wd")
 ```
 
-It is very useful to run `sd_proc.dataset_analysis(...)` when loading a `SegmentationDataset` the first time 
+It is useful to run `sd_proc.dataset_analysis(...)` when loading a `SegmentationDataset` the first time 
 (after writing its voxel storage) or after making changes to the attributes. `dataset_analysis` creates global `numpy`
 arrays for fast access for each attribute and calculates some attributes itself (such as `size` and `bounding box`). This can 
 be viewed as a distributed column store of the underlying database.
 
 ```
-sd_proc.dataset_analysis(sj_sd)
+sd_proc.dataset_analysis(sd_cell_sv)
 ```
 
 When running `dataset_analysis` one can include only a subset of the attributes to avoid problems with non-consistent 
@@ -46,50 +46,51 @@ If `sd_proc.dataset_analysis(...)` was applied, the `SegmentationDataset` can ac
 as an array. For instance, the attribute `size` can be accesses via
 
 ```
-sizes = sj_sd.load_numpy_data("size")
+sizes = sd_cell_sv.load_numpy_data("size")
 ```
 
-Some attributes, such as `size` and `id`, are also available as property (eg. `sj_sd.sizes`). Values in different attribute arrays
-are always sorted in the same way. Hence, one can use the id array (`sj_sd.ids`) as a reference.
+Some attributes, such as `size` and `id`, are also available as object attributes (e.g. `sd_cell_sv.sizes`). Values in 
+different attribute arrays are always sorted in the same way. Hence, one can use the id array (`sd_cell_sv.ids`) as a reference.
 
 A `SegmentationDataset` allows easy access to its `SegmentationObjects` by
 
 ```
-sj_obj = sj_sd.get_segmentation_object(obj_id)
+cell_sv_obj = sd_cell_sv.get_segmentation_object(obj_id)
 ```
 
-There are four different types of data for each `SegmentationObject` (voxels, attributes, meshes and skeletons). Typically, 
-every `SegmentationObject` has the former three while only supervoxels (`sv`) own skeletons. While voxels, meshes and skeletons 
-are predefined datatypes, attributes are an arbitrary key value store. It is adviced though to be consistent in type and
-naming of attributes across the `SegmentationDataset` to avoid problems with the aforementioned column stores.
+There are four additional data structures for each `SegmentationObject`: voxels (`VoxelStorage`), attributes 
+(`AttributeDict`), meshes (`MeshStorage`) and skeletons (`SkeletonStorage`). 
+Typically, every `SegmentationObject` owns the first three while only supervoxels (`sv`) have a skeleton. While 
+voxels, meshes and skeletons are predefined datatypes, attributes are an arbitrary key value store. It is advised though to be consistent in type and
+naming of attributes across the `SegmentationDataset` to avoid problems with the aforementioned numpy arrays.
 
 The different data structures can be accessed by e.g.
 
 ```
-voxels = sj_obj.voxels
-mesh = sj_obj.mesh
-skeleton = sj_obj.skeleton
-attr_value = sj_obj.lookup_in_attribute_dict("attr_key")
+voxels = cell_sv_obj.voxels
+mesh = cell_sv_obj.mesh
+skeleton = cell_sv_obj.skeleton
+attr_value = cell_sv_obj.lookup_in_attribute_dict("attr_key")
 ```
 
 The attribute dict can also be accessed as a whole
 
 ```
-sj_obj.load_attr_dict()
-attr_dict = sj_obj.attr_dict
+cell_sv_obj.load_attr_dict()
+attr_dict = cell_sv_obj.attr_dict
 ```
 
 `SegmentationObjects` cache data that was accessed. This can be disabled by
 ```
-sj_obj.mesh_caching = False
-sj_obj.voxel_caching = False
-sj_obj.skeleton_caching = False
+cell_sv_obj.mesh_caching = False
+cell_sv_obj.voxel_caching = False
+cell_sv_obj.skeleton_caching = False
 ```
 
 and the cache can be cleared by 
 
 ```
-sj_obj.clear_cache()
+cell_sv_obj.clear_cache()
 ```
 
 

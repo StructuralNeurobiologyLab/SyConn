@@ -158,7 +158,7 @@ class SyConnBackend(object):
         self.axodend_only = axodend_only
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
-        self.logger.info('In memory cache of synapses initialized.')
+        self.logger.info(f'In-memory cache of {len(self.sds["syn_ssv"].ids)} synapses initialized.')
         # directed networkx graph of connectivity
         self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
         self.logger.info('Connectivity graph initialized.')
@@ -371,7 +371,13 @@ class SyConnBackend(object):
         :param sv_id:
         :return:
         """
-        return {'ssv': self.ssd.id_changer[int(sv_id)]}
+        sv_id = int(sv_id)
+        try:
+            ssv_id = self.ssd.sv2ssv_ids([int(sv_id)])[sv_id]
+        except KeyError:
+            # sv_id is not in sv2ssv_ids output (dict) -> ssv ID is not part of ssd.ssv_ids
+            ssv_id = 0
+        return {'ssv': ssv_id}
 
     def ct_of_ssv(self, ssv_id):
         """

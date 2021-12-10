@@ -32,7 +32,8 @@ ch, use_points = args
 
 if global_params.config.use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-    predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, bs=1, show_progress=False)
+    for el in basics.chunkify_successive(ch, 10000):
+        predict_cmpt_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=el, bs=1, show_progress=False)
 else:
     comp_dc = global_params.config['compartments']
     map_properties = comp_dc['map_properties_semsegax']

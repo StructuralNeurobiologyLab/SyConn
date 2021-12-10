@@ -1,15 +1,19 @@
-import pytest
-import numpy as np
-import time
-from multiprocessing import Process, Queue
-from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
-    VoxelStorage
-from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
-     read_txt_from_zip, remove_from_zip
 import os
 import logging
 import zipfile
 import sys
+import time
+import pytest
+import tempfile
+
+import numpy as np
+from multiprocessing import Process, Queue
+from syconn import global_params
+# TODO: test VoxelStorageDyn
+from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
+    VoxelStorageClass, BinarySearchStore, VoxelStorageLazyLoading
+from syconn.handler.basics import write_txt2kzip, write_data2kzip,\
+     read_txt_from_zip, remove_from_zip
 
 # TODO: use tempfile
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -25,6 +29,99 @@ def _setup_testfile(fname):
     return test_p
 
 
+def test_VoxelStorageLazyLoading():
+    test_p = f"{dir_path}/vx_dc_lazy.npz"
+    if os.path.isfile(test_p):
+        os.remove(test_p)
+    arr = np.arange(90).reshape((30, 3))
+    vx_dc_lazy = VoxelStorageLazyLoading(test_p)
+    assert len(vx_dc_lazy) == 0
+    vx_dc_lazy[10] = arr
+    vx_dc_lazy.push()
+    del vx_dc_lazy
+    vx_dc_lazy = VoxelStorageLazyLoading(test_p)
+    assert 10 in vx_dc_lazy
+    np.array_equal(vx_dc_lazy[10], arr)
+    assert len(vx_dc_lazy) == 1
+    os.remove(test_p)
+
+
+def test_BinarySearchStore():
+    np.random.seed(0)
+    n_shards = 5
+    n_elements = int(1e6)
+    max_int = int(2e6)  # choice becomes slow for large max values
+    max_int_attr = int(1e12)
+    ids = np.random.choice(max_int, n_elements, replace=False).astype(np.uint64)
+    attr = dict(ssv_ids=np.random.randint(1, max_int_attr, n_elements).astype(np.uint64))
+    tf = tempfile.TemporaryFile()
+    bss = BinarySearchStore(tf, ids, attr, n_shards=n_shards)
+    ixs_sample = np.random.permutation(len(ids))[:1000]
+    attrs = bss.get_attributes(ids[ixs_sample], 'ssv_ids')
+    if not np.array_equal(attr['ssv_ids'][ixs_sample], attrs):
+        not_equal = attr['ssv_ids'][ixs_sample] != attrs
+        print(attrs[not_equal], attr['ssv_ids'][ixs_sample][not_equal])
+    assert np.array_equal(attr['ssv_ids'][ixs_sample], attrs)
+    assert bss.n_shards == n_shards, "Number of shards differ."
+    assert len(bss.id_array) == len(ids), "Unequal ID array lengths."
+    assert np.max(ids) == bss.id_array[-1], 'Maxima do not match.'  # captured by test below, but important detail
+    assert np.array_equal(bss.id_array, np.sort(ids)), "Sort failed."
+    del bss
+    tf.close()
+
+
+def get_attr_newinstances(args):
+    tf, samples, key = args
+    binstore = BinarySearchStore(tf)
+    return binstore.get_attributes(samples, key)
+
+
+def get_attr(args):
+    bss, samples, key = args
+    return bss.get_attributes(samples, key)
+
+
+def test_BinarySearchStore_multiprocessed():
+    np.random.seed(0)
+    n_shards = 5
+    n_elements = int(2e6)
+    n_queries = int(1e3)  # single process query becomes slow for >=1e5
+    max_int = int(9e6)  # choice becomes slow for large max values
+    max_int_attr = int(1e12)
+    ids = np.random.choice(max_int, n_elements, replace=False).astype(np.uint64)
+    attr = dict(ssv_ids=np.random.randint(1, max_int_attr, n_elements).astype(np.uint64))
+    test_p = f"{dir_path}/.binstore"
+    start = time.time()
+    bss = BinarySearchStore(test_p, ids, attr, n_shards=n_shards, overwrite=True)
+    print(f'build BSS: {(time.time() - start):.2f} s')
+    ixs_sample = np.random.permutation(len(ids))[:n_queries]
+    ids_samples = ids[ixs_sample]
+
+    start = time.time()
+    attrs = bss.get_attributes(ids_samples, 'ssv_ids')
+    print(f'get_attr_orig: {(time.time() - start):.2f}')
+
+    from syconn.mp.mp_utils import start_multiprocess
+    start = time.time()
+    attrs_multi = start_multiprocess(
+        get_attr_newinstances, [(test_p, ch, 'ssv_ids') for ch in np.array_split(ids_samples, 5)], nb_cpus=5,
+        debug=True)
+    print(f'get_attr_newinstances: {(time.time() - start):.2f}')
+    attrs_multi = np.concatenate(attrs_multi)
+    assert np.array_equal(attrs_multi, attrs)
+
+    start = time.time()
+    attrs_multi = start_multiprocess(
+        get_attr, [(bss, ch, 'ssv_ids') for ch in np.array_split(ids_samples, 5)], nb_cpus=5,
+        debug=False)
+    print(f'get_attr_pickle: {(time.time() - start):.2f} s')
+    attrs_multi = np.concatenate(attrs_multi)
+    assert np.array_equal(attrs_multi, attrs)
+
+    del bss
+    os.remove(test_p)
+
+
 # TODO: requires revision
 @pytest.mark.xfail(strict=False)
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
@@ -33,10 +130,6 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
       First one after 1s , 2nd after 2 seconds and the third one after 3s.
       The first two creations are EXPECTED to fail. The last one is expected to be
       successful.
-
-      Parameters
-      ----------
-      None
 
       Returns
       -------
@@ -103,7 +196,6 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 
 
 def test_saving_loading_and_copying_process_for_Attribute_dict():
-
     """
     Checks the saving,loading and copying  functionality for an attribute dict
     Returns An Assertion Error in case an exception is thrown
@@ -203,18 +295,18 @@ def test_compression_and_decompression_for_mesh_dict():
         raise AssertionError
 
 
-def test_compression_and_decompression_for_voxel_dict():
+def test_compression_and_decompression_for_voxel_storage():
     test_p = _setup_testfile('test4')
 
     try:
         # tests least entropy data
         start = time.time()
-        vd = VoxelStorage(test_p, read_only=False, cache_decomp=True)
+        vd = VoxelStorageClass(test_p, read_only=False, cache_decomp=True)
         voxel_masks = [np.zeros((128, 128, 100)).astype(np.uint8),
                        np.zeros((10, 50, 20)).astype(np.uint8)] * 2
         offsets = np.random.randint(0, 1000, (4, 3))
         logging.debug("VoxelDict arr size (zeros):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
-        logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
+        logging.debug("VoxelDict arr size (zeros):\t%s" % ([a.shape for a in voxel_masks]))
         start_comp = time.time()
         vd[8192734] = [voxel_masks, offsets]
         vd.push()
@@ -225,10 +317,10 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.warning('FAILED: test_compression_and_decompression_for_voxel_dict: STEP 1 ' + str(e))
         raise AssertionError
 
-    # tests decompressing
+    # tests reading
     try:
         start_loading = time.time()
-        vd = VoxelStorage(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorageClass(test_p, read_only=True, cache_decomp=True)
         logging.debug("Finished loading of compressed VoxelDict after %0.4fs." % (time.time() - start_loading))
         start = time.time()
         _ = vd[8192734]
@@ -256,7 +348,7 @@ def test_compression_and_decompression_for_voxel_dict():
 
     # checks high entropy data
     try:
-        vd = VoxelStorage(test_p, read_only=False)
+        vd = VoxelStorageClass(test_p, read_only=False)
         voxel_masks = [np.random.randint(0, 1, (128, 128, 100)).astype(np.uint8),
                        np.random.randint(0, 1, (10, 50, 20)).astype(np.uint8)] * 2
         offsets = np.random.randint(0, 1000, (4, 3))
@@ -268,7 +360,7 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.debug("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
         # tests decompressing
-        vd = VoxelStorage(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorageClass(test_p, read_only=True, cache_decomp=True)
         start = time.time()
         _ = vd[8192734]
         logging.debug("Finished decompression of VoxelDict after %0.4fs." % (time.time() - start))
@@ -467,3 +559,6 @@ def remove_files_after_test(file_name):
         os.remove(str(dir_path) + '/' + file_name)
 
 
+if __name__ == '__main__':
+    test_BinarySearchStore()
+    test_BinarySearchStore_multiprocessed()
