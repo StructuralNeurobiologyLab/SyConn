@@ -64,7 +64,7 @@ if __name__ == '__main__':
         m = InferenceModel(model_p)
         m._path = model_p
 
-    view_props = global_params.config['compartments']['view_properties_semsegax']
+    view_props = dict(global_params.config['compartments']['view_properties_semsegax'])
     view_props["verbose"] = True
 
     # load SSO instance from k.zip file
