@@ -1440,7 +1440,7 @@ def synssv_o_featurenames() -> list:
 
 
 def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] = None,
-                  threshold_syn: Optional[float] = None, export_kzip: bool = False, log: Optional[Logger] = None):
+                  threshold_syn: float = 0, export_kzip: bool = False, log: Optional[Logger] = None):
     """
     Writes .csv and optionally .kzip (large memory consumption) summary file of connectivity matrix.
 
@@ -1448,8 +1448,7 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
     ----------
     obj_version : str
     dest_folder : Path to csv file.
-    threshold_syn : Threshold applied to filter synapses. If None, set to
-        ``global_params.config['cell_objects']['thresh_synssv_proba']``.
+    threshold_syn : Threshold applied to filter synapses. Defaults to 0, i.e. exporting all synapses.
     export_kzip: Export connectivity matrix as kzip - high memory consumption.
     log: Logger.
     """
@@ -1461,7 +1460,7 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
         log = log_extraction
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
-    log.info(f'Starting export of connectivity matrix as csv file to "{dest_name}".')
+    log.info(f'Starting export of connectivity matrix with minimum probability {threshold_syn} as csv file to "{dest_name}".')
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 

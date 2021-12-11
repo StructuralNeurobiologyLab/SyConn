@@ -1424,6 +1424,18 @@ def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
 
 def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str] = None
                            ) -> Tuple[List[int], List[bool]]:
+    """
+
+    Args:
+        ssv_params: Dictionary of kwargs (key: cell ID, value: dict) used to initialze the
+            ~py:class:`SuperSegmentationObject`.
+        d_in: Dictionary of prediction results.
+        pred_key: Key to store embeddings in skeleton nodes (using nearest-neighbor to propagate embedding locations
+            to nodes).
+
+    Returns:
+
+    """
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
     node_embedding = []
