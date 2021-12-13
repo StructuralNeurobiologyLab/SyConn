@@ -1373,6 +1373,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 assert mask_borders_with_id is not None
                 batch_out_l[cnt][batch_out_l[cnt] == -1] = mask_borders_with_id
             cnt += 1
+        del hc
         assert cnt == batchsize
         # TODO: Add masking if beneficial - for now just use all input points and their labels
         # yield (batch_f, batch), (batch_out, batch_out_l)
