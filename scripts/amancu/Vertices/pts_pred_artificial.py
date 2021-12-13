@@ -298,7 +298,6 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(hc.nodes)
     pcd, idcs = pcd.voxel_down_sample_and_trace(base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
-    # print(f'idcs {idcs}')
     source_nodes = np.max(idcs, axis=1)
     bs = 1
     n_batches = int(np.ceil(len(source_nodes) / bs))

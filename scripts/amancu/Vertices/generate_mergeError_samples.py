@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
-# Authors: Philipp Schubert, Joergen Kornfeld
+# Authors: Andrei Mancu, Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
 import os
@@ -129,18 +129,14 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
         fstObj = ssd.get_super_segmentation_object(cell1)
         sndObj = ssd.get_super_segmentation_object(cell2)
 
-        # merge cs meshes
-        cs_verts = np.empty(shape=(0, 3,))
         # cs coords for skeleton nodes
         cs_coord_list = []
         try:
             for cs_id in cell_pair2cs_ids[(cell1, cell2)]:
                 cs = cs_dataset.get_segmentation_object(cs_id)
-                # list of cs meshes [(indices, vertices, normals)]
                 cs_mesh = calc_contact_syn_mesh(cs, vertex_size=10)
                 for mesh in cs_mesh:
                     area_mesh = mesh[1].reshape(-1, 3)
-                    cs_verts = np.concatenate((cs_verts, area_mesh))
                     # choose random vertex as representative of the contact area (may be multiple for 1 CS)
                     idx = np.random.randint(len(area_mesh), size=1)
                     cs_coord_list.append(area_mesh[idx])
