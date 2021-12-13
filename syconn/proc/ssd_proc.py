@@ -13,6 +13,7 @@ from ..proc.meshes import mesh_creator_sso, merge_meshes
 from ..reps import segmentation, super_segmentation
 from ..reps.segmentation_helper import prepare_so_attr_cache
 from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
+from syconn.proc.meshes import mesh2obj_file_colors
 
 from typing import Iterable, Tuple
 import numpy as np
@@ -20,6 +21,8 @@ import tqdm
 from collections import Counter
 from typing import Optional, List
 from logging import Logger
+from scipy.spatial import cKDTree
+import os
 
 
 def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset, obj_types: List[str],
@@ -398,9 +401,9 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
     return ssv1, ssv2
 
 # WORK IN PROGRESS
-def merge_ssv(cell_obj1, cell_obj2):
-    """python -c "import torch; print(torch.version.cuda)"
-        Merge two cell objects into onepython -c "import torch; print(torch.version.cuda)"
+def merge_ssv(cell_obj1, cell_obj2, cs_coord_list):
+    """
+        Merge two cell objects into one"
 
         Notes:
             Skeleton is in voxel coordinates
@@ -409,9 +412,10 @@ def merge_ssv(cell_obj1, cell_obj2):
         ----------
         cell_obj1, cell_obj2 : SuperSegmentationObject
             Two cells to be merged.
+        cs_coord_list : List of vertices representing each area of contact site
     """
     merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
-    for mesh_type in ['sv']: #, 'syn_ssv', 'vc', 'mi']:                                     # 'sj' fails for current dataset (Not Found)
+    for mesh_type in ['sv']: #, 'syn_ssv', 'vc', 'mi']:                                     # 'sj' fails for current v3 dataset (Not Found)
         mesh1 = cell_obj1.load_mesh(mesh_type)
         mesh2 = cell_obj2.load_mesh(mesh_type)
         ind_lst = [mesh1[0], mesh2[0]]
@@ -424,27 +428,31 @@ def merge_ssv(cell_obj1, cell_obj2):
     merged_cell.skeleton = {}
     cell_obj1.load_skeleton()
     cell_obj2.load_skeleton()
+    edge_idc_offset = len(cell_obj1.skeleton['nodes'])
     merged_cell.skeleton['edges'] = np.concatenate([cell_obj1.skeleton['edges'],
                                                     cell_obj2.skeleton['edges'] +
-                                                    len(cell_obj1.skeleton['nodes'])])  # additional offset
-    # Find the two nodes that are the nearest
-    skeleton1 = cell_obj1.skeleton['nodes']
-    skeleton2 = cell_obj2.skeleton['nodes']
+                                                    edge_idc_offset])  # additional offset
 
-    # TODO KDTree
-    min_distance = 10e10
-    node_pair = [0, 0]
-    for i, node1 in enumerate(skeleton1):
-        for j, node2 in enumerate(skeleton2):
-            dist = np.linalg.norm((node1 - node2) * merged_cell.scaling)
-            if dist < min_distance:
-                node_pair = np.array([i, j+len(skeleton1)], dtype=np.uint64)
-                min_distance = dist
-    node_pair = np.resize(node_pair, (1, 2))
-
-    merged_cell.skeleton['edges'] = np.concatenate([merged_cell.skeleton['edges'], node_pair])
     merged_cell.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
                                                     cell_obj2.skeleton['nodes']])
+
+    # Find the all 2 nodes that are the nearest to the contact site areas
+    scaled_skeleton1 = cell_obj1.skeleton['nodes'] * merged_cell.scaling
+    scaled_skeleton2 = cell_obj2.skeleton['nodes'] * merged_cell.scaling
+    node_pairs = []
+
+    node_tree1 = cKDTree(data=scaled_skeleton1)
+    node_tree2 = cKDTree(data=scaled_skeleton2)
+    # find nodes in 1 micrometer radius
+    for cs_coord in cs_coord_list:
+        _, idcs1 = node_tree1.query(cs_coord, k=1, workers=2)
+        _, idcs2 = node_tree2.query(cs_coord, k=1, workers=2)
+        try:
+            node_pairs.append([idcs1[0], idcs2[0] + edge_idc_offset])                 # if no neighbor was found in either nn searches
+        except:
+            continue
+
+    merged_cell.skeleton['edges'] = np.concatenate([merged_cell.skeleton['edges'], node_pairs])
     merged_cell.skeleton['diameters'] = np.concatenate([cell_obj1.skeleton['diameters'],
                                                         cell_obj2.skeleton['diameters']])
 
