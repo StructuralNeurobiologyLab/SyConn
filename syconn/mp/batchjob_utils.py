@@ -197,7 +197,7 @@ def batchjob_script(params: list, name: str,
         exclude_nodes: Nodes to exclude during job submission.
     """
 
-    max_submit = 750
+    max_submit = 6000
 
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling

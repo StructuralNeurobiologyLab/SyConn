@@ -168,7 +168,7 @@ def main():
     if 'ssd_generation' in todo:
         log.info('Step 4/12 - Creating SuperSegmentationDataset')
         ftimer.start('SSD generation')
-        exec_init.run_create_neuron_ssd(overwrite=args.overwrite, ncores_per_job=4)
+        exec_init.run_create_neuron_ssd(overwrite=args.overwrite, ncores_per_job=10)
         ftimer.stop()
 
     if 'skeleton_generation' in todo:
