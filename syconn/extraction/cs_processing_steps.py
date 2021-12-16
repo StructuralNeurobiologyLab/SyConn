@@ -254,7 +254,7 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     # involved in the contact
     syn_ids = sd_syn.ids.copy()  # type: np.ndarray[(Any, 2), np.uint64]
 
-    sv_to_ssv = ssd.sv2ssv_ids(np.unique(syn_ids))
+    sv_to_ssv = ssd.sv2ssv_ids(np.unique(syn_ids), nb_cpus=sm.cpu_count())
     # np.vectorize is not efficient, just a more convenient "map"
     ssv_ids = np.vectorize(lambda x: sv_to_ssv.get(x, 0))(syn_ids)
     mask = np.all(ssv_ids > 0, axis=1)
@@ -304,7 +304,9 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
     # TODO: this procedure creates folders with single and double digits, e.g. '0' and '00'. Single digit folders are
     #  not used during write-outs, they are probably generated within this method's makedirs
+    log_extraction.debug('Filtering relevant synapses')
     rel_ssv_with_syn_ids = filter_relevant_syn(syn_sd, ssd)
+    log_extraction.debug('Filtering relevant synapses done')
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
     n_used_paths = min(global_params.config.ncore_total * 4, len(storage_location_ids),
@@ -321,11 +323,13 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                   f'overwrite was set to False.')
         shutil.rmtree(sd_syn_ssv.so_storage_path)
 
+    log_extraction.debug('Preparing folder structure')
     # prepare folder structure
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
     for p in voxel_rel_paths_2stage:
         os.makedirs(sd_syn_ssv.so_storage_path + p)
+    log_extraction.debug('Preparing folder structure done.')
 
     # TODO: apply weighting-scheme to balance worker load
     rel_ssv_with_syn_ids_items = list(rel_ssv_with_syn_ids.items())
@@ -416,7 +420,7 @@ def _combine_and_split_syn_thread(args):
             syn_ssv = sd_syn_ssv.get_segmentation_object(syn_ssv_id)
             if (os.path.abspath(syn_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
-                raise ValueError(f'Path mis-match!')
+                raise ValueError(f'Path mis-match! {os.path.abspath(syn_ssv.attr_dict_path)} and {os.path.abspath(base_dir + "/attr_dict.pkl")}')
             synssv_attr_dc = dict(neuron_partners=syn_ssv_partner_ids)
             voxel_dc.set_voxel_cache(syn_ssv_id, this_vx)
             synssv_attr_dc["rep_coord"] = this_vx[len(this_vx) // 2]  # any rep coord
