@@ -580,6 +580,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=None,
     if ws is None:
         ws = view_props_default['ws']
     if np.isscalar(comp_window):
+        # TODO: consider using comp_window / 2 for z dimension again
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:
         edge_lengths = comp_window

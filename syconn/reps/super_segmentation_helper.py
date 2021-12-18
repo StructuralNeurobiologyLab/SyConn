@@ -1601,6 +1601,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         # log_reps.debug('Time to load index and shape views: '
         #                '{:.2f}s.'.format(ts1 - ts0))
         background_id = np.max(i_views)
+        # TODO: this will fail if no single pixel in all views is background
         background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
         pp = len(sso.mesh[1]) // 3
@@ -1625,8 +1626,9 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != unpredicted_l]
             predictions = vertex_labels[vertex_labels != unpredicted_l]
             # remove background class
-            predicted_vertices = predicted_vertices[predictions != background_id]
-            predictions = predictions[predictions != background_id]
+            predicted_vertices = predicted_vertices[predictions != background_l]
+            predictions = predictions[predictions != background_l]
+
         ts2 = time.time()
         # log_reps.debug('Time to map predictions on vertices: '
         #                '{:.2f}s.'.format(ts2 - ts1))
