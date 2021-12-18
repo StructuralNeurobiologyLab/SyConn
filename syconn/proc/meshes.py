@@ -1175,6 +1175,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
                 continue
             m = copy.deepcopy(mesh)
             m.remove_triangles_by_mask(triangle_clusters != ii)
+            m.remove_unreferenced_vertices()
             mesh_.append(m)
         mesh = mesh_
     else:
