@@ -34,8 +34,8 @@ for ssv in ssd.get_super_segmentation_object(ssv_ids):
     ssv.load_skeleton()
     try:
         ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
-    except Exception:
-        raise ()
+    except Exception as e:
+        raise RuntimeError('Could not map myelin to cells.')
     majorityvote_skeleton_property(
         ssv, prop_key='myelin', max_dist=global_params.config['compartments']['dist_axoness_averaging'])
     ssv.save_skeleton()

@@ -3,11 +3,7 @@ Like skeletons, meshes are also computed on `SegmentationObject` level and can
 be merged for `SuperSegmentationObjects`, which agglomerate `SegmentationObject`
 instances.
 
-Mesh computation is implemented in `syconn.proc.meshes` and based on marching
-cubes as implemented in skimage.
-
-The method `triangulation` can operate on sparse point clouds or on dense
-volumetric bool arrays.
+Mesh computation is implemented in `syconn.proc.meshes` and based `open3d` and `zmesh`.
 
 SSO meshes can be called like `sso.load_mesh(obj_type)` where`obj_type` can be
  in `['sv', 'mi', 'sj', 'vc']` or directly from properties `sso.mesh`, `sso.mi_mesh`, ...

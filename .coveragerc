@@ -11,4 +11,5 @@ omit =
     syconn/analysis/syconn_knossos_viewer.py
     syconn/analysis/syconn_graphwalker.py
     syconn/analysis/server.py
+    syconn/version.py
     */__init__.py

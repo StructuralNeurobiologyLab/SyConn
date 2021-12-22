@@ -71,7 +71,7 @@ def batchjob_script(params: list, name: str,
                     n_cores: int = 1, additional_flags: str = '',
                     suffix: str = "", job_name: str = "default",
                     script_folder: Optional[str] = None,
-                    max_iterations: int = 5,
+                    max_iterations: int = 10,
                     python_path: Optional[str] = None,
                     disable_batchjob: bool = False,
                     use_dill: bool = False,
@@ -167,12 +167,10 @@ def batchjob_script(params: list, name: str,
         log_batchjob.error(msg)
         raise NotImplementedError(msg)
     cpus_per_node = global_params.config['ncores_per_node']
-    # mem_lim = int(global_params.config['mem_per_node'] /
-    #               cpus_per_node)
-    # if '--mem' in additional_flags:
-    #     raise ValueError('"--mem" must not be set via the "additional_flags"'
-    #                      ' kwarg.')
-    # additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+    mem_lim = int(global_params.config['mem_per_node'] /
+                  cpus_per_node)
+    if '--mem' not in additional_flags:
+        additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
 
     if exclude_nodes is None:
         exclude_nodes = global_params.config['slurm']['exclude_nodes']
@@ -234,7 +232,7 @@ def batchjob_script(params: list, name: str,
                     pkl.dump(param, f)
 
         os.chmod(this_sh_path, 0o744)
-        cmd_exec = "{0} --output={1} --error={2} --job-name={3} {4}".format(
+        cmd_exec = "{0} --output={1} --error={2} --time=4-0 --job-name={3} {4}".format(
             additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
         if job_id == 0:
             log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
@@ -332,7 +330,7 @@ def batchjob_script(params: list, name: str,
             del slurm2job_dc[slurm_id_orig]
             job2slurm_dc[j] = slurm_id
             slurm2job_dc[slurm_id] = j
-            log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
+            log_batchjob.info(f'Requeued job {j} ({requeue_dc[j]}/{max_iterations}). SLURM IDs: {slurm_id} (new), '
                               f'{slurm_id_orig} (old).')
             if err_msg is not None:
                 log_batchjob.warning(f'Job {j} failed with: {err_msg}')

@@ -1,27 +1,29 @@
-m2r2
-sphinx >=3.0,<=3.1
+myst_parser
+sphinx >=3.0,<=4.2
 sphinx-autodoc-typehints >=1.11,<=1.12
 sphinx_rtd_theme
+docutils>=0.14,<0.18
 
+git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
+git+git://github.com/StructuralNeurobiologyLab/MorphX@master#egg=morphx
 cython
 h5py
 matplotlib
 tqdm
 scipy
 networkx
-zmesh
 lz4
 flask
 fasteners
-numpy
+pandas
+numpy <= 1.21
 coloredlogs
 termcolor
-scikit-learn>=0.21.3
+scikit-learn==0.24.1
 scikit-image
 pyopengl
 opencv-python
-numba==0.49.1
-llvmlite==0.32.1
+numba >0.48
 plyfile
 pytest
 pytest-runner
@@ -32,5 +34,5 @@ dill
 pyyaml
 kimimaro
 fill-voids
-git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
-git+git://github.com/StructuralNeurobiologyLab/MorphX@master#egg=morphx
+zmesh
+

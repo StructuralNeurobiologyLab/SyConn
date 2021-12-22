@@ -610,7 +610,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     Otherwise the classification results will be written to the overlay channel.
 
     Notes:
-        * Has a high GPU memory requirement (minimum 12GB). Does should be controlable from the config or determined
+        * Has a high GPU memory requirement (minimum 12GB). Does should be controllable from the config or determined
           automatically.
         * Resulting KnossosDatasets currently do not use pyknossos confs.
 

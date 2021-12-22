@@ -12,10 +12,7 @@ from syconn.handler import basics
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn import global_params
 import numpy as np
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
+import pickle as pkl
 
 
 path_storage_file = sys.argv[1]
@@ -34,7 +31,8 @@ ch, use_point_models = args
 
 if use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
-    predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=ch, show_progress=False)
+    for el in basics.chunkify_successive(ch, 10000):
+        predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=el, show_progress=False)
 else:
     # multi view model properties
     model_props = global_params.config['celltypes']

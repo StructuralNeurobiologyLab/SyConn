@@ -5,7 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import itertools
-from typing import List, Any, Optional
+from typing import List, Any, Optional, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
@@ -13,6 +13,8 @@ import tqdm
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 from scipy import spatial
 
+if TYPE_CHECKING:
+    from ..reps.super_segmentation import SuperSegmentationObject
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 
@@ -215,17 +217,33 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g, sizes, is_connected_components=False):
+def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = False) -> dict:
+    """
+    Calculate bounding box size of connected components.
+
+    Args:
+        g: Supervoxel graph.
+        bbs: Bounding boxes (physical units).
+        is_connected_components: If graph `g` already is connected components. If False,
+            ``nx.connected_components`` is applied.
+
+    Returns:
+        Look-up which stores the connected component bounding box for every single node in the input Graph `g`.
+    """
     if not is_connected_components:
         ccs = nx.connected_components(g)
     else:
         ccs = g
     node2cssize_dict = {}
     for cc in ccs:
-        # if ID is not in sizes, then i
-        mesh_bbs = np.concatenate([sizes[n] for n in cc if n in sizes])
-        cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0) -
-                                 np.min(mesh_bbs, axis=0), ord=2)
+        # if ID is not in bbs, it was skipped due to low voxel count
+        curr_bbs = [bbs[n] for n in cc if n in bbs]
+        if len(curr_bbs) == 0:
+            raise ValueError(f'Could not find a single bounding box for connected component with IDs: {cc}.')
+        else:
+            curr_bbs = np.concatenate(curr_bbs)
+            cc_size = np.linalg.norm(np.max(curr_bbs, axis=0) -
+                                     np.min(curr_bbs, axis=0), ord=2)
         for n in cc:
             node2cssize_dict[n] = cc_size
     return node2cssize_dict
@@ -291,7 +309,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     if np.all(np.array(list(neuron2ccsize_dict.values())) <=
-              global_params.config['glia']['min_cc_size_ssv']):
+              global_params.config['min_cc_size_ssv']):
         # no significant neuron SV
         if return_removed_nodes:
             return [], [list(g.nodes())]
@@ -304,7 +322,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
     if np.all(np.array(list(glia2ccsize_dict.values())) <=
-              global_params.config['glia']['min_cc_size_ssv']):
+              global_params.config['min_cc_size_ssv']):
         # no significant glia SV
         if return_removed_nodes:
             return [list(g.nodes())], []
@@ -312,7 +330,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
 
     tiny_glia_fragments = []
     for n in g_glia.nodes():
-        if glia2ccsize_dict[n] < global_params.config['glia']['min_cc_size_ssv']:
+        if glia2ccsize_dict[n] < global_params.config['min_cc_size_ssv']:
             tiny_glia_fragments += [n]
 
     # create new neuron graph without sufficiently big glia connected components
@@ -325,7 +343,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     g_tmp = g_neuron.copy()
     for n in g_tmp.nodes():
-        if neuron2ccsize_dict[n] < global_params.config['glia']['min_cc_size_ssv']:
+        if neuron2ccsize_dict[n] < global_params.config['min_cc_size_ssv']:
             g_neuron.remove_node(n)
 
     # create new glia graph with remaining nodes
