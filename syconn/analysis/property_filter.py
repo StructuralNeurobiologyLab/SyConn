@@ -284,7 +284,10 @@ class PropertyFilter(SyConnClient):
         rep_coords = self.params["rep_coords"][mask][ix]
         cts = self.params["partner_celltypes"][mask][ix]
 
-        return (partner_ids, rep_coords, cts)
+        # sort the partners by the synapse mesh area (descending) 
+        sorted_ix = np.argsort(self.params["mesh_areas"][mask][ix])[::-1]
+
+        return (partner_ids[sorted_ix], rep_coords[sorted_ix], cts[sorted_ix])
 
     def get_presynaptic_partners(self, action_state):
         """Adds the presynaptic partners of the selected cell to the
@@ -385,8 +388,11 @@ class PropertyFilter(SyConnClient):
         partner_ids, ix = np.unique(incoming[incoming != ssv_id], return_index=True)
         rep_coords = self.params["rep_coords"][mask][ix]
         cts = self.params["partner_celltypes"][mask][ix]
+        
+        # sort the partners by the synapse mesh area (descending) 
+        sorted_ix = np.argsort(self.params["mesh_areas"][mask][ix])[::-1]
 
-        return (partner_ids, rep_coords, cts)      
+        return (partner_ids[sorted_ix], rep_coords[sorted_ix], cts[sorted_ix])      
 
     def get_postsynaptic_partners(self, action_state):
         """Adds the postsynaptic partners of the selected cell to the
@@ -558,7 +564,7 @@ class PropertyFilter(SyConnClient):
         if not np.any(mask):
             return -1
         
-        loc = self.params["syn_areas"][partners_ix][mask].argmax()
+        loc = self.params["mesh_areas"][partners_ix][mask].argmax()
         partners = self.params["neuron_partners"][partners_ix][mask][loc]
         partner_loc = np.where(partners != ssv_id)[0].item() 
         
