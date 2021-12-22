@@ -3,7 +3,7 @@ import os
 import re
 import copy
 import time
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Union
 
 import numpy as np
 from timeit import default_timer as timer
@@ -15,6 +15,7 @@ from syconn.analysis.cli import configure_backend
 from syconn.analysis.cli import SyConnClient
 from syconn.handler.logger import log_main as logger
 from syconn.handler.prediction import str2int_converter, int2str_converter
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn import global_params
 
 import neuroglancer
@@ -24,21 +25,19 @@ from neuroglancer.viewer_config_state import SegmentIdMapEntry
 from neuroglancer.config import NeuroConfig
 
 
-def get_segmentation_layer(layers: List[SegmentationLayer]) -> Tuple[int, SegmentationLayer]:
-    """Returns the index of the segmentation layer and the segmentation
-    layer itself
+def get_segmentation_layer(layers: List[SegmentationLayer]) -> SegmentationLayer:
+    """Returns the segmentation layer with the volume data
 
     Args:
         layers: list of neuroglancer layers
 
     Returns:
-        index of the segmentation layer and the segmentation layer itself
+        Segmentation layer with volume
     """
 
-    for i, layer in enumerate(layers):
+    for layer in layers:
         if isinstance(layer.layer, neuroglancer.SegmentationLayer) and layer.name == "j0251_rag_flat_Jan2019_v3":
-            print(layer.name)
-            return i, layer
+            return layer
 
 
 def get_celltype(ct: int) -> str:
@@ -64,6 +63,13 @@ def get_celltype(ct: int) -> str:
 class PropertyFilter(SyConnClient):
     """Inherits from SyConnClient and adds custom functionality to the
     neuroglancer viewer
+
+    The dynamic properties should be added here when extending the
+    SyConnClient class. Currently, the following properties are added:
+    - Synaptic partner with largest area
+    - Presynaptic partners
+    - Postsynaptic partners
+    - Cycle through synaptic partners
 
     Attributes:
         params (NeuroConfig): configuration parameters for neuroglancer
@@ -124,24 +130,39 @@ class PropertyFilter(SyConnClient):
         if params.acquisition == "j0251":
             self.gt_type = "ctgt_j0251_v2"
         
-        self.CTs = params["backend"].cts_in_data(self.gt_type)
-        logger.info(f"Found {self.CTs} cell types in the dataset")
+        # Uncomment when using the old segment properties
+        # self.CTs = params["backend"].cts_in_data(self.gt_type)
+        # logger.info(f"Found {self.CTs} cell types in the dataset")
         
         self.ssv_ids = params["ssvs"]
         self.cur_message = None
 
+        self.ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+
         # dict of cell type indices in the ssv_ids array
-        self.CTmask = {ct: [] for ct in self.CTs}
-        logger.info(f"Available filter properties {self.__class__.properties}")
+        # self.CTmask = {ct: [] for ct in self.CTs}
+        # logger.info(f"Available filter properties {self.__class__.properties}")
 
         # add action handler for finding synaptic partner
-        self.viewer.actions.add('show-largest-synaptic-connection', self.get_synaptic_partner)
-        # self.viewer.actions.add('share-viewer', self.generate_viewer_link)
+        self.viewer.actions.add('show-synaptic-partner-with-largest-area', self.get_synaptic_partner)
+        self.viewer.actions.add('show-presynaptic-partners', self.get_presynaptic_partners)
+        self.viewer.actions.add('show-postsynaptic-partners', self.get_postsynaptic_partners)
+        self.viewer.actions.add('cycle-synaptic-partners', self.cycle_synaptic_partners)
 
         # bind actions to keys
         with self.viewer.config_state.txn() as s:
-            s.input_event_bindings.data_view['keyp'] = 'show-largest-synaptic-connection'
+            s.input_event_bindings.data_view['keyp'] = 'show-synaptic-partner-with-largest-area'
+            s.input_event_bindings.data_view['control+keyi'] = 'show-presynaptic-partners'
+            s.input_event_bindings.data_view['control+keyo'] = 'show-postsynaptic-partners'
             # s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
+        
+        self.counter = 0  # counter for cycling through synaptic partners
+        self.active_cell = None  # active cell for synaptic partner
+        self.active_ct = None  # cell type of the active cell
+        self.partner_type = None  # type of synaptic partner (pre or post)
+        self.partner_ids = None  # array of filtered partner ids
+        self.rep_coords = None  # coordinates of the synapses
+        self.cts = None  # cell types of the filtered partners
         
         # Precomputed segment properties are used now. Uncomment this to use the old segment properties
         # defer callback necessary to avoid deadlock 
@@ -183,6 +204,253 @@ class PropertyFilter(SyConnClient):
 
         logger.info(url_without_hash)
 
+    def cycle_synaptic_partners(self, action_state):
+        """Cycles through the synaptic partners of the selected cell
+
+        Args:
+            action_state: captures the hotkey action
+        """    
+
+        if self.counter < len(self.rep_coords):  # if there are still synaptic partners to be shown
+            ct_pair = self.cts[self.counter]  # get the cell type pair
+            pct = ct_pair[ct_pair != self.active_ct]  # get the partner cell type
+            
+            if len(pct) == 0:  # same cell type as the active cell
+                pct = self.active_ct
+            else:
+                pct = pct.item()  # different from the active cell
+
+            ct = int2str_converter(self.active_ct, "ctgt_j0251_v3")
+            partner_ct = int2str_converter(pct, "ctgt_j0251_v3")
+
+            message = f"{self.partner_type} partner {self.partner_ids[self.counter]} ({partner_ct}) of {self.active_cell} ({ct})"
+            self.update_status_message(message)
+
+            # set the viewer to the position of the synapse
+            with self.viewer.txn() as s:
+                layer = get_segmentation_layer(s.layers)
+                layer.segments.clear()
+                layer.segments.add(self.active_cell)
+                layer.segments.add(int(layer.segment_query.split(",")[self.counter]))
+                s.position = self.rep_coords[self.counter]
+
+        else:  # reset the counter and clear the segments
+            message = f"You have reached the end of the list of synaptic partners. Pressing 'Ctrl+u' again will start from the beginning."
+            self.update_status_message(message)
+            self.counter = 0
+
+            with self.viewer.txn() as s:
+                layer = get_segmentation_layer(s.layers)
+                layer.segments.clear()
+                layer.segments.add(self.active_cell)
+
+            return
+        
+        self.counter += 1  # increment the counter for next 'ctrl+u' action
+
+    def _filter_presynaptic_partners(self, ssv_id: int) -> Union[int, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """Filters the presynaptic partners of the selected cell
+
+        Args:
+            ssv_id (int): id of the selected cell
+
+        Returns:
+            -1 or a tuple of partner cell ids, synapse coordinates and
+            cell types of the presynaptic partners
+        """  
+        pre_mask = self.params["tpl_mask"]  # filter out synaptic partners where either of the partner cells has total path length <= 150
+
+        # get the presynaptic partners (active cell's soma and dendrite synapses)
+        mask = (
+            (pre_mask) & (self.params["neuron_partners"][:,0] == ssv_id) & \
+                ((self.params["partner_axoness"][:,0] == 0) | (self.params["partner_axoness"][:,0] == 2))
+        ) | \
+        (
+            (pre_mask) & (self.params["neuron_partners"][:,1] == ssv_id) & \
+                ((self.params["partner_axoness"][:,1] == 0) | (self.params["partner_axoness"][:,1] == 2))
+        )
+
+        if not np.any(mask):
+            return -1
+
+        mask = mask & (self.params["syn_probs"] >= 0.5)
+
+        if not np.any(mask):
+            return -1
+
+        incoming = self.params["neuron_partners"][mask]
+    
+        partner_ids, ix = np.unique(incoming[incoming != ssv_id], return_index=True)
+        rep_coords = self.params["rep_coords"][mask][ix]
+        cts = self.params["partner_celltypes"][mask][ix]
+
+        return (partner_ids, rep_coords, cts)
+
+    def get_presynaptic_partners(self, action_state):
+        """Adds the presynaptic partners of the selected cell to the
+        segment query of the segmentation layer
+
+        Args:
+            action_state (): captures the hotkey action
+        """  
+
+        segment_id = action_state.selected_values.get(self.seg_name) # super().seg_name
+
+        if segment_id is None:
+            message = "No cell selected! Double click on a segment in one of the cross-sectional views"
+            self.update_status_message(message)
+            return
+
+        if isinstance(segment_id.value, int):
+            ssv_id = segment_id.value
+        else:
+            ssv_id = int(segment_id.value.key)
+
+        with self.viewer.txn() as s:
+            layer = get_segmentation_layer(s.layers)
+
+            if ssv_id in layer.segments:
+                logger.info(f"Getting presynaptic partners of {ssv_id}")
+                self.counter = 0
+
+                tic = time.time()
+                result = self._filter_presynaptic_partners(ssv_id)
+                toc = time.time()
+                logger.debug(f"Got presynaptic partners in {toc-tic:.2f} seconds")
+
+                # get active cell's cell type
+                ssv = self.ssd.get_super_segmentation_object(ssv_id)
+                self.active_ct = ssv.celltype()
+                ct = int2str_converter(self.active_ct, "ctgt_j0251_v3")
+                del ssv
+
+                if result == -1:
+                    message = f"No presynaptic partners found for {ssv_id} ({ct})"
+                    self.update_status_message(message)
+                    logger.warning(message)
+                    return
+
+                # clear all the segments
+                layer.segments.clear()
+                self.partner_ids = result[0]
+                self.rep_coords = result[1]
+                self.cts = result[2]
+
+                # add the partners to the segment query list
+                layer.segment_query = ",".join(str(x) for x in self.partner_ids)
+                # add the active cell to the segments list
+                layer.segments.add(ssv_id)
+
+                self.active_cell = ssv_id
+                self.partner_type = "Presynaptic"
+
+                message = f"Presynaptic partners of {ssv_id} ({ct}) are present on the right. Press 'ctrl+u' to cycle through them"
+                self.update_status_message(message)
+
+                with self.viewer.config_state.txn() as cs:
+                    cs.input_event_bindings.data_view['control+keyu'] = 'cycle-synaptic-partners'
+
+    def _filter_postsynaptic_partners(self, ssv_id):
+        """Filters the postsynaptic partners of the selected cell
+
+        Args:
+            ssv_id (int): id of the selected cell
+
+        Returns:
+            -1 or a tuple of partner cell ids, synapse coordinates and
+            cell types of the postsynaptic partners
+        """
+        pre_mask = self.params["tpl_mask"]  # filter out synaptic partners where either of the partner cells has total path length <= 150
+
+        # get the postsynaptic partners (active cell's axon synapses)
+        mask = (
+            (pre_mask) & (self.params["neuron_partners"][:,0] == ssv_id) & \
+                ((self.params["partner_axoness"][:,0] == 1) | (self.params["partner_axoness"][:,0] == 3) | (self.params["partner_axoness"][:,0] == 4))
+        ) | \
+        (
+            (pre_mask) & (self.params["neuron_partners"][:,1] == ssv_id) & \
+                ((self.params["partner_axoness"][:,1] == 1) | (self.params["partner_axoness"][:,1] == 3) | (self.params["partner_axoness"][:,1] == 4))
+        )
+
+        if not np.any(mask):
+            return -1
+
+        mask = mask & (self.params["syn_probs"] >= 0.5)
+
+        if not np.any(mask):
+            return -1
+
+        incoming = self.params["neuron_partners"][mask]
+    
+        partner_ids, ix = np.unique(incoming[incoming != ssv_id], return_index=True)
+        rep_coords = self.params["rep_coords"][mask][ix]
+        cts = self.params["partner_celltypes"][mask][ix]
+
+        return (partner_ids, rep_coords, cts)      
+
+    def get_postsynaptic_partners(self, action_state):
+        """Adds the postsynaptic partners of the selected cell to the
+        segment query of the segmentation layer
+
+        Args:
+            action_state (): captures the hotkey action
+        """ 
+
+        segment_id = action_state.selected_values.get(self.seg_name)
+
+        if segment_id is None:
+            message = "No cell selected! Double click on a segment in one of the cross-sectional views"
+            self.update_status_message(message)
+            return
+
+        if isinstance(segment_id.value, int):
+            ssv_id = segment_id.value
+        else:
+            ssv_id = int(segment_id.value.key)
+
+        with self.viewer.txn() as s:
+            layer = get_segmentation_layer(s.layers)
+            if ssv_id in layer.segments:
+                logger.info(f"Getting postsynaptic partners of {ssv_id}")
+                self.counter = 0
+
+                tic = time.time()
+                result = self._filter_postsynaptic_partners(ssv_id)
+                toc = time.time()
+                logger.debug(f"Got postsynaptic partners in {toc-tic:.2f} seconds")
+
+                # get active cell's cell type
+                ssv = self.ssd.get_super_segmentation_object(ssv_id)
+                self.active_ct = ssv.celltype()
+                ct = int2str_converter(self.active_ct, "ctgt_j0251_v3")
+                del ssv
+
+                if result == -1:
+                    message = f"No postsynaptic partners found for {ssv_id} ({ct})"
+                    self.update_status_message(message)
+                    logger.warning(message)
+                    return
+
+                # clear all the segments
+                layer.segments.clear()
+                self.partner_ids = result[0]
+                self.rep_coords = result[1]
+                self.cts = result[2]
+
+                # add the partners to the segment query list
+                layer.segment_query = ",".join(str(x) for x in self.partner_ids)
+                # add the active cell to the segments list
+                layer.segments.add(ssv_id)
+
+                self.active_cell = ssv_id
+                self.partner_type = "Postsynaptic"
+
+                message = f"Postsynaptic partners of {ssv_id} ({ct}) are present on the right. Press 'ctrl+u' to cycle through them"
+                self.update_status_message(message)
+
+                with self.viewer.config_state.txn() as cs:
+                    cs.input_event_bindings.data_view['control+keyu'] = 'cycle-synaptic-partners'
+
     def get_synaptic_partner(self, action_state):
         """Retrieves the synaptic partner of the currently selected 
         cell
@@ -204,26 +472,25 @@ class PropertyFilter(SyConnClient):
             ssv_id = int(segment_id.value.key)
         
         with self.viewer.txn() as s:
-            segments = get_segmentation_layer(s.layers)[1].segments
-            # segments = s.layers[-1].segments  # segmentation layer with skeletons and meshes
-            if ssv_id in segments:
+            layer = get_segmentation_layer(s.layers)
+            
+            if ssv_id in layer.segments:
 
                 message = f"Loading synaptic partner for the selected cell {ssv_id}"
                 self.update_status_message(message)
 
                 start = time.time()
-                result = self._filter_synaptic_partners(ssv_id)
+                result = self._filter_synaptic_partner(ssv_id)
                 dtime = time.time() - start
                 logger.debug('Got synaptic partner after {:.2f}'.format(dtime))
 
                 # if no synaptic partner is found
                 if result == -1:
-                    message = 'No synaptic partner found for the selected cell {}'.format(ssv_id)
+                    message = f'No synaptic partner found for the selected cell {ssv_id}'
                     self.update_status_message(message)
-
                     return
 
-                # get synaptic partner id, compartment predictions and celltypes
+                # get synaptic partner id, compartment predictions and cell types
                 partner_ssv_id = result["partner_ssv"]
                 ssv_comp = int2str_converter(result["ssv_comp"], "axgt").split('_')[1]
                 partner_ssv_comp = int2str_converter(result["partner_ssv_comp"], "axgt").split('_')[1]
@@ -232,9 +499,10 @@ class PropertyFilter(SyConnClient):
                 rep_coords = result["rep_coords"]
 
                 # add synaptic partner to segment list
-                segments.add(partner_ssv_id)
-                # s.position = np.flip(rep_coords) # use for neuroglancer.LocalVolume source
-                s.position = rep_coords # set position to the representative coordinate
+                layer.segments.add(partner_ssv_id)
+                # use this for neuroglancer.LocalVolume source
+                # s.position = np.flip(rep_coords) 
+                s.position = rep_coords # set position to the synapse location
                 
                 # pre-synaptic -> post-synaptic message format
                 if self.__class__.syn_type[ssv_comp] == "pre-synaptic":
@@ -259,7 +527,7 @@ class PropertyFilter(SyConnClient):
                 self.update_status_message(message)
                 return
 
-    def _filter_synaptic_partners(self, ssv_id: int) -> dict:
+    def _filter_synaptic_partner(self, ssv_id: int) -> dict:
         """Gets synaptic partner ssv_id, compartment predictions, cell
         type, and rep. coords of synapse.
 
@@ -277,9 +545,11 @@ class PropertyFilter(SyConnClient):
         if not np.any(mask):
             return -1
         
+        # get the axo-dendritic synapse indices
         mask_axon_den = ((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1)) & \
                         ((self.params["partner_axoness"][partners_ix][:,0] == 0) | (self.params["partner_axoness"][partners_ix][:,1] == 0))
 
+        # get the axo-somatic synapse indices
         mask_axon_soma = ((self.params["partner_axoness"][partners_ix][:,0] == 1) | (self.params["partner_axoness"][partners_ix][:,1] == 1)) & \
                     ((self.params["partner_axoness"][partners_ix][:,0] == 2) | (self.params["partner_axoness"][partners_ix][:,1] == 2))
 

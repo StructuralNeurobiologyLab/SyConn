@@ -117,7 +117,7 @@ class SyConnClient(object):
         """        
 
         if config.dev_environ:
-            source = f'http://localhost:9000'
+            source = f'http://localhost:9005'
         
         else:
             source = f'https://syconn.esc.mpcdf.mpg.de'
@@ -178,6 +178,7 @@ class SyConnClient(object):
             layer=neuroglancer.SegmentationLayer(
                 source=[
                     f'precomputed://' + source + '/volume/segmentation', # segmentation volume
+                    # f'knossos://' + source + f'/{self.acquisition}/{self.version}/segmentation',  # segmentation volume
                     f'precomputed://' + source + '/sv', # ssv mesh
                     f'precomputed://' + source + '/skeletons', # ssv skeleton
                     f'precomputed://' + source + '/properties', # segment properties

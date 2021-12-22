@@ -1363,8 +1363,16 @@ def int2str_converter(label: int, gt_type: str) -> str:
         
         except KeyError:
             logger.error('Cell type unknown for ssv id {}'.format(label))
-            return "None"
+            return "Unknown"
 
-        # return int2str_label[label]
+    elif gt_type == 'ctgt_j0251_v3':  # only used for neuroglancer purposes
+        int2str_label = {0:'exc', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'int3', 9: 'int1', 10: 'int2'}
+
+        try:
+            return int2str_label[label]
+        except KeyError:
+            logger.error('Cell type unknown for ssv id {}'.format(label))
+            return "Unknown"
+
     else:
         raise ValueError("Given ground truth type is not valid.")
