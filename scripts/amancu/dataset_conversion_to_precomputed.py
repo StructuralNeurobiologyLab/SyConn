@@ -139,5 +139,5 @@ with ProcessPoolExecutor(max_workers=2) as executor:
     executor.map(process, to_upload)
   
 time.sleep(2)
-img = vol[0:512,0:1020,0:1020]
+img = vol[0:512,0:1020,0:1021]
 img.viewer()
