@@ -336,8 +336,7 @@ if __name__ == '__main__':
     # create lookup table for cell ids to cs ids
     if not os.path.exists(lookup_cellpair2cs_path):
         cell_pair2cs_ids, cell_pairs = create_lookup_table(filtered_cs_ids, cs_dataset, dict_sv2ssv)
-        write_obj2
-pkl(lookup_cellpair2cs_path, cell_pair2cs_ids)
+        write_obj2pkl(lookup_cellpair2cs_path, cell_pair2cs_ids)
         log.info(f'Cell pairs written to pickle')
     else:
         try:
@@ -378,9 +377,14 @@ pkl(lookup_cellpair2cs_path, cell_pair2cs_ids)
     # set of ssv_ids to find entries faster
     ssv_ids_set = set(ssd.ssv_ids)
     params = [(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_ids_set, cs_merge_radii) for slice in proc_slices]
+    log.info(len(params))
 
     start = timeit.default_timer()
     log.info(f'Sample generation started with {len(params)} tasks')
+
+    # with mp.Pool(processes=n_proc) as pool:
+    #     multiple_results = [pool.apply_async(create_labeled_points, param) for param in params]
+    #     print([res.get() for res in multiple_results])
 
     # process_map(create_labeled_points, params, max_workers=n_proc)
     running_tasks = [mp.Process(target=create_labeled_points, args=param) for param in params]

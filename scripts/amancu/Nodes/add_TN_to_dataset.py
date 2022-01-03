@@ -36,32 +36,31 @@ def create_hcs(cell_ids, slice):
         idcs = np.unique(node_tree.query_ball_point(verts.mean(axis=0), r=int(30e3)))
         node_labels[idcs] = float(-1)
 
-        hc = HybridCloud(vertices=verts,features=features,
+        hc = HybridCloud(vertices=verts, features=features,
                              nodes=nodes, node_labels=node_labels,
                              edges=curr_cell.skeleton['edges'])
 
-        # for distances
-        colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
-        mask = np.where(hc.node_labels == -1)[0]
-        mask = np.array([[x] for x in mask])
-        try:
-            np.put_along_axis(colors, mask, PINK, axis=0)
-        except:
-            print("No foreground labels in original context.")
-            pass
-        print(np.unique(colors))
-        mesh2obj_file_colors(os.path.expanduser(
-            f'/wholebrain/scratch/amancu/mergeError/Nodes/Examples/Additional/{cell_id}_extraction.ply'),
-            [np.array([]), hc.nodes, np.array([])], colors)
-        
-        # for verts
-        colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
-        mesh2obj_file_colors(os.path.expanduser(
-            f'/wholebrain/scratch/amancu/mergeError/Nodes/Examples/Additional/{cell_id}_verts.ply'),
-            [np.array([]), hc.vertices, np.array([])], colors)
+        # # for distances
+        # colors = np.full(shape=(hc.nodes.shape[0], 4,), fill_value=GREY)
+        # mask = np.where(hc.node_labels == -1)[0]
+        # mask = np.array([[x] for x in mask])
+        # try:
+        #     np.put_along_axis(colors, mask, PINK, axis=0)
+        # except:
+        #     print("No foreground labels in original context.")
+        #     pass
+        # mesh2obj_file_colors(os.path.expanduser(
+        #     f'/wholebrain/scratch/amancu/mergeError/Nodes/Examples/Additional/{cell_id}_extraction.ply'),
+        #     [np.array([]), hc.nodes, np.array([])], colors)
+        #
+        # # for verts
+        # colors = np.full(shape=(hc.vertices.shape[0], 4,), fill_value=GREY)
+        # mesh2obj_file_colors(os.path.expanduser(
+        #     f'/wholebrain/scratch/amancu/mergeError/Nodes/Examples/Additional/{cell_id}_verts.ply'),
+        #     [np.array([]), hc.vertices, np.array([])], colors)
 
-        # if hc.save2pkl(os.path.expanduser(target_dir + f'{cell_id}.pkl')):
-                    # print(f'HybridCloud not written for {cell_id}')
+        if hc.save2pkl(os.path.expanduser(target_dir + f'{cell_id}.pkl')):
+                    print(f'HybridCloud not written for {cell_id}')
 
 
 
@@ -136,10 +135,19 @@ if __name__ == '__main__':
     if len(list((Counter(hvc_to_insert) - Counter(set(hvc_to_insert))).keys())) != 0:
         raise ValueError("HVC array has duplicate ids.")
 
-    # all_ssv_ids = msn_to_insert.extend(lman_to_insert).extend(hvc_to_insert)
-    ids = [msn_to_insert, lman_to_insert, hvc_to_insert] 
-    slices = [np.s_[490:500], np.s_[0:5], np.s_[0:5]]
+    ids_list = np.concatenate([msn_to_insert, lman_to_insert, hvc_to_insert])
 
-    with mp.Pool(processes=10) as pool:
-        multiple_results = [pool.apply_async(create_hcs, (ids[i], slices[i])) for i in range(1)]
+    n_proc = 18
+    offset = 0
+    chunksize = len(ids_list) // n_proc
+    proc_slices = []
+
+    for i_proc in range(n_proc):
+        chunkstart = int(offset + (i_proc * chunksize))
+        # make sure to include the division remainder for the last process
+        chunkend = int(offset + (i_proc + 1) * chunksize) if i_proc < n_proc - 1 else int(offset + len(ids_list))
+        proc_slices.append(np.s_[chunkstart:chunkend])
+
+    with mp.Pool(processes=n_proc) as pool:
+        multiple_results = [pool.apply_async(create_hcs, (ids_list, slicee)) for slicee in proc_slices]
         print([res.get() for res in multiple_results])

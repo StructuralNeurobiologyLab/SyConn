@@ -109,7 +109,7 @@ print(f'Running on device: {device}')
 
 # set save path
 if save_root is None:
-    save_root = f'/wholebrain/scratch/amancu/mergeError/trainings/{modelselect}/see/'
+    save_root = f'/wholebrain/scratch/amancu/mergeError/Nodes/Trainings/{modelselect}/'
 
 # Architecture select for LightConvPoint
 if arch == 'archLrg':
@@ -139,10 +139,6 @@ if modelselect == 'lcp':
     act = nn.ReLU
     model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
                          architecture=architecture, activation=act, norm='gn')
-if modelselect == 'randla':
-    from elektronn3.models.randla_net import RandLANet
-    model = RandLANet(input_channels, num_classes, dropout_p=dr)
-
 print(f'Using model {modelselect}')
 
 model.to(device)

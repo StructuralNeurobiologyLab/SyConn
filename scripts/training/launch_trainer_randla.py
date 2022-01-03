@@ -25,7 +25,7 @@ if __name__ == '__main__':
     #     scale = int(ctx / 10)
     #     save_root = f'/wholebrain/scratch/pschuber/e3_trainings_randla_celltypes_j0251/' \
     #                 f'celltype_pts{npoints}_ctx{ctx}_allGT/'
-    #     params.append([cnn_script, dict(sr=save_root, sp=npoints, cval=-1, seed=0, ctx=ctx,
+    #     params.append([gen_script, dict(sr=save_root, sp=npoints, cval=-1, seed=0, ctx=ctx,
     #                                     scale_norm=scale)])
     # params = list(basics.chunkify_successive(params, 1))
     # batchjob_script(params, 'launch_trainer', n_cores=10, additional_flags='--time=7-0 --qos=720h --gres=gpu:1',
