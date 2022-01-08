@@ -234,7 +234,7 @@ views:
 points:
   glia:
     mapping:
-      # if SV skeletons do not exist, use simple vertex downsampling to generate target locations for the prediction.
+      # if SV skeletons do not exist, use simple vertex downscaling to generate target locations for the prediction.
       sample_loc_ds: 100
       # number of nearest neighbors searched for every target location within the predicted locations.
       pred2loc_knn: 5

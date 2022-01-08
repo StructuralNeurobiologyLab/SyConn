@@ -2174,6 +2174,12 @@ class SuperSegmentationObject(SegmentationBase):
                 # dendrite, neck, head, unpredicted
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.1, 0.1, 0.1, 1],
                                  [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.9, 1]])
+            elif '3models' in semseg_key or 'dasbt' in semseg_key:
+                # dendrite, axon, soma, bouton, terminal, neck, head, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.6, 0.1, 0.1, 1],
+                                 [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.4, 0.4, 0.8, 1], [0.8, 0.8, 0.1, 1],
+                                 [0.9, 0.4, 0.4, 1], [0.1, 0.1, 0.9, 1]])
             else:
                 raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))

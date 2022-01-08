@@ -592,7 +592,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                             batchsize: int, npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None, seeded: bool = False,
                             use_ctx_sampling: bool = True, redundancy: int = 20, map_myelin: bool = False,
-                            use_syntype: bool = True, cellshape_only: bool = False,
+                            use_syntype: bool = True, cellshape_only: bool = False, min_npoints: Optional[int] = None,
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -614,6 +614,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
         use_syntype:
         cellshape_only:
+        min_npoints: Minimum number of points used as input. If mesh vertices are below, missing points will be filled
+            by random sampling.
 
     Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
 
@@ -644,9 +646,15 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
         pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
         nodes = np.max(idcs, axis=1)
+        if seeded:
+            np.random.seed(np.uint32(hash(frozenset((ssv_id, redundancy_ssv)))))
         source_nodes_all = np.random.choice(nodes, redundancy_ssv, replace=len(nodes) < redundancy_ssv)
-        rand_ixs = chunkify(np.random.choice(redundancy_ssv, redundancy_ssv, replace=False), n_batches)
+        rand_ixs = np.arange(len(source_nodes_all))
+        np.random.shuffle(rand_ixs)
+        rand_ixs = list(chunkify_successive(rand_ixs, batchsize))
         npoints_ssv = min(len(hc.vertices), npoints)
+        if min_npoints is not None:
+            npoints_ssv = max(npoints_ssv, 4096)  # minimum number of nodes for the celltype classifaciton model
         if npoints_ssv == 0:
             log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
         if use_ctx_sampling:
@@ -656,8 +664,6 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         for ii in range(n_batches):
             n_samples = min(redundancy_ssv, batchsize)
             redundancy_ssv -= batchsize
-            if seeded:
-                np.random.seed(np.uint32(hash(frozenset((ssv_id, n_samples, ii)))))
             batch = np.zeros((n_samples, npoints_ssv, 3))
             batch_f = np.zeros((n_samples, npoints_ssv, len(feat_dc)))
             if len(hc.vertices) == 0:
@@ -681,6 +687,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                             msg = (f'Could not find context with > 0 vertices during batch '
                                    f'generation of {ssv} in method "pts_loader_scalar_infer".')
                             log_handler.error(msg)
+                            print(msg)
                             raise ValueError(msg)
                         source_node = source_nodes_all[sn_cnt]
                         if use_ctx_sampling:
@@ -1171,7 +1178,7 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
         use_myelin: Use myelin point cloud as inpute feature.
 
     Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
-        If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
+        If train is False, out_labels will be a scalar indicating the current SSV progress, i.e.
         the last batch will have output_label=1.
 
     """
@@ -1724,7 +1731,7 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
     n_inputs = 5
     if 'j0251' in mpath:
         n_classes = 11
-    if 'myelin' in mpath:
+    if '_myelin' in mpath:
         n_inputs += 1
     if '_noSyntype' in mpath:
         n_inputs -= 1
@@ -2321,12 +2328,14 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     ax_pred[ax_pred == -1] = 5  # unpredicted to unpredicted
     # prepare dendritic compartment labels in multi-view layout
     sp_pred = np.array(cmpt_preds)
+
     sp_pred[cmpt_preds == 1] = 3  # axon to 'other'
     sp_pred[cmpt_preds == 2] = 3  # soma to 'other'
     sp_pred[cmpt_preds == 3] = 3  # en-passant to 'other'
     sp_pred[cmpt_preds == 4] = 3  # terminal to 'other'
     sp_pred[cmpt_preds == 5] = 1  # head to head
-    sp_pred[cmpt_preds == 6] = 2  # neck to neck
+    sp_pred[cmpt_preds == 0] = 2  # dendrite to shaft
+    sp_pred[cmpt_preds == 6] = 0  # neck to neck
     sp_pred[cmpt_preds == -1] = 5  # unpredicted to unpredicted
 
     ld[pred_key_ax] = ax_pred.astype(np.int32)
