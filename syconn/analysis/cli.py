@@ -91,8 +91,10 @@ class SyConnClient(object):
 
         if "example_cube" in self.acquisition:
             return self.acquisition + '_' + self.version
-
-        return "j0251_72_clahe2"
+        elif "j0251" in self.acquisition:
+            return "j0251_72_clahe2"
+        elif "j0126" in self.acquisition:
+            return "j0126_realigned"
 
     def configure_viewer(self, state: neuroglancer.viewer_state.ViewerState, organelles: Optional[list] = None):
         """Configures the viewer state with the desired image and

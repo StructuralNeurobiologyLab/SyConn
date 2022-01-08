@@ -7,21 +7,17 @@ from typing import List, Tuple, Optional, Union
 
 import numpy as np
 from timeit import default_timer as timer
-from bs4 import BeautifulSoup as Soup
-from knossos_utils import KnossosDataset
-from numpy.core.fromnumeric import size
 
+from knossos_utils import KnossosDataset
 from syconn.analysis.cli import configure_backend
 from syconn.analysis.cli import SyConnClient
 from syconn.handler.logger import log_main as logger
 from syconn.handler.prediction import str2int_converter, int2str_converter
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn import global_params
-
 import neuroglancer
 import neuroglancer.cli
 from neuroglancer.viewer_state import SegmentationLayer
-from neuroglancer.viewer_config_state import SegmentIdMapEntry
 from neuroglancer.config import NeuroConfig
 
 
@@ -31,16 +27,19 @@ def get_segmentation_layer(layers: List[SegmentationLayer]) -> SegmentationLayer
     Args:
         layers: list of neuroglancer layers
 
+    TODO:
+        * check if there is a better way to do this
+
     Returns:
         Segmentation layer with volume
     """
 
     for layer in layers:
-        if isinstance(layer.layer, neuroglancer.SegmentationLayer) and layer.name == "j0251_rag_flat_Jan2019_v3":
+        if isinstance(layer.layer, neuroglancer.SegmentationLayer) and (layer.name == "j0251_rag_flat_Jan2019_v3" or layer.name == "j0126_areaxfs_v10" or layer.name == "j0126_assembled_core_relabeled"):
             return layer
 
 
-def get_celltype(ct: int) -> str:
+def get_celltype(ct: int, gt_type: str) -> str:
     """Returns the celltype name from the celltype id. Adapted from
     `~syconn.handler.prediction.int2str_converter`
 
@@ -50,9 +49,13 @@ def get_celltype(ct: int) -> str:
     Returns:
         str: celltype name
     """    
+    if gt_type == "ctgt_j0251_v3":
+        int2str_label = {0:'exc', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'int 3', 9: 'int 1', 10: 'int 2'}
+    elif gt_type == "ctgt_v2":
+        int2str_label = {0:"STN", 1: "modulatory", 2: "MSN", 3: "LMAN", 4: "HVC", 5: "GP", 6: "INT"}
+    else:
+        raise ValueError("Unknown gt_type {}".format(gt_type))
 
-    int2str_label = {0:'exc', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'int 3', 9: 'int 1', 10: 'int 2'}
-    
     try:
         return int2str_label[ct]
 
@@ -111,13 +114,14 @@ class PropertyFilter(SyConnClient):
         "soma": "post-synaptic",
     }
 
-    def __init__(self, params: NeuroConfig, token: Optional[str]=None, organelles: Optional[list]=None):
+    def __init__(self, params: NeuroConfig, token: Optional[str]=None, organelles: Optional[list]=None, use_tpl_mask=True):
         """Initializes the base client and property filter
 
         Args:
             params: server configuration
             token: 40-character hex string. Defaults to None.
             organelles: list of organelles to be displayed
+            use_tpl_mask: whether to use the total path length mask or not. Defaults to True.
         """              
 
         super().__init__(params, token, organelles)
@@ -125,46 +129,54 @@ class PropertyFilter(SyConnClient):
         self.params = params
         self.acquisition = params.acquisition
         self.version = params.version
+        self.use_tpl_mask = use_tpl_mask
 
-        self.gt_type = "ctgt"
+        if self.use_tpl_mask:
+            logger.debug("Using total path length mask for dynamic properties")
+
+        self.gt_type = "ctgt_v2"
         if params.acquisition == "j0251":
-            self.gt_type = "ctgt_j0251_v2"
+            self.gt_type = "ctgt_j0251_v3"
         
-        # Uncomment when using the old segment properties
+        # Uncomment when the old segment properties are used
         # self.CTs = params["backend"].cts_in_data(self.gt_type)
         # logger.info(f"Found {self.CTs} cell types in the dataset")
         
         self.ssv_ids = params["ssvs"]
         self.cur_message = None
 
-        self.ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+        self.ssd = SuperSegmentationDataset(working_dir=params["working_dir"])
 
         # dict of cell type indices in the ssv_ids array
+        # Uncomment when the old segment properties are used
         # self.CTmask = {ct: [] for ct in self.CTs}
         # logger.info(f"Available filter properties {self.__class__.properties}")
 
-        # add action handler for finding synaptic partner
+        # action handlers for dynamic properties
         self.viewer.actions.add('show-synaptic-partner-with-largest-area', self.get_synaptic_partner)
         self.viewer.actions.add('show-presynaptic-partners', self.get_presynaptic_partners)
         self.viewer.actions.add('show-postsynaptic-partners', self.get_postsynaptic_partners)
         self.viewer.actions.add('cycle-synaptic-partners', self.cycle_synaptic_partners)
+        self.viewer.actions.add('reset-viewer-state', self.reset_viewer_state)
 
-        # bind actions to keys
+        # bind actions to hotkeys
         with self.viewer.config_state.txn() as s:
             s.input_event_bindings.data_view['keyp'] = 'show-synaptic-partner-with-largest-area'
             s.input_event_bindings.data_view['control+keyi'] = 'show-presynaptic-partners'
             s.input_event_bindings.data_view['control+keyo'] = 'show-postsynaptic-partners'
+            s.input_event_bindings.viewer['control+keyx'] = 'reset-viewer-state'
             # s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
         
         self.counter = 0  # counter for cycling through synaptic partners
-        self.active_cell = None  # active cell for synaptic partner
+        self.active_cell = None  # active cell 
         self.active_ct = None  # cell type of the active cell
         self.partner_type = None  # type of synaptic partner (pre or post)
         self.partner_ids = None  # array of filtered partner ids
         self.rep_coords = None  # coordinates of the synapses
         self.cts = None  # cell types of the filtered partners
+        self.mesh_areas = None  # areas of the synapses
         
-        # Precomputed segment properties are used now. Uncomment this to use the old segment properties
+        # Precomputed segment properties are used now. Uncomment this when the old segment properties are used
         # defer callback necessary to avoid deadlock 
         # self.viewer.shared_state.add_changed_callback(
         #     lambda: self.viewer.defer_callback(self.on_state_changed)
@@ -204,6 +216,18 @@ class PropertyFilter(SyConnClient):
 
         logger.info(url_without_hash)
 
+    def reset_viewer_state(self, action_state):
+        """Resets the viewer state to the default state"""
+
+        with self.viewer.txn() as s:
+            layer = get_segmentation_layer(s.layers)
+            layer.segments.clear()
+            layer.segment_query = ""
+            s.position = [b // 2 for b in self.params["boundary"]]  # set viewer position to the center of the dataset
+
+        with self.viewer.config_state.txn() as s:
+            s.status_messages['status'] = ""  # clear status message
+
     def cycle_synaptic_partners(self, action_state):
         """Cycles through the synaptic partners of the selected cell
 
@@ -214,16 +238,16 @@ class PropertyFilter(SyConnClient):
         if self.counter < len(self.rep_coords):  # if there are still synaptic partners to be shown
             ct_pair = self.cts[self.counter]  # get the cell type pair
             pct = ct_pair[ct_pair != self.active_ct]  # get the partner cell type
-            
+        
             if len(pct) == 0:  # same cell type as the active cell
                 pct = self.active_ct
             else:
                 pct = pct.item()  # different from the active cell
 
-            ct = int2str_converter(self.active_ct, "ctgt_j0251_v3")
-            partner_ct = int2str_converter(pct, "ctgt_j0251_v3")
+            ct = int2str_converter(self.active_ct, self.gt_type)
+            partner_ct = int2str_converter(pct, self.gt_type)
 
-            message = f"{self.partner_type} partner {self.partner_ids[self.counter]} ({partner_ct}) of {self.active_cell} ({ct})"
+            message = f"{self.partner_type} partner {self.partner_ids[self.counter]} ({partner_ct}) of {self.active_cell} ({ct}). Synaptic area: {self.mesh_areas[self.counter]:.4f} µm²"
             self.update_status_message(message)
 
             # set the viewer to the position of the synapse
@@ -235,7 +259,7 @@ class PropertyFilter(SyConnClient):
                 s.position = self.rep_coords[self.counter]
 
         else:  # reset the counter and clear the segments
-            message = f"You have reached the end of the list of synaptic partners. Pressing 'Ctrl+u' again will start from the beginning."
+            message = f"You have viewed all the synaptic partners of {self.active_cell}. Pressing 'Ctrl+u' again will start from the beginning."
             self.update_status_message(message)
             self.counter = 0
 
@@ -257,8 +281,11 @@ class PropertyFilter(SyConnClient):
         Returns:
             -1 or a tuple of partner cell ids, synapse coordinates and
             cell types of the presynaptic partners
-        """  
-        pre_mask = self.params["tpl_mask"]  # filter out synaptic partners where either of the partner cells has total path length <= 150
+        """ 
+        if self.use_tpl_mask:
+            pre_mask = self.params["tpl_mask"]  # filter out synaptic partners where either of the partner cells has total path length <= 150
+        else:
+            pre_mask = np.ones_like(self.params["syn_probs"], dtype=bool)  # no pre-filtering
 
         # get the presynaptic partners (active cell's soma and dendrite synapses)
         mask = (
@@ -283,11 +310,12 @@ class PropertyFilter(SyConnClient):
         partner_ids, ix = np.unique(incoming[incoming != ssv_id], return_index=True)
         rep_coords = self.params["rep_coords"][mask][ix]
         cts = self.params["partner_celltypes"][mask][ix]
+        mesh_areas = self.params["mesh_areas"][mask][ix]
 
         # sort the partners by the synapse mesh area (descending) 
-        sorted_ix = np.argsort(self.params["mesh_areas"][mask][ix])[::-1]
+        sorted_ix = np.argsort(mesh_areas)[::-1]
 
-        return (partner_ids[sorted_ix], rep_coords[sorted_ix], cts[sorted_ix])
+        return (partner_ids[sorted_ix], rep_coords[sorted_ix], cts[sorted_ix], mesh_areas[sorted_ix])
 
     def get_presynaptic_partners(self, action_state):
         """Adds the presynaptic partners of the selected cell to the
@@ -324,7 +352,8 @@ class PropertyFilter(SyConnClient):
                 # get active cell's cell type
                 ssv = self.ssd.get_super_segmentation_object(ssv_id)
                 self.active_ct = ssv.celltype()
-                ct = int2str_converter(self.active_ct, "ctgt_j0251_v3")
+                logger.debug("Active cell's cell type: {}".format(self.active_ct))
+                ct = int2str_converter(self.active_ct, self.gt_type)
                 del ssv
 
                 if result == -1:
@@ -338,6 +367,7 @@ class PropertyFilter(SyConnClient):
                 self.partner_ids = result[0]
                 self.rep_coords = result[1]
                 self.cts = result[2]
+                self.mesh_areas = result[3]
 
                 # add the partners to the segment query list
                 layer.segment_query = ",".join(str(x) for x in self.partner_ids)
@@ -363,7 +393,10 @@ class PropertyFilter(SyConnClient):
             -1 or a tuple of partner cell ids, synapse coordinates and
             cell types of the postsynaptic partners
         """
-        pre_mask = self.params["tpl_mask"]  # filter out synaptic partners where either of the partner cells has total path length <= 150
+        if self.use_tpl_mask:
+            pre_mask = self.params["tpl_mask"]  # filter out synaptic partners where either of the partner cells has total path length <= 150
+        else:
+            pre_mask = np.ones_like(self.params["syn_probs"], dtype=bool)  # no pre-filtering
 
         # get the postsynaptic partners (active cell's axon synapses)
         mask = (
@@ -388,11 +421,12 @@ class PropertyFilter(SyConnClient):
         partner_ids, ix = np.unique(incoming[incoming != ssv_id], return_index=True)
         rep_coords = self.params["rep_coords"][mask][ix]
         cts = self.params["partner_celltypes"][mask][ix]
+        mesh_areas = self.params["mesh_areas"][mask][ix]
         
         # sort the partners by the synapse mesh area (descending) 
-        sorted_ix = np.argsort(self.params["mesh_areas"][mask][ix])[::-1]
+        sorted_ix = np.argsort(mesh_areas)[::-1]
 
-        return (partner_ids[sorted_ix], rep_coords[sorted_ix], cts[sorted_ix])      
+        return (partner_ids[sorted_ix], rep_coords[sorted_ix], cts[sorted_ix], mesh_areas[sorted_ix])
 
     def get_postsynaptic_partners(self, action_state):
         """Adds the postsynaptic partners of the selected cell to the
@@ -428,7 +462,7 @@ class PropertyFilter(SyConnClient):
                 # get active cell's cell type
                 ssv = self.ssd.get_super_segmentation_object(ssv_id)
                 self.active_ct = ssv.celltype()
-                ct = int2str_converter(self.active_ct, "ctgt_j0251_v3")
+                ct = int2str_converter(self.active_ct, self.gt_type)
                 del ssv
 
                 if result == -1:
@@ -442,6 +476,7 @@ class PropertyFilter(SyConnClient):
                 self.partner_ids = result[0]
                 self.rep_coords = result[1]
                 self.cts = result[2]
+                self.mesh_areas = result[3]
 
                 # add the partners to the segment query list
                 layer.segment_query = ",".join(str(x) for x in self.partner_ids)
@@ -500,8 +535,8 @@ class PropertyFilter(SyConnClient):
                 partner_ssv_id = result["partner_ssv"]
                 ssv_comp = int2str_converter(result["ssv_comp"], "axgt").split('_')[1]
                 partner_ssv_comp = int2str_converter(result["partner_ssv_comp"], "axgt").split('_')[1]
-                ssv_ct = get_celltype(result["ssv_ct"])
-                partner_ssv_ct = get_celltype(result["partner_ssv_ct"])
+                ssv_ct = get_celltype(result["ssv_ct"], self.gt_type)
+                partner_ssv_ct = get_celltype(result["partner_ssv_ct"], self.gt_type)
                 rep_coords = result["rep_coords"]
 
                 # add synaptic partner to segment list
