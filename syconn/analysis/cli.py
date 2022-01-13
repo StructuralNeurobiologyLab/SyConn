@@ -170,6 +170,7 @@ class SyConnClient(object):
                 source=[
                     # f'knossos://' + source + f'/{self.acquisition}/{self.version}/image' # raw volume
                     f'precomputed://' + source + f'/volume/image'
+                    # f'precomputed://' + source + f'/{self.acquisition}/{self.version}/image/test/'
                 ]
             )
         )
