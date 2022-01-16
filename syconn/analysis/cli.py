@@ -53,7 +53,7 @@ class SyConnClient(object):
         version: version of the dataset
     """
 
-    def __init__(self, params: NeuroConfig, token: str, organelles: Optional[list] = None):
+    def __init__(self, params: NeuroConfig, token: str, organelles: Optional[list] = None, **kwargs):
         """Initialize the client with the given parameters.
 
         Args:
@@ -68,6 +68,9 @@ class SyConnClient(object):
         # warn the user if no organelles are provided
         if organelles == None:
             logger.warning('No organelles selected')
+
+        self.seg_src = kwargs["seg_src"]
+        self.img_src = kwargs["img_src"]
         
         viewer = self.viewer = neuroglancer.Viewer(token=token)
         
@@ -108,18 +111,23 @@ class SyConnClient(object):
             organelles: list of organelle meshes to be displayed
 
         Note:
-            1. The default implementation of this method adds all the \
-                datasources. Override this method to configure the \
-                viewer state.
+            1. The default implementation of this method adds all the
+            datasources. Override this method to configure the viewer
+            state
 
             2. Layer visibility is set for the SegmentationLayer with
             the segmentation, mesh and skeleton data. Changing it will 
             affect the properties behavior in the side panel of the 
-            viewer. Change accordingly.
+            viewer. Change accordingly
+
+            3. The source (base url) in the development server is the
+            nginx endpoint. The tornado server `host` and `port` are
+            set in the `server.py` file. Make sure the port matches
+            the value in the `dev.syconn.esc.mpcdf.mpg.de` nginx config  
         """        
 
-        if config.dev_environ:
-            source = f'http://localhost:9005'
+        if config.dev_environ:  # development environment
+            source = f'http://localhost:9005'  
         
         else:
             source = f'https://syconn.esc.mpcdf.mpg.de'
@@ -168,9 +176,9 @@ class SyConnClient(object):
             name=self.raw_name,
             layer=neuroglancer.ImageLayer(
                 source=[
-                    # f'knossos://' + source + f'/{self.acquisition}/{self.version}/image' # raw volume
-                    f'precomputed://' + source + f'/volume/image'
-                    # f'precomputed://' + source + f'/{self.acquisition}/{self.version}/image/test/'
+                    self.img_src
+                    # f'precomputed://' + source + '/volume/image'  # unsharded old precomputed
+                    # f'precomputed://' + source + f'/{self.acquisition}/{self.version}/image/test/'  # sharded new precomputed
                 ]
             )
         )
@@ -180,8 +188,9 @@ class SyConnClient(object):
             name=self.seg_name,
             layer=neuroglancer.SegmentationLayer(
                 source=[
-                    f'precomputed://' + source + '/volume/segmentation', # segmentation volume
+                    # f'precomputed://' + source + '/volume/segmentation', # segmentation volume
                     # f'knossos://' + source + f'/{self.acquisition}/{self.version}/segmentation',  # segmentation volume
+                    self.seg_src,
                     f'precomputed://' + source + '/sv', # ssv mesh
                     f'precomputed://' + source + '/skeletons', # ssv skeleton
                     f'precomputed://' + source + '/properties', # segment properties

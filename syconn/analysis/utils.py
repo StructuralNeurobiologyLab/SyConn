@@ -130,7 +130,7 @@ def get_mesh_meta(ssv_id: int, lod: int):
     return meta
 
 
-def get_mean_mesh_areas(ssvs: Union[np.ndarray, list]) -> np.ndarray:
+def get_mean_mesh_areas(ssv_ids: Union[np.ndarray, list]) -> np.ndarray:
     """Retrieves the mean synapse mesh areas of ssvs. Same ordering as\
          :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids` 
 
@@ -140,9 +140,10 @@ def get_mean_mesh_areas(ssvs: Union[np.ndarray, list]) -> np.ndarray:
     Returns:
         mean mesh areas (N,)
     """
-
     mean_mesh_areas = []
-    for ssv_id in ssvs:
+    ssd = SuperSegmentationDataset()
+
+    for ssv_id in ssv_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         if len(ssv.syn_ssv) == 0:
             mean_mesh_area = 0.0
@@ -151,8 +152,7 @@ def get_mean_mesh_areas(ssvs: Union[np.ndarray, list]) -> np.ndarray:
 
         mean_mesh_areas.append(mean_mesh_area)
 
-    mean_mesh_areas = np.array(mean_mesh_areas)
-    return mean_mesh_areas
+    return np.array(mean_mesh_areas)
 
 
 if __name__ == '__main__':

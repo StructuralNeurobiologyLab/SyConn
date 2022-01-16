@@ -114,7 +114,7 @@ class PropertyFilter(SyConnClient):
         "soma": "post-synaptic",
     }
 
-    def __init__(self, params: NeuroConfig, token: Optional[str]=None, organelles: Optional[list]=None, use_tpl_mask=True):
+    def __init__(self, params: NeuroConfig, token: Optional[str]=None, organelles: Optional[list]=None, use_tpl_mask=True, **kwargs):
         """Initializes the base client and property filter
 
         Args:
@@ -124,7 +124,7 @@ class PropertyFilter(SyConnClient):
             use_tpl_mask: whether to use the total path length mask or not. Defaults to True.
         """              
 
-        super().__init__(params, token, organelles)
+        super().__init__(params, token, organelles, **kwargs)
 
         self.params = params
         self.acquisition = params.acquisition
@@ -158,6 +158,7 @@ class PropertyFilter(SyConnClient):
         self.viewer.actions.add('show-postsynaptic-partners', self.get_postsynaptic_partners)
         self.viewer.actions.add('cycle-synaptic-partners', self.cycle_synaptic_partners)
         self.viewer.actions.add('reset-viewer-state', self.reset_viewer_state)
+        self.viewer.actions.add('share-viewer', self.generate_viewer_link)
 
         # bind actions to hotkeys
         with self.viewer.config_state.txn() as s:
@@ -165,7 +166,7 @@ class PropertyFilter(SyConnClient):
             s.input_event_bindings.data_view['control+keyi'] = 'show-presynaptic-partners'
             s.input_event_bindings.data_view['control+keyo'] = 'show-postsynaptic-partners'
             s.input_event_bindings.viewer['control+keyx'] = 'reset-viewer-state'
-            # s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
+            s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
         
         self.counter = 0  # counter for cycling through synaptic partners
         self.active_cell = None  # active cell 
