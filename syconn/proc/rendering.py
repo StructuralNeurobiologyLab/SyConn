@@ -465,31 +465,6 @@ def get_sso_view_dc(sso: 'SuperSegmentationObject', verbose: bool = False) -> di
     return view_dc
 
 
-def render_sso_ortho_views(sso: 'SuperSegmentationObject') -> np.ndarray:
-    """
-    Renders three views of SSO mesh.
-
-    Args:
-        sso: SuperSegmentationObject
-
-    Returns:
-        View array.
-
-    """
-    multi_view_sso = load_rendering_func('multi_view_sso')
-    views = np.zeros((3, 4, 1024, 1024))
-    # init MeshObject to calculate rotation into PCA frame
-    views[:, 0] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('sv',), )
-    views[:, 1] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('mi',))
-    views[:, 2] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('vc',))
-    views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('sj',))
-    return views
-
-
 def render_sso_coords_multiprocessing(ssv: 'SuperSegmentationObject', n_jobs: int,
                                       rendering_locations: Optional[np.ndarray] = None,
                                       verbose: bool = False, render_kwargs: Optional[dict] = None,

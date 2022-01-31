@@ -277,9 +277,7 @@ class SuperSegmentationObject(SegmentationBase):
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
             for other_dataset in other_datasets:
-                other_version = \
-                    int(re.findall(r"[\d]+",
-                                   os.path.basename(other_dataset))[-1])
+                other_version = int(re.findall(r"[\d]+", os.path.basename(other_dataset))[-1])
                 if max_version < other_version:
                     max_version = other_version
 
@@ -490,8 +488,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         All cell supervoxel IDs which are assigned to this cell reconstruction.
         """
-        # must be <= uint32
-        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint32)
+        return np.array(self.lookup_in_attribute_dict("sv"), dtype=np.uint64)
 
     @property
     def sj_ids(self) -> np.ndarray:
@@ -1269,7 +1266,7 @@ class SuperSegmentationObject(SegmentationBase):
 
         """
         if obj_types is None:
-            obj_types = self.config['existing_cell_organelles']
+            obj_types = self.config['process_cell_organelles']
         annotations = []
         for obj_type in obj_types:
             assert obj_type in self.attr_dict
@@ -1672,7 +1669,7 @@ class SuperSegmentationObject(SegmentationBase):
                          save: bool = True):
         """
         Wrapper function for mapping all existing cell organelles (as defined in
-        :py:attr:`~config['existing_cell_organelles']`).
+        :py:attr:`~config['process_cell_organelles']`).
 
         Args:
             obj_types: Type of :class:`~syconn.reps.super_segmentation_object
@@ -1680,9 +1677,10 @@ class SuperSegmentationObject(SegmentationBase):
             save: Saves the attribute dict of this SSV object afterwards.
         """
         if obj_types is None:
-            obj_types = self.config['existing_cell_organelles']
+            obj_types = self.config['process_cell_organelles']
         self.aggregate_segmentation_object_mappings(obj_types, save=save)
         for obj_type in obj_types:
+            # TODO: remove handling of sj?
             self.apply_mapping_decision(obj_type, save=save,
                                         correct_for_background=obj_type == "sj")
 
@@ -1714,7 +1712,7 @@ class SuperSegmentationObject(SegmentationBase):
         """
         self.load_attr_dict()
         self._map_cellobjects()
-        for sv_type in self.config['existing_cell_organelles'] + ["sv", "syn_ssv"]:
+        for sv_type in self.config['process_cell_organelles'] + ["sv", "syn_ssv"]:
             _ = self._load_obj_mesh(obj_type=sv_type, rewrite=False)
         self.calculate_skeleton()
 
@@ -2151,11 +2149,10 @@ class SuperSegmentationObject(SegmentationBase):
         # (last two colors correspond to background and undpredicted vertices (k=0))
         cols = None
         if dest_path is not None:
-            if 'spiness' in semseg_key:
+            if 'spiness' in semseg_key or 'dnho' in semseg_key or 'do' in semseg_key:
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
-                cols = (cols * 255).astype(np.uint8)
             elif 'axon' in semseg_key:
                 # cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                 #                  [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1],
@@ -2165,10 +2162,28 @@ class SuperSegmentationObject(SegmentationBase):
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                                  [0.8, 0.8, 0.1, 1], [0.9, 0.9, 0.9, 1],
                                  [0.1, 0.1, 0.9, 1]])
-                cols = (cols * 255).astype(np.uint8)
+            elif 'ads' in semseg_key:
+                # dendrite, axon, soma, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                                 [0.1, 0.1, 0.1, 1], [0.1, 0.1, 0.9, 1]])
+            elif 'abt' in semseg_key:
+                # axon, bouton, terminal, unpredicted
+                cols = np.array([[0.9, 0.2, 0.2, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.8, 0.8, 0.1, 1], [0.1, 0.1, 0.9, 1]])
+            elif 'dnh' in semseg_key:
+                # dendrite, neck, head, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.1, 0.1, 0.1, 1],
+                                 [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.9, 1]])
+            elif '3models' in semseg_key or 'dasbt' in semseg_key:
+                # dendrite, axon, soma, bouton, terminal, neck, head, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.6, 0.1, 0.1, 1],
+                                 [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.4, 0.4, 0.8, 1], [0.8, 0.8, 0.1, 1],
+                                 [0.9, 0.4, 0.4, 1], [0.1, 0.1, 0.9, 1]])
             else:
                 raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))
+            cols = (cols * 255).astype(np.uint8)
         return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
@@ -2187,7 +2202,8 @@ class SuperSegmentationObject(SegmentationBase):
             k: int
                 Number of nearest neighbors (NN) during k-NN classification
             ds_vertices: int
-                striding factor for vertices
+                striding factor for vertices, uses ``max(1, ds_vertices // 10)`` if
+                ``len(vertices) < 5e6``.
             ignore_labels: List[int]
                 Vertices with labels in `ignore_labels` will be ignored during
                 majority vote, e.g. used to exclude unpredicted vertices.
@@ -2203,6 +2219,8 @@ class SuperSegmentationObject(SegmentationBase):
             ignore_labels = []
         coords = np.array(coords) * self.scaling
         vertices = self.mesh[1].reshape((-1, 3))
+        if len(vertices) == 0:
+            return np.zeros((0, ), dtype=np.int32)
         if len(vertices) < 5e6:
             ds_vertices = max(1, ds_vertices // 10)
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
@@ -2365,7 +2383,8 @@ class SuperSegmentationObject(SegmentationBase):
         write_skeleton_kzip(dest_path, [new_anno])
 
     def mergelist2kzip(self, dest_path: Optional[str] = None):
-        self.load_attr_dict()
+        if len(self.attr_dict) == 0:
+            self.load_attr_dict()
         kml = knossos_ml_from_sso(self)
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
@@ -2497,7 +2516,7 @@ class SuperSegmentationObject(SegmentationBase):
                 or None to use default values (see :func:`~mesh2kzip`).
             individual_sv_meshes: Export meshes of cell supervoxels individually.
             object_meshes: Defaults to subcellular organelles defined in config.yml
-                ('existing_cell_organelles').
+                ('process_cell_organelles').
             synssv_instead_sj: If True, will use 'syn_ssv' objects instead of 'sj'.
 
 
@@ -2526,7 +2545,7 @@ class SuperSegmentationObject(SegmentationBase):
             attr_keys.remove('rag')
 
         if object_meshes is None:
-            object_meshes = list(self.config['existing_cell_organelles']) + ['sv']
+            object_meshes = list(self.config['process_cell_organelles']) + ['sv', 'syn_ssv']
         else:
             object_meshes = list(object_meshes)
 
@@ -2864,17 +2883,6 @@ class SuperSegmentationObject(SegmentationBase):
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
-    def skel_features(self, feature_context_nm, overwrite=False):
-        features = self._load_skelfeatures(feature_context_nm)
-        if features is None or overwrite:
-            if not "assoc_sj" in self.skeleton:
-                ssh.associate_objs_with_skel_nodes(self)
-            features = ssh.extract_skel_features(self, feature_context_nm=
-            feature_context_nm)
-            self._save_skelfeatures(feature_context_nm, features,
-                                    overwrite=True)
-        return features
-
     def write_axpred_rfc(self, dest_path=None, k=1):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
@@ -2895,50 +2903,6 @@ class SuperSegmentationObject(SegmentationBase):
         self._pred2mesh(self.skeleton["nodes"] * self.scaling,
                         self.skeleton[key], k=k, dest_path=dest_path,
                         ply_fname=key + ".ply")
-
-    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None, max_dist=0, leave_out_classes=()):
-        """
-        Predicting class c
-
-        Parameters
-        ----------
-        sc : SkelClassifier
-            Classifier to predict "axoness" or "spiness" for every node on
-            self.skeleton["nodes"]. Target type is defined in SkelClassifier
-        clf_name : str
-        feature_context_nm : int
-        max_dist : int
-            Defines the maximum path length from a source node for collecting
-            neighboring nodes to calculate an average prediction for
-            the source node.
-        leave_out_classes:
-
-        Returns
-        -------
-
-        """
-        assert sc.target_type in ["axoness", "spiness"]
-        if feature_context_nm is None:
-            feature_context_nm = self.config['skeleton']['feature_context_rfc'][sc.target_type]
-        clf = sc.load_classifier(clf_name, feature_context_nm, production=True,
-                                 leave_out_classes=leave_out_classes)
-        probas = clf.predict_proba(self.skel_features(feature_context_nm))
-        pred = []
-        if max_dist == 0:
-            pred = np.argmax(probas, axis=1)
-        else:
-            for i_node in range(len(self.skeleton["nodes"])):
-                paths = nx.single_source_dijkstra_path(
-                    self.weighted_graph(), i_node, max_dist)
-                neighs = np.array(list(paths.keys()), dtype=np.int64)
-                c = np.argmax(np.sum(probas[neighs], axis=0))
-                pred.append(c)
-
-        pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
-                                          max_dist)
-        self.skeleton[pred_key] = np.array(pred, dtype=np.int32)
-        self.skeleton[pred_key + "_proba"] = np.array(probas, dtype=np.float32)
-        self.save_skeleton(to_object=True, to_kzip=False)
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         """
@@ -3161,11 +3125,6 @@ class SuperSegmentationObject(SegmentationBase):
                              dest_path=dest_path)
 
     # --------------------------------------------------------------- CELL TYPES
-    def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
-                          feature_context_nm=25000):
-        raise DeprecationWarning('This method is deprecated. Use '
-                                 '"predict_nodes" instead!')
-
     def predict_celltype_multiview(self, model, pred_key_appendix, model_tnet=None, view_props=None,
                                    onthefly_views=False, overwrite=True, model_props=None,
                                    verbose: bool = False, save_to_attr_dict: bool = True):
@@ -3375,7 +3334,11 @@ class SuperSegmentationObject(SegmentationBase):
             vx_count = 0
         obj_vol = vx_count * np.prod(self.scaling) / 1e9  # in um^3
         path_length = self.total_edge_length(compartments_of_interest) / 1e3  # in um
-        return obj_vol / path_length
+        
+        if path_length == 0:
+            return 0.0
+        else:
+            return obj_vol / path_length
 
 
 # ------------------------------------------------------------------------------
@@ -3537,20 +3500,31 @@ def semsegaxoness_predictor(args) -> List[int]:
 def semsegaxoness2skel(sso: SuperSegmentationObject, map_properties: dict,
                        pred_key: str, max_dist: int):
     """
-
+    Populate the following two skeleton keys:
+        * "{}_avg{}".format(pred_key, max_dist)
+        * "{}_avg{}_comp_maj".format(pred_key, max_dist)
     Args:
         sso: SuperSegmentationObject.
         map_properties: Properties used to map the vertex predictions to the skeleton nodes.
         pred_key: Used for retrieving vertex labels and to store the mapped node labels in the skeleton.
         max_dist: Distance used for majority vote in ``majorityvote_skeleton_property``.
 
+    Notes:
+        * Node predictions will be zero if no mesh vertices are available or no nodes exist.
+
     Returns:
 
     """
     if sso.skeleton is None:
         sso.load_skeleton()
-    if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
-        print(f"Skeleton of {sso} has zero nodes.")
+    if sso.skeleton is None:
+        log_reps.warning(f"Skeleton of {sso} hdoes not exist.")
+        return
+    if len(sso.skeleton["nodes"]) == 0 or len(sso.mesh[1]) == 0:
+        log_reps.warning(f"Skeleton of {sso} has zero nodes or no mesh vertices.")
+        sso.skeleton["{}_avg{}".format(pred_key, max_dist)] = np.zeros((len(sso.skeleton['nodes']), 1))
+        sso.skeleton["{}_avg{}_comp_maj".format(pred_key, max_dist)] = np.zeros((len(sso.skeleton['nodes']), 1))
+        sso.save_skeleton()
         return
     # vertex predictions
     node_preds = sso.semseg_for_coords(

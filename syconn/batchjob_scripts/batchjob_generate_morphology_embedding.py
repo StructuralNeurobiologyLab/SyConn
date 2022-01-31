@@ -31,9 +31,11 @@ use_point_models = args[2]
 assert ssv_ids.size == np.unique(ssv_ids).size
 ssd = SuperSegmentationDataset()
 if use_point_models:
+    ssv_id_chunks = basics.chunkify_successive(ssv_ids, 10000)
     ssd_kwargs = dict(working_dir=ssd.working_dir, config=ssd.config)
-    ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in ssv_ids]
-    infere_cell_morphology_ssd(ssv_params)
+    for ssv_id_chunk in ssv_id_chunks:
+        ssv_params = [dict(ssv_id=ssv_id, **ssd_kwargs) for ssv_id in ssv_id_chunk]
+        infere_cell_morphology_ssd(ssv_params)
 else:
     ncpus = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
     n_worker = 2

@@ -310,7 +310,6 @@ def map_synssv_objects(synssv_version: Optional[str] = None, log: Optional[Logge
 
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(map_synssv_objects_thread, multi_params, nb_cpus=nb_cpus)
-
     else:
         _ = qu.batchjob_script(multi_params, "map_synssv_objects",
                                remove_jobfolder=True, log=log)
@@ -334,7 +333,8 @@ def map_synssv_objects_thread(args):
     ssv_partners = ssv_partners[syn_prob > syn_threshold]
 
     for ssv_id in ssv_obj_ids:
-        # enable of SegmentationObjects, including their meshes -> reuse in typedsyns2mesh call
+        # enable cache of syn_ssv SegmentationObjects, including their meshes
+        # -> reused in typedsyns2mesh call
         ssv = ssd.get_super_segmentation_object(ssv_id, caching=True)
         ssv.load_attr_dict()
 

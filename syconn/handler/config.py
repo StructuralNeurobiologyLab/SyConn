@@ -92,7 +92,9 @@ class Config(object):
         Reads the content stored in the config file.
         """
         try:
-            self._config = yaml.load(open(self.path_config, 'r'), Loader=yaml.FullLoader)
+            with open(self.path_config, 'r') as f:
+                self._config = yaml.load(f, Loader=yaml.FullLoader)
+                
             self.initialized = True
         except FileNotFoundError:
             pass
@@ -358,16 +360,16 @@ class DynConfig(Config):
         return self.entries['paths']['kd_golgi']
 
     @property
-    def kd_organells_paths(self) -> Dict[str, str]:
+    def kd_organelles_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle probability maps
 
         Returns:
-            Dictionary containg the paths to ``KnossosDataset`` of available
-            cellular containing ``global_params.config['existing_cell_organelles']``.
+            Dictionary containing the paths to ``KnossosDataset`` of available
+            cellular containing ``global_params.config['process_cell_organelles']``.
         """
         path_dict = {k: self.entries['paths']['kd_{}'.format(k)] for k in
-                     self['existing_cell_organelles']}
+                     self['process_cell_organelles']}
         return path_dict
 
     @property
@@ -377,10 +379,10 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containing the paths to ``KnossosDataset`` of available
-            cellular organelles ``global_params.config['existing_cell_organelles']``.
+            cellular organelles ``global_params.config['process_cell_organelles']``.
         """
         path_dict = {k: "{}/knossosdatasets/{}_seg/".format(
-            self.working_dir, k) for k in self['existing_cell_organelles']}
+            self.working_dir, k) for k in self['process_cell_organelles']}
         return path_dict
 
     @property
@@ -540,7 +542,6 @@ class DynConfig(Config):
             and ``other`` (soma and axon) via 2D projections (-> semantic segmentation).
         """
         return self.model_dir + '/spiness/model.pts'
-        # return self.model_dir + '/spiness/'
 
     @property
     def mpath_axonsem(self) -> str:
@@ -550,7 +551,6 @@ class DynConfig(Config):
             dendrites and somata via 2D projections.
         """
         return self.model_dir + '/axoness_semseg/model.pts'
-        # return self.model_dir + '/axoness_semseg/'
 
     @property
     def mpath_compartment_pts(self) -> str:

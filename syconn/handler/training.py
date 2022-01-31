@@ -1,6 +1,7 @@
 import subprocess
 from multiprocessing import Process, Queue, Manager
 import time
+import sys
 
 
 def start_training(q_in: Queue, dc: dict):
@@ -10,7 +11,7 @@ def start_training(q_in: Queue, dc: dict):
             break
         script_path, args = q_in.get()
         args_str = ' '.join([f'--{k}={v}' for k, v in args.items()])
-        cmd_str = f'python {script_path} {args_str}'
+        cmd_str = f'{sys.executable} {script_path} {args_str}'
         print(f'Started training with command {cmd_str}.')
         process = subprocess.Popen(cmd_str, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         out_str, err = process.communicate()

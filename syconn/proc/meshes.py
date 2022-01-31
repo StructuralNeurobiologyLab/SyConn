@@ -20,12 +20,18 @@ from scipy.ndimage import zoom
 from scipy.ndimage.morphology import binary_erosion
 from sklearn.decomposition import PCA
 from zmesh import Mesher
-import open3d as o3d
-from vigra.filters import gaussianGradient
+try:
+    from vigra.filters import gaussianGradient
+except ImportError:
+    pass  # for sphinx build
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 
 from .image import apply_pca
 from .. import global_params
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn, VoxelStorageLazyLoading
 from ..handler.basics import write_data2kzip, data2kzip
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
@@ -519,7 +525,7 @@ def _mesh_loader(so):
 
 def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplices: int = 3,
                    nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
-                   cmap: Optional = None, alpha: float = 1.0, use_new_subfold: bool = True):
+                   cmap: Optional[Iterable[tuple]] = None, alpha: float = 1.0, use_new_subfold: bool = True):
     """
     Merge meshes of SegmentationObjects. This will cache :py:class:`~syconn.reps.segmentation.SegmentationObject`.
 
@@ -1120,7 +1126,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
     Args:
-        voxel_iter: Iterator of binary voxel mak (3D cube) and cube offset (in voxels).
+        voxel_iter: Iterator of binary voxel mask (3D cube) and cube offset (in voxels).
         scale: Size of voxels in `mask_list` in nm (x, y, z).
         vertex_size: In nm. Resolution used to simplify mesh.
         boundary_struct: Connectivity of kernel used to determine boundary
@@ -1129,7 +1135,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
             "An important parameter of the function is depth that defines the depth of the octree
             used for the surface reconstruction and hence implies the resolution of the resulting
             triangle mesh. A higher depth value means a mesh with more details."
-        compute_connected_components:< Compute connected components of mesh. Return list of meshes.
+        compute_connected_components: Compute connected components of mesh. Return list of meshes.
         voxel_size_simplify: Voxel size in nm when applying `simplify_vertex_clustering`. Defaults to `vertex_size`.
         min_vert_num: Minimum number of vertices of the connected component meshes (only applied if
             `compute_connected_components=True`).
@@ -1140,12 +1146,12 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         std_ratio: Standard deviation of distance between points used as threshold for filtering. See
             http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
 
-    Notes: Use `mask_list` with cubes with 1-voxel-overlap to guarantee that boundaries that align with
-        the 3D  array border are identified correctly.
+    Notes: Use `voxel_iter` with cubes that have 1-voxel-overlap to guarantee that segmentation instance boundaries
+        that align with the 3D  array border are identified correctly.
 
     Returns:
         Flat Index/triangle, vertex and normals array of the mesh. List[ind, vert, norm] if
-        `compute_connected_components=True`.
+        ``compute_connected_components=True``.
     """
     if voxel_size_simplify is None:
         voxel_size_simplify = vertex_size
@@ -1214,6 +1220,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
                 continue
             m = copy.deepcopy(mesh)
             m.remove_triangles_by_mask(triangle_clusters != ii)
+            m.remove_unreferenced_vertices()
             mesh_.append(m)
         mesh = mesh_
     else:
@@ -1227,7 +1234,8 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
 
 
 def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
-                          voxel_dc: Optional[VoxelStorage] = None, **gen_kwgs):
+                          voxel_dc: Optional[Union[VoxelStorageLazyLoading, VoxelStorageDyn]] = None,
+                          **gen_kwgs) -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
 
     Args:
@@ -1239,20 +1247,27 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
 
     """
     assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
-    if voxel_dc is None:
-        voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
-    if isinstance(voxel_dc, VoxelStorageDyn):
-        voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
-        return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1, **gen_kwgs)
+    if segobj._voxel_list is None:
+        if segobj.type == 'cs':
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
+            voxels = np.array(voxel_dc.get_voxel_cache(segobj.id), dtype=np.uint32)
+        else:
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageLazyLoading(segobj.voxel_path)
+            voxels = np.array(voxel_dc[segobj.id], dtype=np.uint32)
     else:
-        # no overlap possible, stored as a single mask anyway.
-        bin_arrs, block_offsets = voxel_dc[segobj.id]
-        assert len(bin_arrs) == 1, 'Multiple mask cubes are not expected.'
-        return gen_mesh_voxelmask(zip(bin_arrs, block_offsets), segobj.scaling, overlap=0, **gen_kwgs)
+        voxels = np.array(segobj._voxel_list, dtype=np.uint32)
+    abs_offset = np.min(voxels, axis=0)
+    # reduce offset by one -> voxels in 3D cube will have an additional offset of 1 which creates a border of 0s.
+    voxels -= abs_offset - 1
+    id_mask = np.zeros(np.max(voxels, axis=0) + 2, dtype=np.bool)
+    id_mask[voxels[:, 0], voxels[:, 1], voxels[:, 2]] = True
+    return gen_mesh_voxelmask(zip([id_mask], [abs_offset - 1]), segobj.scaling, overlap=0, **gen_kwgs)
 
 
-def calc_cell_mesh_from_points(segobj: 'segmentation.SegmentationObject', **gen_kwgs):
+def calc_cell_mesh_from_points(segobj: 'segmentation.SegmentationObject', **gen_kwgs) \
+        -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
     voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
-    return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1,
-                              compute_connected_components=False, **gen_kwgs)
+    return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1, compute_connected_components=False, **gen_kwgs)

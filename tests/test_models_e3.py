@@ -62,7 +62,7 @@ def test_load_cnn_celltype():
 # point based models
 def test_load_cnn_compartment_pt():
     _setup_working_dir()
-    _ = get_cpmt_model_pts()
+    _ = get_cmpt_model_pts()
 
 
 def test_load_cnn_glia_pt():

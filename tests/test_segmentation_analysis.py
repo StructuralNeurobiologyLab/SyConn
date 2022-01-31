@@ -3,7 +3,7 @@
 # All rights reserved
 
 from syconn.extraction.find_object_properties import detect_cs, detect_cs_64bit, detect_seg_boundaries, \
-    find_object_properties, find_object_properties_cs
+    find_object_properties, find_object_properties_cs_64bit
 import numpy as np
 from syconn.global_params import config
 from syconn.handler.basics import chunkify_weighted
@@ -135,7 +135,7 @@ def test_detect_cs_64bit():
     _helpertest_detect_cs_64bit(np.array([0, 0, 6]), stencil, cube_size)
 
 
-def test_find_object_properties_cs():
+def test_find_object_properties_cs_64bit():
     sample = np.zeros((20, 20, 20), dtype=np.uint64)
     sample[5, 5, 5] = cs_id_to_partner_inverse([100, 200])
     sample[19, 15, 5] = cs_id_to_partner_inverse([50, 200])
@@ -143,7 +143,7 @@ def test_find_object_properties_cs():
     rep_coords1, bounding_boxes1, sizes1 = find_object_properties(sample)
     sample = np.array([cs_id_to_partner_ids_vec([k])[0] for k in sample.flatten()],
                       dtype=np.uint64).reshape((20, 20, 20, 2))
-    rep_coords2, bounding_boxes2, sizes2 = find_object_properties_cs(sample)
+    rep_coords2, bounding_boxes2, sizes2 = find_object_properties_cs_64bit(sample)
     for k in sizes1:  # keys are tuples of IDs
         # get properties from 32 bit extraction method
         s1 = sizes1[k]
@@ -209,4 +209,4 @@ def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
 
 
 if __name__ == '__main__':
-    test_find_object_properties_cs()
+    test_find_object_properties_cs_64bit()

@@ -20,13 +20,13 @@ from . import log_reps
 from .rep_helper import SegmentationBase
 from .segmentation import SegmentationDataset, SegmentationObject
 from .super_segmentation_helper import assemble_from_mergelist
-from .super_segmentation_helper import associate_objs_with_skel_nodes
 from .super_segmentation_helper import view_embedding_of_sso_nocache
 from .super_segmentation_object import SuperSegmentationObject
 from .. import global_params
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
-from ..backend.storage import BinarySearchStore
+from ..handler import basics
+from ..backend.storage import BinarySearchStore, bss_get_attr_helper
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 
@@ -108,7 +108,7 @@ class SuperSegmentationDataset(SegmentationBase):
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None, config: DynConfig = None,
                  sso_caching: bool = False, sso_locking: bool = False, create: bool = False,
                  sd_lookup: Optional[Dict[str, SegmentationDataset]] = None,
-                 cache_properties: Optional[List[str]] = None):
+                 cache_properties: Optional[List[str]] = None, overwrite: bool = False):
         """
         Args:
             working_dir: Path to the working directory.
@@ -138,11 +138,10 @@ class SuperSegmentationDataset(SegmentationBase):
         self._mapping_dict = None
         self.sso_caching = sso_caching
         self.sso_locking = sso_locking
-        self._mapping_dict_reversed = None
         self._mapping_lookup_reverse = None
+        self.overwrite = overwrite
 
         self._type = ssd_type
-        self._id_changer = []
         self._ssv_ids = None
         # cache mechanism
         self._ssoid2ix = None
@@ -275,14 +274,6 @@ class SuperSegmentationDataset(SegmentationBase):
         return os.path.exists(self.mapping_dict_path)
 
     @property
-    def mapping_dict_reversed_exists(self) -> bool:
-        """
-        Checks if the inverse mapping dictionary exists (supervoxel ID to
-        super-supervoxel ID).
-        """
-        return os.path.exists(self.mapping_dict_reversed_path)
-
-    @property
     def mapping_dict_path(self) -> str:
         """
         Path to the mapping dictionary pkl file.
@@ -297,32 +288,11 @@ class SuperSegmentationDataset(SegmentationBase):
         return self.path + "/mapping_lookup_reverse.h5"
 
     @property
-    def mapping_dict_reversed_path(self) -> str:
-        """
-        Path to the inverse mapping dictionary pkl file.
-        """
-        return self.path + "/mapping_dict_reversed.pkl"
-
-    @property
-    def id_changer_path(self) -> str:
-        """
-        Path to the ID change array.
-        """
-        return self.path + "/id_changer.npy"
-
-    @property
     def version_dict_exists(self) -> bool:
         """
         Checks whether the version dictionary exists at :py:attr:`~version_dict_path`.
         """
         return os.path.exists(self.version_dict_path)
-
-    @property
-    def id_changer_exists(self) -> bool:
-        """
-        Checks whether the version dictionary exists at :py:attr:`~id_changer_path`.
-        """
-        return os.path.exists(self.id_changer_path)
 
     @property
     def mapping_dict(self) -> Dict[int, np.ndarray]:
@@ -336,41 +306,33 @@ class SuperSegmentationDataset(SegmentationBase):
                 self._mapping_dict = {}
         return self._mapping_dict
 
-    @property
-    def mapping_dict_reversed(self) -> Dict[int, int]:
-        """
-        Dictionary which contains the super-supervoxel ID for every supervoxel.
-        """
-        if self._mapping_dict_reversed is None:
-            if self.mapping_dict_reversed_exists:
-                self.load_mapping_dict_reversed()
-            else:
-                self._mapping_dict_reversed = {}
-                for k, v in self.mapping_dict.items():
-                    for ix in v:
-                        self._mapping_dict_reversed[ix] = k
-                self.save_mapping_dict_reversed()
-        return self._mapping_dict_reversed
-
-    def sv2ssv_ids(self, ids: np.ndarray) -> Dict[int, int]:
+    def sv2ssv_ids(self, ids: np.ndarray, nb_cpus=1) -> Dict[int, int]:
         """
         Use :attr:`~mapping_lookup_reverse` to query the cell ID for a given array of supervoxel IDs.
         IDs that are not in :attr:`~sv_ids` will not be added to the output dict.
 
         Args:
-            ids: IDs to find the corresponding cell ID.
+            ids: Unique IDs to find the corresponding cell ID.
+            nb_cpus:
 
         Returns:
             Dictionary with supervoxel ID as key and cell ID as value.
         """
-        lookup = dict()
-        queries = np.intersect1d(ids, self.sv_ids)
-        for sv_id, ssv_id in zip(queries, self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')):
-            lookup[sv_id] = ssv_id
-        return lookup
-
+        assert np.ndim(ids) == 1
+        # explicitly cast to uint64 because if `ids` is a list of python int intersect auto-casts to float
+        queries = np.intersect1d(ids, self.sv_ids).astype(np.uint64)
+        log_reps.debug(f'Finished intersection of {len(ids)} query IDs.')
+        if nb_cpus <= 1:
+            query_res = self.mapping_lookup_reverse.get_attributes(queries, 'ssv_ids')
+        else:
+            params = [(self.mapping_lookup_reverse, ch, 'ssv_ids') for ch in np.array_split(queries, nb_cpus)]
+            query_res = sm.start_multiprocess(bss_get_attr_helper, params, nb_cpus=nb_cpus, debug=nb_cpus <= 1)
+            query_res = np.concatenate(query_res)
+        log_reps.debug('Finished queries.')
+        return dict(zip(queries, query_res))
+    
     @property
-    def mapping_lookup_reverse(self):
+    def mapping_lookup_reverse(self) -> BinarySearchStore:
         if self._mapping_lookup_reverse is None:
             self._mapping_lookup_reverse = BinarySearchStore(self.mapping_lookup_reverse_path)
         return self._mapping_lookup_reverse
@@ -379,10 +341,15 @@ class SuperSegmentationDataset(SegmentationBase):
         """Create data structure for efficient look-ups from supervoxel ID to cell ID,
         see :py:class:`syconn.backend.storage.BinarySearchStore`.
         """
-        # TODO: use mapping dict instead of mapping dict reversed -> then remove mapping dict reversed code
-        ids = np.array(list(self.mapping_dict_reversed.keys()), dtype=np.uint64)
-        ssv_ids = np.array(list(self.mapping_dict_reversed.values()), dtype=np.uint64)
-        BinarySearchStore(self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids))
+        ids, ssv_ids = [], []
+        for ssv_id, sv_ids in self.mapping_dict.items():
+            ssv_ids.extend([ssv_id] * len(sv_ids))
+            ids.extend(list(sv_ids))
+        ids = np.array(ids, dtype=np.uint64)
+        ssv_ids = np.array(ssv_ids, dtype=np.uint64)
+        BinarySearchStore(
+            self.mapping_lookup_reverse_path, id_array=ids, attr_arrays=dict(ssv_ids=ssv_ids),
+            overwrite=self.overwrite)
 
     @property
     def ssv_ids(self) -> np.ndarray:
@@ -431,16 +398,8 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         return self.mapping_lookup_reverse.id_array
 
-    @property
-    def id_changer(self) -> List[int]:
-        """
-        Used to agglomerate synapse fragments ('syn', supervoxel-level) to whole synapses between cells ('syn_ssv').
-        """
-        if len(self._id_changer) == 0:
-            self.load_id_changer()
-        return self._id_changer
-
-    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False):
+    def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False) -> \
+            Optional[np.ndarray]:
         """
         Todo:
             * remove 's' appendix in file names.
@@ -456,7 +415,7 @@ class SuperSegmentationDataset(SegmentationBase):
         if os.path.exists(self.path + prop_name + ".npy"):
             return np.load(self.path + prop_name + ".npy", allow_pickle=True)
         elif os.path.exists(self.path + prop_name + "s.npy"):
-            log_reps.warn(f'Using "s" appendix in numpy cache file '
+            log_reps.warning(f'Using "s" appendix in numpy cache file '
                           f'"{self.path + prop_name + "s.npy"}", this is deprecated.')
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
@@ -466,16 +425,6 @@ class SuperSegmentationDataset(SegmentationBase):
                 raise FileNotFoundError(msg)
             if not suppress_warning:
                 log_reps.warning(msg)
-
-    def sv_id_to_ssv_id(self, sv_id: int) -> int:
-        """
-        Args:
-            sv_id: Supervoxel ID.
-
-        Returns:
-            The super-supervoxel ID which `sv_id` is part of.
-        """
-        return self.id_changer[sv_id]
 
     def get_segmentationdataset(self, obj_type: str) -> SegmentationDataset:
         assert obj_type in self.version_dict
@@ -541,9 +490,57 @@ class SuperSegmentationDataset(SegmentationBase):
                                                               caching=caching))
         return sso
 
+    def store_total_edge_lengths(self, ax_pred_key: Optional[str] = "axoness_avg10000", overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
+        """Stores total edge lengths of all the cells in this dataset 
+        in nanometers. Same ordering as :attr:`~.ssv_ids`.
+
+        Args:
+            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`
+            overwrite: Overwrite the `total_edge_lengths.npy` file. Defaults to False.
+            nb_cpus: CPUs per worker. Defaults to None.
+        """
+        if os.path.exists(self.path + "total_edge_lengths.npy") and not overwrite:
+            log_reps.warning(f"Total edge lengths already exist in {self.path}. To overwrite, set overwrite=True.")
+            return
+
+        if nb_cpus is None:
+            import multiprocessing
+            nb_cpus = multiprocessing.cpu_count()
+
+        params = [(ch, ax_pred_key) for ch in list(basics.chunkify_successive(self.ssv_ids, 500))]
+
+        total_edge_lengths = np.concatenate(sm.start_multiprocess_imap(get_total_edge_lengths, params=params, nb_cpus=nb_cpus), axis=0)
+
+        np.save(self.path + "total_edge_lengths.npy", total_edge_lengths)
+
+    def store_path_densities_seg_objs(self, obj_type: str, compartments_of_interest: Optional[list] = None, ax_pred_key: Optional[str] = 'axoness_avg10000', overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
+        """Stores path densities of all the cells in this dataset.
+        Same ordering as :attr:`~.ssv_ids`.
+
+        Args:
+            obj_type: Key to any available sub-cellular structure.
+            compartments_of_interest: Which compartments to take into account for calculation. axon: 1, dendrite: 0, soma: 2
+            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`, only used if `compartments_of_interest` was set. Defaults to 'axoness_avg10000'.
+            overwrite: Overwrite the `<obj_type>_path_densities.npy` file. Defaults to False.
+            nb_cpus: CPUs per worker. Defaults to None.
+        """
+        if os.path.exists(self.path + obj_type + "_path_densities.npy") and not overwrite:
+            log_reps.warning(f"Path densities for {obj_type} already exist in {self.path}. To overwrite, set overwrite=True.")
+            return
+
+        if nb_cpus is None:
+            import multiprocessing
+            nb_cpus = multiprocessing.cpu_count()
+
+        params = [(obj_type, ch, compartments_of_interest, ax_pred_key) for ch in list(basics.chunkify_successive(self.ssv_ids, 500))]
+
+        path_densities = np.concatenate(sm.start_multiprocess_imap(get_path_density_seg_obj, params=params, nb_cpus=nb_cpus), axis=0)
+
+        np.save(self.path + obj_type + "_path_densities" + ".npy", path_densities)
+
     def save_dataset_shallow(self, overwrite: bool = False):
         """
-        Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict` and :py:attr:`~id_changer`.
+        Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict`.
 
         Args:
             overwrite: Do not replace existing files.
@@ -552,13 +549,9 @@ class SuperSegmentationDataset(SegmentationBase):
             self.save_version_dict()
         if not self.mapping_dict_exists or overwrite:
             self.save_mapping_dict()
-        if not self.mapping_dict_reversed_exists or overwrite:
-            self.save_mapping_dict_reversed()
-        if not self.id_changer_exists or overwrite:
-            self.save_id_changer()
 
     def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
-                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True, overwrite=False):
+                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
@@ -575,33 +568,12 @@ class SuperSegmentationDataset(SegmentationBase):
             nb_cpus: CPUs per worker.
             use_batchjob: Use batchjob processing instead of local multiprocessing.
             new_mapping: Whether to apply new mapping (see :func:`~mapping_dict`).
-            overwrite: Remove existing SSD folder, if False and a folder already
-                exists it raises FileExistsError.
 
         Returns:
 
         """
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
-                          new_mapping=new_mapping, overwrite=overwrite, use_batchjob=use_batchjob)
-
-    def predict_cell_types_skelbased(self, stride: int = 1000, nb_cpus=1):
-        """
-        Not used anymore.
-        """
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir])
-
-        if not qu.batchjob_enabled():
-            sm.start_multiprocess(predict_cell_type_skelbased_thread,
-                                  multi_params, nb_cpus=nb_cpus)
-
-        else:
-            qu.batchjob_script(multi_params, "predict_cell_type_skelbased",
-                               n_cores=nb_cpus, remove_jobfolder=True)
+                          new_mapping=new_mapping, overwrite=self.overwrite, use_batchjob=use_batchjob)
 
     def save_version_dict(self):
         """
@@ -626,43 +598,12 @@ class SuperSegmentationDataset(SegmentationBase):
         else:
             log_reps.warn(f'No entries in mapping dict of {self}.')
 
-    def save_mapping_dict_reversed(self):
-        """
-        Save the reversed mapping dictionary to a `.pkl` file.
-        """
-        if len(self.mapping_dict_reversed) > 0:
-            write_obj2pkl(self.mapping_dict_reversed_path,
-                          self._mapping_dict_reversed)
-        else:
-            log_reps.warn(f'No entries in reverse mapping dict of {self}.')
-
     def load_mapping_dict(self):
         """
         Load the mapping dictionary from the `.pkl` file.
         """
         assert self.mapping_dict_exists
         self._mapping_dict = load_pkl2obj(self.mapping_dict_path)
-
-    def load_mapping_dict_reversed(self):
-        """
-        Load the reversed mapping dictionary from the `.pkl` file.
-        """
-        assert self.mapping_dict_reversed_exists
-        self._mapping_dict_reversed = load_pkl2obj(self.mapping_dict_reversed_path)
-
-    def save_id_changer(self):
-        """
-        Save the ID changer as `.npy` file.
-        """
-        if len(self._id_changer) > 0:
-            np.save(self.id_changer_path, self._id_changer)
-
-    def load_id_changer(self):
-        """
-        Load the ID changer from the `.npy` file.
-        """
-        assert self.id_changer_exists
-        self._id_changer = np.load(self.id_changer_path)
 
     def enable_property_cache(self, property_keys: List[str]):
         """
@@ -677,6 +618,8 @@ class SuperSegmentationDataset(SegmentationBase):
         if self._ssoid2ix is None:
             self._ssoid2ix = {k: ix for ix, k in enumerate(self.ssv_ids)}
         self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
+
+    
 
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False, attr_keys: Iterable = (),
@@ -706,6 +649,20 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
         overwrite: Remove existing SSD folder, if False and a folder already exists it raises FileExistsError.
     """
+
+    # This is to only remove files for overwriting that are actually generated here; e.g. mapping_lookup_reverse
+    # is not written here and thus should not be deleted here if overwrite = True.
+    deep_ssd_storage_pths = [
+        ssd.mapping_dict_path,
+        ssd.mapping_dict_path,
+        ssd.version_dict_path,
+        f'{ssd.path}/id.npy',
+        f'{ssd.path}/size.npy',
+        f'{ssd.path}/sv.npy',
+        f'{ssd.path}/rep_coord.npy',
+        f'{ssd.path}/bounding_box.npy',
+    ]
+
     # check if ssv storages already exists
     if new_mapping and os.path.exists(ssd.path) and len(glob.glob(ssd.path + '/so_storage/*')) > 1:
         if not overwrite:
@@ -713,7 +670,13 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
             log_reps.error(msg)
             raise FileExistsError(msg)
         else:
-            shutil.rmtree(ssd.path)
+            for cur_pth in deep_ssd_storage_pths:
+                if not os.path.exists(cur_pth):
+                    continue
+                if os.path.isdir(cur_pth):
+                    shutil.rmtree(cur_pth)
+                else:
+                    os.remove(cur_pth)
 
     ssd.save_dataset_shallow(overwrite=overwrite)
     if n_jobs is None:
@@ -900,33 +863,6 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     return voxels
 
 
-def predict_cell_type_skelbased_thread(args):
-    """Skeleton-based celltype prediction"""
-    # TODO: check functionality, use 'predict_nodes'!
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                associate_objs_with_skel_nodes(ssv, ("sj", "mi", "vc"))
-                ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-            except:
-                pass
-
-
 def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
                              new_version: str, target_wd: Optional[str] = None,
                              n_jobs: int = 1, safe: bool = True):
@@ -968,38 +904,6 @@ def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
 
 
-def preproc_sso_skelfeature_thread(args: Tuple):
-    """
-    Helper function to compute skeleton feature of a cell reconstruction. See
-    :func:`~reps.super_segmentation_object.SuperSegmentationObject.skel_features`
-    for details.
-
-    Args:
-        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
-            initialize the :class:`~syconn.reps.super_segmentation_dataset
-            .SuperSegmentationDataset`.
-    """
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
-            log_reps.warning("Skeleton of SSV %d has zero nodes." % ssv_id)
-            continue
-        for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
-            try:
-                _ = ssv.skel_features(feat_ctx_nm)
-            except IndexError as e:
-                log_reps.error("Error at SSO %d (context: %d).\n%s" % (
-                    ssv.id, feat_ctx_nm, e))
-
-
 def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
     """
     Helper function to infer local morphology embeddings of a cell
@@ -1030,3 +934,94 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
                                           overwrite=True, **view_props)
         else:
             ssv.predict_views_embedding(m, pred_key_appendix)
+
+
+def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list], ax_pred_key: str) -> np.ndarray:
+    """Retrieves the total edge lengths of the super-supervoxels' :py:attr:`~skeleton` in nanometers. The compartments used
+    to compute the edge lengths are axon: 1, axon terminals: 3, 4,
+    dendrite: 0, soma: 2.  
+
+    Args:
+        ssv ids: 
+        ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`
+
+    Returns:
+        Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
+    """
+    total_edge_lengths = []
+    ssd = SuperSegmentationDataset()
+
+    for ssv_id in ssv_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_skeleton()
+        if ax_pred_key not in ssv.skeleton.keys():
+            ax_pred_key = 'axoness'  # fall back to the old key
+            
+        total_edge_lengths.append(ssv.total_edge_length(compartments_of_interest=[0, 1, 2, 3, 4], ax_pred_key=ax_pred_key))
+
+    return np.array(total_edge_lengths)
+
+
+def get_path_density_seg_obj(args: Union[tuple, list]) -> np.ndarray:
+    """Retrieves the path density of sub-cellular structures of ssvs. 
+
+    Args:
+        *args: `obj_type`: Key to any available sub-cellular structure,\
+            args[0], `ssv_ids`: Cell reconstructin ids, args[1],\
+            `compartments_of_interest`: Which compartments to take\
+                into account for calculation, args[2]. axon: 1, \
+            dendrite: 0, soma: 2, en-passant bouton: 3, terminal bouton: 4, `ax_pred_key`: Key of compartment prediction stored in :attr:`~skeleton`, only used if
+                `compartments_of_interest` was set. .
+
+    Returns:
+        Average volume per path length (um^3 / um) for the ssvs
+    """    
+    obj_type = args[0]
+    ssv_ids = args[1]
+    compartments_of_interest = args[2]
+    ax_pred_key = args[3]
+
+    path_densities = []
+    ssd = SuperSegmentationDataset()
+
+    for ssv_id in ssv_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_skeleton()
+        path_densities.append(ssv.path_density_seg_obj(obj_type, compartments_of_interest=compartments_of_interest, ax_pred_key=ax_pred_key))
+
+    return np.array(path_densities)
+
+
+def filter_ssd_by_total_pathlength(ssd: SuperSegmentationDataset, min_edge_length: float) -> np.ndarray:
+    """
+    Filter cells concurrently.
+
+    Args:
+        ssd: Cell reconstruction dataset.
+        min_edge_length: Minim skeleton edge length in µm.
+
+    Returns:
+        Array of :class:`~SuperSegmentationObject` that have a total skeleton edge length > `min_edge_length`.
+    """
+    # TODO: @hashirah adapt numpy cache key
+    total_path_lengths = ssd.load_numpy_data('total_edge_length')
+    if total_path_lengths is not None:
+        return ssd.ssv_ids[total_path_lengths >= min_edge_length]
+    if total_path_lengths == 0:
+        return ssd.ssv_ids
+    params = [(ch, min_edge_length) for ch in chunkify(ssd.ssv_ids, min(len(ssd.ssv_ids), 1000))]
+    filtered_ssv_ids = np.concatenate(sm.start_multiprocess_imap(_filter_ssvs_by_total_pathlength, params))
+    return filtered_ssv_ids
+
+
+def _filter_ssvs_by_total_pathlength(args: tuple) -> list:
+    ssv_ids, min_edge_length = args
+    ssv_ids_of_interest = []
+    ssd = SuperSegmentationDataset()
+    for ssv_id in ssv_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        length = ssv.total_edge_length() / 1e3  # nm to µm
+        if length < min_edge_length:
+            continue
+        ssv_ids_of_interest.append(ssv_id)
+    return ssv_ids_of_interest

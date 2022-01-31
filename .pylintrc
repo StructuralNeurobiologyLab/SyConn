@@ -1,5 +1,5 @@
 [MASTER]
-ignore=batchjob_scripts,cnn
+ignore=batchjob_scripts,cnn,egl_ext.py,rendering_egl.py,rendering_osmesa.py
 variable-rgx=^[a-z][a-z0-9]*((_[a-z0-9]+)*)?$
 argument-rgx=^[a-z][a-z0-9]*((_[a-z0-9]+)*)?$
 max-line-length=120
