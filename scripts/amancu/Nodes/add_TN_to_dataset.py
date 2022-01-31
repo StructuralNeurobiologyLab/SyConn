@@ -67,6 +67,7 @@ def create_hcs(cell_ids, slice):
 
 
 if __name__ == '__main__':
+    # get the better datset
     global_params.wd = '/ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2'
     ssd = SuperSegmentationDataset(global_params.config.working_dir)
 

@@ -212,9 +212,9 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
             merged_cell_nodes, node_labels = get_skeleton_label_and_distances(merged_cell, cs_coord_list,
                                                                                         source_node_idcs, radius)
 
-
             # save mesh to .ply and mesh+skeleton with labels as HybridCloud .pkl
-            hc = HybridCloud(vertices=merged_cell_verts,features=features,
+            #TODO put also labels
+            hc = HybridCloud(vertices=merged_cell_verts,features=features,  
                              nodes=merged_cell_nodes, node_labels=node_labels,
                              edges=merged_cell.skeleton['edges'])
 

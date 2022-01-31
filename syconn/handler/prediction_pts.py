@@ -1302,6 +1302,7 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
                 source_nodes = np.where(hc.node_labels == label)[0]
             else:
                 source_nodes = np.concatenate((source_nodes, np.where(hc.node_labels == label)[0]))
+        
         source_nodes = np.random.choice(source_nodes, batchsize)
         npoints_ssv = min(len(hc.vertices), npoints)
         if npoints_ssv == 0:
@@ -1378,6 +1379,152 @@ def pts_loader_semseg_train(fnames_pkl: Iterable[str], batchsize: int,
         # TODO: Add masking if beneficial - for now just use all input points and their labels
         # yield (batch_f, batch), (batch_out, batch_out_l)
         yield batch_f, batch, batch_out_l
+
+
+def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
+                            npoints: int, ctx_size: float,
+                            transform: Optional[Callable] = None,
+                            use_subcell: bool = False, mask_borders_with_id: Optional[int] = None,
+                            gt_type: str = 'compartment'
+                            ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+    """
+    Generator for SSV point cloud samples of size `npoints`. Currently used for
+    semantic segmentation tasks, e.g. spine, bouton and functional compartment
+    prediction.
+
+    Args:
+        fnames_pkl:
+        batchsize:
+        npoints:
+        ctx_size:
+        transform:
+        use_subcell:
+        mask_borders_with_id:
+        gt_type:
+        source_node_labels:
+
+    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
+
+    """
+    feat_dc = dict(pts_feat_dict)
+    del feat_dc['syn_ssv_asym']
+    del feat_dc['syn_ssv_sym']
+    del feat_dc['sv_myelin']
+    if not use_subcell:
+        del feat_dc['mi']
+        del feat_dc['vc']
+        del feat_dc['syn_ssv']
+
+    # in 1 out 5 events augment the context size by factor [0.6, 1.4] drawn from a normal distribution with mean 1
+    # and std 0.1
+    if np.random.randint(0, 4) == 0:
+        fluct = 1
+    else:
+        fluct = min(max(np.random.randn(1)[0] * 0.1 + 1, 0.8), 1.2)
+    ctx_size_fluct = fluct * ctx_size
+
+    for pkl_f in fnames_pkl:
+        hc = load_hc_pkl(pkl_f, gt_type)
+        # filter valid skeleton nodes (i.e. which were close to manually annotated nodes)
+        # use merger labels
+        # iterate over labels
+        source_nodes = np.where(hc.node_labels >= -1)[0]
+        
+        source_nodes = np.random.choice(source_nodes, batchsize, replace=len(hc.nodes) < batchsize)
+        source_node_labels = hc.node_labels[source_nodes]
+        
+        npoints_ssv = min(len(hc.vertices), npoints)
+        if npoints_ssv == 0:
+            raise ValueError(f'No vertices in "{pkl_f}".')
+
+        # change here the number of predicted nodes
+        n_out_pts = 100
+        if n_out_pts > 1:  # n_out_pts == 1 for embedding generation
+            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
+            n_out_pts_curr = n_out_pts + npoints_add
+        else:
+            n_out_pts_curr = n_out_pts
+        # add a +-10% fluctuation in the number of input and output points
+        npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
+        npoints_ssv += npoints_add
+        batch = np.zeros((batchsize, npoints_ssv, 3))
+        batch_f = np.ones((batchsize, npoints_ssv, len(feat_dc)))
+        batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
+        batch_out_l = np.zeros((batchsize, n_out_pts_curr, ))              ##### HERE
+        cnt = 0
+        for source_node in source_nodes:
+            # create local context
+            while True:
+                if hc.node_labels[source_node] not in source_node_labels:
+                    raise ValueError(f'Invalid source node in "{pkl_f}".')
+                node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
+                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                sample_feats = hc_sub.features
+                if len(sample_feats) > 0:
+                    break
+                source_node = np.random.choice(source_nodes)
+            sample_pts = hc_sub.vertices
+            sample_labels = hc_sub.labels
+
+            # get target locations
+            if n_out_pts_curr == 1:
+                out_coords = np.array([hc.nodes[source_node]])
+                out_labels = np.array([hc.node_labels[source_node]])
+            elif len(hc_sub.nodes) < n_out_pts_curr:
+                # add surface points
+                add_verts = sample_pts[np.random.choice(len(sample_pts), n_out_pts_curr - len(hc_sub.nodes))]
+                out_coords = np.concatenate([hc_sub.nodes, add_verts])
+                out_labels = np.concatenate([hc_sub.node_labels, np.zeros(add_verts)])
+            # down sample to ~500nm apart
+            else:
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
+                pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                base_points = np.max(idcs, axis=1)
+                base_points = np.random.choice(base_points, n_out_pts_curr,
+                                                replace=len(base_points) < n_out_pts_curr)
+                out_coords = hc_sub.nodes[base_points]
+                out_labels = hc_sub.node_labels[base_points]
+
+            # sub-sample vertices
+            sample_ixs = np.arange(len(sample_pts))
+            np.random.shuffle(sample_ixs)
+            sample_pts = sample_pts[sample_ixs][:npoints_ssv]
+            sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+            # add duplicate points before applying the transform if sample_pts
+            # has less points than npoints_ssv
+            npoints_add = npoints_ssv - len(sample_pts)
+            idx = np.random.choice(len(sample_pts), npoints_add)
+            sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+            sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+            # one hot encoding
+            sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
+            hc_sub._vertices = sample_pts
+            hc_sub._features = sample_feats
+            hc_sub._nodes = np.array(out_coords)
+            hc_sub._node_labels = np.array(out_labels)
+            # apply augmentations
+            if transform is not None:
+                transform(hc_sub)
+            batch[cnt] = hc_sub.vertices
+            batch_f[cnt] = hc_sub.features
+            batch_out[cnt] = hc_sub.nodes
+            # if not train:
+            #     batch_out_orig[cnt][:] = out_coords
+            # copmute labels to predict 
+            #               classification - merger 1, no merger 0
+            #               regression - leave classic hc_sub labels
+            # classification labels
+            out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
+            one_idcs = np.where(hc_sub.node_labels >= 0)[0]
+            np.put(out_point_label, one_idcs, np.ones(len(one_idcs)))
+            batch_out_l[cnt] = out_point_label
+            cnt += 1
+        del hc
+        assert cnt == batchsize
+        # TODO: Add masking if beneficial - for now just use all input points and their labels
+        # yield (batch_f, batch), (batch_out, batch_out_l)
+        yield batch_f, batch, batch_out, batch_out_l
 
 
 def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
@@ -1638,9 +1785,12 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
     feat_ds_dict['hybrid'] = feat_ds_dict['sv']
     hc = HybridCloud()
     hc.load_from_pkl(path)
+    hc._labels = np.zeros(shape=(len(hc.vertices),))
     new_verts = []
     new_labels = []
     new_feats = []
+    new_nodes = []
+    new_node_labels = []
     for ident_str, feat_id in pts_feat_dict.items():
         pcd = o3d.geometry.PointCloud()
         m = (hc.features == feat_id).squeeze()
@@ -1701,7 +1851,7 @@ def get_pt_kwargs(mdir: str) -> Tuple[dict, dict]:
     return mkwargs, loader_kwargs
 
 
-def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'InferenceModel':
+def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'InferenceModel':          # TODO
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     from elektronn3.models.convpoint import SegSmall

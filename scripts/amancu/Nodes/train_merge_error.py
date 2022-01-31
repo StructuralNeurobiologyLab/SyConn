@@ -3,7 +3,7 @@
 # Copyright (c) 2019 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Andrei Mancu
-from merge_dataloader import CloudFalseMergeLoader
+from merge_error_dataloader import CloudFalseMergeLoader, NodeFalseMergeLoader
 
 import os
 import torch
@@ -27,7 +27,7 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--model', type=str, default='lcp', help='Model to use: segsmall/lcp/randla')
-parser.add_argument('--r', type=int, default=1000, help='Radius of merger positive labeling  neighborhood')
+parser.add_argument('--r', type=int, default=3000, help='Radius of merger positive labeling  neighborhood')
 parser.add_argument('--opt', type=str, default='Adam', help='Chosen optimizer: Adam/SGD')
 parser.add_argument('--lr', type=str, default='StepLR', help='Chosen learning rate: StepLR/ExponentialLR/CyclicLR/ConstantLR')
 parser.add_argument('--conv', type=str, default='ConvPoint', help='Convolution type for lcp')
@@ -78,27 +78,23 @@ use_bias = args.use_bias
 lr = 2e-3
 lr_stepsize = 100
 lr_dec = 0.995
-max_steps = 290000
+max_steps = 1000000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
 use_syntype = False
-dr = 0.2
+dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
 
+
 # 'no_merge': 0, 'merge_error': 1
 num_classes = 2
-
-act = 'relu'
+input_channels = 1
+act = 'swish'
 
 if name is None:
     name = f'{modelselect}_r{radius}'
-
-if not cellshape_only and use_subcell:
-    input_channels = 5 if use_syntype else 4
-else:
-    input_channels = 1
 
 if use_cuda:
     device = torch.device('cuda')
@@ -109,36 +105,33 @@ print(f'Running on device: {device}')
 
 # set save path
 if save_root is None:
-    save_root = f'/wholebrain/scratch/amancu/mergeError/Nodes/Trainings/{modelselect}/'
+    save_root = f'/wholebrain/scratch/amancu/mergeError/Nodes/Trainings/'
 
 # Architecture select for LightConvPoint
-if arch == 'archLrg':
-    architecture = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
-                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
-                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
-                      {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
-                      {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
-                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
-                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
-                      {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
-                      {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
-                      {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
-                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-                      {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
-else:
-    architecture = None
+# architecture = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
+#                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
+#                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
+#                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
+#                     {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
+#                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
+#                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
+#                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+#                     {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
+#                     {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
+#                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+#                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
+#                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
 
 # Model selection
-model = None
-if modelselect == 'lcp':
-    search = 'SearchQuantized'
-    convol = dict(layer=conv, kernel_separation=False)
-    layer = convol['layer']
-    name += f'_{layer}_{search}_{arch}'
-    act = nn.ReLU
-    model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
-                         architecture=architecture, activation=act, norm='gn')
+search = 'SearchQuantized'
+convol = dict(layer=conv, kernel_separation=False)
+layer = convol['layer']
+name += f'_{layer}_{search}_{arch}'
+act = nn.ReLU
+# model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
+#                     architecture=architecture, activation=act, norm=use_norm)
+model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
+                 track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 print(f'Using model {modelselect}')
 
 model.to(device)
@@ -174,9 +167,9 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 # valid_transform = clouds.Compose([])
 
 # mask boarder points with 'num_classes' and set its weight to 0
-train_ds = CloudFalseMergeLoader(radius=radius, npoints=npoints, transform=train_transform,
+train_ds = NodeFalseMergeLoader(radius=radius, npoints=npoints, transform=train_transform,
                                  batch_size=batch_size, ctx_size=ctx)
-valid_ds = CloudFalseMergeLoader(radius=radius, npoints=npoints, transform=valid_transform, train=False,
+valid_ds = NodeFalseMergeLoader(radius=radius, npoints=npoints, transform=valid_transform, train=False,
                                  batch_size=batch_size, ctx_size=ctx)
 
 # PREPARE AND START TRAINING #
@@ -220,9 +213,7 @@ elif learning_rate == 'CyclicLR':
 weights = [1,2]
 
 # uncomment for desired  loss!
-
-# name += f'_weights{weights[0]},{weights[1]}_FocalLoss'
-name += f'_weights{weights[0]},{weights[1]}_CrossEntropy'
+name += f'_CrossEntropy'
 
 class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
 
@@ -250,7 +241,7 @@ if modelselect == 'lcp':
         train_dataset=train_ds,
         valid_dataset=valid_ds,
         batchsize=1,
-        num_workers=4,
+        num_workers=8,
         valid_metrics=valid_metrics,
         save_root=save_root,
         enable_save_trace=enable_save_trace,
