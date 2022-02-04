@@ -3,6 +3,7 @@
 # Copyright (c) 2019 - now
 # Max Planck Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Andrei Mancu
+import re
 from merge_error_dataloader import CloudFalseMergeLoader, NodeFalseMergeLoader
 
 import os
@@ -15,11 +16,14 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import SegSmall
+from elektronn3.models.convpoint import SegSmall, SegBig
 from elektronn3.models.lcp_adapt import ConvAdaptSeg
 from lightconvpoint.utils.network import get_search, get_conv
 from elektronn3.modules.loss import FocalLoss
 from elektronn3.training import Trainer3d, Backup, metrics
+
+import warnings
+warnings.filterwarnings("ignore")
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -40,6 +44,7 @@ parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=float)
+parser.add_argument('--reg', type=bool, default=False, help='True for regression task, False for classification')
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -73,12 +78,13 @@ npoints = args.sp
 scale_norm = args.scale_norm
 save_root = args.sr
 ctx = args.ctx
+regression = args.reg
 use_bias = args.use_bias
 
 lr = 2e-3
 lr_stepsize = 100
 lr_dec = 0.995
-max_steps = 1000000
+max_steps = 800000
 
 # celltype specific
 eval_nr = random_seed  # number of repetition
@@ -88,13 +94,16 @@ track_running_stats = False
 use_norm = 'gn'
 
 
-# 'no_merge': 0, 'merge_error': 1
-num_classes = 2
+if regression:
+    num_classes = 1
+else:
+    # 'no_merge': 0, 'merge_error': 1
+    num_classes = 2
 input_channels = 1
 act = 'swish'
 
 if name is None:
-    name = f'{modelselect}_r{radius}'
+    name = f'SegSmall_r{radius}'
 
 if use_cuda:
     device = torch.device('cuda')
@@ -102,36 +111,20 @@ else:
     device = torch.device('cpu')
 
 print(f'Running on device: {device}')
+print(f'Starting Regression Task' if regression else 'Starting Classification Task')
 
 # set save path
 if save_root is None:
     save_root = f'/wholebrain/scratch/amancu/mergeError/Nodes/Trainings/'
 
-# Architecture select for LightConvPoint
-# architecture = [{'ic': -1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': -1},
-#                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 2048},
-#                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 1024},
-#                     {'ic': 1, 'oc': 1, 'ks': 16, 'nn': 32, 'np': 256},
-#                     {'ic': 1, 'oc': 2, 'ks': 16, 'nn': 32, 'np': 64},
-#                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 16, 'np': 16},
-#                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 8, 'np': 8},
-#                     {'ic': 2, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
-#                     {'ic': 4, 'oc': 2, 'ks': 16, 'nn': 4, 'np': 'd'},
-#                     {'ic': 4, 'oc': 1, 'ks': 16, 'nn': 8, 'np': 'd'},
-#                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-#                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'},
-#                     {'ic': 2, 'oc': 1, 'ks': 16, 'nn': 16, 'np': 'd'}]
-
 # Model selection
 search = 'SearchQuantized'
 convol = dict(layer=conv, kernel_separation=False)
 layer = convol['layer']
-name += f'_{layer}_{search}_{arch}'
-act = nn.ReLU
-# model = ConvAdaptSeg(input_channels, num_classes, get_conv(convol), get_search(search), kernel_num=64,
-#                     architecture=architecture, activation=act, norm=use_norm)
+name += f'_{layer}_{search}'
 model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
+# model = SegBig(input_channels, num_classes, dropout=dr, norm_type=use_norm, use_bias=use_bias)
 print(f'Using model {modelselect}')
 
 model.to(device)
@@ -168,9 +161,9 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 
 # mask boarder points with 'num_classes' and set its weight to 0
 train_ds = NodeFalseMergeLoader(radius=radius, npoints=npoints, transform=train_transform,
-                                 batch_size=batch_size, ctx_size=ctx)
+                                batch_size=batch_size, ctx_size=ctx, regression=regression)
 valid_ds = NodeFalseMergeLoader(radius=radius, npoints=npoints, transform=valid_transform, train=False,
-                                 batch_size=batch_size, ctx_size=ctx)
+                                batch_size=batch_size, ctx_size=ctx, regression=regression)
 
 # PREPARE AND START TRAINING #
 
@@ -213,12 +206,16 @@ elif learning_rate == 'CyclicLR':
 weights = [1,2]
 
 # uncomment for desired  loss!
-name += f'_CrossEntropy'
 
 class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
 
 # criterion = FocalLoss(weight=class_weights, ignore_index=num_classes).to(device)
-criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
+if regression:
+    criterion = torch.nn.MSELoss().to(device)
+    name += f'_MSE_Regression'
+else:
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights, ignore_index=num_classes).to(device)
+    name += f'_CrossEntropy_Classification'
 valid_metrics = {  # mean metrics
     'val_accuracy_mean': metrics.Accuracy(),
     'val_precision_mean': metrics.Precision(),
@@ -252,7 +249,7 @@ if modelselect == 'lcp':
         dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
         nbatch_avg=1,
         tqdm_kwargs={'disable': False},
-        lcp_flag=True
+        # lcp_flag=True
     )
 # for randla
 else:

@@ -70,7 +70,7 @@ class CloudFalseMergeLoader(Dataset):
 
 class NodeFalseMergeLoader(Dataset):
     def __init__(self, radius=3000, npoints=20000, transform: Callable = Identity(),
-                 train=True, batch_size=1, ctx_size=20000, mask_borders_with_id=None):
+                 train=True, batch_size=1, ctx_size=20000, mask_borders_with_id=None, regression=False):
         self.hclouds = f'/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
 
         # get all Hybridcloud files
@@ -84,6 +84,7 @@ class NodeFalseMergeLoader(Dataset):
         self._batch_size = batch_size
         self.ctx_size = ctx_size
         self.mask_borders_with_id = mask_borders_with_id
+        self.regression = regression
 
         appen = f'{self.train_limit} cell samples for training' if self.train else f'{len(self.fnames) - self.train_limit} cell samples for validation'
         print(f'Using radius {radius} and ' + appen)
@@ -124,5 +125,5 @@ class NodeFalseMergeLoader(Dataset):
             [*pts_loader_semseg_train_nodes([p], self._batch_size, self.num_pts,
                                       transform=self.transform, ctx_size=self.ctx_size,
                                       use_subcell=False,
-                                      mask_borders_with_id=self.mask_borders_with_id, gt_type='merger')][0]
+                                      mask_borders_with_id=self.mask_borders_with_id, gt_type='merger', regression=self.regression)][0]
         return sample_pts, sample_feats, out_pts, out_labels
