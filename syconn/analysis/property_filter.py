@@ -4,7 +4,7 @@ import re
 import copy
 import time
 from typing import List, Tuple, Optional, Union
-
+from collections import defaultdict
 import numpy as np
 from timeit import default_timer as timer
 
@@ -19,6 +19,9 @@ import neuroglancer
 import neuroglancer.cli
 from neuroglancer.viewer_state import SegmentationLayer
 from neuroglancer.config import NeuroConfig
+
+# names of the segmentation layers that contain the segmentation data
+SEG_LAYERS = ("j0251_72_seg_20210127_agglo2", "j0251_rag_flat_Jan2019_v3", "j0126_areaxfs_v10", "j0126_assembled_core_relabeled")
 
 
 def get_segmentation_layer(layers: List[SegmentationLayer]) -> SegmentationLayer:
@@ -35,7 +38,7 @@ def get_segmentation_layer(layers: List[SegmentationLayer]) -> SegmentationLayer
     """
 
     for layer in layers:
-        if isinstance(layer.layer, neuroglancer.SegmentationLayer) and (layer.name == "j0251_rag_flat_Jan2019_v3" or layer.name == "j0126_areaxfs_v10" or layer.name == "j0126_assembled_core_relabeled"):
+        if isinstance(layer.layer, neuroglancer.SegmentationLayer) and (layer.name in SEG_LAYERS):
             return layer
 
 
@@ -64,15 +67,16 @@ def get_celltype(ct: int, gt_type: str) -> str:
 
 
 class PropertyFilter(SyConnClient):
-    """Inherits from SyConnClient and adds custom functionality to the
-    neuroglancer viewer
+    """Inherits from :class:`~syconn.analysis.cli.SyConnClient` and
+    adds custom functionality to the neuroglancer viewer.
 
     The dynamic properties should be added here when extending the
-    SyConnClient class. Currently, the following properties are added:
-    - Synaptic partner with largest area
+    SyConnClient class. Currently, the following properties are
+    supported:
+    - Synaptic partner with the largest synapse area
     - Presynaptic partners
     - Postsynaptic partners
-    - Cycle through synaptic partners
+    - Depth first search (DFS) of the postsynaptic partners
 
     Attributes:
         params (NeuroConfig): configuration parameters for neuroglancer
@@ -157,6 +161,7 @@ class PropertyFilter(SyConnClient):
         self.viewer.actions.add('show-presynaptic-partners', self.get_presynaptic_partners)
         self.viewer.actions.add('show-postsynaptic-partners', self.get_postsynaptic_partners)
         self.viewer.actions.add('cycle-synaptic-partners', self.cycle_synaptic_partners)
+        self.viewer.actions.add('depth-first-search', self.depth_first_search)
         self.viewer.actions.add('reset-viewer-state', self.reset_viewer_state)
         self.viewer.actions.add('share-viewer', self.generate_viewer_link)
 
@@ -165,6 +170,7 @@ class PropertyFilter(SyConnClient):
             s.input_event_bindings.data_view['keyp'] = 'show-synaptic-partner-with-largest-area'
             s.input_event_bindings.data_view['control+keyi'] = 'show-presynaptic-partners'
             s.input_event_bindings.data_view['control+keyo'] = 'show-postsynaptic-partners'
+            s.input_event_bindings.data_view['control+keyd'] = 'depth-first-search'
             s.input_event_bindings.viewer['control+keyx'] = 'reset-viewer-state'
             s.input_event_bindings.viewer['control+keyl'] = 'share-viewer'
         
@@ -176,6 +182,9 @@ class PropertyFilter(SyConnClient):
         self.rep_coords = None  # coordinates of the synapses
         self.cts = None  # cell types of the filtered partners
         self.mesh_areas = None  # areas of the synapses
+        self.depth = 0  # depth of the depth-first search
+        self.visited = set()  # set of visited nodes
+        self.next_cell = None  # next cell to be visited
         
         # Precomputed segment properties are used now. Uncomment this when the old segment properties are used
         # defer callback necessary to avoid deadlock 
@@ -188,12 +197,9 @@ class PropertyFilter(SyConnClient):
 
         Args:
             message (str): message to display
-        """        
-        if message != self.cur_message:
-            with self.viewer.config_state.txn() as s:
-                s.status_messages['status'] = message
-                
-            self.cur_message = message
+        """      
+        with self.viewer.config_state.txn() as s:
+            s.status_messages['status'] = message
 
     def generate_viewer_link(self, action_state):
         """Generates a link to the current viewer state
@@ -227,10 +233,139 @@ class PropertyFilter(SyConnClient):
             s.position = [b // 2 for b in self.params["boundary"]]  # set viewer position to the center of the dataset
 
         with self.viewer.config_state.txn() as s:
-            s.status_messages['status'] = ""  # clear status message
+            s.status_messages['status'] = None  # clear status message
+
+    def depth_first_search(self, action_state):
+        """Depth-first search of the synaptic chain starting from the
+        selected cell.
+
+        Args:
+            action_state (ActionState): captures the hotkey action
+        """ 
+        logger.debug(f"Current depth: {self.depth}")
+
+        if self.depth >= 3:  # max depth
+            self.depth = 0
+            self.visited = set()
+            self.next_cell = None
+            self.update_status_message("Maximum depth reached. Select a new cell to start the search.")
+            return
+
+        elif self.depth == 0:  # start search
+            segment_id = action_state.selected_values.get(self.seg_name) # super().seg_name
+
+            if segment_id is None:
+                message = "No cell selected! Double click on a segment in one of the cross-sectional views"
+                self.update_status_message(message)
+                return
+
+            if isinstance(segment_id.value, int):
+                ssv_id = segment_id.value
+            else:
+                ssv_id = int(segment_id.value.key)
+
+        else:  # continue search
+            ssv_id = self.next_cell
+
+        # find strongest connection partner and update viewer
+        self.update_viewer(ssv_id)
+
+    def update_viewer(self, ssv_id):
+        """Updates the viewer with the next cell in the search.
+
+        Args:
+            ssv_id (int): id of the selected segment
+
+        TODO:
+            * generalize this for other dynamic properties
+        """        
+        with self.viewer.txn() as s:
+            layer = get_segmentation_layer(s.layers)
+
+            if ssv_id in layer.segments and ssv_id not in self.visited:
+                message = f"Searching postsynaptic partner of {ssv_id} with strongest connection"
+                # self.update_status_message(message)
+                logger.info(message)
+                self.depth += 1  # increase depth
+                self.visited.add(ssv_id)  # add current node to visited nodes
+
+                tic = time.time()
+                result = self._get_strongest_connection_partner(ssv_id)
+                toc = time.time()
+                logger.debug(f"Got strongly connected partner in {toc-tic:.2f} seconds")
+
+                if result == -1:
+                    message = f"No postsynaptic partner found for {ssv_id} that satisfies the condition. Search ended at depth {self.depth}. Select a new cell to start the search."
+                    self.update_status_message(message)
+                    logger.warning(message)
+                    self.depth = 0  # reset depth
+                    self.visited = set()  # reset visited nodes
+                    self.next_cell = None
+                    return
+
+                partner_id = result[0]
+                self.next_cell = partner_id
+                rep_coord = result[1]
+                partner_ct = int2str_converter(result[2], self.gt_type)
+                ssv_ct = int2str_converter(result[3], self.gt_type)
+
+                layer.segments.add(partner_id)
+                s.position = rep_coord
+                
+                if self.depth == 1:
+                    message = f"{ssv_id} ({ssv_ct}) → {partner_id} ({partner_ct})"
+                else:
+                    message = self.cur_message + f" → {partner_id} ({partner_ct})"
+
+                self.cur_message = message
+                self.update_status_message(message)
+    
+    def _get_strongest_connection_partner(self, ssv_id):
+        """Finds the strongest connection partner of the selected
+        segment.
+
+        Args:
+            ssv_id (int): id of the selected segment
+
+        Returns:
+            tuple: (partner_id, rep_coord, partner_ct, ssv_ct)
+        """        
+        mask = ((self.params["neuron_partners"][:,0] == ssv_id) & ((self.params["partner_axoness"][:,0] == 1) | (self.params["partner_axoness"][:,0] == 3) | (self.params["partner_axoness"][:,0] == 4)) & ((self.params["partner_axoness"][:,1] == 0) | (self.params["partner_axoness"][:,1] == 2))) |\
+((self.params["neuron_partners"][:,1] == ssv_id) & ((self.params["partner_axoness"][:,1] == 1) | (self.params["partner_axoness"][:,1] == 3) | (self.params["partner_axoness"][:,1] == 4)) & ((self.params["partner_axoness"][:,0] == 0) | (self.params["partner_axoness"][:,0] == 2)))
+
+        mask &= (self.params["syn_probs"] >= 0.5)
+
+        if not np.any(mask):
+            return -1
+
+        outgoing = self.params["neuron_partners"][mask]
+        areas = defaultdict(int)
+
+        if len(np.unique(outgoing, axis=0)) < len(outgoing):
+            logger.warning("Found multiple outgoing connections for the same partner")
+            for syn_pair, a in zip(outgoing, self.params["mesh_areas"][mask]):
+                key = syn_pair[syn_pair != ssv_id].item()
+                areas[key] += a
+
+            partner_id = max(areas, key=areas.get)
+            cand_syn = np.where(outgoing == partner_id)[0]
+            largest_syn_ix = self.params["mesh_areas"][mask][cand_syn].argmax()
+            partner_loc_mask = outgoing[cand_syn][largest_syn_ix] != ssv_id
+            rep_coord = self.params["rep_coords"][mask][cand_syn][largest_syn_ix]
+            partner_ct = self.params["partner_celltypes"][mask][cand_syn][largest_syn_ix][partner_loc_mask].item()
+            ssv_ct = self.params["partner_celltypes"][mask][cand_syn][largest_syn_ix][~partner_loc_mask].item()
+
+        else:
+            ix = self.params["mesh_areas"][mask].argmax()
+            partner_id = outgoing[ix][outgoing[ix] != ssv_id].item()
+            rep_coord = self.params["rep_coords"][mask][ix]
+            partner_ct = self.params["partner_celltypes"][mask][ix][outgoing[ix] != ssv_id].item()
+            ssv_ct = self.params["partner_celltypes"][mask][ix][outgoing[ix] == ssv_id].item()
+
+        return partner_id, rep_coord, partner_ct, ssv_ct
 
     def cycle_synaptic_partners(self, action_state):
-        """Cycles through the synaptic partners of the selected cell
+        """Cycles through the synaptic partners of the selected cell.
 
         Args:
             action_state: captures the hotkey action
@@ -274,7 +409,7 @@ class PropertyFilter(SyConnClient):
         self.counter += 1  # increment the counter for next 'ctrl+u' action
 
     def _filter_presynaptic_partners(self, ssv_id: int) -> Union[int, Tuple[np.ndarray, np.ndarray, np.ndarray]]:
-        """Filters the presynaptic partners of the selected cell
+        """Filters the presynaptic partners of the selected cell.
 
         Args:
             ssv_id (int): id of the selected cell
@@ -320,7 +455,7 @@ class PropertyFilter(SyConnClient):
 
     def get_presynaptic_partners(self, action_state):
         """Adds the presynaptic partners of the selected cell to the
-        segment query of the segmentation layer
+        segment query of the segmentation layer.
 
         Args:
             action_state (): captures the hotkey action
@@ -385,7 +520,7 @@ class PropertyFilter(SyConnClient):
                     cs.input_event_bindings.data_view['control+keyu'] = 'cycle-synaptic-partners'
 
     def _filter_postsynaptic_partners(self, ssv_id):
-        """Filters the postsynaptic partners of the selected cell
+        """Filters the postsynaptic partners of the selected cell.
 
         Args:
             ssv_id (int): id of the selected cell
@@ -431,7 +566,7 @@ class PropertyFilter(SyConnClient):
 
     def get_postsynaptic_partners(self, action_state):
         """Adds the postsynaptic partners of the selected cell to the
-        segment query of the segmentation layer
+        segment query of the segmentation layer.
 
         Args:
             action_state (): captures the hotkey action
@@ -495,7 +630,7 @@ class PropertyFilter(SyConnClient):
 
     def get_synaptic_partner(self, action_state):
         """Retrieves the synaptic partner of the currently selected 
-        cell
+        cell.
 
         Args:
             action_state: captures the hotkey action
@@ -551,14 +686,14 @@ class PropertyFilter(SyConnClient):
                     message = f'{ssv_id}: {ssv_ct} \
                         {self.__class__.syn_type[ssv_comp]} \
                             ({ssv_comp}) \
-                        -> {partner_ssv_id}: {partner_ssv_ct} \
+                        → {partner_ssv_id}: {partner_ssv_ct} \
                             {self.__class__.syn_type[partner_ssv_comp]} \
                             ({partner_ssv_comp})'
                 else:
                     message = f'{partner_ssv_id}: {partner_ssv_ct} \
                         {self.__class__.syn_type[partner_ssv_comp]} \
                             ({partner_ssv_comp}) \
-                        -> {ssv_id}: {ssv_ct} \
+                        → {ssv_id}: {ssv_ct} \
                             {self.__class__.syn_type[ssv_comp]} \
                             ({ssv_comp})'
 
@@ -617,7 +752,7 @@ class PropertyFilter(SyConnClient):
 
     def on_state_changed(self):
         """Captures a state change and updates state. Individual
-        property querying supported"""
+        property querying supported."""
 
         ix, segmentation_layer = get_segmentation_layer(self.viewer.state.layers)
         segment_query = segmentation_layer.segment_query
@@ -737,16 +872,7 @@ class PropertyFilter(SyConnClient):
 
         Returns:
             ssv ids of interest
-        """        
-        """
-        
-        :param celltype: queried cell type
-        :type celltype: str
-        :param filter_list: [(<property>, <operator>, <value>),...]
-        :type filter_list: list of tuple
-        :return ssv_ids_of_interest: 
-        :rtype ssv_ids_of_interest: numpy.ndarray 
-        """
+        """     
 
         if celltype != None:
             indices = self.CTmask[celltype] # use cached cell type indices
@@ -814,32 +940,3 @@ class PropertyFilter(SyConnClient):
             self.cur_message = message
 
         return pages
-
-
-if __name__ == "__main__":
-    """TODO: PropertyFilter is generalized. This needs to be changed."""
-       
-    ap = argparse.ArgumentParser()
-    neuroglancer.cli.add_server_arguments(ap)
-    # handle_layer_args(ap)
-    args = ap.parse_args()
-    neuroglancer.cli.handle_server_arguments(args)
-
-    if args.wd == '':
-        logger.error('No working directory selected... Aborting')
-
-    global_params.wd = os.path.expanduser(args.wd)
-    
-    global backend
-    backend = configure_backend()
-
-    if "example_cube" in args.wd:
-        params = dict(backend=backend, segmentation=KnossosDataset(global_params.config.working_dir+"/knossosdatasets/seg"), image=KnossosDataset(global_params.config.working_dir+"/knossosdatasets/seg"))
-    else:
-        params = dict(backend=backend, segmentation=KnossosDataset(global_params.config.kd_seg_path), image=KnossosDataset("/wholebrain/songbird/j0251/j0251_72_clahe2"))
-    
-    # load seg and raw data
-    seg_path = global_params.config.kd_seg_path
-    
-    pf = PropertyFilter(params, args.organelles)
-    print(pf.viewer)
