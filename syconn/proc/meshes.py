@@ -862,6 +862,59 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
 
+def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
+    """
+    Based on compartmentalize_mesh but uses skeleton coordinates and axoness prediction. Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
+    on axoness prediction of SV's contained in SuperSuperVoxel ssv.
+
+    Args:
+        ssv: SuperSegmentationObject
+        pred_key_appendix: str
+            Specific version of axoness prediction
+
+    Returns: np.array
+        Majority label of each face / triangle in mesh indices;
+        triangulation is assumed. If majority class has n=1, majority label is
+        set to -1.
+
+    """
+
+    preds = ssv.skeleton["axoness_avg10000"]
+    preds[preds == 3] = 1
+    preds[preds == 4] = 1
+    pred_coords = ssv.skeleton["nodes"] * ssv.scaling
+    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3,
+                                        colors=(0, 1, 2))
+    # get axoness of each vertex where indices are pointing to
+    ind_comp = axoness[ind]
+    ind = ind.reshape(-1, 3)
+    vert = vert.reshape(-1, 3)
+    norm = ssv.mesh[2].reshape(-1, 3)
+    ind_comp = ind_comp.reshape(-1, 3)
+    ind_comp_maj = np.zeros((len(ind)), dtype=np.uint8)
+    for ii in range(len(ind)):
+        triangle = ind_comp[ii]
+        cnt = Counter(triangle)
+        ax, n = cnt.most_common(1)[0]
+        if n == 1:
+            ax = -1
+        ind_comp_maj[ii] = ax
+    comp_meshes = {}
+    for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
+        comp_ind = ind[ind_comp_maj == ii].flatten()
+        unique_comp_ind = np.unique(comp_ind)
+        comp_vert = vert[unique_comp_ind].flatten()
+        if len(ssv.mesh[2]) != 0:
+            comp_norm = norm[unique_comp_ind].flatten()
+        else:
+            comp_norm = ssv.mesh[2]
+        remap_dict = {}
+        for i in range(len(unique_comp_ind)):
+            remap_dict[unique_comp_ind[i]] = i
+        comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
+        comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
+    return comp_meshes
+
 
 def mesh_creator_sso(ssv: 'super_segmentation_object.SuperSegmentationObject',
                      segobjs: Iterable[str] = ('sv', 'mi', 'sj', 'vc')):

@@ -2636,7 +2636,7 @@ class SuperSegmentationObject(SegmentationBase):
                                     comments=sv_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def _pred2mesh(self, pred_coords: np.ndarray, preds: np.ndarray, ply_fname: Optional[str] = None,
+    def m(self, pred_coords: np.ndarray, preds: np.ndarray, ply_fname: Optional[str] = None,
                    dest_path: Optional[str] = None, colors: Optional[Union[tuple, np.ndarray, list]] = None,
                    k: int = 1, **kwargs):
         """
