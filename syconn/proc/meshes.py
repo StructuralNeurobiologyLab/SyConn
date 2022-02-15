@@ -865,7 +865,7 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
 def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
     """
     Based on compartmentalize_mesh but uses skeleton coordinates and axoness prediction. Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
-    on axoness prediction of SV's contained in SuperSuperVoxel ssv.
+    on axoness prediction of SV's contained in SuperSuperVoxel ssv. Skeleton of cell needs to be loaded.
 
     Args:
         ssv: SuperSegmentationObject
@@ -878,7 +878,6 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
         set to -1.
 
     """
-
     preds = ssv.skeleton["axoness_avg10000"]
     preds[preds == 3] = 1
     preds[preds == 4] = 1
