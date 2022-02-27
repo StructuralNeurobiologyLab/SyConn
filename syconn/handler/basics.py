@@ -170,9 +170,9 @@ def coordpath2anno(coords, scaling=None, add_edges=True):
         scaling = global_params.config['scaling']
     anno = SkeletonAnnotation()
     anno.scaling = scaling
-    scaling = np.array(scaling, dtype=np.int)
+    scaling = np.array(scaling, dtype=np.int32)
     rep_nodes = []
-    coords = np.array(coords, dtype=np.int)
+    coords = np.array(coords, dtype=np.int32)
     for c in coords:
         unscaled_c = c / scaling
         n = SkeletonNode().from_scratch(anno, unscaled_c[0], unscaled_c[1],
@@ -497,13 +497,13 @@ def write_obj2pkl(path, objects):
     gc.disable()
     if isinstance(path, str):
         with open(path + ".tmp", 'wb') as output:
-            pkl.dump(objects, output, -1)
+            pkl.dump(objects, output, protocol=pkl.HIGHEST_PROTOCOL)
         shutil.move(path + ".tmp", path)
     else:
         log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
                          "'objects' (python object).")
         with open(objects + ".tmp", 'wb') as output:
-            pkl.dump(path, output, -1)
+            pkl.dump(path, output, protocol=pkl.HIGHEST_PROTOCOL)
         shutil.move(objects + ".tmp", objects)
     gc.enable()
 
@@ -712,7 +712,7 @@ def prase_cc_dict_from_txt(txt):
             curr_line = line.decode()
         else:
             curr_line = line
-        line_nb = np.array(re.findall(r"(\d+)", curr_line), dtype=np.uint)
+        line_nb = np.array(re.findall(r"(\d+)", curr_line), dtype=np.uint64)
         curr_ixs = line_nb[3:]
         cc_ix = line_nb[0]
         curr_ixs = curr_ixs[curr_ixs != 0]

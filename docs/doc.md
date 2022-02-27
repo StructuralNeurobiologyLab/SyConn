@@ -1,25 +1,21 @@
 # Documentation
 
 ## Installation
-* Python 3.6/3.7
+* Python 3.7
 * The whole pipeline was designed and tested on Linux systems
-* SyConn functionality is mostly based on the packages
-  [elektronn3](https://github.com/ELEKTRONN/elektronn3) and
-  [knossos-utils](https://github.com/knossos-project/knossos_utils)
-* [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
 Before you can set up SyConn, ensure that the
 [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
 package manager is installed on your system. Then you can install SyConn
 and all of its dependencies into a new conda
 [environment](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html)
-named "syco" by running:
+named "syconn2" by running:
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn
     cd SyConn
-    conda env create -f environment.yml -n syco python=3.7
-    conda activate syco
-    pip install --no-deps -v -e .
+    conda env create -f environment.yml -n syconn2 python=3.7
+    conda activate syconn2
+    pip install -e .
 
 
 The last command will install SyConn in
@@ -28,47 +24,66 @@ mode, which is useful for development on SyConn itself. If you want to
 install it as a regular read-only package instead, replace the last
 command with:
 
-    pip install --no-deps -v .
+    pip install .
 
 
 To update the environment, e.g. if the environment file changed, use:
 
     conda env update --name syco --file environment.yml --prune
 
+If you encounter
+
+     /lib64/libm.so.6: version `GLIBC_2.27' not found
+
+with open3d, you need to upgrade your system or downgrade open3d to `<=0.9`.
+
 ## Example run
-Place the example and model data (provided upon request) in `SyConn/examples/`,
+Place the example data and models (provided upon request) in `~/SyConnData/`,
 cd to `SyConn/examples/` and run
 
     python start.py [--working_dir=..]
 
-The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of sub-cellular structures
-(mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory).
+The example script analyzes the EM data together with the cell segmentation, 
+probability maps of sub-cellular structures (mitochondria, vesicle clouds and synaptic junctions) and synapse type
+(inhibitory, excitatory). For adding further cell organelles to this pipeline see [here](cellorganelle_integration.md).
 
-On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
-finished the following analysis steps for an example cube of shape \[2180 2180 1140] after 02h:16min:52s.
+The data format for raw image and segmentation data is based on ``KnossosDataset`` 
+(see [knossos_utils](https://github.com/knossos-project/knossos_utils)).
 
-\[0/8] Preparation                       00h:07min:21s                   5%
+On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (NVidia Quadro RTX 5000) SyConn
+finished the following analysis steps for an example cube of shape \[1100 1100 600] (1.452e-06 mm^3; 0.726 GVx) after 00h:31min:46s.
 
-\[1/8] SD generation                     00h:29min:41s                   21%
+\[1/11]    Preparation                             0d:0h:1min:20s      4.2%
 
-\[2/8] SSD generation                    00h:01min:28s                   1%
+\[2/11]    Dense predictions                       0d:0h:1min:2s       3.3%
 
-\[3/8] Neuron rendering                  00h:40min:03s                   29%
+\[3/11]    SD generation                           0d:0h:3min:55s      12.3%
 
-\[4/8] Synapse detection                 00h:32min:18s                   23%
+\[4/11]    SSD generation                          0d:0h:0min:33s      1.7%
 
-\[5/8] Axon prediction                   00h:05min:11s                   3%
+\[5/11]    Skeleton generation                     0d:0h:8min:35s      27.0%
 
-\[6/8] Spine prediction                  00h:14min:03s                   10%
+\[6/11]    Synapse detection                       0d:0h:5min:35s      17.6%
 
-\[7/8] Celltype analysis                 00h:06min:06s                   4%
+\[7/11]    Contact detection                       0d:0h:0min:0s       0.0%
 
-\[8/8] Matrix export                     00h:00min:37s                   0%
+\[8/11]    Compartment predictions                 0d:0h:6min:4s       19.1%
+
+\[9/11]    Morphology extraction                   0d:0h:2min:7s       6.7%
+
+\[10/11]   Celltype analysis                       0d:0h:2min:23s      7.5%
+
+\[11/11]   Matrix export                           0d:0h:0min:7s       0.4%
 
 
 ## Example scripts and API usage
 An introduction on how to use the example scripts can be found [here](examples.md)
 and API code examples [here](api.md).
+
+## Flowchart of SyConn
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=2880&amp;h=1200">
+
 
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
@@ -82,7 +97,7 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 (such as lustre, Google Cloud Filestore or AWS Elastic File System).
 
 * Agglomerated supervoxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
- of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
+ of super-SVs are usually defined in a region supervoxel graph which is used to initialize the SuperSegmentationDataset
   ([SSD](super_segmentation_datasets.md)).
 
 * [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951)
@@ -90,13 +105,8 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
 
 * [Mesh](meshes.md) generation and representation of supervoxels
 
-* Multi-view representation of neurpn reconstructions for [glia](glia_removal.md) and
+* Multi-view representation of neuron reconstructions for [glia](glia_removal.md) and
  [neuron](neuron_analysis.md) analysis (published in [Nature Communications](https://www.nature.com/articles/s41467-019-10836-3))
-
-
-## Flowchart of SyConn
-
-<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=2880&amp;h=1200">
 
 
 ## Analysis steps

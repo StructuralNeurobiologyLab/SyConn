@@ -1,16 +1,15 @@
-# -*- coding: utf-8 -*-
-# SyConn - Synaptic connectivity inference toolkit
-#
-# Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Philipp Schubert, Alexandra Rother
+import time
 import sys
 import os
 import pickle as pkl
 from collections import defaultdict
-import time
+import tqdm
+import itertools
+import numpy as np
 
+from syconn import global_params
 from syconn.proc.skeleton import kimimaro_skelgen
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -23,15 +22,16 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 cube_size, cube_offsets, ds = args
-
+skel_params = global_params.config["skeleton"]['kimimaro_skelgen']
 nb_cpus = os.environ.get('SLURM_CPUS_PER_TASK')
 if nb_cpus is not None:
     nb_cpus = int(nb_cpus)
 
 res = defaultdict(list)
-res_ids = []
-for cube_offset in cube_offsets:
-    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus)
+ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+for cube_offset in tqdm.tqdm(cube_offsets, total=len(cube_offsets), disable=True):
+    skels = kimimaro_skelgen(cube_size, cube_offset, ds=ds, nb_cpus=nb_cpus, ssd=ssd,
+                             **skel_params)
     for k, v in skels.items():
         res[k].append(v)
 

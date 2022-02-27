@@ -107,7 +107,8 @@ def get_glia_coverage(seg, neuron_ids, glia_ids, max_dist, scale):
     int, float
         Number and fraction of neuron boundary voxels close to glia boundary
     """
-    seg = np.array(seg, np.int)
+    # TODO: Revisit and check compliance with uint64 SV IDs
+    seg = np.array(seg, np.int64)
     for ix in neuron_ids:
         seg[seg == ix] = -1
     for ix in glia_ids:
@@ -153,23 +154,3 @@ def crop_box_to_bndry(offset, box_size, bndry):
         offset[offset < 0] = 0
         # print offset, box_size, bndry
     return offset, box_size
-
-
-# TODO: probably out-dated
-def map_cs_properties(cs):
-    cs.load_attr_dict()
-    if "neuron_partner_ct" in cs.attr_dict:
-        return
-    partners = cs.attr_dict["neuron_partners"]
-    partner_ax = np.zeros(2, dtype=np.uint8)
-    partner_ct = np.zeros(2, dtype=np.uint8)
-    for kk, ix in enumerate(partners):
-        sso = SuperSegmentationObject(ix, working_dir="/wholebrain"
-                                                      "/scratch/areaxfs/")
-        sso.load_attr_dict()
-        ax = get_sso_axoness_from_coord(sso, cs.rep_coord)
-        partner_ax[kk] = np.uint(ax)
-        partner_ct[kk] = np.uint(sso.attr_dict["celltype_cnn"])
-    cs.attr_dict["neuron_partner_ax"] = partner_ax
-    cs.attr_dict["neuron_partner_ct"] = partner_ct
-    cs.save_attr_dict()

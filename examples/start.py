@@ -28,6 +28,13 @@ if __name__ == '__main__':
                              'or "2" (1100, 1100, 600).')
     parser.add_argument('--log_level', type=str, default='INFO',
                         help='Level of logging (INFO, DEBUG).')
+    parser.add_argument('--overwrite', dest='overwrite', action='store_true',
+                        help='Overwrite generated data.')
+    parser.add_argument('--run_server', help='Run syconn KNOSSOS server after processing.',
+                        dest='run_server', action='store_true')
+    parser.add_argument('--prior_astrocyte_removal', help='Separate astrocytes from neurons.',
+                        dest='prior_astrocyte_removal', action='store_true')
+    parser.set_defaults(overwrite=False, run_server=False, prior_astrocyte_removal=False)
     args = parser.parse_args()
     example_cube_id = int(args.example_cube)
     log_level = args.log_level
@@ -39,36 +46,53 @@ if __name__ == '__main__':
     experiment_name = 'j0126_example'
     log = initialize_logging(experiment_name, log_dir=example_wd + '/logs/')
     scale = np.array([10, 10, 20])
-    prior_glia_removal = True
     key_val_pairs_conf = [
-        ('glia', {'prior_glia_removal': prior_glia_removal}),
+        ('glia', {'prior_astrocyte_removal': args.prior_astrocyte_removal}),
         ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
-        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
+        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('mem_per_node', 250000),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 17),
+        ('nnodes_total', 4),
+        ('cell_contacts',
+         {'generate_cs_ssv': False,  # cs_ssv: contact site objects between cells
+          'min_path_length_partners': None,
+          }),
         ('skeleton', {'use_kimimaro': True}),
         ('log_level', log_level),
         # these will be created during synapse type prediction (
         # exec_dense_prediction.predict_synapsetype()), must also be uncommented!
         # ('paths', {'kd_sym': f'{example_wd}/knossosdatasets/syntype_v2/',
         #            'kd_asym': f'{example_wd}/knossosdatasets/syntype_v2/'}),
-        ('cell_objects', {
-          # 'sym_label': 1, 'asym_label': 2,
-          })
+        ('cell_objects',
+         {
+          # first remove small fragments, close existing holes, then erode to trigger watershed segmentation
+          'extract_morph_op': {'mi': ['binary_opening', 'binary_closing', 'binary_erosion', 'binary_erosion',
+                                      'binary_erosion'],
+                               'sj': ['binary_opening', 'binary_closing'],
+                               'vc': ['binary_opening', 'binary_closing', 'binary_erosion']}
+          }
+         ),
+        ('meshes', {'meshing_props_points':
+            {'cs_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20),
+             'syn_ssv': dict(depth=11, vertex_size=20, voxel_size_simplify=20)}}
+         )
     ]
     if example_cube_id == 1:
-        chunk_size = (256, 256, 128)
+        chunk_size = (256, 256, 256)
     elif example_cube_id == 2:
         chunk_size = (256, 256, 256)
     else:
         chunk_size = (512, 512, 256)
     n_folders_fs = 100
+
     n_folders_fs_sc = 100
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
+                     os.path.abspath(os.path.curdir) + '/SyConnData',
+                     os.path.abspath(os.path.curdir) + '/SyConn',
+                     os.path.expanduser('~/SyConnData/'),
                      os.path.expanduser('~/SyConn/')]:
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
         if os.path.isdir(h5_dir):
@@ -82,6 +106,12 @@ if __name__ == '__main__':
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.critical('Python version <3.6. This is untested!')
 
+    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
+    # system is None
+    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
+    from syconn.handler.compression import load_from_h5py
+
+    # PREPARE TOY DATA
     generate_default_conf(example_wd, scale, key_value_pairs=key_val_pairs_conf,
                           force_overwrite=True)
 
@@ -93,12 +123,6 @@ if __name__ == '__main__':
     os.makedirs(example_wd, exist_ok=True)
     global_params.wd = example_wd
 
-    # keep imports here to guarantee the correct usage of pyopengl platform if batch processing
-    # system is None
-    from syconn.exec import exec_init, exec_syns, exec_render, exec_dense_prediction, exec_inference, exec_skeleton
-    from syconn.handler.compression import load_from_h5py
-
-    # PREPARE TOY DATA
     log.info(f'Step 0/9 - Preparation')
     ftimer = FileTimer(example_wd + '/.timing.pkl')
     ftimer.start('Preparation')
@@ -118,10 +142,10 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    if not prior_glia_removal:
-        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+    if not args.prior_astrocyte_removal:
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_svgraph_path)
     else:
-        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_svgraph_path)
 
     tmp = load_from_h5py(h5_dir + 'sj.h5', hdf5_names=['sj'])[0]
     offset = np.array([0, 0, 0])
@@ -129,7 +153,6 @@ if __name__ == '__main__':
     del tmp
 
     # INITIALIZE DATA
-    # TODO: switch to streaming confs instead of h5 files
     if not os.path.isdir(global_params.config.kd_sj_path):
         kd = knossosdataset.KnossosDataset()
         kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -173,54 +196,57 @@ if __name__ == '__main__':
     # START SyConn
     log.info('Step 1/9 - Predicting sub-cellular structures')
     ftimer.start('Dense predictions')
-    # TODO: launch all predictions in parallel
     exec_dense_prediction.predict_myelin()
-    # TODO: if performed, work-in paths of the resulting KDs to the config
-    # TODO: might also require adaptions in init_cell_subcell_sds
-    # exec_dense_prediction.predict_cellorganelles()
-    # exec_dense_prediction.predict_synapsetype()
     ftimer.stop()
 
     log.info('Step 2/9 - Creating SegmentationDatasets (incl. SV meshes)')
     ftimer.start('SD generation')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs_sc)
+                                    n_folders_fs_sc=n_folders_fs_sc, overwrite=args.overwrite)
     exec_init.run_create_rag()
     ftimer.stop()
 
-    log.info('Step 3/9 - Glia separation')
-    if global_params.config.prior_glia_removal:
-        ftimer.start('Glia separation')
+    log.info('Step 3/9 - Astrocyte separation')
+    if global_params.config.prior_astrocyte_removal:
+        ftimer.start('Astrocyte separation')
         if not global_params.config.use_point_models:
-            exec_render.run_glia_rendering()
-            exec_inference.run_glia_prediction()
+            exec_render.run_astrocyte_rendering()
+            exec_inference.run_astrocyte_prediction()
         else:
-            exec_inference.run_glia_prediction_pts()
-        exec_inference.run_glia_splitting()
+            exec_inference.run_astrocyte_prediction_pts()
+        exec_inference.run_astrocyte_splitting()
         ftimer.stop()
     else:
-        log.info('Glia separation disabled. Skipping.')
+        log.info('Astrocyte separation disabled. Skipping.')
 
     log.info('Step 4/9 - Creating SuperSegmentationDataset')
     ftimer.start('SSD generation')
-    exec_init.run_create_neuron_ssd()
+    exec_init.run_create_neuron_ssd(overwrite=args.overwrite)
     ftimer.stop()
 
     log.info('Step 5/9 - Skeleton generation')
     ftimer.start('Skeleton generation')
-    exec_skeleton.run_skeleton_generation()
+    exec_skeleton.run_skeleton_generation(map_myelin=True)
     ftimer.stop()
-
-    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
-        log.info('Step 5.5/9 - Neuron rendering')
-        ftimer.start('Neuron rendering')
-        exec_render.run_neuron_rendering()
-        ftimer.stop()
 
     log.info('Step 6/9 - Synapse detection')
     ftimer.start('Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
     ftimer.stop()
+
+    log.info('Step 6.5/9 - Contact detection')
+    ftimer.start('Contact detection')
+    if global_params.config['cell_contacts']['generate_cs_ssv']:
+        exec_syns.run_cs_ssv_generation(n_folders_fs=n_folders_fs_sc, overwrite=args.overwrite)
+    else:
+        log.info('Cell-cell contact detection ("cs_ssv" objects) disabled. Skipping.')
+    ftimer.stop()
+
+    if not (global_params.config.use_onthefly_views or global_params.config.use_point_models):
+        log.info('Extra step - Neuron rendering')
+        ftimer.start('Neuron rendering')
+        exec_render.run_neuron_rendering()
+        ftimer.stop()
 
     log.info('Step 7/9 - Compartment prediction')
     ftimer.start('Compartment predictions')
@@ -230,7 +256,7 @@ if __name__ == '__main__':
     exec_syns.run_spinehead_volume_calc()
     ftimer.stop()
 
-    log.info('Step 8/9 - Morphology extraction')
+    log.info('Step 8/9 - Cell-morphology embeddings')
     ftimer.start('Morphology extraction')
     exec_inference.run_morphology_embedding()
     ftimer.stop()
@@ -247,7 +273,8 @@ if __name__ == '__main__':
 
     time_summary_str = ftimer.prepare_report()
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
-             'can be analyzed via the KNOSSOS-SyConn plugin at '
-             '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    os.system(f'syconn.server --working_dir={example_wd} --port=10001')
+    if args.run_server:
+        log.info('Setting up flask server for inspection. Annotated cell reconstructions and wiring '
+                 'can be analyzed via the KNOSSOS-SyConn plugin at '
+                 '`SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+        os.system(f'syconn.server --working_dir={example_wd} --port=10001')

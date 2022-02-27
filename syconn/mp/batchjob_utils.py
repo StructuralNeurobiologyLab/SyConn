@@ -31,6 +31,7 @@ import time
 import numpy as np
 from multiprocessing import cpu_count
 from logging import Logger
+import logging
 
 
 def batchjob_enabled() -> bool:
@@ -54,8 +55,8 @@ def batchjob_enabled() -> bool:
             subprocess.check_call(cmd_check, shell=True,
                                   stdout=devnull, stderr=devnull)
     except subprocess.CalledProcessError as e:
-        print("BatchJobSystem '{}' specified but failed with error '{}' not found,"
-              " switching to single node multiprocessing.".format(batch_proc_system, e))
+        logging.warning("BatchJobSystem '{}' specified but failed with error '{}' not found,"
+                        " switching to single node multiprocessing.".format(batch_proc_system, e))
         return False
     return True
 
@@ -70,14 +71,14 @@ def batchjob_script(params: list, name: str,
                     n_cores: int = 1, additional_flags: str = '',
                     suffix: str = "", job_name: str = "default",
                     script_folder: Optional[str] = None,
-                    max_iterations: int = 5,
+                    max_iterations: int = 10,
                     python_path: Optional[str] = None,
                     disable_batchjob: bool = False,
                     use_dill: bool = False,
                     remove_jobfolder: bool = False,
                     log: Logger = None, sleep_time: Optional[int] = None,
-                    show_progress=True,
-                    overwrite=False):
+                    show_progress: bool = True, overwrite: bool = False,
+                    exclude_nodes: Optional[list] = None):
     """
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
@@ -115,6 +116,7 @@ def batchjob_script(params: list, name: str,
         sleep_time: Sleep duration before checking batch job states again.
         show_progress: Only used if ``disabled_batchjob=True``.
         overwrite:
+        exclude_nodes: Nodes to exclude during job submission.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -162,15 +164,19 @@ def batchjob_script(params: list, name: str,
     if global_params.config['batch_proc_system'] != 'SLURM':
         msg = ('"batchjob_script" currently does not support any other batch processing '
                'system than SLURM.')
-        log_mp.error(msg)
+        log_batchjob.error(msg)
         raise NotImplementedError(msg)
     cpus_per_node = global_params.config['ncores_per_node']
     mem_lim = int(global_params.config['mem_per_node'] /
                   cpus_per_node)
-    if '--mem' in additional_flags:
-        raise ValueError('"--mem" must not be set via the "additional_flags"'
-                         ' kwarg.')
-    additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+    if '--mem' not in additional_flags:
+        additional_flags += ' --mem-per-cpu={}M'.format(mem_lim)
+
+    if exclude_nodes is None:
+        exclude_nodes = global_params.config['slurm']['exclude_nodes']
+    if exclude_nodes is not None:
+        additional_flags += f' --exclude={",".join(exclude_nodes)}'
+        log_batchjob.debug(f'Excluding slurm nodes: {",".join(exclude_nodes)}')
 
     # Start SLURM job
     if len(job_name) > 8:
@@ -226,7 +232,7 @@ def batchjob_script(params: list, name: str,
                     pkl.dump(param, f)
 
         os.chmod(this_sh_path, 0o744)
-        cmd_exec = "{0} --output={1} --error={2} --job-name={3} {4}".format(
+        cmd_exec = "{0} --output={1} --error={2} --time=4-0 --job-name={3} {4}".format(
             additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
         if job_id == 0:
             log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
@@ -284,7 +290,7 @@ def batchjob_script(params: list, name: str,
                 nb_failed += 1
                 continue
             # restart job
-            if requeue_dc[j] == 20:  # TODO: use global_params NCORES_PER_NODE
+            if requeue_dc[j] == cpus_per_node:  # TODO: use global_params NCORES_PER_NODE
                 log_batchjob.warning(f'About to re-submit job {j} ({job2slurm_dc[j]}) '
                                      f'which already was assigned the maximum number '
                                      f'of available CPUs.')
@@ -297,8 +303,11 @@ def batchjob_script(params: list, name: str,
             if time.time() - last_failed > 5:
                 # if a job failed within the last 5 seconds, do not print the error
                 # message (assume same error)
-                with open(f"{path_to_err}/job_{j}.log") as f:
-                    err_msg = f.read()
+                try:
+                    with open(f"{path_to_err}/job_{j}.log") as f:
+                        err_msg = f.read()
+                except FileNotFoundError as e:
+                    err_msg = f'FileNotFoundError: {e}'
                 last_failed = time.time()
                 if 'exceeded memory limit' in err_msg:
                     err_msg = None  # do not report message of OOM errors
@@ -321,7 +330,7 @@ def batchjob_script(params: list, name: str,
             del slurm2job_dc[slurm_id_orig]
             job2slurm_dc[j] = slurm_id
             slurm2job_dc[slurm_id] = j
-            log_batchjob.info(f'Requeued job {j}. SLURM IDs: {slurm_id} (new), '
+            log_batchjob.info(f'Requeued job {j} ({requeue_dc[j]}/{max_iterations}). SLURM IDs: {slurm_id} (new), '
                               f'{slurm_id_orig} (old).')
             if err_msg is not None:
                 log_batchjob.warning(f'Job {j} failed with: {err_msg}')
@@ -356,13 +365,11 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
 
     def _delete_folder(dn, lg, to=60):
         start = time.time()
-        e = ''
         while to > time.time() - start:
             try:
                 shutil.rmtree(dn)
                 break
             except OSError as e:
-                e = str(e)
                 time.sleep(5)
         if time.time() - start > to:
             shutil.rmtree(dn, ignore_errors=True)
@@ -602,7 +609,7 @@ def nodestates_slurm() -> Dict[int, dict]:
     compute012           dead       32         208990     gpu:GP100G
     """
     node_states = dict()
-    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', str)]  # TOOD: gres should be number of gpus
+    attr_keys = [('state', str), ('cpus', int), ('memory', int), ('gres', int)]
     process = subprocess.Popen(cmd_stat, shell=True, stdout=subprocess.PIPE)
     out, err = process.communicate()
     if process.returncode != 0:
@@ -614,6 +621,8 @@ def nodestates_slurm() -> Dict[int, dict]:
         node_uri, *str_parsed = re.findall(r"(\S+)", line)
         ndc = dict()
         for k, v in zip(attr_keys, str_parsed):
+            if k[0] == 'gres':
+                v = v.split(':')[-1]
             ndc[k[0]] = k[1](v)
         node_states[node_uri] = ndc
     return node_states
@@ -690,3 +699,51 @@ def delete_jobs_by_name(job_name):
                          stdout=subprocess.PIPE)
     else:
         raise NotImplementedError
+
+
+def restart_nodes_daemon():
+    """
+    Only support gce. [WIP]
+
+    Returns:
+
+    """
+    zone = 'us-east1-c'
+    cluster_name = 'slurm-gluster-gpu-'
+    """
+    gcloud compute instances start slurm-gluster-gpu-client001 --zone us-east1-c"""
+    process = subprocess.Popen('gcloud compute instances stop --help', shell=True, stdout=subprocess.PIPE)
+    out, err = process.communicate()
+    if process.returncode != 0:
+        log_mp.error(f'Could not run gcloud compute instances stop command. Error: {err}')
+        raise ValueError
+    log_mp.debug('Restart-slurm-nodes daemon running..')
+    while True:
+        node_states = nodestates_slurm()
+        ixs = np.array(list(node_states.keys()))
+        states = np.array(['down' in v['state'] for v in node_states.values()])
+        if np.sum(states) > 0:
+            node_ix_str = " ".join([f'{cluster_name}{ix}' for ix in ixs[states]])
+
+            log_mp.debug(f'Restarting {np.sum(states)} node(s): "{node_ix_str}".')
+            process = subprocess.Popen(f'gcloud compute instances stop {node_ix_str} --zone {zone}', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "gcloud compute instances stop" command. Error: {err}')
+            process = subprocess.Popen(f'gcloud compute instances start {node_ix_str} --zone {zone}', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "gcloud compute instances start" command. Error: {err}')
+            time.sleep(30)  # wait additional 30 s to give slurm time to start and update status
+        states = np.array(['drain' in v['state'] for v in node_states.values()])
+        if np.sum(states) > 0:
+            nodenames = f'client[{",".join(ix.replace("client", "") for ix in ixs)}]'
+            process = subprocess.Popen(f'sudo scontrol update nodename={nodenames} state=RESUME', shell=True,
+                                       stdout=subprocess.PIPE)
+            out, err = process.communicate()
+            if process.returncode != 0:
+                log_mp.warning(f'Could not run "scontrol update" command. Error: {err}')
+            time.sleep(30)  # wait additional 30 s to give slurm time to start and update status
+        time.sleep(30)

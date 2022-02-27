@@ -17,11 +17,6 @@ import morphx.processing.clouds as clouds
 from torch import nn
 from elektronn3.models.convpoint import SegSmall
 from elektronn3.training import Trainer3d, Backup, metrics
-try:
-    from torch.optim.lr_scheduler import CosineAnnealingWarmRestarts
-except ModuleNotFoundError as e:
-    print(e)
-    from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # PARSE PARAMETERS #
 parser = argparse.ArgumentParser(description='Train a network.')
@@ -155,27 +150,8 @@ valid_ds = CellCloudGlia(npoints=npoints, transform=valid_transform, train=False
 
 # set up optimization
 optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-# optimizer = torch.optim.SGD(
-#     model.parameters(),
-#     lr=lr,  # Learning rate is set by the lr_sched below
-#     momentum=0.9,
-#     weight_decay=0.5e-5,
-# )
-
-# optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
 lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-# lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-# lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
-# lr_sched = torch.optim.lr_scheduler.CyclicLR(
-#     optimizer,
-#     base_lr=1e-4,
-#     max_lr=1e-2,
-#     step_size_up=2000,
-#     cycle_momentum=True,
-#     mode='exp_range',
-#     gamma=0.99994,
-# )
+
 criterion = torch.nn.CrossEntropyLoss()
 if use_cuda:
     criterion.cuda()

@@ -18,9 +18,9 @@ from torch import optim
 import numpy as np
 """
 Used the following to create the GT:
-    create_h5_from_kzip('/wholebrain/songbird/j0126/GT/myeling_gt/myelin_3_0_8.010.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
-    create_h5_from_kzip('/wholebrain/songbird/j0126/GT/myeling_gt/myelin_2_4_1.007.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
-    create_h5_from_kzip('/wholebrain/songbird/j0126/GT/myeling_gt/myelin_0_0_1.007.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
+    create_h5_from_kzip('/myeling_gt/myelin_3_0_8.010.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
+    create_h5_from_kzip('/myeling_gt/myelin_2_4_1.007.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
+    create_h5_from_kzip('/myeling_gt/myelin_0_0_1.007.k.zip', kd_p, mag=4, apply_mops_seg=['binary_opening', 'binary_closing'])
 """
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')

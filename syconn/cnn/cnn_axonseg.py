@@ -14,26 +14,20 @@ from syconn import global_params
 from syconn.cnn.TrainData import MultiviewDataCached
 import argparse
 import os
-import _pickle
 import zipfile
 import torch
 from elektronn3 import logger
 
-from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 from torch import nn
 from torch import optim
-from torch.utils.data.dataset import random_split
 try:
     from elektronn3.modules.loss import DiceLoss
 except ImportError:
     from elektronn3.training.loss import DiceLoss
 from elektronn3.training import metrics
 from elektronn3.models.fcn_2d import *
-from elektronn3.models.unet import UNet
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
-from sys import getsizeof
-import pdb
 
 
 def get_model():
@@ -129,7 +123,6 @@ if __name__ == "__main__":
     #     weight_decay=0.5e-4,
     #     lr=lr,
     # )
-    # lr_sched = CosineAnnealingWarmRestarts(optimizer, 75000, T_mult=2)
 
     # lr_sched = optim.lr_scheduler.ExponentialLR(optimizer, 0.9998)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)

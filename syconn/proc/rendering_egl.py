@@ -319,7 +319,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     ctx = init_ctx(ws, depth_map=depth_map)
     init_opengl(ws, enable_lightning, depth_map=depth_map, clear_value=background)
     vertices = np.array(vertices)
-    indices = np.array(indices, dtype=np.uint)
+    indices = np.array(indices, dtype=np.uint64)
     if colors is not None:
         colored = True
         colors = np.array(colors)
@@ -646,6 +646,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=None,
     if ws is None:
         ws = view_props_default['ws']
     if np.isscalar(comp_window):
+        # TODO: consider using comp_window / 2 for z dimension again
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:
         edge_lengths = comp_window

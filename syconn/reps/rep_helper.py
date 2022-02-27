@@ -198,12 +198,13 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     return subfold
 
 
-def ix_from_subfold(subfold, n_folders):
+def ix_from_subfold(subfold, n_folders) -> int:
     """
 
     Parameters
     ----------
-    subfold : str
+    subfold :
+    n_folders:
 
     Returns
     -------
@@ -324,11 +325,11 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     """
     if colors is None:
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                                    [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+                                    [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.int32)
     else:
         if np.max(colors) <= 1.0:
             colors = np.array(colors) * 255
-        colors = np.array(colors, dtype=np.uint)
+        colors = np.array(colors, dtype=np.int32)
         if len(colors) < np.max(rep_values) + 1:
             msg = 'Length of colors has to be equal to "np.max(rep_values)+1"' \
                   '. Note that currently only consecutive labels are supported.'
@@ -338,7 +339,7 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     if k > len(rep_coords):
         k = len(rep_coords)
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
-    hull_rep = np.zeros((len(vertices)), dtype=np.int)
+    hull_rep = np.zeros((len(vertices)), dtype=np.int32)
     for i in range(len(ixs)):
         curr_reps = np.array(rep_values)[ixs[i]]
         if np.isscalar(curr_reps):
@@ -414,10 +415,10 @@ def surface_samples(coords: np.ndarray,
     """
     coords = np.array(coords)  # create copy!
     offset = np.min(coords, axis=0)
-    bin_sizes = np.array(bin_sizes, dtype=np.float)
+    bin_sizes = np.array(bin_sizes, dtype=np.float32)
     coords -= offset
     query_tree = spatial.cKDTree(coords)
-    nb_bins = np.ceil(np.max(coords, axis=0) / bin_sizes).astype(np.int)
+    nb_bins = np.ceil(np.max(coords, axis=0) / bin_sizes).astype(np.int32)
     nb_bins = np.max([[1, 1, 1], nb_bins], axis=0)
     H, edges = np.histogramdd(coords, bins=nb_bins)
     nb_smaples = np.min([np.sum(H != 0), max_nb_samples])
@@ -436,77 +437,6 @@ def surface_samples(coords: np.ndarray,
     for i, ixs in enumerate(close_ixs):
         samples[i] = np.mean(coords[ixs], axis=0) + offset
     return samples
-
-
-def find_object_properties(cube: np.ndarray) -> \
-        Tuple[Dict[int, Any], Dict[int, Any], Dict[int, Any]]:
-    """
-    Interface method for :func:`~_find_object_properties` (python fallback) and
-    :func:`~find_object_properties_C` (cython).
-
-    Args:
-        cube: The segmentation cube as a 3D array.
-
-    Returns:
-        A list of dictionaries with supervoxel IDs as keys: representative
-        coordinate pointing to an object voxel, bounding box, size (in voxels).
-    """
-    try:
-        from .find_object_properties_C import find_object_propertiesC
-        return find_object_propertiesC(cube)
-    except ImportError:
-        return _find_object_properties(cube)
-
-
-def _find_object_properties(cube: np.ndarray) -> \
-        Tuple[Dict[int, Any], Dict[int, Any], Dict[int, Any]]:
-    """
-    Extracts representative coordinate, bounding box and size for each segmentation objects
-    within `cube`. Ignores ID=0.
-    TODO: find a way to use bincount and find_objects for very large IDs -> use
-     ID remapping to make segmentation IDs contiguous
-
-    Args:
-        cube:
-
-    Returns:
-        A list of dictionaries with supervoxel IDs as keys: representative
-        coordinate pointing to an object voxel, bounding box, size (in voxels).
-
-    """
-    from scipy.ndimage import find_objects
-    mask = cube != 0
-    if np.prod(cube.shape) == 0 or np.sum(mask) == 0:
-        return {}, {}, {}
-    # get sizes
-    min_id = np.min(cube[mask]) - 1  # -1 to not set the lowest ID to background
-    log_reps.debug("Cube size: {}, min/max ID: {}/{}".format(cube.shape, min_id + 1,
-                                                             np.max(cube)))
-    cube[mask] = cube[mask] - min_id
-    cnts = np.bincount(cube.flatten().astype(np.int64))
-    ids = np.nonzero(cnts)[0]
-    # get bounding boxes
-    res = find_objects(
-        cube)  # returns a list of bounding boxes, first entry will correspond to ID=1
-
-    bbs = {}
-    rep_coords = {}
-    sizes = {}
-    for ii in ids:
-        if ii == 0:
-            continue
-        obj_id = int(ii + min_id)
-        # sls = res[int(ii-1)]  # Old version which does not scale to huge IDs
-        sls = res[int(ii - 1)]
-        min_vec = np.array([sl.start for sl in sls],
-                           dtype=np.int)  # -1 because bounding boxes start at element with ID 1
-        max_vec = np.array([sl.stop for sl in sls], dtype=np.int)
-        rand_obj_coord = np.transpose(np.nonzero(cube[sls] == ii))[0]
-        bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
-        sizes[obj_id] = cnts[ii]
-        rep_coords[
-            obj_id] = min_vec + rand_obj_coord
-    return rep_coords, bbs, sizes
 
 
 class SegmentationBase:

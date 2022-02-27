@@ -6,16 +6,16 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import copy
 import re
-from typing import Union, Tuple, List, Optional, Dict, Generator, Any
+from typing import Union, Tuple, List, Optional, Dict, Generator, Any, Iterator
 
 import networkx as nx
 from knossos_utils import knossosdataset
 from scipy import spatial
 
-from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase
+from .rep_helper import subfold_from_ix, knossos_ml_from_svixs, SegmentationBase, get_unique_subfold_ixs
 from .segmentation_helper import *
 from ..handler.basics import get_filepaths_from_dir, safe_copy, \
-    write_txt2kzip, temp_seed
+    write_txt2kzip
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.config import DynConfig
 from ..proc import meshes
@@ -412,7 +412,8 @@ class SegmentationObject(SegmentationBase):
         Path to the voxel storage. See :class:`~syconn.backend.storage.VoxelStorageDyn`
         for details.
         """
-        return self.segobj_dir + "/voxel.pkl"
+        # file type is inferred by either VoxelStorageLazyLoading or VoxelStorageDyn
+        return self.segobj_dir + "/voxel"
 
     #                                                                 PROPERTIES
     @property
@@ -423,6 +424,7 @@ class SegmentationObject(SegmentationBase):
             None if object is not of type 'cs', else return the IDs to the two
             supervoxels which are part of the contact site.
         """
+        # TODO: use `cs_id_to_partner_ids_vec`  (single source of truth)
         if self.type in ['cs', 'syn']:
             partner = [self.id >> 32]
             partner.append(self.id - (partner[0] << 32))
@@ -438,7 +440,7 @@ class SegmentationObject(SegmentationBase):
         """
         if self._size is None and 'size' in self.attr_dict:
             self._size = self.attr_dict['size']
-        if self._size is None and self.attr_dict_exists:
+        elif self._size is None and self.attr_dict_exists:
             self._size = self.lookup_in_attribute_dict("size")
         if self._size is None:
             self.calculate_size()
@@ -459,7 +461,7 @@ class SegmentationObject(SegmentationBase):
     def bounding_box(self) -> np.ndarray:
         if self._bounding_box is None and 'bounding_box' in self.attr_dict:
             self._bounding_box = self.attr_dict['bounding_box']
-        if self._bounding_box is None and self.attr_dict_exists:
+        elif self._bounding_box is None and self.attr_dict_exists:
             self._bounding_box = self.lookup_in_attribute_dict('bounding_box')
         if self._bounding_box is None:
             self.calculate_bounding_box()
@@ -477,7 +479,7 @@ class SegmentationObject(SegmentationBase):
         """
         if self._rep_coord is None and 'rep_coord' in self.attr_dict:
             self._rep_coord = self.attr_dict['rep_coord']
-        if self._rep_coord is None and self.attr_dict_exists:
+        elif self._rep_coord is None and self.attr_dict_exists:
             self._rep_coord = self.lookup_in_attribute_dict("rep_coord")
         if self._rep_coord is None:
             self.calculate_rep_coord()
@@ -504,9 +506,15 @@ class SegmentationObject(SegmentationBase):
     def voxels_exist(self) -> bool:
         if self.version == 'tmp':
             return False
-        voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                disable_locking=True)  # look-up only, PS 12Dec2018
-        return self.id in voxel_dc
+        if self.type in ['syn', 'syn_ssv']:
+            voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            exists = self.id in voxel_dc
+            voxel_dc.close()
+        else:
+            voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                       disable_locking=True)
+            self.id in voxel_dc
+        return exists
 
     @property
     def voxels(self) -> np.ndarray:
@@ -605,8 +613,7 @@ class SegmentationObject(SegmentationBase):
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
                 verts = self.mesh[1].reshape(-1, 3)
-                self._mesh_bb = [np.min(verts, axis=0),
-                                 np.max(verts, axis=0)]
+                self._mesh_bb = np.array([np.min(verts, axis=0), np.max(verts, axis=0)], dtype=np.float32)
         return self._mesh_bb
 
     @property
@@ -642,7 +649,7 @@ class SegmentationObject(SegmentationBase):
         if self.version == 'tmp':
             return False
         location_dc = CompressedStorage(self.locations_path,
-                                        disable_locking=True)  # look-up only, PS 12Dec2018
+                                        disable_locking=True)
         return self.id in location_dc
 
     def views_exist(self, woglia: bool, index_views: bool = False,
@@ -651,14 +658,14 @@ class SegmentationObject(SegmentationBase):
         True if rendering locations have been stored at :func:`~view_path`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
         """
         if self.version == 'tmp':
             return False
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    disable_locking=True)  # look-up only, PS 12Dec2018
+                                    disable_locking=True)
         return self.id in view_dc
 
     def views(self, woglia: bool, index_views: bool = False,
@@ -668,7 +675,7 @@ class SegmentationObject(SegmentationBase):
         :py:attr:`~type` must be `sv`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
 
@@ -734,11 +741,14 @@ class SegmentationObject(SegmentationBase):
         Returns:
             3D array of the all voxels which belong to this supervoxel.
         """
-        if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True, disable_locking=True)
-        if not isinstance(voxel_dc, VoxelStorageDyn):
-            voxels = load_voxels_depr(self, voxel_dc=voxel_dc)
+        # syn_ssv do not have a segmentation KD; voxels are cached in their VoxelStorage
+        if self.type in ['syn', 'syn_ssv']:
+            vxs_list = self.voxel_list - self.bounding_box[0]
+            voxels = np.zeros(self.bounding_box[1] - self.bounding_box[0] + 1, dtype=np.bool)
+            voxels[vxs_list[..., 0], vxs_list[..., 1], vxs_list[..., 2]] = True
         else:
+            if voxel_dc is None:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True, disable_locking=True)
             voxels = voxel_dc.get_voxel_data_cubed(self.id)[0]
         if self.voxel_caching:
             self._voxels = voxels
@@ -879,6 +889,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
 
         """
+        _supported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
+        if self.type in _supported_types:
+            raise ValueError(f'"mesh_from_scratch" does not support type "{self.type}". Supported types: '
+                             f'{_supported_types}')
         if ds is None:
             ds = self.config['meshes']['downsampling'][self.type]
         return meshes.get_object_mesh(self, ds, mesher_kwargs=kwargs)
@@ -918,12 +932,12 @@ class SegmentationObject(SegmentationBase):
             color = (130, 130, 130, 160)
         elif self.type == "cs":
             color = (100, 200, 30, 255)
-        elif self.type == "conn":
-            color = (150, 50, 200, 255)
         elif self.type == "syn":
             color = (150, 50, 200, 255)
         elif self.type == "syn_ssv":
             color = (240, 50, 50, 255)
+        elif self.type == "cs_ssv":
+            color = (100, 200, 30, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -931,7 +945,7 @@ class SegmentationObject(SegmentationBase):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise TypeError("Given object type '{}' does not exist."
+            raise TypeError("Color for bbject type '{}' does not exist."
                             "".format(self.type))
         color = np.array(color, dtype=np.uint8)
         if ext_color is not None:
@@ -962,7 +976,7 @@ class SegmentationObject(SegmentationBase):
         Loader method of :py:attr:`~views`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
             raw_only: If True, ignores cell organelles projections.
@@ -999,7 +1013,7 @@ class SegmentationObject(SegmentationBase):
             * remove `cellobjects_only`.
 
         Args:
-            woglia: If True, looks for views without glia, i.e. after glia separation.
+            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
             index_views: If True, refers to index views.
             view_key: Identifier of the requested views.
             views: View array.
@@ -1142,8 +1156,11 @@ class SegmentationObject(SegmentationBase):
                 this object.
         """
         if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                    disable_locking=True)
+            if self.type in ['syn', 'syn_ssv']:
+                voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            else:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                           disable_locking=True)
 
         if self.id not in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
@@ -1153,50 +1170,11 @@ class SegmentationObject(SegmentationBase):
         if isinstance(voxel_dc, VoxelStorageDyn):
             self._rep_coord = voxel_dc.object_repcoord(self.id)
             return
-
-        bin_arrs, block_offsets = voxel_dc[self.id]
-        block_offsets = np.array(block_offsets)
-
-        if len(bin_arrs) > 1:
-            sizes = []
-            for i_bin_arr in range(len(bin_arrs)):
-                sizes.append(np.sum(bin_arrs[i_bin_arr]))
-
-            sizes = np.array(sizes)
-            center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
-                                 np.mean(block_offsets[:, 1] * sizes) / self.size,
-                                 np.mean(block_offsets[:, 2] * sizes) / self.size]
-            center_of_gravity = np.array(center_of_gravity)
-
-            dists = spatial.distance.cdist(block_offsets,
-                                           np.array([center_of_gravity]))
-
-            central_block_id = np.argmin(dists)
+        elif isinstance(voxel_dc, VoxelStorageLazyLoading):
+            self._rep_coord = voxel_dc[self.id][len(voxel_dc[self.id]) // 2]  # any rep coord
+            return
         else:
-            central_block_id = 0
-
-        vx = bin_arrs[central_block_id].copy()
-        central_block_offset = block_offsets[central_block_id]
-
-        id_locs = np.where(vx == vx.max())
-        id_locs = np.array(id_locs)
-
-        # downsampling to ensure fast processing - this is deterministic!
-        if len(id_locs[0]) > 1e4:
-            with temp_seed(0):
-                idx = np.random.randint(0, len(id_locs[0]), int(1e4))
-            id_locs = np.array([id_locs[0][idx], id_locs[1][idx], id_locs[2][idx]])
-
-        # calculate COM
-        COM = np.mean(id_locs, axis=1)
-
-        # ensure that the point is contained inside of the object, i.e. use closest existing point to COM
-        kdtree_array = np.swapaxes(id_locs, 0, 1)
-        kdtree = spatial.cKDTree(kdtree_array)
-        dd, ii = kdtree.query(COM, k=1)
-        found_point = kdtree_array[ii, :]
-
-        self._rep_coord = found_point + central_block_offset
+            raise ValueError(f'Invalid voxel storage class: {type(voxel_dc)}')
 
     def calculate_bounding_box(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
@@ -1206,8 +1184,11 @@ class SegmentationObject(SegmentationBase):
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
         """
         if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                    disable_locking=True)
+            if self.type in ['syn', 'syn_ssv']:
+                voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            else:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                           disable_locking=True)
         if not isinstance(voxel_dc, VoxelStorageDyn):
             _ = self.load_voxels(voxel_dc=voxel_dc)
         else:
@@ -1223,8 +1204,11 @@ class SegmentationObject(SegmentationBase):
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
         """
         if voxel_dc is None:
-            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                    disable_locking=True)
+            if self.type in ['syn', 'syn_ssv']:
+                voxel_dc = VoxelStorageLazyLoading(self.voxel_path)
+            else:
+                voxel_dc = VoxelStorageDyn(self.voxel_path, read_only=True,
+                                           disable_locking=True)
         if not isinstance(voxel_dc, VoxelStorageDyn):
             _ = self.load_voxels(voxel_dc=voxel_dc)
         else:
@@ -1238,7 +1222,7 @@ class SegmentationObject(SegmentationBase):
         Write supervoxel segmentation to k.zip.
 
         Todo:
-            * check usage.
+            * Broken, segmentation not rendered in K.
 
         Args:
             path:
@@ -1254,11 +1238,8 @@ class SegmentationObject(SegmentationBase):
             except:
                 raise ValueError("KnossosDataset could not be loaded")
 
-        kd.from_matrix_to_cubes(self.bounding_box[0],
-                                data=self.voxels.astype(np.uint64) * write_id,
-                                datatype=np.uint64,
-                                kzip_path=path,
-                                overwrite=False)
+        kd.save_to_kzip(offset=self.bounding_box[0], data=self.voxels.astype(np.uint64).swapaxes(0, 2) * write_id,
+                        kzip_path=path, data_mag=1, mags=[1])
 
     def clear_cache(self):
         """
@@ -1385,7 +1366,7 @@ class SegmentationDataset(SegmentationBase):
 
         After successfully executing
         :class:`~syconn.exec.exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
-        can be loaded from cache via the following keys:
+        can be loaded from numpy arrays via the following keys:
             * 'id': ID array, identical to :py:attr:`~ids`.
             * 'bounding_box': Bounding box of every SV.
             * 'size': Number voxels of each SV.
@@ -1398,17 +1379,17 @@ class SegmentationDataset(SegmentationBase):
             * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SVs.
             * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
 
-        If a glia separation is performed, the following attributes will be cached as well:
+        If astrocyte separation is performed, the following attributes will be stored as numpy array as well:
             * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
               locations, 2: 0-index=neuron, 1-index=glia).
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
         organelles (e.g. 'mi', 'vc', etc.; see
-        :py:attr:`~syconn.global_params.config['existing_cell_organelles']`).
+        :py:attr:`~syconn.global_params.config['process_cell_organelles']`).
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
-        properties are cached:
+        properties are stored as numpy arrays:
             * 'id': ID array, identical to
               :py:attr:`~ids`.
             * 'bounding_box': Bounding box of every SV.
@@ -1441,8 +1422,6 @@ class SegmentationDataset(SegmentationBase):
             * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
               :py:attr:`~syconn.global_params.config['cell_objects']['sym_thresh']` .
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
-            * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
-              objects.
     """
 
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,
@@ -1462,7 +1441,7 @@ class SegmentationDataset(SegmentationBase):
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
                 setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
             n_folders_fs: Number of folders within the dataset's folder structure.
-            cache_properties: Use numpy cache arrays to populate the specified object properties when initializing
+            cache_properties: Use numpy arrays to populate the specified object properties when initializing
                 :py:class:`~syconn.reps.segmentation.SegmentationObject` via :py:func:`~get_segmentation_object`.
         """
 
@@ -1476,6 +1455,7 @@ class SegmentationDataset(SegmentationBase):
         self._config = config
         self._soid2ix = None
         self._property_cache = dict()
+        self._version = None
         if cache_properties is None:
             cache_properties = tuple()
 
@@ -1687,6 +1667,21 @@ class SegmentationDataset(SegmentationBase):
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
         return sorted(glob.glob(p))
 
+    def iter_so_dir_paths(self) -> Iterator[str]:
+        """
+        Iterator over all possible `SegmentationObject` storage base directories.
+
+        Notes:
+            In contrast to :attr:`~so_dir_paths` this iterator may return paths to storages that
+            do not exist, in the case that no object fell into its ID bucket.
+
+        Returns:
+            Path to ID storage base folder.
+        """
+        storage_location_ids = get_unique_subfold_ixs(self.n_folders_fs)
+        for ix in storage_location_ids:
+            yield self.so_storage_path + subfold_from_ix(ix, self.n_folders_fs)
+
     @property
     def config(self) -> DynConfig:
         """
@@ -1767,13 +1762,14 @@ class SegmentationDataset(SegmentationBase):
             yield self.get_segmentation_object(self.ids[ix])
             ix += 1
 
-    def load_cached_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
+    def load_numpy_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
         """
         Load cached array. The ordering of the returned array will correspond
         to :py:attr:`~ids`.
 
         Todo:
             * remove 's' appendix in file names.
+            * remove 'celltype' replacement for 'celltype_cnn_e3' as soon as 'celltype_cnn_e3' was renamed package-wide
 
         Args:
             prop_name: Identifier of the requested cache array.
@@ -1782,10 +1778,12 @@ class SegmentationDataset(SegmentationBase):
         Returns:
             numpy array of property `prop_name`.
         """
+        if prop_name == 'celltype':
+            prop_name = 'celltype_cnn_e3'
         if os.path.exists(self.path + prop_name + "s.npy"):
             return np.load(self.path + prop_name + "s.npy", allow_pickle=True)
         else:
-            msg = f'Requested data cache "{prop_name}" did not exist.'
+            msg = f'Requested data cache "{prop_name}" did not exist in {self}.'
             if not allow_nonexisting:
                 log_reps.error(msg)
                 raise FileNotFoundError(msg)
@@ -1845,7 +1843,7 @@ class SegmentationDataset(SegmentationBase):
 
         so = SegmentationObject(**kwargs_def)
         for k, v in self._property_cache.items():
-            so.attr_dict[k] = v[self._soid2ix[obj_id]]
+            so.attr_dict[k] = v[self.soid2ix[obj_id]]
         return so
 
     def save_version_dict(self):
@@ -1863,6 +1861,12 @@ class SegmentationDataset(SegmentationBase):
         except Exception as e:
             raise FileNotFoundError('Version dictionary of SegmentationDataset not found. {}'.format(str(e)))
 
+    @property
+    def soid2ix(self):
+        if self._soid2ix is None:
+            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
+        return self._soid2ix
+
     def enable_property_cache(self, property_keys: Iterable[str]):
         """
         Add properties to cache.
@@ -1877,9 +1881,9 @@ class SegmentationDataset(SegmentationBase):
                 property_keys.remove(k)
         if len(property_keys) == 0:
             return
-        if self._soid2ix is None:
-            self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
-        self._property_cache.update({k: self.load_cached_data(k, allow_nonexisting=False) for k in property_keys})
+        # init index array
+        _ = self.soid2ix
+        self._property_cache.update({k: self.load_numpy_data(k, allow_nonexisting=False) for k in property_keys})
 
     def get_volume(self, source: str = 'total') -> float:
         """
@@ -1894,10 +1898,10 @@ class SegmentationDataset(SegmentationBase):
         """
         self.enable_property_cache(['size'])
         if source == 'neuron':
-            g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+            g = nx.read_edgelist(global_params.config.pruned_svgraph_path, nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'glia':
-            g = nx.read_edgelist(global_params.config.working_dir + "/glia/glia_rag.bz2", nodetype=np.uint)
+            g = nx.read_edgelist(global_params.config.working_dir + "/glia/astrocyte_svgraph.bz2", nodetype=np.uint64)
             svids = g.nodes()
         elif source == 'total':
             svids = self.ids

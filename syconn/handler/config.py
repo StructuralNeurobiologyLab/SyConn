@@ -92,7 +92,9 @@ class Config(object):
         Reads the content stored in the config file.
         """
         try:
-            self._config = yaml.load(open(self.path_config, 'r'), Loader=yaml.FullLoader)
+            with open(self.path_config, 'r') as f:
+                self._config = yaml.load(f, Loader=yaml.FullLoader)
+                
             self.initialized = True
         except FileNotFoundError:
             pass
@@ -340,16 +342,34 @@ class DynConfig(Config):
         return self.entries['paths']['kd_mi']
 
     @property
-    def kd_organells_paths(self) -> Dict[str, str]:
+    def kd_er_path(self) -> str:
+        """
+        Returns:
+            Path to ER probability map or binary predictions stored as
+            ``KnossosDataset``.
+        """
+        return self.entries['paths']['kd_er']
+
+    @property
+    def kd_golgi_path(self) -> str:
+        """
+        Returns:
+            Path to Golgi probability map or binary predictions stored as
+            ``KnossosDataset``.
+        """
+        return self.entries['paths']['kd_golgi']
+
+    @property
+    def kd_organelles_paths(self) -> Dict[str, str]:
         """
         KDs of subcell. organelle probability maps
 
         Returns:
-            Dictionary containg the paths to ``KnossosDataset`` of available
-            cellular containing ``global_params.config['existing_cell_organelles']``.
+            Dictionary containing the paths to ``KnossosDataset`` of available
+            cellular containing ``global_params.config['process_cell_organelles']``.
         """
         path_dict = {k: self.entries['paths']['kd_{}'.format(k)] for k in
-                     self['existing_cell_organelles']}
+                     self['process_cell_organelles']}
         return path_dict
 
     @property
@@ -359,10 +379,10 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containing the paths to ``KnossosDataset`` of available
-            cellular organelles ``global_params.config['existing_cell_organelles']``.
+            cellular organelles ``global_params.config['process_cell_organelles']``.
         """
         path_dict = {k: "{}/knossosdatasets/{}_seg/".format(
-            self.working_dir, k) for k in self['existing_cell_organelles']}
+            self.working_dir, k) for k in self['process_cell_organelles']}
         return path_dict
 
     @property
@@ -375,28 +395,83 @@ class DynConfig(Config):
         return "{}/tmp/".format(self.working_dir)
 
     @property
-    def init_rag_path(self) -> str:
+    def init_svgraph_path(self) -> str:
         """
         Returns:
             Path to initial RAG.
         """
         self._check_actuality()
-        p = self.entries['paths']['init_rag']
+        p = self.entries['paths']['init_svgraph']
         if p is None or len(p) == 0:
             p = self.working_dir + "/rag.bz2"
         return p
 
     @property
-    def pruned_rag_path(self) -> str:
+    def pruned_svgraph_path(self) -> str:
         """
-        See config parameter
-        ``global_params.config['glia']['min_cc_size_ssv']``.
+        Pruned SV graph. All cells or cell fragments with bounding box diagonal
+        of less than ``global_params.config['min_cc_size_ssv']`` are filtered.
 
         Returns:
-            Path to pruned RAG after size filtering.
+            Path to pruned SV graph after size filtering.
         """
         self._check_actuality()
-        return self.working_dir + '/pruned_rag.bz2'
+        return self.working_dir + '/pruned_svgraph.bz2'
+
+    @property
+    def pruned_svagg_list_path(self) -> str:
+        """
+        Pruned SV lists. All cells or cell fragments with bounding box diagonal
+        of less than ``global_params.config['min_cc_size_ssv']`` are filtered.
+
+        Returns:
+            Path to pruned agglomeration list (list of SV IDs for every cell) after size filtering.
+        """
+        self._check_actuality()
+        return self.working_dir + '/pruned_svagg_list.txt'
+
+    @property
+    def neuron_svgraph_path(self) -> str:
+        """
+        Neuron SV graph.
+
+        Returns:
+            Path to neuron SV graph.
+        """
+        self._check_actuality()
+        return "{}/glia/neuron_svgraph.bz2".format(self.working_dir)
+
+    @property
+    def neuron_svagg_list_path(self) -> str:
+        """
+        Neuron SV lists.
+
+        Returns:
+            Path to agglomeration list (list of SV IDs for every cell).
+        """
+        self._check_actuality()
+        return "{}/glia/neuron_svagg_list.txt".format(self.working_dir)
+
+    def astrocyte_svgraph_path(self) -> str:
+        """
+        Astrocyte SV graph.
+
+        Returns:
+            Path to neuron SV graph.
+        """
+        self._check_actuality()
+        return "{}/glia/astrocyte_svgraph.bz2".format(global_params.config.working_dir)
+
+    @property
+    def astrocyte_svagg_list_path(self) -> str:
+        """
+        Astrocyte SV lists.
+
+        Returns:
+            Path to agglomeration list (list of SV IDs for every cell).
+        """
+        self._check_actuality()
+        return "{}/glia/astrocyte_svagg_list.txt".format(self.working_dir)
 
     # --------- CLASSIFICATION MODELS
     @property
@@ -467,7 +542,6 @@ class DynConfig(Config):
             and ``other`` (soma and axon) via 2D projections (-> semantic segmentation).
         """
         return self.model_dir + '/spiness/model.pts'
-        # return self.model_dir + '/spiness/'
 
     @property
     def mpath_axonsem(self) -> str:
@@ -477,7 +551,6 @@ class DynConfig(Config):
             dendrites and somata via 2D projections.
         """
         return self.model_dir + '/axoness_semseg/model.pts'
-        # return self.model_dir + '/axoness_semseg/'
 
     @property
     def mpath_compartment_pts(self) -> str:
@@ -556,8 +629,42 @@ class DynConfig(Config):
         return self.model_dir + '/syntype/model.pts'
 
     @property
+    def mpath_er(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying cell parts occupied
+            by ER within 3D EM raw data.
+        """
+        return self.model_dir + '/er/model.pts'
+
+    @property
+    def mpath_golgi(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying cell parts occupied
+            by Golgi Apparatus within 3D EM raw data.
+        """
+        return self.model_dir + '/golgi/model.pts'
+
+    @property
+    def mpath_mivcsj(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying synapse types (symmetric
+            vs. asymmetric) within 3D EM raw data.
+        """
+        return self.model_dir + '/mivcsj/model.pt'
+
+    @property
     def mpath_syn_rfc(self) -> str:
         return self.model_dir + '/conn_syn_rfc//rfc'
+
+    @property
+    def mpath_syn_rfc_fallback(self) -> str:
+        """
+        Path to rfc model created with sklearn==0.21.0
+        """
+        return self.model_dir + '/conn_syn_rfc//rfc_fallback'
 
     @property
     def allow_mesh_gen_cells(self) -> bool:
@@ -654,16 +761,16 @@ class DynConfig(Config):
         return f"{self.working_dir}/{self['batch_proc_system']}/"
 
     @property
-    def prior_glia_removal(self) -> bool:
+    def prior_astrocyte_removal(self) -> bool:
         """
-        If ``True`` glia separation procedure will be initiated to create a
-        glia-separated RAG (see ``glia/neuron_rag.bz2`` and
-        ``glia/glia_rag.bz2``).
+        If ``True`` astrocyte separation procedure will be initiated to create a
+        astrocyte-separated RAG (see ``glia/neuron_svgraph.bz2`` and
+        ``glia/astrocyte_svgraph.bz2``).
 
         Returns:
             Value stored in ``config.yml``.
         """
-        return self.entries['glia']['prior_glia_removal']
+        return self.entries['glia']['prior_astrocyte_removal']
 
     @property
     def use_new_subfold(self) -> bool:
@@ -708,8 +815,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                           kd_asym: Optional[str] = None,
                           kd_sj: Optional[str] = None, kd_mi: Optional[str] = None,
-                          kd_vc: Optional[str] = None, init_rag_p: str = "",
-                          prior_glia_removal: bool = True,
+                          kd_vc: Optional[str] = None, kd_er: Optional[str] = None,
+                          kd_golgi: Optional[str] = None, init_svgraph_path: str = "",
+                          prior_astrocyte_removal: bool = True,
                           use_new_meshing: bool = True,
                           allow_mesh_gen_cells: bool = True,
                           use_new_subfold: bool = True, force_overwrite=False,
@@ -721,8 +829,8 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     OpenGL (egl vs osmesa), the scheduling system (SLURM vs QSUB vs None) and
     various parameters for processing the data. See
     ``SyConn/scripts/example_run/start.py`` for an example.
-    ``init_rag`` can be set specifically in the config-file which is optional.
-    By default it is set to ``init_rag = working_dir + "rag.bz2"``. SyConn then
+    ``init_svgraph_path`` can be set specifically in the config-file which is optional.
+    By default it is set to ``init_svgraph_path = working_dir + "rag.bz2"``. SyConn then
     will require an edge list of the supervoxel graph, see also
     ``SyConn/scripts/example_run/start.py``.
     Writes the file ``config.yml`` to `working_dir` after adapting the
@@ -748,8 +856,10 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         kd_sj: Path to the synaptic junction predictions.
         kd_mi: Path to the mitochondria predictions.
         kd_vc: Path to the vesicle cloud predictions.
-        init_rag_p: Path to the initial supervoxel graph.
-        prior_glia_removal: If True, applies glia separation before analysing
+        kd_er: Path to the ER predictions.
+        kd_golgi: Path to the Golgi-Apparatus predictions.
+        init_svgraph_path: Path to the initial supervoxel graph.
+        prior_astrocyte_removal: If True, applies astrocyte separation before analysing
             cell reconstructions.
         use_new_meshing: If True, uses new meshing procedure based on `zmesh`.
         allow_mesh_gen_cells: If True, meshing of cell supervoxels will be
@@ -772,6 +882,10 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         kd_mi = working_dir + 'knossosdatasets/mi/'
     if kd_vc is None:
         kd_vc = working_dir + 'knossosdatasets/vc/'
+    if kd_er is None:
+        kd_er = working_dir + 'knossosdatasets/er/'
+    if kd_golgi is None:
+        kd_golgi = working_dir + 'knossosdatasets/golgi/'
 
     default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
     entries = default_conf.entries
@@ -781,7 +895,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     entries['paths']['kd_sj'] = kd_sj
     entries['paths']['kd_vc'] = kd_vc
     entries['paths']['kd_mi'] = kd_mi
-    entries['paths']['init_rag'] = init_rag_p
+    entries['paths']['kd_er'] = kd_er
+    entries['paths']['kd_golgi'] = kd_golgi
+    entries['paths']['init_svgraph'] = init_svgraph_path
     entries['paths']['use_new_subfold'] = use_new_subfold
     if type(scaling) is np.ndarray:
         scaling = scaling.tolist()
@@ -794,7 +910,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
-    entries['glia']['prior_glia_removal'] = prior_glia_removal
+    entries['glia']['prior_astrocyte_removal'] = prior_astrocyte_removal
     if key_value_pairs is not None:
         _update_key_value_pair_rec(key_value_pairs, entries)
     default_conf._working_dir = working_dir

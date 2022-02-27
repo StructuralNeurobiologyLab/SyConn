@@ -72,8 +72,9 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     sso._object_caching = True
     sso._view_caching = True
 
-    # meshes
-    for obj_type in global_params.config['existing_cell_organelles'] + ["sv", "syn_ssv"]:
+    # meshes; added 'sj' because test-kzips do not contain 'syn_ssv' objects
+    obj_types = set(global_params.config['process_cell_organelles']).union({'sv', 'sj'})
+    for obj_type in obj_types:
         ply_name = "{}.ply".format(obj_type)
         if ply_name in files:
             sso._meshes[obj_type] = read_mesh_from_zip(path, ply_name)
@@ -109,7 +110,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
             tmp_dir = os.path.dirname(path)
             tmp_p = "{}/rag.bz2".format(tmp_dir)
             z.extract('rag.bz2', tmp_dir)
-            sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint)
+            sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint64)
             os.remove(tmp_p)
             _ = sso.rag  # invoke node conversion into SegmentationObjects
         files.remove("rag.bz2")

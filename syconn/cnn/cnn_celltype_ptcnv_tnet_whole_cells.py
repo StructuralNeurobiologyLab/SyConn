@@ -15,12 +15,10 @@ import elektronn3
 elektronn3.select_mpl_backend('Agg')
 import morphx.processing.clouds as clouds
 from torch import nn
-from elektronn3.models.convpoint import ModelNet40, ModelNetBig, ModelNetAttention
+from elektronn3.models.convpoint import ModelNet40
 from elektronn3.training import Trainer3dTriplet, Backup
-from elektronn3.training import SWA
 import torch.nn.functional as F
 import numpy as np
-from elektronn3.training.schedulers import CosineAnnealingWarmRestarts
 
 # Dimension of latent space
 Z_DIM = 10
@@ -160,12 +158,6 @@ if __name__ == '__main__':
                        track_running_stats=track_running_stats, act=act)
     name += '_moreAug4'
 
-    # model = ModelNetBig(input_channels, Z_DIM)
-    # name += '_big'
-
-    # model = ModelNetAttention(input_channels, Z_DIM, npoints=npoints)
-    # name += '_attention'
-
     model = TripletNet(model)
     model = nn.DataParallel(model)
 
@@ -212,7 +204,6 @@ if __name__ == '__main__':
     # optimizer = SWA(optimizer)  # Enable support for Stochastic Weight Averaging
     lr_sched = torch.optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     # lr_sched = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.99992)
-    # lr_sched = CosineAnnealingWarmRestarts(optimizer, T_0=4000, T_mult=2)
     # lr_sched = torch.optim.lr_scheduler.CyclicLR(
     #     optimizer,
     #     base_lr=1e-4,

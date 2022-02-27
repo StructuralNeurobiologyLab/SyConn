@@ -27,6 +27,10 @@ if __name__ == '__main__':
         raise FileNotFoundError('Could not find cell reconstruction file at the'
                                 f' specified location {cell_kzip_fn}.')
 
+    model_p = args.modelpath
+    if not os.path.isdir(path_to_workingdir) and os.path.isdir(os.path.expanduser(f'~/SyConnData/models/')):
+        path_to_workingdir = os.path.expanduser(f'~/SyConnData/')
+
     # set working directory to obtain models
     global_params.wd = path_to_workingdir
 
@@ -36,8 +40,6 @@ if __name__ == '__main__':
     from syconn.reps.super_segmentation_helper import semseg_of_sso_nocache
     from syconn.proc.ssd_assembly import init_sso_from_kzip
     from syconn.handler.prediction import get_semseg_axon_model
-
-    model_p = args.modelpath
 
     # get model for compartment detection
     if model_p is None:
@@ -62,7 +64,7 @@ if __name__ == '__main__':
         m = InferenceModel(model_p)
         m._path = model_p
 
-    view_props = global_params.config['compartments']['view_properties_semsegax']
+    view_props = dict(global_params.config['compartments']['view_properties_semsegax'])
     view_props["verbose"] = True
 
     # load SSO instance from k.zip file

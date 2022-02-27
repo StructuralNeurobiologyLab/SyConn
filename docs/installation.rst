@@ -33,3 +33,20 @@ To update the environment, e.g. if the environment file changed, use::
 
     conda env update --name syco --file environment.yml --prune
 
+
+Troubleshooting
+===============
+
+In case you encounter the following import error with vigra::
+
+    ImportError: libemon.so.1.3.1: cannot open shared object file: No such file or directory
+
+
+try to install lemon from scratch or via conda::
+
+    conda install lemon=1.3.1=he9d42e9_3 -c conda-forge
+
+
+If glibc >= 2.27 is available on you compute environment you can relax the open3d and pytorch versio. restriction.
+
+Also see the dumps of environment yaml files in the example folder.
