@@ -1203,6 +1203,7 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
     """
     assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
     if segobj._voxel_list is None:
+        # Does not work since 9c064cd1, see method (calc_cell_mesh_from_points) below for working solution
         if segobj.type == 'cs':
             if voxel_dc is None:
                 voxel_dc = VoxelStorageDyn(segobj.voxel_path, read_only=True, disable_locking=True, voxel_mode=False)
