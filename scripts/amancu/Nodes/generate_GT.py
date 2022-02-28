@@ -22,15 +22,16 @@ except ImportError:
 
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from scipy.spatial import cKDTree
 from syconn import global_params
 from syconn.handler.config import initialize_logging
 from syconn.handler.basics import write_obj2pkl, load_pkl2obj
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
-from syconn.proc.meshes import calc_contact_syn_mesh, mesh2obj_file_colors, merge_meshes
+from syconn.proc.meshes import calc_contact_syn_mesh, mesh2obj_file_colors, merge_meshes, gen_mesh_voxelmask
 from syconn.proc.ssd_proc import merge_ssv
+from syconn.backend.storage import AttributeDict, MeshStorage, VoxelStorage, VoxelStorageDyn, VoxelStorageLazyLoading
 from morphx.classes.hybridmesh import HybridCloud
 
 # paths
@@ -77,8 +78,6 @@ def get_skeleton_label_and_distances(merged_cell, cs_coord_list, source_node_idc
     for i in range(len(dist.keys())):
         node_features[list(dist.keys())[i]] = list(dist.values())[i]
 
-    # print(f'Unique node features: {np.unique(node_features)}')
-
     return merged_cell_nodes, node_features
 
 
@@ -95,7 +94,7 @@ def merge_ssv_and_get_source_node_idcs(cell_obj1, cell_obj2, cs_coord_list):
             Two cells to be merged.
         cs_coord_list : List of locations representing each area of contact site
     """
-    # print(f'Representative coords list length: {len(cs_coord_list)}')
+
     merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
     for mesh_type in [
         'sv']:  # , 'syn_ssv', 'vc', 'mi']:                                     # 'sj' fails for current v3 dataset (Not Found)
@@ -129,16 +128,14 @@ def merge_ssv_and_get_source_node_idcs(cell_obj1, cell_obj2, cs_coord_list):
     node_tree2 = cKDTree(data=scaled_skeleton2)
     # find first neighboring node from each skeleton
     for cs_coord in cs_coord_list:
-        _, idcs1 = node_tree1.query(cs_coord, k=1, workers=2)
-        _, idcs2 = node_tree2.query(cs_coord, k=1, workers=2)
-        # print(f'indices 1: {idcs1} \n indices 2: {idcs2}')
+        _, idcs1 = node_tree1.query(cs_coord, k=1, n_jobs=2)
+        _, idcs2 = node_tree2.query(cs_coord, k=1, n_jobs=2)
         try:
             node_pairs.append([idcs1, idcs2 + edge_idc_offset])
         except Exception as e:
             log.error(f'Exception: {e}')
             continue  # if no neighbor was found in either nn searches
 
-    # print(f'New node pairs: {np.unique(node_pairs,axis=0)}')
     # add remaining edges of the merge spot
     merged_cell.skeleton['edges'] = np.concatenate([merged_cell.skeleton['edges'], np.unique(node_pairs,
                                                                                              axis=0)])  # node_pairs should be unique, as some node connecttions repeat themselves
@@ -175,25 +172,26 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
 
         # cs coords for skeleton nodes
         cs_coord_list = []
-        try:
-            for cs_id in cell_pair2cs_ids[(cell1, cell2)]:
-                cs = cs_dataset.get_segmentation_object(cs_id)
-                # list of cs meshes [(indices, vertices, normals)]
-                cs_mesh = calc_contact_syn_mesh(cs, vertex_size=10)
-                for mesh in cs_mesh:
-                    area_mesh = mesh[1].reshape(-1, 3)
-                    pcd = o3d.geometry.PointCloud()
-                    pcd.points = o3d.utility.Vector3dVector(area_mesh)
-                    voxel_size = 300
-                    _, idcs = pcd.voxel_down_sample_and_trace(voxel_size, pcd.get_min_bound(), pcd.get_max_bound())
-                    rep_coords = area_mesh[np.max(idcs, axis=1)]
-                    # print(f'rep coords: {rep_coords}')
-                    # choose the mean coords on each axis as the representative coordinate for the contact site
-                    # rep_coord = np.mean(area_mesh, axis=0)
-                    cs_coord_list.extend(rep_coords)
-        except Exception as e:
-            log.error(f'[EXCEPTION]: {e}')
-            continue
+        # try:
+        for cs_id in cell_pair2cs_ids[(cell1, cell2)]:
+            cs = cs_dataset.get_segmentation_object(cs_id)
+            # list of cs meshes [(indices, vertices, normals)]
+            voxel_dc = VoxelStorage(cs.voxel_path, read_only=True, disable_locking=True)
+            voxel_iter = voxel_dc.iter_voxelmask_offset(cs.id, overlap=1)
+            cs_mesh = gen_mesh_voxelmask(voxel_iter, cs.scaling, overlap=1, compute_connected_components=True)
+            for mesh in cs_mesh:
+                area_mesh = mesh[1].reshape(-1, 3)
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(area_mesh)
+                voxel_size = 300
+                _, idcs = pcd.voxel_down_sample_and_trace(voxel_size, pcd.get_min_bound(), pcd.get_max_bound())
+                rep_coords = area_mesh[np.max(idcs, axis=1)]
+                # choose the mean coords on each axis as the representative coordinate for the contact site
+                # rep_coord = np.mean(area_mesh, axis=0)
+                cs_coord_list.extend(rep_coords)
+        # except Exception as e:
+        #     log.error(f'[Exception]: {e}')
+        #     continue
         if len(cs_coord_list) == 0:
             log.info(f'No cs found for given cell pair {cell1} and {cell2}')
             continue
@@ -257,7 +255,7 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
         gc.collect()
 
 
-def create_lookup_table(filtered_contact_sites_ids, cs_dataset, dict_sv2ssv):
+def create_lookup_table(filtered_contact_sites_ids, cs_dataset):
     """Loop through all contact_sites ids and if two corresponding cells are found,
     store the cell_id and corresponding cs_id into dictionary
 
@@ -268,12 +266,13 @@ def create_lookup_table(filtered_contact_sites_ids, cs_dataset, dict_sv2ssv):
     """
     cell_pair2cs_ids = dict()
     cell_pairs = list()
+    ssd = SuperSegmentationDataset()
 
     for cs_id in tqdm(filtered_contact_sites_ids):
         sv_partner = cs_dataset.get_segmentation_object(cs_id).cs_partner
-        if sv_partner[0] in dict_sv2ssv and sv_partner[1] in dict_sv2ssv:
-            c1 = dict_sv2ssv[sv_partner[0]]
-            c2 = dict_sv2ssv[sv_partner[1]]
+        if sv_partner[0] in ssd.sv_ids and sv_partner[1] in ssd.sv_ids:
+            dict = ssd.sv2ssv_ids(sv_partner)
+            c1, c2 = dict[sv_partner[0]], dict[sv_partner[1]]
             if c1 == c2:
                 continue
             if c1 < c2:
@@ -299,7 +298,7 @@ if __name__ == '__main__':
     parser.add_argument('--r', nargs='+', help='Radius of merger',
                         default=[3000])
     parser.add_argument('--nproc', type=int, help='Number of processors to use',
-                        default=15)
+                        default=20)
     parser.add_argument('--set', type=str, help='Training or test set generation.', default='training')
     args = parser.parse_args()
     # global cs_ptMerger_radius
@@ -318,7 +317,8 @@ if __name__ == '__main__':
     global_params.wd = '/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/'
     cs_dataset = SegmentationDataset(obj_type='cs')
     ssd = SuperSegmentationDataset()
-    dict_sv2ssv = ssd.mapping_dict_reversed  # dict: {supervoxel : super-supervoxel}
+
+    log.info(f'Executing GT generation for: {dataset}')
     log.info(f'Datasets loaded')
     log.info(f'Cs merge radii: {cs_merge_radii}')
 
@@ -335,7 +335,7 @@ if __name__ == '__main__':
 
     # create lookup table for cell ids to cs ids
     if not os.path.exists(lookup_cellpair2cs_path):
-        cell_pair2cs_ids, cell_pairs = create_lookup_table(filtered_cs_ids, cs_dataset, dict_sv2ssv)
+        cell_pair2cs_ids, cell_pairs = create_lookup_table(filtered_cs_ids, cs_dataset)
         write_obj2pkl(lookup_cellpair2cs_path, cell_pair2cs_ids)
         log.info(f'Cell pairs written to pickle')
     else:
@@ -347,7 +347,7 @@ if __name__ == '__main__':
             log.info(f'Cell pairs and pair2cs dict loaded')
         except:
             log.info(f'Pickle file not found')
-            cell_pair2cs_ids, cell_pairs = create_lookup_table(filtered_cs_ids, cs_dataset, dict_sv2ssv)
+            cell_pair2cs_ids, cell_pairs = create_lookup_table(filtered_cs_ids, cs_dataset)
             write_obj2pkl(lookup_cellpair2cs_path, cell_pair2cs_ids)
             log.info(f'Cell pairs written to pickle')
 
@@ -382,11 +382,10 @@ if __name__ == '__main__':
     start = timeit.default_timer()
     log.info(f'Sample generation started with {len(params)} tasks')
 
-    # with mp.Pool(processes=n_proc) as pool:
-    #     multiple_results = [pool.apply_async(create_labeled_points, param) for param in params]
-    #     print([res.get() for res in multiple_results])
-
     # process_map(create_labeled_points, params, max_workers=n_proc)
+    # with ProcessPoolExecutor(max_workers=n_proc) as executor:
+    #     executor.map(create_labeled_points, params)
+
     running_tasks = [mp.Process(target=create_labeled_points, args=param) for param in params]
     for running_task in running_tasks:
         running_task.start()
