@@ -889,10 +889,10 @@ class SegmentationObject(SegmentationBase):
         Returns:
 
         """
-        _supported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
-        if self.type in _supported_types:
-            raise ValueError(f'"mesh_from_scratch" does not support type "{self.type}". Supported types: '
-                             f'{_supported_types}')
+        _unsupported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
+        if self.type in _unsupported_types:
+            raise ValueError(f'"mesh_from_scratch" does not support type "{self.type}". Unsupported types: '
+                             f'{_unsupported_types}')
         if ds is None:
             ds = self.config['meshes']['downsampling'][self.type]
         return meshes.get_object_mesh(self, ds, mesher_kwargs=kwargs)
