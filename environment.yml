@@ -13,7 +13,7 @@ channels:
 dependencies:
   - nvidia::cudatoolkit=10.2
   # From -c pytorch
-  - pytorch::pytorch >=1.8,<=1.9  # can be > 1.9 if glibc >=2.27 is available
+  - pytorch::pytorch >=1.8,<=1.9.1  # can be > 1.9 if glibc >=2.27 is available
   - torchvision
   - pyg
   - pytorch-sparse

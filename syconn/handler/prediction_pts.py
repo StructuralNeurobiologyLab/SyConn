@@ -1616,7 +1616,7 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
                             npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None,
                             use_subcell: bool = False, mask_borders_with_id: Optional[int] = None,
-                            gt_type: str = 'compartment'
+                            gt_type: str = 'compartment', regression=False,
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
@@ -1681,7 +1681,10 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
         batch = np.zeros((batchsize, npoints_ssv, 3))
         batch_f = np.ones((batchsize, npoints_ssv, len(feat_dc)))
         batch_out = np.zeros((batchsize, n_out_pts_curr, 3))
-        batch_out_l = np.zeros((batchsize, n_out_pts_curr, ))              ##### HERE
+        if regression:
+            batch_out_l = np.zeros((batchsize, n_out_pts_curr, 1))
+        else:
+            batch_out_l = np.zeros((batchsize, n_out_pts_curr, ))              ##### HERE
         cnt = 0
         for source_node in source_nodes:
             # create local context
@@ -1691,6 +1694,7 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
                 node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
+                # print here to check if more runs
                 if len(sample_feats) > 0:
                     break
                 source_node = np.random.choice(source_nodes)
@@ -1698,6 +1702,7 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
             sample_labels = hc_sub.labels
 
             # get target locations
+            assert n_out_pts_curr >= 1
             if n_out_pts_curr == 1:
                 out_coords = np.array([hc.nodes[source_node]])
                 out_labels = np.array([hc.node_labels[source_node]])
@@ -1705,7 +1710,7 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
                 # add surface points
                 add_verts = sample_pts[np.random.choice(len(sample_pts), n_out_pts_curr - len(hc_sub.nodes))]
                 out_coords = np.concatenate([hc_sub.nodes, add_verts])
-                out_labels = np.concatenate([hc_sub.node_labels, np.zeros(add_verts)])
+                out_labels = np.concatenate((hc_sub.node_labels.squeeze(), np.zeros(len(add_verts))))
             # down sample to ~500nm apart
             else:
                 pcd = o3d.geometry.PointCloud()
@@ -1745,10 +1750,26 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
             # copmute labels to predict 
             #               classification - merger 1, no merger 0
             #               regression - leave classic hc_sub labels
-            # classification labels
-            out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
-            one_idcs = np.where(hc_sub.node_labels >= 0)[0]
-            np.put(out_point_label, one_idcs, np.ones(len(one_idcs)))
+            if regression:
+                # get -1 and -2 indices -> transform them into no interest zones -> 0 label
+                # positive labels convert them into [0,1] range, where 1 is a source node, and the distance from it decreases until 0
+                out_point_label = np.zeros(hc_sub.node_labels.squeeze().shape)
+                src_node_indcs = np.where(hc_sub.node_labels == 0)[0]
+                out_point_label[src_node_indcs] = 1
+                merge_node_indcs = np.where(hc_sub.node_labels > 0)[0]
+                merge_node_labels = 1 - ((hc_sub.node_labels.squeeze().astype(float)[merge_node_indcs]) / 3000)
+                for i, label in enumerate(merge_node_labels):
+                    out_point_label[merge_node_indcs[i]] = label
+                print(out_point_label.shape)
+                # assert len(out_point_label.shape) == 3
+                out_point_label = out_point_label.squeeze()[:, np.newaxis]
+                # print(f'shape {out_point_label.shape}')
+            else:
+                out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
+                one_idcs = np.where(hc_sub.node_labels >= 0)[0]
+                np.put(out_point_label, one_idcs, np.ones(len(one_idcs)))
+            if len(out_point_label) == 0:
+                print(f'NO LABELS? \n verts: {len(batch[cnt])} \n outs_nodes: {len(batch_out[cnt])}')
             batch_out_l[cnt] = out_point_label
             cnt += 1
         del hc
