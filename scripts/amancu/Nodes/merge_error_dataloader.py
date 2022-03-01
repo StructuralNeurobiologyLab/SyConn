@@ -74,7 +74,7 @@ class NodeFalseMergeLoader(Dataset):
         self.hclouds = f'/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
 
         # get all Hybridcloud files
-        self.fnames = fnames = glob.glob(self.hclouds + '*.pkl')
+        self.fnames = glob.glob(self.hclouds + '*.pkl')
 
         self.train_limit = int(0.8 * (len(self.fnames)))
         self.radius = radius
@@ -104,7 +104,7 @@ class NodeFalseMergeLoader(Dataset):
         pts = torch.from_numpy(sample_pts).float()
         feats = torch.from_numpy(sample_feats).float()
         nodes = torch.from_numpy(out_nodes).float()
-        lbs = torch.from_numpy(out_labels).long()
+        lbs = torch.from_numpy(out_labels).float()
         return {'pts': pts, 'features': feats, 'out_pts': nodes,'target': lbs, 'extra': os.path.basename(self.fnames[item])}
 
     def __len__(self):
