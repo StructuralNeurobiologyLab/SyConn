@@ -15,7 +15,7 @@ class CloudFalseMergeLoader(Dataset):
         self.hclouds = f'/wholebrain/scratch/amancu/mergeError/ptclouds/R{radius}/Hybridcloud/'
 
         # get all Hybridcloud files
-        self.fnames = fnames = glob.glob(self.hclouds + '*.pkl')
+        self.fnames = glob.glob(self.hclouds + '*.pkl')
 
         self.train_limit = int(0.8*(len(self.fnames)))
         self.radius = radius
@@ -72,6 +72,7 @@ class NodeFalseMergeLoader(Dataset):
     def __init__(self, radius=3000, npoints=20000, transform: Callable = Identity(),
                  train=True, batch_size=1, ctx_size=20000, mask_borders_with_id=None, regression=False):
         self.hclouds = f'/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
+        # self.hclouds = f'/home/andrei/mnt/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
 
         # get all Hybridcloud files
         self.fnames = glob.glob(self.hclouds + '*.pkl')

@@ -44,6 +44,9 @@ try:
     import torch
 except ImportError:
     pass
+
+from memory_profiler import profile
+
 # TODO: specify further, add to config
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2, sv_myelin=5)
 # in nm, should be replaced by Poisson disk sampling
@@ -1694,7 +1697,6 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
                 node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
                 hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
                 sample_feats = hc_sub.features
-                # print here to check if more runs
                 if len(sample_feats) > 0:
                     break
                 source_node = np.random.choice(source_nodes)
@@ -1760,10 +1762,8 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
                 merge_node_labels = 1 - ((hc_sub.node_labels.squeeze().astype(float)[merge_node_indcs]) / 3000)
                 for i, label in enumerate(merge_node_labels):
                     out_point_label[merge_node_indcs[i]] = label
-                print(out_point_label.shape)
                 # assert len(out_point_label.shape) == 3
                 out_point_label = out_point_label.squeeze()[:, np.newaxis]
-                # print(f'shape {out_point_label.shape}')
             else:
                 out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
                 one_idcs = np.where(hc_sub.node_labels >= 0)[0]
