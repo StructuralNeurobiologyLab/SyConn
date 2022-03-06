@@ -45,7 +45,6 @@ try:
 except ImportError:
     pass
 
-from memory_profiler import profile
 
 # TODO: specify further, add to config
 pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2, sv_myelin=5)
@@ -1666,13 +1665,30 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
         
         source_nodes = np.random.choice(source_nodes, batchsize, replace=len(hc.nodes) < batchsize)
         source_node_labels = hc.node_labels[source_nodes]
-        
+
+        hc_subs = []
+        # create contexts for batch
+        for source_node in source_nodes:
+            # create local context
+            while True:
+                if hc.node_labels[source_node] not in source_node_labels:
+                    raise ValueError(f'Invalid source node in "{pkl_f}".')
+                node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
+                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
+                sample_feats = hc_sub.features
+                if len(sample_feats) > 0:
+                    break
+                source_node = np.random.choice(source_nodes)
+            hc_subs.append(hc_sub)
+
+
+        # create batches to return
         npoints_ssv = min(len(hc.vertices), npoints)
         if npoints_ssv == 0:
             raise ValueError(f'No vertices in "{pkl_f}".')
 
-        # change here the number of predicted nodes
-        n_out_pts = 100
+        # number of predicted nodes
+        n_out_pts = np.min([len(hc_sub.nodes) for hc_sub in hc_subs])
         if n_out_pts > 1:  # n_out_pts == 1 for embedding generation
             npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
             n_out_pts_curr = n_out_pts + npoints_add
@@ -1689,19 +1705,15 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
         else:
             batch_out_l = np.zeros((batchsize, n_out_pts_curr, ))              ##### HERE
         cnt = 0
-        for source_node in source_nodes:
-            # create local context
-            while True:
-                if hc.node_labels[source_node] not in source_node_labels:
-                    raise ValueError(f'Invalid source node in "{pkl_f}".')
-                node_ids = context_splitting_graph_many(hc, [source_node], ctx_size_fluct)[0]
-                hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
-                sample_feats = hc_sub.features
-                if len(sample_feats) > 0:
-                    break
-                source_node = np.random.choice(source_nodes)
+
+        # process contexts to
+        for i, source_node in enumerate(source_nodes):
+            # get current context and process it
+            hc_sub = hc_subs[i]
+
             sample_pts = hc_sub.vertices
             sample_labels = hc_sub.labels
+            sample_feats = hc_sub.features
 
             # get target locations
             assert n_out_pts_curr >= 1
