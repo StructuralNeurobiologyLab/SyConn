@@ -1688,13 +1688,8 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
             raise ValueError(f'No vertices in "{pkl_f}".')
 
         # number of predicted nodes
-        n_out_pts = np.min([len(hc_sub.nodes) for hc_sub in hc_subs])
-        if n_out_pts > 1:  # n_out_pts == 1 for embedding generation
-            npoints_add = np.random.randint(-int(n_out_pts * 0.1), int(n_out_pts * 0.1))
-            n_out_pts_curr = n_out_pts + npoints_add
-        else:
-            n_out_pts_curr = n_out_pts
-        # add a +-10% fluctuation in the number of input and output points
+        n_out_pts_curr = np.min([len(hc_sub.nodes) for hc_sub in hc_subs])
+
         npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
         npoints_ssv += npoints_add
         batch = np.zeros((batchsize, npoints_ssv, 3))
