@@ -70,7 +70,7 @@ class CloudFalseMergeLoader(Dataset):
 
 class NodeFalseMergeLoader(Dataset):
     def __init__(self, radius=3000, npoints=20000, transform: Callable = Identity(),
-                 train=True, batch_size=1, ctx_size=20000, mask_borders_with_id=None, regression=False):
+                 train=True, batch_size=4, ctx_size=20000, mask_borders_with_id=None, regression=False):
         self.hclouds = f'/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
         # self.hclouds = f'/home/andrei/mnt/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
 
@@ -105,7 +105,10 @@ class NodeFalseMergeLoader(Dataset):
         pts = torch.from_numpy(sample_pts).float()
         feats = torch.from_numpy(sample_feats).float()
         nodes = torch.from_numpy(out_nodes).float()
-        lbs = torch.from_numpy(out_labels).float()
+        if self.regression:
+            lbs = torch.from_numpy(out_labels).float()
+        else:
+            lbs = torch.from_numpy(out_labels).long()
         return {'pts': pts, 'features': feats, 'out_pts': nodes,'target': lbs, 'extra': os.path.basename(self.fnames[item])}
 
     def __len__(self):
