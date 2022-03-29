@@ -182,7 +182,7 @@ def extract_subhcs(hc: HybridCloud, ctx_size, ctx_dst_fac, npoints, transform: C
             cnt += 1
         yield (arr_list['feats'], arr_list['verts'], arr_list['nodes'], arr_list['labels']), arr_list['source_node'], arr_list['margin_mask'], arr_list['global_vert_indices'], arr_list['global_node_indices']
 
-def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform, device, global_dict):
+def process_data_slice(slice, pred_files, model, model_name, ctx_size, ctx_dst_fac, npoints, pred_transform, device, global_dict):
     """
     Adds average results of metrics (precision, recall, accuracy, f1score) per cell in the res_dc dictionary of results.
 
@@ -313,8 +313,8 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
                 # print("No foreground labels in original context.")
                 pass
             mesh2obj_file_colors(os.path.expanduser(
-                f'/wholebrain/scratch/amancu/mergeError/Nodes/Preds/quantitative/meshes_{os.path.dirname(os.path.basename(path))}/' + os.path.basename(
-                    path) + f'_original_nodes_.ply'),
+                f'/wholebrain/scratch/amancu/mergeError/Nodes/Preds/quantitative/meshes_{model_name}/' + os.path.basename(
+                    path) + f'_original_nodes.ply'),
                 [np.array([]), hc.nodes, np.array([])], colors)
 
             # prediction
@@ -327,7 +327,7 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
                 # print("No foreground labels in prediction.")
                 pass
             mesh2obj_file_colors(os.path.expanduser(
-                f'//wholebrain/scratch/amancu/mergeError/Nodes/Preds/quantitative/meshes_{os.path.dirname(os.path.basename(path))}/' + os.path.basename(
+                f'/wholebrain/scratch/amancu/mergeError/Nodes/Preds/quantitative/meshes_{model_name}/' + os.path.basename(
                     path) + f'_prediction_nodes.ply'),
                 [np.array([]), hc.nodes, np.array([])], colors)
     return getpid()
@@ -336,13 +336,13 @@ def process_data_slice(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints,
 PINK = np.array([10., 255., 10., 255.])
 BLUE = np.array([255., 125., 125., 255.])
 GREY = np.array([180., 180., 180., 255.])
-nproc = 1
+nproc = 10
 
 if __name__ == '__main__':
     # define model args
     input_channels = 1
     num_classes = 2
-    use_norm = False
+    use_norm = 'gn'
     dr = 0.3
     track_running_stats = False
     act = 'swish'
@@ -396,7 +396,7 @@ if __name__ == '__main__':
             dict['balanced_accuracy'] = []
             dict['fscore'] = []
 
-            params = [(slice, pred_files, model, ctx_size, ctx_dst_fac, npoints, pred_transform,
+            params = [(slice, pred_files, model, model_name, ctx_size, ctx_dst_fac, npoints, pred_transform,
                        device, dict) for slice in proc_slices]
             running_tasks = [mp.Process(target=process_data_slice, args=param) for param in params]
             _ = [running_task.start() for running_task in running_tasks]
