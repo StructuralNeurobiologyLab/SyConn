@@ -47,12 +47,16 @@ ply_example_path = os.path.expanduser(f'/wholebrain/scratch/amancu/mergeError/No
 no_Skelmerger_radius = 20e3
 skelmerger_radius = 2e3
 
-# CHANGE
-# nr_samples = 6000
 # colors for labels
 PINK = np.array([10., 255., 10., 255.])
 BLUE = np.array([255., 125., 125., 255.])
 GREY = np.array([180., 180., 180., 255.])
+
+# for the classification task
+# "-2" no interest zones, "-1" context zones, "0" no merger, "1" merger zone
+# for the regression task task
+# "-2" no interest zones, "-1" context zones -> 0
+# interest zone [0,1] range, where 1 is a source node, and the distance from it decreases until 0
 
 def get_skeleton_label_and_distances(merged_cell, cs_coord_list, source_node_idcs, threshold):
     merged_cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling  # coordinates of all nodes

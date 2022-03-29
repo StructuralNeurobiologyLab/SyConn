@@ -1772,6 +1772,8 @@ def pts_loader_semseg_train_nodes(fnames_pkl: Iterable[str], batchsize: int,
                 # assert len(out_point_label.shape) == 3
                 out_point_label = out_point_label.squeeze()[:, np.newaxis]
             else:
+                # for the classification task
+                # "-2" no interest zones, "-1" context zones, "0" no merger, "1" merger zone
                 out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
                 one_idcs = np.where(hc_sub.node_labels >= 0)[0]
                 np.put(out_point_label, one_idcs, np.ones(len(one_idcs)))
