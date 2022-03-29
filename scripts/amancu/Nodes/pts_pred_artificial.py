@@ -336,7 +336,7 @@ def process_data_slice(slice, pred_files, model, model_name, ctx_size, ctx_dst_f
 PINK = np.array([10., 255., 10., 255.])
 BLUE = np.array([255., 125., 125., 255.])
 GREY = np.array([180., 180., 180., 255.])
-nproc = 10
+nproc = 15
 
 if __name__ == '__main__':
     # define model args
