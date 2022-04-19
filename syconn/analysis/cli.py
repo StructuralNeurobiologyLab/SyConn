@@ -9,6 +9,7 @@ from knossos_utils import KnossosDataset
 from syconn.handler.logger import log_main as logger
 from syconn import global_params
 from syconn.analysis.backend import SyConnBackend
+import neuroglancer
 import neuroglancer.cli
 from neuroglancer.config import NeuroConfig
 from neuroglancer import config
@@ -55,10 +56,9 @@ class SyConnClient(object):
             token: 40-character hex token for the client
             organelles: list of organelle meshes to be displayed
         """        
-
+        self.params = params
         self.acquisition = params.acquisition
         self.version = params.version
-        self.params = params
 
         # warn the user if no organelles are provided
         if organelles == None:
@@ -67,11 +67,23 @@ class SyConnClient(object):
         self.seg_src = kwargs["seg_src"]
         self.img_src = kwargs["img_src"]
         
-        viewer = self.viewer = neuroglancer.Viewer(token=token)
+        initial_state = neuroglancer.ViewerState(
+            title=self.acquisition + '_' + self.version,
+            position=np.array(self.params["boundary"], dtype=np.float32) // 2,
+            crossSectionScale=1e-9,
+        )
         
-        # add layers with different data sources
+        viewer = self.viewer = neuroglancer.Viewer(token=token)
+        # viewer.set_state(initial_state)
+    
         with viewer.txn() as s:
+            # s.title = self.acquisition + '_' + self.version
+            # s.position=np.array(self.params["boundary"], dtype=np.float32) // 2
             self.configure_viewer(s, organelles)
+
+        # with viewer.txn() as s:
+        # add layers with different data sources
+            
 
     @property
     def token(self):
@@ -94,7 +106,7 @@ class SyConnClient(object):
         elif "j0126" in self.acquisition:
             return "j0126_realigned"
 
-    def configure_viewer(self, state: neuroglancer.viewer_state.ViewerState, organelles: Optional[list] = None):
+    def configure_viewer(self, state, organelles: Optional[list] = None):
         """Configures the viewer state with the desired image and
         segmentation volumes, skeletons, cell and organelle meshes.
         These objects are datasources and can be provided by the 
@@ -123,12 +135,12 @@ class SyConnClient(object):
         """        
 
         if config.dev_environ:  # development environment
-            source = f'http://localhost:9005'  
+            source = f'http://localhost:9002'  
         
         else:  # production environment
             source = f'https://syconn.esc.mpcdf.mpg.de'
 
-        def append_organelle_layer(state: neuroglancer.ViewerState, organelle: str):
+        def append_organelle_layer(state, organelle: str):
             """Creates a mesh datasource layer for the given organelle
             
             Organelle mesh colors referenced from 
@@ -159,7 +171,7 @@ class SyConnClient(object):
             state.layers.append(
                 name=name,
                 layer=neuroglancer.SegmentationLayer(
-                    source=f'precomputed://' + source + f'/{organelle}',  # organelle mesh
+                    source=f'precomputed://' + source + f'/{self.token}/{self.acquisition}/{self.version}/{organelle}',  # organelle mesh
                     segment_default_color=color,
                     linked_segmentation_group=self.seg_name,
                     linked_segmentation_color_group=False,
@@ -182,25 +194,14 @@ class SyConnClient(object):
             layer=neuroglancer.SegmentationLayer(
                 source=[
                     self.seg_src,
-                    f'precomputed://' + source + '/sv',  # ssv mesh
-                    f'precomputed://' + source + f'/{self.acquisition}_{self.version}/skeletons',  # ssv skeleton
-                    f'precomputed://' + source + f'/{self.acquisition}_{self.version}/properties',  # segment properties
+                    f'precomputed://' + source + f'/{self.token}/{self.acquisition}/{self.version}/sv',  # ssv mesh
+                    f'precomputed://' + source + f'/{self.token}/{self.acquisition}/{self.version}/skeletons',  # ssv skeleton
+                    f'precomputed://' + source + f'/{self.acquisition}/{self.version}/properties',  # segment properties
                 ],
                 mesh_silhouette_rendering=2,
             ),
             tab='segments'  # show segments tab with properties
         )
-
-        # TODO(hashir): agglomerate supervoxels for j0126
-        # SEG_LAYERS = ("j0251_72_seg_20210127_agglo2", "j0251_rag_flat_Jan2019_v3", "j0126_areaxfs_v10", "j0126_assembled_core_relabeled")
-
-        # for layer in state.layers:
-        #     if isinstance(layer.layer, neuroglancer.SegmentationLayer) and (layer.name in SEG_LAYERS):
-        #         seg_layer = layer        
-        
-        # if self.acquisition == 'j0126':
-        #     ssv2sv_mapping = [tuple(value) for _, value in self.params["ssd"].mapping_dict.items()]
-        #     seg_layer.equivalences = ssv2sv_mapping  # set segmentation equivalences
 
         state.selected_layer.layer = self.seg_name
         state.selected_layer.visible = True

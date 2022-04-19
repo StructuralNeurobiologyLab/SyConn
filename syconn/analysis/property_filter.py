@@ -55,7 +55,7 @@ def get_celltype(ct: int, gt_type: str) -> str:
     if gt_type == "ctgt_j0251_v3":
         int2str_label = {0:'exc', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'int 3', 9: 'int 1', 10: 'int 2'}
     elif gt_type == "ctgt_v2":
-        int2str_label = {0:"STN", 1: "modulatory", 2: "MSN", 3: "LMAN", 4: "HVC", 5: "GP", 6: "INT"}
+        int2str_label = {0:"exc", 1: "modulatory", 2: "MSN", 3: "LMAN", 4: "HVC", 5: "GP", 6: "INT"}
     else:
         raise ValueError("Unknown gt_type {}".format(gt_type))
 
@@ -306,8 +306,8 @@ class PropertyFilter(SyConnClient):
                 partner_id = result[0]
                 self.next_cell = partner_id
                 rep_coord = result[1]
-                partner_ct = int2str_converter(result[2], self.gt_type)
-                ssv_ct = int2str_converter(result[3], self.gt_type)
+                partner_ct = get_celltype(result[2], self.gt_type)
+                ssv_ct = get_celltype(result[3], self.gt_type)
 
                 layer.segments.add(partner_id)
                 s.position = rep_coord
@@ -380,8 +380,8 @@ class PropertyFilter(SyConnClient):
             else:
                 pct = pct.item()  # different from the active cell
 
-            ct = int2str_converter(self.active_ct, self.gt_type)
-            partner_ct = int2str_converter(pct, self.gt_type)
+            ct = get_celltype(self.active_ct, self.gt_type)
+            partner_ct = get_celltype(pct, self.gt_type)
 
             message = f"{self.partner_type} partner {self.partner_ids[self.counter]} ({partner_ct}) of {self.active_cell} ({ct}). Synaptic area: {self.mesh_areas[self.counter]:.4f} µm²"
             self.update_status_message(message)
@@ -489,7 +489,7 @@ class PropertyFilter(SyConnClient):
                 ssv = self.ssd.get_super_segmentation_object(ssv_id)
                 self.active_ct = ssv.celltype()
                 logger.debug("Active cell's cell type: {}".format(self.active_ct))
-                ct = int2str_converter(self.active_ct, self.gt_type)
+                ct = get_celltype(self.active_ct, self.gt_type)
                 del ssv
 
                 if result == -1:
@@ -598,7 +598,7 @@ class PropertyFilter(SyConnClient):
                 # get active cell's cell type
                 ssv = self.ssd.get_super_segmentation_object(ssv_id)
                 self.active_ct = ssv.celltype()
-                ct = int2str_converter(self.active_ct, self.gt_type)
+                ct = get_celltype(self.active_ct, self.gt_type)
                 del ssv
 
                 if result == -1:
@@ -669,8 +669,8 @@ class PropertyFilter(SyConnClient):
 
                 # get synaptic partner id, compartment predictions and cell types
                 partner_ssv_id = result["partner_ssv"]
-                ssv_comp = int2str_converter(result["ssv_comp"], "axgt").split('_')[1]
-                partner_ssv_comp = int2str_converter(result["partner_ssv_comp"], "axgt").split('_')[1]
+                ssv_comp = get_celltype(result["ssv_comp"], "axgt").split('_')[1]
+                partner_ssv_comp = get_celltype(result["partner_ssv_comp"], "axgt").split('_')[1]
                 ssv_ct = get_celltype(result["ssv_ct"], self.gt_type)
                 partner_ssv_ct = get_celltype(result["partner_ssv_ct"], self.gt_type)
                 rep_coords = result["rep_coords"]
