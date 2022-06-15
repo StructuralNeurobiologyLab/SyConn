@@ -135,7 +135,12 @@ class SyConnClient(object):
         """        
 
         if config.dev_environ:  # development environment
-            source = f'http://localhost:9002'  
+            host = config.global_server_args['host']
+            port = config.global_server_args['port']
+            source = f'http://{host}:{port}'
+
+        elif config.dev_environ_nginx:
+            source = f'http://localhost:9005'  
         
         else:  # production environment
             source = f'https://syconn.esc.mpcdf.mpg.de'

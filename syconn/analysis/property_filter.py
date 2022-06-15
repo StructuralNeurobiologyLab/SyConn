@@ -53,7 +53,7 @@ def get_celltype(ct: int, gt_type: str) -> str:
         str: celltype name
     """    
     if gt_type == "ctgt_j0251_v3":
-        int2str_label = {0:'exc', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'int 3', 9: 'int 1', 10: 'int 2'}
+        int2str_label = {0:'STN', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'FS', 9: 'LTS', 10: 'NGF'}
     elif gt_type == "ctgt_v2":
         int2str_label = {0:"exc", 1: "modulatory", 2: "MSN", 3: "LMAN", 4: "HVC", 5: "GP", 6: "INT"}
     else:
