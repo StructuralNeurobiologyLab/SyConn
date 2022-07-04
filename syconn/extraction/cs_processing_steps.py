@@ -728,8 +728,8 @@ def _combine_and_split_cs_thread(args):
             mesh_dc[cs_ssv.id] = cs_ssv.mesh
             csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
             csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
-            csssv_attr_dc["bounding_box"] = cs_ssv.mesh_bb // scaling
-            csssv_attr_dc["rep_coord"] = (seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling).astype(np.int32)
+            csssv_attr_dc["bounding_box"] = (cs_ssv.mesh_bb // scaling).astype(np.int32)
+            csssv_attr_dc["rep_coord"] = (seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling).astype(np.int64)
             csssv_attr_dc["cs_ids"] = list(cs_ids)
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
@@ -1440,7 +1440,7 @@ def synssv_o_featurenames() -> list:
 
 
 def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] = None,
-                  threshold_syn: Optional[float] = None, export_kzip: bool = False, log: Optional[Logger] = None):
+                  threshold_syn: float = 0, export_kzip: bool = False, log: Optional[Logger] = None):
     """
     Writes .csv and optionally .kzip (large memory consumption) summary file of connectivity matrix.
 
@@ -1448,8 +1448,7 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
     ----------
     obj_version : str
     dest_folder : Path to csv file.
-    threshold_syn : Threshold applied to filter synapses. If None, set to
-        ``global_params.config['cell_objects']['thresh_synssv_proba']``.
+    threshold_syn : Threshold applied to filter synapses. Defaults to 0, i.e. exporting all synapses.
     export_kzip: Export connectivity matrix as kzip - high memory consumption.
     log: Logger.
     """
@@ -1461,7 +1460,7 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
         log = log_extraction
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
-    log.info(f'Starting export of connectivity matrix as csv file to "{dest_name}".')
+    log.info(f'Starting export of connectivity matrix with minimum probability {threshold_syn} as csv file to "{dest_name}".')
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 

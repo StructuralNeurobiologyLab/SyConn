@@ -490,25 +490,28 @@ class SuperSegmentationDataset(SegmentationBase):
                                                               caching=caching))
         return sso
 
-    def store_total_edge_lengths(self, overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
+    def store_total_edge_lengths(self, ax_pred_key: Optional[str] = "axoness_avg10000", overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
         """Stores total edge lengths of all the cells in this dataset 
         in nanometers. Same ordering as :attr:`~.ssv_ids`.
 
         Args:
-            overwrite: Overwrite the .npy file. Defaults to False.
+            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`
+            overwrite: Overwrite the `total_edge_lengths.npy` file. Defaults to False.
             nb_cpus: CPUs per worker. Defaults to None.
-        """        
+        """
+        if os.path.exists(self.path + "total_edge_lengths.npy") and not overwrite:
+            log_reps.warning(f"Total edge lengths already exist in {self.path}. To overwrite, set overwrite=True.")
+            return
+
         if nb_cpus is None:
             import multiprocessing
             nb_cpus = multiprocessing.cpu_count()
 
-        total_edge_lengths = np.concatenate(sm.start_multiprocess_imap(get_total_edge_lengths, params=list(basics.chunkify_successive(self.ssv_ids, 500)), nb_cpus=nb_cpus), axis=0)
+        params = [(ch, ax_pred_key) for ch in list(basics.chunkify_successive(self.ssv_ids, 500))]
 
-        if not os.path.exists(self.path + "total_edge_length.npy"):
-            np.save(self.path + "total_edge_length.npy", total_edge_lengths)
+        total_edge_lengths = np.concatenate(sm.start_multiprocess_imap(get_total_edge_lengths, params=params, nb_cpus=nb_cpus), axis=0)
 
-        if overwrite:
-            np.save(self.path + "total_edge_length.npy", total_edge_lengths)
+        np.save(self.path + "total_edge_lengths.npy", total_edge_lengths)
 
     def store_path_densities_seg_objs(self, obj_type: str, compartments_of_interest: Optional[list] = None, ax_pred_key: Optional[str] = 'axoness_avg10000', overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
         """Stores path densities of all the cells in this dataset.
@@ -518,9 +521,13 @@ class SuperSegmentationDataset(SegmentationBase):
             obj_type: Key to any available sub-cellular structure.
             compartments_of_interest: Which compartments to take into account for calculation. axon: 1, dendrite: 0, soma: 2
             ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`, only used if `compartments_of_interest` was set. Defaults to 'axoness_avg10000'.
-            overwrite: Overwrite the .npy file. Defaults to False.
+            overwrite: Overwrite the `<obj_type>_path_densities.npy` file. Defaults to False.
             nb_cpus: CPUs per worker. Defaults to None.
         """
+        if os.path.exists(self.path + obj_type + "_path_densities.npy") and not overwrite:
+            log_reps.warning(f"Path densities for {obj_type} already exist in {self.path}. To overwrite, set overwrite=True.")
+            return
+
         if nb_cpus is None:
             import multiprocessing
             nb_cpus = multiprocessing.cpu_count()
@@ -529,11 +536,7 @@ class SuperSegmentationDataset(SegmentationBase):
 
         path_densities = np.concatenate(sm.start_multiprocess_imap(get_path_density_seg_obj, params=params, nb_cpus=nb_cpus), axis=0)
 
-        if not os.path.exists(self.path + obj_type + "_path_density" + ".npy"):
-            np.save(self.path + obj_type + "_path_density" + ".npy", path_densities)
-
-        if overwrite:
-            np.save(self.path + obj_type + "_path_density" + ".npy", path_densities)
+        np.save(self.path + obj_type + "_path_densities" + ".npy", path_densities)
 
     def save_dataset_shallow(self, overwrite: bool = False):
         """
@@ -933,13 +936,14 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
             ssv.predict_views_embedding(m, pred_key_appendix)
 
 
-def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list]):
+def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list], ax_pred_key: str) -> np.ndarray:
     """Retrieves the total edge lengths of the super-supervoxels' :py:attr:`~skeleton` in nanometers. The compartments used
     to compute the edge lengths are axon: 1, axon terminals: 3, 4,
     dendrite: 0, soma: 2.  
 
     Args:
-        ssv ids:
+        ssv ids: 
+        ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`
 
     Returns:
         Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
@@ -950,7 +954,10 @@ def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list]):
     for ssv_id in ssv_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_skeleton()
-        total_edge_lengths.append(ssv.total_edge_length(compartments_of_interest=[0, 1, 2, 3, 4]))
+        if ax_pred_key not in ssv.skeleton.keys():
+            ax_pred_key = 'axoness'  # fall back to the old key
+            
+        total_edge_lengths.append(ssv.total_edge_length(compartments_of_interest=[0, 1, 2, 3, 4], ax_pred_key=ax_pred_key))
 
     return np.array(total_edge_lengths)
 

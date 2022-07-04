@@ -890,7 +890,7 @@ class SegmentationObject(SegmentationBase):
 
         """
         _supported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
-        if self.type in _supported_types:
+        if self.type not in _supported_types:
             raise ValueError(f'"mesh_from_scratch" does not support type "{self.type}". Supported types: '
                              f'{_supported_types}')
         if ds is None:

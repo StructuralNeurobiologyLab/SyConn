@@ -246,7 +246,7 @@ def _dataset_analysis_thread(args):
     if 'rep_coord' in global_attr_dict:
         global_attr_dict['rep_coord'] = np.array(global_attr_dict['rep_coord'], dtype=np.int32)
     if 'size' in global_attr_dict:
-        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int32)
+        global_attr_dict['size'] = np.array(global_attr_dict['size'], dtype=np.int64)
     if 'mesh_area' in global_attr_dict:
         global_attr_dict['mesh_area'] = np.array(global_attr_dict['mesh_area'], dtype=np.float32)
     return global_attr_dict

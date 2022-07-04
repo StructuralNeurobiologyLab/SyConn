@@ -49,6 +49,7 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
+from syconn.proc.graphs import stitch_skel_nx
 
 MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
                  Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]]
@@ -2163,9 +2164,23 @@ class SuperSegmentationObject(SegmentationBase):
                                  [0.8, 0.8, 0.1, 1], [0.9, 0.9, 0.9, 1],
                                  [0.1, 0.1, 0.9, 1]])
             elif 'ads' in semseg_key:
-                # dendrite, axon, soma, bouton, terminal, background, unpredicted
+                # dendrite, axon, soma, unpredicted
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
-                                 [0.1, 0.1, 0.1, 1], ])
+                                 [0.1, 0.1, 0.1, 1], [0.1, 0.1, 0.9, 1]])
+            elif 'abt' in semseg_key:
+                # axon, bouton, terminal, unpredicted
+                cols = np.array([[0.9, 0.2, 0.2, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.8, 0.8, 0.1, 1], [0.1, 0.1, 0.9, 1]])
+            elif 'dnh' in semseg_key:
+                # dendrite, neck, head, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.1, 0.1, 0.1, 1],
+                                 [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.9, 1]])
+            elif '3models' in semseg_key or 'dasbt' in semseg_key:
+                # dendrite, axon, soma, bouton, terminal, neck, head, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.6, 0.1, 0.1, 1],
+                                 [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.4, 0.4, 0.8, 1], [0.8, 0.8, 0.1, 1],
+                                 [0.9, 0.4, 0.4, 1], [0.1, 0.1, 0.9, 1]])
             else:
                 raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))
