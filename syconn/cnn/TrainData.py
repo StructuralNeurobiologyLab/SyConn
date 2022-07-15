@@ -275,12 +275,12 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
+            ssd_kwargs = dict(working_dir="/ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2")
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
             assert self.train, "Other mode than 'train' is not implemented."
-            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
+            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv"
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint64)
             if len(np.unique(ssv_ids)) != len(ssv_ids):

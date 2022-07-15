@@ -607,7 +607,7 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
 
 
 def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_folders_fs=10000,
-                         log=None, overwrite=False):
+                         log=None, overwrite=False, rel_ssv_with_cs_ids = None):
     """
     Creates 'cs_ssv' objects from 'cs' objects. Computes connected
     cs-objects on SSV level and re-calculates their attributes (mesh_area, size, ..).
@@ -631,7 +631,8 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
     cs_version = cs_sd.version
-    rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
+    if rel_ssv_with_cs_ids is None
+        rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
@@ -698,6 +699,8 @@ def _combine_and_split_cs_thread(args):
 
     # iterate over cell partners and their contact site IDs (each contact site is between two supervoxels
     # of the partner cells)
+    test_cs_id = 275781054487918910
+
     for ssvpartners_enc, cs_ids in rel_ssv_with_cs_ids_items:
         n_items_for_path += 1
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
@@ -717,11 +720,14 @@ def _combine_and_split_cs_thread(args):
             # generate connected component meshes; vertices are in nm
             ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
 
+
         for mesh_cc in ccs:
             cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id)
+
             if (os.path.abspath(cs_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
+
             csssv_attr_dc = dict(neuron_partners=ssv_ids)
             # don't store normals
             cs_ssv._mesh = [mesh_cc[0], mesh_cc[1], np.zeros((0,), dtype=np.float32)]
@@ -743,6 +749,10 @@ def _combine_and_split_cs_thread(args):
 
             # add cs_ssv dict to AttributeStorage
             attr_dc[cs_ssv_id] = csssv_attr_dc
+            if cs_ids[0] == test_cs_id:
+                print(cs_ssv_id)
+                print(attr_dc[cs_ssv_id])
+                print(base_dir)
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
@@ -757,8 +767,8 @@ def _combine_and_split_cs_thread(args):
                 cs_ssv_id += np.uint(sd_cs.n_folders_fs)
 
         if n_items_for_path > n_per_voxel_path:
-            attr_dc.push()
-            mesh_dc.push()
+            #attr_dc.push()
+            #mesh_dc.push()
             cur_path_id += 1
             if len(voxel_rel_paths) == cur_path_id:
                 raise ValueError(f'Worker ran out of possible storage paths for storing {sd_cs_ssv.type}.')
@@ -771,9 +781,11 @@ def _combine_and_split_cs_thread(args):
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
             mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
-    if n_items_for_path > 0:
-        attr_dc.push()
-        mesh_dc.push()
+
+
+    #if n_items_for_path > 0:
+        #attr_dc.push()
+        #mesh_dc.push()
 
 
 def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000, verbose=False):

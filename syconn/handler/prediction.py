@@ -1336,5 +1336,10 @@ def int2str_converter(label: int, gt_type: str) -> str:
                              FS=8, LTS=9, NGF=10)
         int2str_label = {v: k for k, v in str2int_label.items()}
         return int2str_label[label]
+    elif gt_type == 'ctgt_j0251_v3':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10, ASTRO = 11, OLIGO = 12, MICRO = 13, FRAG = 14)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
     else:
         raise ValueError("Given ground truth type is not valid.")
