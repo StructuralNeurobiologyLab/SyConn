@@ -83,7 +83,7 @@ onehot = True
 act = 'relu'
 use_myelin = False
 if name is None:
-    name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_j0251v4_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     else:

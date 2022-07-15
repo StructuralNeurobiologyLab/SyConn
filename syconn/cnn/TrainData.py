@@ -287,7 +287,7 @@ if elektronn3_avail:
                 ixs, cnt = np.unique(ssv_ids, return_counts=True)
                 raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
-            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v3') for el in str_labels], dtype=np.uint16)
             if self.cv_val is not None and self.cv_val != -1:
                 assert self.cv_val < 10
                 kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
