@@ -67,11 +67,11 @@ class SyConnClient(object):
         self.seg_src = kwargs["seg_src"]
         self.img_src = kwargs["img_src"]
         
-        initial_state = neuroglancer.ViewerState(
-            title=self.acquisition + '_' + self.version,
-            position=np.array(self.params["boundary"], dtype=np.float32) // 2,
-            crossSectionScale=1e-9,
-        )
+        # initial_state = neuroglancer.ViewerState(
+        #     title=self.acquisition + '_' + self.version,
+        #     position=np.array(self.params["boundary"], dtype=np.float32) // 2,
+        #     crossSectionScale=1e-9,
+        # )
         
         viewer = self.viewer = neuroglancer.Viewer(token=token)
         # viewer.set_state(initial_state)
