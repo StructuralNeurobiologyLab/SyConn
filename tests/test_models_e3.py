@@ -10,14 +10,17 @@ import pytest
 pytest.mark.filterwarnings("ignore:Initialized working directory without existing config file at")
 
 
-# TODO: loading pytorch3 models currently let's gitlab-runners get stuck after running tests
+# TODO: loading pytorch3 models currently lets gitlab-runners get stuck after running tests
 def _setup_working_dir():
     for curr_dir in [os.path.dirname(os.path.realpath(__file__)) + '/',
                      os.path.abspath(os.path.curdir) + '/',
                      os.path.abspath(os.path.curdir) + '/SyConnData/',
                      os.path.abspath(os.path.curdir) + '/SyConn/',
                      os.path.expanduser('~/SyConnData/'),
-                     os.path.expanduser('~/SyConn/')]:
+                     os.path.expanduser('~/SyConn/'),
+		     os.path.expanduser('~/scratch/SyConnData/'),
+                     os.path.expanduser('~/scratch/SyConn/')]:
+
         m_dir = curr_dir + '/models/'
         if os.path.isdir(m_dir):
             break
