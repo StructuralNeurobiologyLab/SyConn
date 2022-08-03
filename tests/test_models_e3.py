@@ -17,7 +17,8 @@ def _setup_working_dir():
                      os.path.abspath(os.path.curdir) + '/SyConnData/',
                      os.path.abspath(os.path.curdir) + '/SyConn/',
                      os.path.expanduser('~/SyConnData/'),
-                     os.path.expanduser('~/SyConn/')]:
+                     os.path.expanduser('~/SyConn/'),
+		     '/wholebrain/songbird/SyConn_v2_examples/SyConnData']:
         m_dir = curr_dir + '/models/'
         if os.path.isdir(m_dir):
             break
