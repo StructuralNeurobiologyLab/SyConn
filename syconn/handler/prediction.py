@@ -1260,6 +1260,10 @@ def str2int_converter(comment: str, gt_type: str) -> int:
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9, NGF=10)
         return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v3':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                             FS=8, LTS=9, NGF=10, ASTRO = 11, OLIGO = 12, MICRO = 13, FRAG = 14)
+        return str2int_label[comment]
     else:
         raise ValueError("Given groundtruth type is not valid.")
 

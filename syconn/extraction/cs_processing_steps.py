@@ -631,7 +631,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
     cs_version = cs_sd.version
-    if rel_ssv_with_cs_ids is None
+    if rel_ssv_with_cs_ids is None:
         rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
@@ -647,6 +647,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
         if not overwrite:
             raise FileExistsError(f'"{sd_cs_ssv.so_storage_path}" already exists, but overwrite was set to False.')
         shutil.rmtree(sd_cs_ssv.so_storage_path)
+
 
     # prepare folder structure
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
@@ -664,7 +665,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log, exclude_nodes=['wb02', 'wb03', 'wb04', 'wb05', 'wb06', 'wb07', 'wb08', 'wb09'])
 
 
 def _combine_and_split_cs_thread(args):
@@ -691,6 +692,7 @@ def _combine_and_split_cs_thread(args):
     base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
+
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
     cs_ssv_id = base_id
 
@@ -699,7 +701,7 @@ def _combine_and_split_cs_thread(args):
 
     # iterate over cell partners and their contact site IDs (each contact site is between two supervoxels
     # of the partner cells)
-    test_cs_id = 275781054487918910
+
 
     for ssvpartners_enc, cs_ids in rel_ssv_with_cs_ids_items:
         n_items_for_path += 1
@@ -722,12 +724,10 @@ def _combine_and_split_cs_thread(args):
 
 
         for mesh_cc in ccs:
-            cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id)
-
+            cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id, create = True)
             if (os.path.abspath(cs_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
-
             csssv_attr_dc = dict(neuron_partners=ssv_ids)
             # don't store normals
             cs_ssv._mesh = [mesh_cc[0], mesh_cc[1], np.zeros((0,), dtype=np.float32)]
@@ -749,10 +749,6 @@ def _combine_and_split_cs_thread(args):
 
             # add cs_ssv dict to AttributeStorage
             attr_dc[cs_ssv_id] = csssv_attr_dc
-            if cs_ids[0] == test_cs_id:
-                print(cs_ssv_id)
-                print(attr_dc[cs_ssv_id])
-                print(base_dir)
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
@@ -767,8 +763,8 @@ def _combine_and_split_cs_thread(args):
                 cs_ssv_id += np.uint(sd_cs.n_folders_fs)
 
         if n_items_for_path > n_per_voxel_path:
-            #attr_dc.push()
-            #mesh_dc.push()
+            attr_dc.push()
+            mesh_dc.push()
             cur_path_id += 1
             if len(voxel_rel_paths) == cur_path_id:
                 raise ValueError(f'Worker ran out of possible storage paths for storing {sd_cs_ssv.type}.')
@@ -783,9 +779,9 @@ def _combine_and_split_cs_thread(args):
 
 
 
-    #if n_items_for_path > 0:
-        #attr_dc.push()
-        #mesh_dc.push()
+    if n_items_for_path > 0:
+        attr_dc.push()
+        mesh_dc.push()
 
 
 def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000, verbose=False):

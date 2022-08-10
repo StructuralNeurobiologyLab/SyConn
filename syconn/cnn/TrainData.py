@@ -279,7 +279,7 @@ if elektronn3_avail:
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
-            assert self.train, "Other mode than 'train' is not implemented."
+            #assert self.train, "Other mode than 'train' is not implemented."
             self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv"
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint64)
@@ -298,7 +298,10 @@ if elektronn3_avail:
                 self.splitting_dict = {'train': ssv_ids, 'valid': ssv_ids}  # use all data
                 log_cnn.critical(f'Using all GT data for training!')
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
-            self.sso_ids = self.splitting_dict['train']
+            if self.train:
+                self.sso_ids = self.splitting_dict['train']
+            else:
+                self.sso_ids = self.splitting_dict['valid']
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
@@ -306,12 +309,13 @@ if elektronn3_avail:
                 log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
-            if self.train:
+            return len(self.sso_ids) * 3
+            #if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
-                return len(self.sso_ids) * 60
-            else:
-                return max(len(self.sso_ids) // 5, 1)
+                #return len(self.sso_ids) * 3 #* 60
+            #else:
+                #return max(len(self.sso_ids) // 5, 1)
 
 
     class CellCloudGlia(Dataset):

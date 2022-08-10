@@ -1692,6 +1692,12 @@ def get_pt_kwargs(mdir: str) -> Tuple[dict, dict]:
     scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
     mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation, use_bias=use_bias)
     loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints)
+    '''
+    mkwargs = dict(use_norm='gn',
+                   track_running_stats=False, act='relu', use_bias=True)
+    loader_kwargs = dict(ctx_size=20000, scale_fact=2000,
+                         npoints=50000)  # TODO: manually set by best guesses from training script, lookup
+    '''
     return mkwargs, loader_kwargs
 
 
@@ -1727,10 +1733,10 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         mpath = global_params.config.mpath_celltype_pts
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
-    n_classes = 8
+    n_classes = 15
     n_inputs = 5
     if 'j0251' in mpath:
-        n_classes = 11
+        n_classes = 15
     if '_myelin' in mpath:
         n_inputs += 1
     if '_noSyntype' in mpath:

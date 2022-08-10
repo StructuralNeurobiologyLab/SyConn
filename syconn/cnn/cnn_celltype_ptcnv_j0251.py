@@ -78,7 +78,7 @@ eval_nr = random_seed  # number of repetition
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
-num_classes = 11
+num_classes = 15
 onehot = True
 act = 'relu'
 use_myelin = False
@@ -167,11 +167,11 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                               cellshape_only=cellshape_only, use_syntype=use_syntype,
                               onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
-# valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
-#                               cv_val=cval, cellshape_only=cellshape_only,
-#                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-#                               ctx_size=ctx, map_myelin=use_myelin)
-valid_ds = None
+valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
+                               cv_val=cval, cellshape_only=cellshape_only,
+                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+                               ctx_size=ctx, map_myelin=use_myelin)
+#valid_ds = None
 
 # PREPARE AND START TRAINING #
 
@@ -212,16 +212,17 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=20,
+    num_workers=10,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
     num_classes=num_classes,
-    # example_input=example_input,
+    example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
     nbatch_avg=10,
+    tqdm_kwargs={"disable": False}
 )
 
 # Archiving training script, src folder, env info
