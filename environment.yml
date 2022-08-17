@@ -74,6 +74,10 @@ dependencies:
   - sphinx_rtd_theme
   - sphinx-autodoc-typehints
 
+  # For syconn-neuroglancer web
+  - nodejs
+  - sockjs-tornado
+
   # Required dependencies that are not yet available via conda:
   - pip:
     - zmesh
