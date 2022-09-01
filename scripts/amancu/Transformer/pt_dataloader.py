@@ -3,7 +3,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import pytorch_lightning as pl
 
-from syconn.handler.prediction_pts import pts_loader_semseg_train_nodes
+from syconn.handler.prediction_pts import pts_loader_semseg_train_transformer
 from elektronn3.data.transforms import Identity
 elektronn3_avail = True
 from sklearn import model_selection
@@ -59,7 +59,7 @@ class NodeFalseMergeLoader(Dataset):
         """
         p = self.fnames[item]
         sample_feats, sample_pts, out_pts, out_labels, offset = \
-            [*pts_loader_semseg_train_nodes([p], self._batch_size, self.num_pts,
+            [*pts_loader_semseg_train_transformer([p], self._batch_size, self.num_pts,
                                       transform=self.transform, ctx_size=self.ctx_size,
                                       use_subcell=False,
                                       mask_borders_with_id=self.mask_borders_with_id, gt_type='merger', regression=self.regression)][0]
