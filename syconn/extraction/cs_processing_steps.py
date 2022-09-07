@@ -643,17 +643,24 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     # target SD for SSV cs objects
     sd_cs_ssv = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="0", create=False,
                                                  n_folders_fs=n_folders_fs)
+    '''
     if os.path.exists(sd_cs_ssv.so_storage_path):
         if not overwrite:
             raise FileExistsError(f'"{sd_cs_ssv.so_storage_path}" already exists, but overwrite was set to False.')
         shutil.rmtree(sd_cs_ssv.so_storage_path)
-
+    '''
+    save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220907_cs_run/"
+    if os.path.exists(save_dir):
+        if not overwrite:
+            raise FileExistsError(f'"{save_dir}" already exists, but overwrite was set to False.')
+        shutil.rmtree(save_dir)
 
     # prepare folder structure
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
     for p in voxel_rel_paths_2stage:
-        os.makedirs(sd_cs_ssv.so_storage_path + p)
+        #os.makedirs(sd_cs_ssv.so_storage_path + p)
+        os.makedirs(save_dir + p)
 
     rel_ssv_with_cs_ids_items = list(rel_ssv_with_cs_ids.items())
 
@@ -665,7 +672,8 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log, exclude_nodes=['wb02', 'wb03', 'wb04', 'wb05', 'wb06', 'wb07', 'wb08', 'wb09'])
+        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log,
+                               exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009'])
 
 
 def _combine_and_split_cs_thread(args):
@@ -689,7 +697,9 @@ def _combine_and_split_cs_thread(args):
     n_per_voxel_path = np.ceil(float(len(rel_ssv_with_cs_ids_items)) / len(voxel_rel_paths))
     n_items_for_path = 0
     cur_path_id = 0
-    base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+    #base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+    save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220907_cs_run/"
+    base_dir = save_dir + voxel_rel_paths[cur_path_id]
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
 
@@ -772,7 +782,8 @@ def _combine_and_split_cs_thread(args):
             id_chunk_cnt = 0
             base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
             cs_ssv_id = base_id
-            base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+            #base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+            base_dir = save_dir + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
             mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
