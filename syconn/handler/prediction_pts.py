@@ -1865,14 +1865,14 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
 
         npoints_add = np.random.randint(-int(npoints_ssv * 0.1), int(npoints_ssv * 0.1))
         npoints_ssv += npoints_add
-        batch = np.zeros((batchsize * npoints_ssv, 3))                                   # TODO change here
-        batch_f = np.ones((batchsize * npoints_ssv, len(feat_dc)))
-        batch_out = np.zeros((batchsize * n_out_pts_curr, 3))
+        batch = [] #np.zeros((batchsize * npoints_ssv, 3))                                   # TODO change here
+        batch_f = [] #np.ones((batchsize * npoints_ssv, len(feat_dc)))
+        batch_out = [] #np.zeros((batchsize * n_out_pts_curr, 3))
         if regression:
-            batch_out_l = np.zeros((batchsize * n_out_pts_curr, 1))
+            batch_out_l = [] #np.zeros((batchsize * n_out_pts_curr, 1))
         else:
-            batch_out_l = np.zeros((batchsize * n_out_pts_curr, ))              ##### HERE
-        batch_offsets = np.zeros((batchsize)) 
+            batch_out_l = [] #np.zeros((batchsize * n_out_pts_curr, ))              ##### HERE
+        batch_offsets = [] #np.zeros((batchsize)) 
         
         cnt = 0
 
@@ -1926,9 +1926,10 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
             # apply augmentations
             if transform is not None:
                 transform(hc_sub)
-            batch[cnt * npoints_ssv] = hc_sub.vertices
-            batch_f[cnt * npoints_ssv] = hc_sub.features
-            batch_out[cnt * n_out_pts_curr] = hc_sub.nodes
+            # print(f'position: {cnt * npoints_ssv}\n for npoints_ssv: {npoints_ssv}\n hc sub verts {hc_sub.vertices.shape}')
+            batch.append(hc_sub.vertices) #batch[cnt * npoints_ssv] = hc_sub.vertices
+            batch_f.append(hc_sub.features) #batch_f[cnt * npoints_ssv] = hc_sub.features
+            batch_out.append(hc_sub.nodes) #batch_out[cnt * n_out_pts_curr] = hc_sub.nodes
             # if not train:
             #     batch_out_orig[cnt][:] = out_coords
             # copmute labels to predict 
@@ -1954,11 +1955,17 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
                 np.put(out_point_label, one_idcs, np.ones(len(one_idcs)))
             if len(out_point_label) == 0:
                 print(f'NO LABELS? \n verts: {len(batch[cnt])} \n outs_nodes: {len(batch_out[cnt])}')
-            batch_out_l[cnt * n_out_pts_curr] = out_point_label
-            batch_offsets[cnt] = npoints_ssv
+            batch_out_l.append(out_point_label) #batch_out_l[cnt * n_out_pts_curr] = out_point_label
+            batch_offsets.append(npoints_ssv) #batch_offsets[cnt] = npoints_ssv
             cnt += 1
         del hc
         assert cnt == batchsize
+
+        batch = np.array(batch)
+        batch_f = np.array(batch_f)
+        batch_out = np.array(batch_out)
+        batch_out_l = np.array(batch_out_l)
+        batch_offsets = np.array(batch_offsets)
         # TODO: Add masking if beneficial - for now just use all input points and their labels
         # yield (batch_f, batch), (batch_out, batch_out_l)
         yield batch_f, batch, batch_out, batch_out_l, batch_offsets

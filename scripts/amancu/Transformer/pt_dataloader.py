@@ -31,7 +31,7 @@ class NodeFalseMergeLoader(Dataset):
 
     def __getitem__(self, item):
 
-        item = np.random.randint(0, self.__len__)
+        item = np.random.randint(0, len(self.fnames))
 
         sample_pts, sample_feats, out_nodes, out_labels, offset = self.load_sample(item)
 
@@ -42,7 +42,8 @@ class NodeFalseMergeLoader(Dataset):
             lbs = torch.from_numpy(out_labels).float()
         else:
             lbs = torch.from_numpy(out_labels).long()
-        return {'pts': pts, 'features': feats, 'out_pts': nodes,'target': lbs, 'extra': os.path.basename(self.fnames[item]), 'offset': offset}
+        offset = torch.from_numpy(offset).int()
+        return pts, feats, nodes, lbs, os.path.basename(self.fnames[item]), offset
 
     def __len__(self):
         return len(self.fnames)
@@ -66,7 +67,7 @@ class NodeFalseMergeLoader(Dataset):
         return sample_pts, sample_feats, out_pts, out_labels, offset
 
 class PtNodeDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size: int = 64, radius=3000, npoints=20000, transforms=None, root=None,
+    def __init__(self, batch_size: int = 64, radius=3000, npoints=20000, ctx_size=20000, transforms=None, root=None,
                 limit_num_samples=None, num_workers=32, shuffle=True):
 
         self.hclouds = root
@@ -78,9 +79,12 @@ class PtNodeDataModule(pl.LightningDataModule):
         if self.fnames == [] or self.fnames is None:
             raise BaseException(f'There have been no Hybridcloud pickles found at this location: {self.hclouds}')
 
+        print(f'Dataset contains {len(self.fnames)} samples')
+
         self.batch_size = batch_size
         self.radius = radius
         self.npoints = npoints
+        self.ctx_size = ctx_size
         self.transforms = transforms
         self.root = root
         self.limit_num_samples = limit_num_samples
@@ -101,14 +105,16 @@ class PtNodeDataModule(pl.LightningDataModule):
 
         print(f'Processed split:\nTrain\t{len(self.train_split)}\nVal\t{len(self.val_split)}\nTest\t{len(self.test_split)}')
 
-        self.train_dataset = NodeFalseMergeLoader('train', self.train_split, self.radius, self.npoints, 
-                                                transform=self.transforms["train"], root=root)
 
-        self.validation_dataset = NodeFalseMergeLoader('val', self.val_split, self.radius, self.npoints, 
-                                                transform=self.transforms["val"], root=root)
+        print(self.transforms['train'])
+        self.train_dataset = NodeFalseMergeLoader('train', self.train_split, self.radius, self.npoints, batch_size=self.batch_size, ctx_size=self.ctx_size,
+                                                transform=self.transforms['train'])
 
-        self.test_dataset = NodeFalseMergeLoader('test', self.test_split, self.radius, self.npoints, 
-                                                transform=self.transforms["test"], root=root)
+        self.validation_dataset = NodeFalseMergeLoader('val', self.val_split, self.radius, self.npoints, batch_size=self.batch_size, ctx_size=self.ctx_size,
+                                                transform=self.transforms['val'])
+
+        self.test_dataset = NodeFalseMergeLoader('test', self.test_split, self.radius, self.npoints, batch_size=self.batch_size, ctx_size=self.ctx_size,
+                                                transform=self.transforms['test'])
 
 
     def train_dataloader(self):
