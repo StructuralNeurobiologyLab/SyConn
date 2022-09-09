@@ -70,3 +70,6 @@ target/
 
 # VSCode
 .vscode/
+
+# Transformer runs
+scripts/amancu/Transformer/lightning_logs/
