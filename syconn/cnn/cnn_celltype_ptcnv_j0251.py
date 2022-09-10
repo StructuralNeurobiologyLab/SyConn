@@ -28,6 +28,7 @@ parser.add_argument('--bs', type=int, default=16, help='Batch size')
 parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
+parser.add_argument('--noamp', action='store_true', help='Disable automatic mixed precision')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
 parser.add_argument('--use_bias', default=1, help='Use bias parameter in Convpoint layers.',
@@ -58,6 +59,7 @@ random.seed(random_seed)
 
 # define parameters
 use_cuda = not args.co
+use_amp = not args.noamp
 name = args.na
 batch_size = args.bs
 npoints = args.sp
@@ -213,6 +215,7 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
+    mixed_precision=use_amp,
     num_workers=10,
     valid_metrics=valid_metrics,
     save_root=save_root,
