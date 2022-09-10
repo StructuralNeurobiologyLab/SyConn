@@ -309,7 +309,8 @@ if elektronn3_avail:
                 log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
-            return len(self.sso_ids) * 3
+            #return len(self.sso_ids) * 3
+            return 20
             #if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
