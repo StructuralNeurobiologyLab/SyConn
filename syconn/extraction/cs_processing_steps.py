@@ -628,11 +628,12 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     overwrite:
 
     """
+    raise ValueError
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
     cs_version = cs_sd.version
     save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220909_cs_run/"
-    raise ValueError
+
     if rel_ssv_with_cs_ids is None:
         rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
