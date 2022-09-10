@@ -745,7 +745,7 @@ class BinarySearchStore:
             queries = obj_ids[bucket_mask]
             ixs_sort = np.argsort(queries)
             indices = np.searchsorted(ids, queries[ixs_sort])
-            d = grp[f'{bucket_id}'][indices]
+            d = grp[f'{bucket_id}'][list(indices)]
             # undo sorting using argsort of argsort to match slicing mask on the left
             data[bucket_mask] = d[np.argsort(ixs_sort)]
         self._h5_file.close()
