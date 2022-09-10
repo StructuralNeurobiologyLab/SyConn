@@ -628,12 +628,12 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     overwrite:
 
     """
-    raise ValueError
+
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
     cs_version = cs_sd.version
-    save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220909_cs_run/"
-
+    save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220910_cs_run/"
+    assert 1==0, "this should appear"
     if rel_ssv_with_cs_ids is None:
         rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
@@ -702,7 +702,7 @@ def _combine_and_split_cs_thread(args):
     n_items_for_path = 0
     cur_path_id = 0
     #base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
-    save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220909_cs_run/"
+    save_dir = "cajal/nvmescratch/users/arother/cs_debugging/220910_cs_run/"
     base_dir = save_dir + voxel_rel_paths[cur_path_id]
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
