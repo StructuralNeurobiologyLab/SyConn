@@ -1,30 +1,29 @@
 # Dependencies marked with "(optional)" are not required for core functionality
 # and can be commented out if there are conflicts.
 
-name: syco
+name: test
 channels:
   - pytorch
   - conda-forge
   - defaults
   - menpo
   - open3d-admin
-  - pyg
-  - nvidia
+  # - pyg
 dependencies:
-  - nvidia::cudatoolkit=10.2
+  - cudatoolkit=11.6
   # From -c pytorch
-  - pytorch::pytorch >=1.8,<=1.9  # can be > 1.9 if glibc >=2.27 is available
+  - pytorch::pytorch  # can be > 1.9 if glibc >=2.27 is available
   - torchvision
-  - pyg
-  - pytorch-sparse
+  # - pyg
+  # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python >= 3.7  # (3.6 should also work)
+  - python >= 3.9  # (3.6 should also work)
   - pip
   - lemon
   - vigra
   - freeglut
-  - pyopengl
+  - pyopengl=3.1.5
   # highest available version for pyopengl-accelerate is 3.1.3 (pyopengl 3.1.5 is being used right now)
   #  - pyopengl-accelerate
   - python-snappy
@@ -39,10 +38,10 @@ dependencies:
   - fasteners
   - numpy
   - coloredlogs
-  - scipy = 1.6
+  - scipy < 1.9   # <1.9 because n_jobs parameter in every tree query was removed. Can be >=1.9 if refactored in the whole project
   - termcolor
   # fix version due to stored RFC models.
-  - scikit-learn = 0.24.1
+  - scikit-learn >= 0.24.1
   - scikit-image
   - opencv
   - numba >0.48  # =0.48 led to freeze when importing elektronn3.data
@@ -63,7 +62,7 @@ dependencies:
   - menpo::osmesa
 
   # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
-  - open3d-admin::open3d = 0.9.0
+  - open3d-admin::open3d
 
   # For tests (optional):
   - pytest
@@ -79,6 +78,9 @@ dependencies:
     - zmesh
     - plyfile
     - torch_geometric == 2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
+    - --find-links https://data.pyg.org/whl/torch-1.12.0+cu116.html
+    - torch-sparse
+    - torch-scatter
     # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
