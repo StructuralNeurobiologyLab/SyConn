@@ -262,7 +262,8 @@ def test_compression_and_decompression_for_mesh_dict():
         logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ')
         raise AssertionError
     except Exception as e:
-        assert str(e) == "Unable to release an unacquired lock"
+        # obey typo in upstream package
+        assert str(e) in ["Unable to release an unacquired lock", "Unable to release an unaquired lock"]
 
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 
