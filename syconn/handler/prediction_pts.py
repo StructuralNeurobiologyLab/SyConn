@@ -1873,7 +1873,8 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
         else:
             batch_out_l = [] #np.zeros((batchsize * n_out_pts_curr, ))              ##### HERE
         batch_offsets = [] #np.zeros((batchsize)) 
-        
+        batch_out_offsets = []
+
         cnt = 0
 
         # process contexts to
@@ -1899,7 +1900,7 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
             else:
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                pcd, idcs, int_vectors = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
                 base_points = np.max(idcs, axis=1)
                 base_points = np.random.choice(base_points, n_out_pts_curr,
                                                 replace=len(base_points) < n_out_pts_curr)
@@ -1926,7 +1927,6 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
             # apply augmentations
             if transform is not None:
                 transform(hc_sub)
-            # print(f'position: {cnt * npoints_ssv}\n for npoints_ssv: {npoints_ssv}\n hc sub verts {hc_sub.vertices.shape}')
             batch.append(hc_sub.vertices) #batch[cnt * npoints_ssv] = hc_sub.vertices
             batch_f.append(hc_sub.features) #batch_f[cnt * npoints_ssv] = hc_sub.features
             batch_out.append(hc_sub.nodes) #batch_out[cnt * n_out_pts_curr] = hc_sub.nodes
@@ -1950,25 +1950,30 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
             else:
                 # for the classification task
                 # "-2" no interest zones, "-1" context zones, "0" no merger, "1" merger zone
-                out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
-                one_idcs = np.where(hc_sub.node_labels >= 0)[0]
+                # out_point_label = np.zeros(shape=(len(hc_sub.node_labels),))
+                # one_idcs = np.where(hc_sub.node_labels >= 0)[0]
+                out_point_label = np.zeros(shape=(len(hc_sub.vertices),))                     # TODO do it clean
+                one_idcs = np.where(hc_sub.labels == 1)[0]
                 np.put(out_point_label, one_idcs, np.ones(len(one_idcs)))
             if len(out_point_label) == 0:
                 print(f'NO LABELS? \n verts: {len(batch[cnt])} \n outs_nodes: {len(batch_out[cnt])}')
             batch_out_l.append(out_point_label) #batch_out_l[cnt * n_out_pts_curr] = out_point_label
-            batch_offsets.append(npoints_ssv) #batch_offsets[cnt] = npoints_ssv
+            batch_offsets.append((cnt+1)*npoints_ssv) #batch_offsets[cnt] = npoints_ssv
+            batch_out_offsets.append((cnt+1)*n_out_pts_curr)
             cnt += 1
         del hc
         assert cnt == batchsize
 
-        batch = np.array(batch)
-        batch_f = np.array(batch_f)
-        batch_out = np.array(batch_out)
-        batch_out_l = np.array(batch_out_l)
+        batch = np.concatenate(np.array(batch))
+        batch_f = np.concatenate(np.array(batch_f))
+        batch_out = np.concatenate(np.array(batch_out))
+        batch_out_l = np.concatenate(np.array(batch_out_l))
         batch_offsets = np.array(batch_offsets)
+        batch_out_offsets = np.array(batch_out_offsets)
+        # print(f'batch: {batch.shape}\t{batch_f.shape}\t{batch_out.shape}\t{batch_out_l.shape}\t{batch_offsets.shape}')
         # TODO: Add masking if beneficial - for now just use all input points and their labels
         # yield (batch_f, batch), (batch_out, batch_out_l)
-        yield batch_f, batch, batch_out, batch_out_l, batch_offsets
+        yield batch_f, batch, batch_out, batch_out_l, batch_offsets, batch_out_offsets
 
 
 def pts_loader_semseg(ssv_params: Optional[List[Tuple[int, dict]]] = None,
@@ -2247,7 +2252,11 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
         labels = hc.labels[m]
         feats = hc.features[m]
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(
+        a = pcd.voxel_down_sample_and_trace(
+            pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
+            pcd.get_max_bound())
+
+        pcd, idcs, int_vector = pcd.voxel_down_sample_and_trace(
             pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
             pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)

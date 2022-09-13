@@ -63,7 +63,6 @@ class TransitionDown(nn.Module):
             x = self.pool(x).squeeze(-1)  # (m, c)
             p, o = n_p, n_o
         else:
-            print(f'x in fwd: {x.shape}')
             x = self.relu(self.bn(self.linear(x)))  # (n, c)
         return [p, x, o]
 
@@ -162,9 +161,8 @@ class PointTransformerSeg(nn.Module):
         # p0 = pxo['pts']
         # x0 = pxo['features']
         # o0 = pxo['offset']
-        x0 = x0.squeeze(0).squeeze(0)
-        p0 = p0.squeeze()
-        print(f'x0: {x0.shape} and p0: {p0.shape}')
+        # x0 = x0.squeeze(0).squeeze(0)
+        # p0 = p0.squeeze()
         x0 = p0 if self.c == 3 else torch.cat((p0, x0), 1)
         p1, x1, o1 = self.enc1([p0, x0, o0])
         p2, x2, o2 = self.enc2([p1, x1, o1])

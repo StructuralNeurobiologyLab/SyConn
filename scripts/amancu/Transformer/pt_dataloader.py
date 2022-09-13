@@ -1,4 +1,5 @@
 from logging import root
+from pickle import TRUE
 from torch.utils.data import Dataset, DataLoader
 import torch
 import pytorch_lightning as pl
@@ -33,7 +34,7 @@ class NodeFalseMergeLoader(Dataset):
 
         item = np.random.randint(0, len(self.fnames))
 
-        sample_pts, sample_feats, out_nodes, out_labels, offset = self.load_sample(item)
+        sample_pts, sample_feats, out_nodes, out_labels, pts_offset, out_offset = self.load_sample(item)
 
         pts = torch.from_numpy(sample_pts).float()
         feats = torch.from_numpy(sample_feats).float()
@@ -42,8 +43,9 @@ class NodeFalseMergeLoader(Dataset):
             lbs = torch.from_numpy(out_labels).float()
         else:
             lbs = torch.from_numpy(out_labels).long()
-        offset = torch.from_numpy(offset).int()
-        return pts, feats, nodes, lbs, os.path.basename(self.fnames[item]), offset
+        pts_offset = torch.from_numpy(pts_offset).int()
+        out_offset = torch.from_numpy(out_offset).int()
+        return pts, feats, nodes, lbs, pts_offset, out_offset, os.path.basename(self.fnames[item])
 
     def __len__(self):
         return len(self.fnames)
@@ -59,12 +61,12 @@ class NodeFalseMergeLoader(Dataset):
             Numpy arrays of points, point features, target points and target labels.
         """
         p = self.fnames[item]
-        sample_feats, sample_pts, out_pts, out_labels, offset = \
+        sample_feats, sample_pts, out_pts, out_labels, pts_offset, out_offset = \
             [*pts_loader_semseg_train_transformer([p], self._batch_size, self.num_pts,
                                       transform=self.transform, ctx_size=self.ctx_size,
                                       use_subcell=False,
                                       mask_borders_with_id=self.mask_borders_with_id, gt_type='merger', regression=self.regression)][0]
-        return sample_pts, sample_feats, out_pts, out_labels, offset
+        return sample_pts, sample_feats, out_pts, out_labels, pts_offset, out_offset
 
 class PtNodeDataModule(pl.LightningDataModule):
     def __init__(self, batch_size: int = 64, radius=3000, npoints=20000, ctx_size=20000, transforms=None, root=None,
@@ -72,7 +74,7 @@ class PtNodeDataModule(pl.LightningDataModule):
 
         self.hclouds = root
         if self.hclouds is None:
-            self.hclouds = f'/wholebrain/scratch/amancu/mergeError/Nodes/TrainingGT/R{radius}_downsample300/'
+            self.hclouds = f'/cajal/scratch/users/amancu/merge_error/transformer/GT/training/R{radius}_downsample300/'
 
         self.fnames = glob.glob(self.hclouds + '*.pkl')
 
@@ -82,6 +84,7 @@ class PtNodeDataModule(pl.LightningDataModule):
         print(f'Dataset contains {len(self.fnames)} samples')
 
         self.batch_size = batch_size
+        self.dataloader_batch_size = 1
         self.radius = radius
         self.npoints = npoints
         self.ctx_size = ctx_size
@@ -105,8 +108,6 @@ class PtNodeDataModule(pl.LightningDataModule):
 
         print(f'Processed split:\nTrain\t{len(self.train_split)}\nVal\t{len(self.val_split)}\nTest\t{len(self.test_split)}')
 
-
-        print(self.transforms['train'])
         self.train_dataset = NodeFalseMergeLoader('train', self.train_split, self.radius, self.npoints, batch_size=self.batch_size, ctx_size=self.ctx_size,
                                                 transform=self.transforms['train'])
 
@@ -118,13 +119,13 @@ class PtNodeDataModule(pl.LightningDataModule):
 
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size,
+        return DataLoader(self.train_dataset, batch_size=self.dataloader_batch_size,
                           num_workers=self.num_workers, pin_memory=True)
 
     def val_dataloader(self):
-        return DataLoader(self.validation_dataset, batch_size=self.batch_size,
+        return DataLoader(self.validation_dataset, batch_size=self.dataloader_batch_size,
                           num_workers=self.num_workers, pin_memory=True)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size,
+        return DataLoader(self.test_dataset, batch_size=self.dataloader_batch_size,
                           num_workers=self.num_workers, pin_memory=True)
