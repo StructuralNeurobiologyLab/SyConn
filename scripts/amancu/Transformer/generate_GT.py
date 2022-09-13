@@ -31,10 +31,10 @@ from syconn.backend.storage import VoxelStorage
 from morphx.classes.hybridmesh import HybridCloud
 
 # paths
-filtered_cs_ids_path = os.path.expanduser(f'/cajal/scratch/users/amancu/merge_error/GT/filtered_cs_ids[10k-100k].npy')
+filtered_cs_ids_path = os.path.expanduser(f'/cajal/scratch/users/amancu/merge_error/transformer/GT/filtered_cs_ids[10k-100k].npy')
 lookup_cellpair2cs_path = os.path.expanduser(
-    f'/cajal/scratch/users/amancu/merge_error/GT/lookup_cellpair2cs[10k-100k].pkl')
-ply_example_path = os.path.expanduser(f'/cajal/scratch/users/amancu/merge_error/GT/Examples/')
+    f'/cajal/scratch/users/amancu/merge_error/transformer/GT/lookup_cellpair2cs[10k-100k].pkl')
+ply_example_path = os.path.expanduser(f'/cajal/scratch/users/amancu/merge_error/transformer/GT/Examples/')
 
 #####################################################################
 ''' Change pt radius here before running '''
@@ -158,8 +158,8 @@ def merge_ssv_and_get_source_node_idcs(cell_obj1, cell_obj2, cs_coord_list):
     node_tree2 = cKDTree(data=scaled_skeleton2)
     # find first neighboring node from each skeleton
     for cs_coord in cs_coord_list:
-        _, idcs1 = node_tree1.query(cs_coord, k=1, n_jobs=2)
-        _, idcs2 = node_tree2.query(cs_coord, k=1, n_jobs=2)
+        _, idcs1 = node_tree1.query(cs_coord, k=1, workers=2)
+        _, idcs2 = node_tree2.query(cs_coord, k=1, workers=2)
         try:
             node_pairs.append([idcs1, idcs2 + edge_idc_offset])
         except Exception as e:
@@ -213,7 +213,7 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
                 pcd = o3d.geometry.PointCloud()
                 pcd.points = o3d.utility.Vector3dVector(area_mesh)
                 voxel_size = 300
-                _, idcs = pcd.voxel_down_sample_and_trace(voxel_size, pcd.get_min_bound(), pcd.get_max_bound())
+                _, idcs, _ = pcd.voxel_down_sample_and_trace(voxel_size, pcd.get_min_bound(), pcd.get_max_bound())
                 rep_coords = area_mesh[np.max(idcs, axis=1)]
                 # choose the mean coords on each axis as the representative coordinate for the contact site
                 # rep_coord = np.mean(area_mesh, axis=0)
@@ -234,12 +234,12 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
             # cell_vertices, vertex_labels, colors = find_vertNearestNeighbor(merged_cell, cs_verts, radius)
 
             # look for nearby skeleton nodes
-            merged_cell_nodes, node_labels = get_labels_and_distances(merged_cell, cs_coord_list,
+            merged_cell_nodes, node_labels, merged_cell_verts, vert_labels = get_labels_and_distances(merged_cell, cs_coord_list,
                                                                                         source_node_idcs, radius)
 
             # save mesh to .ply and mesh+skeleton with labels as HybridCloud .pkl
             #TODO put also labels
-            hc = HybridCloud(vertices=merged_cell_verts, features=features,  
+            hc = HybridCloud(vertices=merged_cell_verts, features=features, labels=vert_labels,
                              nodes=merged_cell_nodes, node_labels=node_labels,
                              edges=merged_cell.skeleton['edges'])
 
@@ -282,6 +282,28 @@ def create_labeled_points(cell_pair2cs_ids, cell_pairs, slice, cs_dataset, ssv_s
         gc.collect()
 
 
+def lookuptable_proc(filtered_cs_ids, slice, cell_pair2cs_ids, cell_pairs):
+    for cs_id in tqdm(filtered_cs_ids[slice]):
+        sv_partner = cs_dataset.get_segmentation_object(cs_id).cs_partner
+        if sv_partner[0] in ssd.sv_ids and sv_partner[1] in ssd.sv_ids:
+            dic = ssd.sv2ssv_ids(sv_partner)
+            c1, c2 = dic[sv_partner[0]], dic[sv_partner[1]]
+            if c1 == c2:
+                continue
+            if c1 < c2:
+                if (c1, c2) in cell_pair2cs_ids:
+                    cell_pair2cs_ids[(c1, c2)].append(cs_id)
+                else:
+                    cell_pair2cs_ids[(c1, c2)] = [cs_id]
+                    cell_pairs.append((c1, c2))
+            else:
+                if (c2, c1) in cell_pair2cs_ids:
+                    cell_pair2cs_ids[c2, c1].append(cs_id)
+                else:
+                    cell_pair2cs_ids[(c2, c1)] = [cs_id]
+                    cell_pairs.append((c2, c1))
+
+
 def create_lookup_table(filtered_contact_sites_ids, cs_dataset):
     """Loop through all contact_sites ids and if two corresponding cells are found,
     store the cell_id and corresponding cs_id into dictionary
@@ -291,15 +313,36 @@ def create_lookup_table(filtered_contact_sites_ids, cs_dataset):
     cell_pair2cs_ids : dict
     cell_pairs : list
     """
-    cell_pair2cs_ids = dict()
-    cell_pairs = list()
+    # cell_pair2cs_ids = dict()
+    # cell_pairs = list()
     ssd = SuperSegmentationDataset()
+
+    chunksize = len(filtered_contact_sites_ids) // n_proc
+    proc_slices = []
+
+    for i_proc in range(n_proc):
+        chunkstart = int(i_proc * chunksize)
+        # make sure to include the division remainder for the last process
+        chunkend = int(i_proc + 1) * chunksize if i_proc < n_proc - 1 else len(filtered_contact_sites_ids)
+        proc_slices.append(np.s_[chunkstart:chunkend])
+
+    with mp.Manager() as m:
+        cell_pair2cs_ids = m.dict()
+        cell_pairs = m.list()
+        params = [(filtered_contact_sites_ids, proc_slice, cell_pair2cs_ids, cell_pairs) for proc_slice in proc_slices]
+        running_tasks = [mp.Process(target=lookuptable_proc, args=param) for param in params]
+        for running_task in running_tasks:
+            running_task.start()
+        for running_task in running_tasks:
+            running_task.join()
+        log.info("len cell_pairs2cs_ids: {}".format(len(cell_pair2cs_ids)))
+        return dict(cell_pair2cs_ids), list(cell_pairs)
 
     for cs_id in tqdm(filtered_contact_sites_ids):
         sv_partner = cs_dataset.get_segmentation_object(cs_id).cs_partner
         if sv_partner[0] in ssd.sv_ids and sv_partner[1] in ssd.sv_ids:
-            dict = ssd.sv2ssv_ids(sv_partner)
-            c1, c2 = dict[sv_partner[0]], dict[sv_partner[1]]
+            dic = ssd.sv2ssv_ids(sv_partner)
+            c1, c2 = dic[sv_partner[0]], dic[sv_partner[1]]
             if c1 == c2:
                 continue
             if c1 < c2:
@@ -325,7 +368,7 @@ if __name__ == '__main__':
     parser.add_argument('--r', nargs='+', help='Radius of merger',
                         default=[3000])
     parser.add_argument('--nproc', type=int, help='Number of processors to use',
-                        default=20)
+                        default=50)
     parser.add_argument('--set', type=str, help='Training or test set generation.', default='training')
     args = parser.parse_args()
     # global cs_ptMerger_radius
@@ -339,7 +382,8 @@ if __name__ == '__main__':
                              log_dir=os.path.expanduser('/cajal/scratch/users/amancu/merge_error/transformer/GT/logs/'))
 
     # setup datasets
-    global_params.wd = '/ssdscratch/pschuber/songbird/j0251/j0251_72_seg_20210127_agglo2/'
+    # global_params.wd = '/ssdscratch/pschuber/songbird/j0251/j0251_72_seg_20210127_agglo2/'
+    global_params.wd = '/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/'
     cs_dataset = SegmentationDataset(obj_type='cs')
     ssd = SuperSegmentationDataset()
 
@@ -347,10 +391,10 @@ if __name__ == '__main__':
     log.info(f'Datasets loaded')
     log.info(f'Cs merge radii: {cs_merge_radii}')
 
-    # skip small and very large CS. Keep 10.000 < size < 100.000 -> 86096777
+    # skip small and very large CS. Keep 10.000 < size < 100.000 -> 86357754
     if not os.path.exists(filtered_cs_ids_path):
         # mask to get the filtered contact sites by size
-        mask = (cs_dataset.sizes > int(1e4)) & (cs_dataset.sizes < int(1e6))
+        mask = (cs_dataset.sizes > int(1e4)) & (cs_dataset.sizes < int(1e5))
         filtered_cs_ids = cs_dataset.ids[mask]
         np.save(filtered_cs_ids_path, filtered_cs_ids)
         log.info(f'Done writing filtered cs_ids')
@@ -366,6 +410,7 @@ if __name__ == '__main__':
     else:
         try:
             cell_pair2cs_ids = load_pkl2obj(lookup_cellpair2cs_path)
+            print(f'cell pairs loaded from file with {len(cell_pair2cs_ids)} samples')
             cell_pairs = []
             for key in cell_pair2cs_ids.keys():
                 cell_pairs.append(key)
@@ -380,12 +425,12 @@ if __name__ == '__main__':
     gc.collect()
 
     if dataset == 'test':
-        offset = 30e3
+        offset = 3e4
         nr_samples = 2000
         log.info(f'Offset and nr_samples adapted to test set.')
     else:
         offset = 0
-        nr_samples = int(1e4)
+        nr_samples = int(2e4)       # 20k samples for training
 
     # setup parallelization parameters
     log.info(f'Using {n_proc} processors')
