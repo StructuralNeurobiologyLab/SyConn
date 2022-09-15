@@ -513,8 +513,10 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     return dict_out
 
 
-@functools.lru_cache(256)
+@functools.lru_cache(512)
 def _load_ssv_hc_cached(args):
+    with open("/cajal/nvmescratch/users/arother/cnn_training/220913_cnn_training/chaching.txt", "a") as cachefile:
+        cachefile.write("cache used")
     return _load_ssv_hc(args)
 
 

@@ -189,7 +189,7 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin,
+                    train=True, draw_local=True, cache=True, map_myelin=self.map_myelin,
                     use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
                     draw_local_dist=draw_local_dist)][0]
             else:
@@ -197,7 +197,7 @@ if elektronn3_avail:
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
                     use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
-                    train=True, cache=False, map_myelin=self.map_myelin)][0]
+                    train=True, cache=True, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -309,8 +309,7 @@ if elektronn3_avail:
                 log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
-            #return len(self.sso_ids) * 3
-            return 20
+            return len(self.sso_ids) * 3
             #if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
