@@ -513,11 +513,17 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     return dict_out
 
 
+global_debug_cache = set()
 @functools.lru_cache(512)
 def _load_ssv_hc_cached(args):
-    with open("/cajal/nvmescratch/users/arother/cnn_training/220913_cnn_training/chaching.txt", "a") as cachefile:
-        cachefile.write("cache used")
+    global_debug_cache.add(args)
+    with open("/cajal/nvmescratch/users/arother/cnn_training/220915_test/chaching.txt", "a") as cachefile:
+        cachefile.write(f"cache used, size cache = {len(global_debug_cache)}, {global_debug_cache} \n")
     return _load_ssv_hc(args)
+
+def _load_ssv_hc_pkl(ssvid):
+    hc = load_pkl2obj("cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl % ssvid")
+    return hc
 
 
 def _load_ssv_hc(args):
@@ -774,13 +780,17 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
     else:
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
+            #just for default values!
+            hc = _load_ssv_hc_pkl(curr_ssvid)
+            '''
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
             args = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin)
             if cache:
-                hc = _load_ssv_hc_cached(args)
+                #hc = _load_ssv_hc_cached(args)
             else:
                 hc = _load_ssv_hc(args)
             ssv.clear_cache()
+            '''
             # fluctuate context size in 1/4 samples
             if np.random.randint(0, 4) == 0:
                 ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
