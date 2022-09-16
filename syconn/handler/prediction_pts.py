@@ -32,12 +32,13 @@ from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
 from syconn import global_params
 from syconn.handler import log_handler
-from syconn.handler.basics import chunkify_successive, chunkify
+from syconn.handler.basics import chunkify_successive, chunkify, load_pkl2obj
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.prediction import certainty_estimate
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject, semsegaxoness2skel
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+
 
 # for readthedocs build
 try:
@@ -50,7 +51,20 @@ pts_feat_dict = dict(sv=0, mi=1, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4, vc=2,
 pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70, syn_ssv_asym=70, vc=100),
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
+hc_cache_gt = {}
 
+
+def init_hc_cache_gt():
+    print("initialising cache")
+    v6_gt = pd.read_csv(
+        "wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv",
+        names=["cellids", "celltype"])
+    cellids = np.array(v6_gt["cellids"])
+    for cellid in cellids:
+        hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl')
+        hc_cache_gt[cellid] = hc
+
+init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -522,7 +536,8 @@ def _load_ssv_hc_cached(args):
     return _load_ssv_hc(args)
 
 def _load_ssv_hc_pkl(ssvid):
-    hc = load_pkl2obj("cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl % ssvid")
+    hc = hc_cache_gt[ssvid]
+    #hc = load_pkl2obj("cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl" % ssvid)
     return hc
 
 
@@ -782,8 +797,10 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
         for curr_ssvid in ssv_ids:
             #just for default values!
             hc = _load_ssv_hc_pkl(curr_ssvid)
-            '''
+            start = time.time()
             ssv = ssd.get_super_segmentation_object(curr_ssvid)
+            print(f'{time.time() - start} - duration get ssv')
+            '''
             args = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin)
             if cache:
                 #hc = _load_ssv_hc_cached(args)
