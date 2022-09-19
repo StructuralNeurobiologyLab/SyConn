@@ -805,8 +805,6 @@ def _combine_and_split_cs_thread(args):
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
             mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
-
-
     if n_items_for_path > 0:
         attr_dc.push()
         mesh_dc.push()

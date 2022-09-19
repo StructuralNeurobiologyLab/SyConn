@@ -38,6 +38,7 @@ from syconn.handler.prediction import certainty_estimate
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject, semsegaxoness2skel
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+import pandas as pd
 
 
 # for readthedocs build
@@ -61,7 +62,7 @@ def init_hc_cache_gt():
         names=["cellids", "celltype"])
     cellids = np.array(v6_gt["cellids"])
     for cellid in cellids:
-        hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl')
+        hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl' % cellid)
         hc_cache_gt[cellid] = hc
 
 init_hc_cache_gt()
@@ -796,10 +797,10 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
             #just for default values!
-            hc = _load_ssv_hc_pkl(curr_ssvid)
             start = time.time()
-            ssv = ssd.get_super_segmentation_object(curr_ssvid)
-            print(f'{time.time() - start} - duration get ssv')
+            hc = _load_ssv_hc_pkl(curr_ssvid)
+            print(f'{time.time() - start} - duration for cached hc')
+            #ssv = ssd.get_super_segmentation_object(curr_ssvid)
             '''
             args = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin)
             if cache:
@@ -819,9 +820,9 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint64) * ssv.id
+            ixs = np.ones((batchsize,), dtype=np.uint64) * curr_ssvid
             if len(hc.vertices) == 0:
-                log_handler.warning(f'Could not find any mesh vertex in {ssv}.')
+                log_handler.warning(f'Could not find any mesh vertex in {curr_ssvid}.')
                 cnt = batchsize
             else:
                 cnt = 0
@@ -845,7 +846,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                     cnt_ctx = 0
                     while True:
                         if cnt_ctx > 2*len(source_nodes):
-                            raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
+                            raise ValueError(f'Could not find context with > 0 vertices in {curr_ssvid}.')
                         cnt_ctx += 1
                         if use_ctx_sampling:
                             node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
