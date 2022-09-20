@@ -122,7 +122,7 @@ else:
 print(f'Running on device: {device}')
 
 # set paths
-save_root = "/cajal/nvmescratch/users/arother/cnn_training/220916_hc_preloaded/"
+save_root = "/cajal/nvmescratch/users/arother/cnn_training/220920_test_kdtree_cache/"
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
@@ -174,6 +174,7 @@ valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=
                                cv_val=cval, cellshape_only=cellshape_only,
                                use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
                                ctx_size=ctx, map_myelin=use_myelin)
+
 #valid_ds = None
 
 # PREPARE AND START TRAINING #
@@ -216,7 +217,7 @@ trainer = Trainer3d(
     valid_dataset=valid_ds,
     batchsize=1,
     mixed_precision=use_amp,
-    num_workers=8,
+    num_workers=2,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

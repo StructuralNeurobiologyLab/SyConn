@@ -281,6 +281,7 @@ if elektronn3_avail:
             # load GT
             #assert self.train, "Other mode than 'train' is not implemented."
             self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv"
+            #self.csv_p = "cajal/nvmescratch/users/arother/cnn_training/j0251_celltype_gt_short_test.csv"
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint64)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
