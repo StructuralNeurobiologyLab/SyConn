@@ -1831,6 +1831,7 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
 
     for pkl_f in fnames_pkl:
         hc = load_hc_pkl(pkl_f, gt_type)
+        # print(f'hc labels: {np.unique(hc.labels)}')
         # filter valid skeleton nodes (i.e. which were close to manually annotated nodes)
         # use merger labels
         # iterate over labels
@@ -1886,6 +1887,8 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
             sample_labels = hc_sub.labels
             sample_feats = hc_sub.features
 
+            # print(f'labels: {np.unique(sample_labels)}')
+
             # get target locations
             assert n_out_pts_curr >= 1
             if n_out_pts_curr == 1:
@@ -1912,16 +1915,20 @@ def pts_loader_semseg_train_transformer(fnames_pkl: str, batchsize: int,
             np.random.shuffle(sample_ixs)
             sample_pts = sample_pts[sample_ixs][:npoints_ssv]
             sample_feats = sample_feats[sample_ixs][:npoints_ssv]
+            sample_labels = sample_labels[sample_ixs][:npoints_ssv]
             # add duplicate points before applying the transform if sample_pts
             # has less points than npoints_ssv
             npoints_add = npoints_ssv - len(sample_pts)
-            idx = np.random.choice(len(sample_pts), npoints_add)
-            sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
-            sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+            if npoints_add > 0:
+                idx = np.random.choice(len(sample_pts), npoints_add)
+                sample_pts = np.concatenate([sample_pts, sample_pts[idx]])
+                sample_feats = np.concatenate([sample_feats, sample_feats[idx]])
+                sample_labels = np.concatenate([sample_labels, sample_labels[idx]])
             # one hot encoding
             sample_feats = label_binarize(sample_feats, classes=np.arange(len(feat_dc)))
             hc_sub._vertices = sample_pts
             hc_sub._features = sample_feats
+            hc_sub._labels = sample_labels
             hc_sub._nodes = np.array(out_coords)
             hc_sub._node_labels = np.array(out_labels)
             # apply augmentations
@@ -2234,7 +2241,6 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
     feat_ds_dict['hybrid'] = feat_ds_dict['sv']
     hc = HybridCloud()
     hc.load_from_pkl(path)
-    hc._labels = np.zeros(shape=(len(hc.vertices),))
     new_verts = []
     new_labels = []
     new_feats = []
@@ -2243,6 +2249,7 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
     for ident_str, feat_id in pts_feat_dict.items():
         pcd = o3d.geometry.PointCloud()
         m = (hc.features == feat_id).squeeze()
+        # print(f'm for {ident_str}: {m}')
         if np.sum(m) == 0:
             if not (feat_id == 0 and len(hc.features) == 0 and len(hc.vertices) != 0):
                 continue
