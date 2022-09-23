@@ -23,8 +23,9 @@ class PointTransformerModule(pl.LightningModule):
         self.num_training_steps = 100
         self.logging = logging
         self.cloud_path = cloud_path
+        # self.weight =  torch.tensor([1,2], dtype=torch.float32)
 
-        self.loss = nn.CrossEntropyLoss(weight=[])
+        self.loss = nn.CrossEntropyLoss()
         self.model = pointtransformer_seg_repro(c=3, k=2)
 
     def forward(self, x):
