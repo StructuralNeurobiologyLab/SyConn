@@ -32,7 +32,8 @@ class NodeFalseMergeLoader(Dataset):
 
     def __getitem__(self, item):
 
-        item = np.random.randint(0, len(self.fnames))
+        # item = np.random.randint(0, len(self.fnames))
+        # print(f'{self.fnames[item]}')
 
         sample_pts, sample_feats, out_nodes, out_labels, pts_offset, out_offset = self.load_sample(item)
 
@@ -70,13 +71,19 @@ class NodeFalseMergeLoader(Dataset):
 
 class PtNodeDataModule(pl.LightningDataModule):
     def __init__(self, batch_size: int = 64, radius=3000, npoints=20000, ctx_size=20000, transforms=None, root=None,
-                limit_num_samples=None, num_workers=32, shuffle=True):
+                limit_num_samples=None, num_workers=32, shuffle=True, additional_data:bool=False):
 
         self.hclouds = root
         if self.hclouds is None:
             self.hclouds = f'/cajal/scratch/users/amancu/merge_error/transformer/GT/training/R{radius}_downsample300/'
 
         self.fnames = glob.glob(self.hclouds + '*.pkl')
+
+        if additional_data:
+            additionl_data_path = '/cajal/scratch/users/amancu/merge_error/transformer/GT/training/AdditionalGT/*.pkl'
+            additional_files = glob.glob(additionl_data_path)
+            print(f'Added {len(additional_files)} to the {len(self.fnames)} sample data')
+            self.fnames += additional_files
 
         if self.fnames == [] or self.fnames is None:
             raise BaseException(f'There have been no Hybridcloud pickles found at this location: {self.hclouds}')

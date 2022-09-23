@@ -72,4 +72,4 @@ target/
 .vscode/
 
 # Transformer runs
-scripts/amancu/Transformer/lightning_logs/
+scripts/amancu/Transformer/lightning_logs

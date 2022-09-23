@@ -13,12 +13,18 @@ from pt_transformer import PointTransformerSeg
 
 # Loggers and monitors
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import LearningRateMonitor
-wandb_logger = WandbLogger(name='4k sample run - basic mergers', project="merge-error-detection")
-lr_monitor = LearningRateMonitor(logging_interval='step')
-
 from pytorch_lightning.loggers import TensorBoardLogger
+from pytorch_lightning.callbacks import LearningRateMonitor
 
+PROJECT_NAME = '6.5ksampleRun_allMergers_additionalData_noAugm'
+TB_PATH = '/cajal/scratch/users/amancu/merge_error/transformer/tensorboard/'
+WANDB_PATH = '/cajal/scratch/users/amancu/merge_error/transformer/wandb/'
+CLOUD_PATH = f'/cajal/scratch/users/amancu/merge_error/transformer/trainings/{PROJECT_NAME}/'
+LOG = True
+
+tensorboard_logger = TensorBoardLogger(save_dir=TB_PATH, name=PROJECT_NAME)
+wandb_logger = WandbLogger(save_dir=WANDB_PATH, name=PROJECT_NAME, project="merge-error-detection")
+lr_monitor = LearningRateMonitor(logging_interval='step')
 
 # Datamodule hyperparams
 SCALE_NORM = 5000
@@ -31,6 +37,7 @@ ROOT = f'/cajal/scratch/users/amancu/merge_error/transformer/GT/training/R{RADIU
 LIMIT_SAMPLES = None
 NUM_WORKERS = 8
 SHUFFLE = True
+ADDITIONAL_DATA = True        # Add true negatives to the datset
 TRANSFORMS = {
     'train': clouds.Compose([clouds.Center(), clouds.Normalization(SCALE_NORM)]), #clouds.Compose([clouds.RandomVariation((-30, 30), distr='normal'),  # in nm
                                       #clouds.Center(),
@@ -44,7 +51,7 @@ TRANSFORMS = {
 }
 
 data_module = PtNodeDataModule(BATCH_SIZE, RADIUS, NPOINTS, CTX_SIZE, TRANSFORMS, root=ROOT, 
-                                limit_num_samples=LIMIT_SAMPLES, num_workers=NUM_WORKERS, shuffle=SHUFFLE)
+                                limit_num_samples=LIMIT_SAMPLES, num_workers=NUM_WORKERS, shuffle=SHUFFLE, additional_data=ADDITIONAL_DATA)
 
 
 train_loader = data_module.train_dataloader()
@@ -57,20 +64,25 @@ WARMUP = 1
 
 n_gpus = torch.cuda.device_count()
 print(f"#gpus available: {n_gpus}")
+torch.cuda.set_device(0)
 
 hyperparams = {
     "learning_rate": LEARNING_RATE,
     "warmup_steps": WARMUP,
+    "logging": LOG,
+    "cloud_path": CLOUD_PATH,
 }
+
 
 model = PointTransformerModule(**hyperparams)
 
 # Trainer hyperparams
 seed_everything(42, workers=True)
 ACCELERATOR = "gpu"
+DEVICE = [0]
 
 wandb_logger.watch(model)
 
-trainer = Trainer(limit_train_batches=100, max_epochs=100, accelerator=ACCELERATOR, 
-                auto_select_gpus=True, devices=[0], log_every_n_steps=1, logger=wandb_logger)
+trainer = Trainer(limit_train_batches=100, max_epochs=100, accelerator=ACCELERATOR, devices=DEVICE,
+                auto_select_gpus=False, log_every_n_steps=1,) #logger=[wandb_logger, tensorboard_logger], callbacks=[lr_monitor])
 trainer.fit(model=model, train_dataloaders=train_loader, val_dataloaders=val_loader)
