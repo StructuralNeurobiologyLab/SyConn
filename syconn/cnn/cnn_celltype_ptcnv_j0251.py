@@ -122,7 +122,7 @@ else:
 print(f'Running on device: {device}')
 
 # set paths
-save_root = "/cajal/nvmescratch/users/arother/cnn_training/220920_test_kdtree_cache/"
+#save_root = "/cajal/nvmescratch/users/arother/cnn_training/220927_dijkstra_cpu4/"
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
@@ -217,7 +217,7 @@ trainer = Trainer3d(
     valid_dataset=valid_ds,
     batchsize=1,
     mixed_precision=use_amp,
-    num_workers=2,
+    num_workers=32,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,

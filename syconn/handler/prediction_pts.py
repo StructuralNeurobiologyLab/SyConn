@@ -54,7 +54,7 @@ pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70,
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 
 hc_cache_gt = {}
-kdtree_cache_gt = {}
+#kdtree_cache_gt = {}
 
 def init_hc_cache_gt():
     print("initialising cache")
@@ -65,8 +65,8 @@ def init_hc_cache_gt():
     for cellid in cellids:
         hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl' % cellid)
         hc_cache_gt[cellid] = hc
-        kdtree = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_kdtree.pkl' % cellid)
-        kdtree_cache_gt[cellid] = kdtree
+        #kdtree = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_kdtree.pkl' % cellid)
+        #kdtree_cache_gt[cellid] = kdtree
 
 
 init_hc_cache_gt()
@@ -847,7 +847,9 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                             sn_new.append(np.random.choice(neighs, 1)[0])
                     source_nodes = sn_new
                 #kdt = cKDTree(hc.nodes)  # -> precomputed
-                kdt = kdtree_cache_gt[curr_ssvid]
+                #kdt = kdtree_cache_gt[curr_ssvid]
+                #use nx dijksta path as in context_splitting_graph_many
+                g = hc.graph()
                 for source_node in source_nodes:
                     cnt_ctx = 0
                     while True:
@@ -856,7 +858,10 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                         cnt_ctx += 1
                         if use_ctx_sampling:
                             #node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
-                            node_ids = kdt.query_ball_point(hc.nodes[source_node], ctx_size_fluct)
+                            #node_ids = kdt.query_ball_point(hc.nodes[source_node], ctx_size_fluct)
+                            #this approach comes from the function context_splitting_graph_many
+                            path = nx.single_source_dijkstra_path(g, source_node, weight='weight', cutoff=ctx_size_fluct)
+                            node_ids = np.array(list(path.keys()))
                         else:
                             node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                         hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud

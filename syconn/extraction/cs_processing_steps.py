@@ -691,6 +691,7 @@ def _combine_and_split_cs_thread(args):
     scaling = sd_cs.scaling
     meshing_kws = global_params.config['meshes']['meshing_props_points']['cs_ssv']
     mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
+    misclassified_astrocytes = load_pkl2obj("cajal/nvmescratch/users/arother/j0251v4_prep/pot_astro_ids.pkl")
 
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
@@ -714,6 +715,13 @@ def _combine_and_split_cs_thread(args):
         start = time.time()
         n_items_for_path += 1
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
+
+        if np.any(np.in1d(ssv_ids, misclassified_astrocytes)):
+            test_filename = base_dir + "/progress.txt"
+            with open(test_filename,
+                      "a") as infofile:
+                infofile.write(("%i :%i excluded due to misclassified astrocyte \n" % (n_items_for_path, cs_ssv_id)))
+            continue
 
         # verify ssv_partner_ids
         cs_lst = sd_cs.get_segmentation_object(cs_ids)
