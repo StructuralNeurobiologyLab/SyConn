@@ -30,7 +30,7 @@ except ImportError:
 from . import log_extraction
 from .. import global_params
 from ..backend.storage import AttributeDict, VoxelStorageDyn, MeshStorage, VoxelStorageLazyLoading
-from ..handler.basics import chunkify
+from ..handler.basics import chunkify, load_pkl2obj
 from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -736,7 +736,7 @@ def _combine_and_split_cs_thread(args):
             ccs = []
         else:
             # generate connected component meshes; vertices are in nm
-            ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
+            ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, testfilename=test_filename, **meshing_kws)
 
 
         for mesh_cc in ccs:
