@@ -1167,7 +1167,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         # 26-connected
         boundary_struct = np.ones((3, 3, 3))
     pts, norm = [], []
-    counter = 0
+    counter = 1
     for m, off in tqdm.tqdm(voxel_iter, disable=not verbose, desc='VoxelLoad'):
         bndry = m.astype(np.float32) - binary_erosion(m, boundary_struct, iterations=1)
         if overlap > 0:
@@ -1188,11 +1188,11 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         pts.append(pts_)
         norm_ = grad[nonzero_mask]
         norm.append(norm_)
+        if testfilename is not None:
+            with open(testfilename,
+                      "a") as infofile:
+                infofile.write(("loop ran for %i times \n" % (counter)))
         counter += 1
-    if testfilename is not None:
-        with open(testfilename,
-                  "a") as infofile:
-            infofile.write(("loop ran for %i times \n" % (counter)))
     norm = np.concatenate(norm)
     pts = np.concatenate(pts) * scale
     assert norm.shape == pts.shape, 'Incorrect shapes for normals and points.'

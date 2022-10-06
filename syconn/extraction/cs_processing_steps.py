@@ -39,6 +39,8 @@ from ..reps.super_segmentation_dataset import filter_ssd_by_total_pathlength
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
+from memory_profiler import memory_usage
+
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
@@ -638,8 +640,9 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
-    n_used_paths = min(global_params.config.ncore_total * 30, len(storage_location_ids),
-                       len(rel_ssv_with_cs_ids))
+    #n_used_paths = min(global_params.config.ncore_total * 30, len(storage_location_ids),
+    #                   len(rel_ssv_with_cs_ids))
+    n_used_paths = min(len(storage_location_ids),len(rel_ssv_with_cs_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
     # target SD for SSV cs objects
@@ -674,7 +677,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log,
-                               batchjob_folder= save_dir, overwrite= True, additional_flags="--gres=gpu:0 --mem=400000 --cpus-per-task 24 ",
+                               batchjob_folder= save_dir, overwrite= True, additional_flags="--gres=gpu:0 --mem=15000 --cpus-per-task 1",
                                exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
                                               'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
 
@@ -692,6 +695,13 @@ def _combine_and_split_cs_thread(args):
     meshing_kws = global_params.config['meshes']['meshing_props_points']['cs_ssv']
     mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
     misclassified_astrocytes = load_pkl2obj("cajal/nvmescratch/users/arother/j0251v4_prep/pot_astro_ids.pkl")
+
+    example_cs = 275781054487918910
+    cs_ids = np.array(rel_ssv_with_cs_ids_items, dtype = object)[:, 1]
+    if example_cs not in cs_ids:
+        raise ValueError('example cs not in this worker')
+
+
 
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
@@ -716,8 +726,8 @@ def _combine_and_split_cs_thread(args):
         n_items_for_path += 1
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
 
+        test_filename = base_dir + "/progress.txt"
         if np.any(np.in1d(ssv_ids, misclassified_astrocytes)):
-            test_filename = base_dir + "/progress.txt"
             with open(test_filename,
                       "a") as infofile:
                 infofile.write(("%i :%i excluded due to misclassified astrocyte \n" % (n_items_for_path, cs_ssv_id)))
@@ -781,9 +791,10 @@ def _combine_and_split_cs_thread(args):
             attr_dc[cs_ssv_id] = csssv_attr_dc
             cs_time = time.time() - start
             test_filename = base_dir + "/progress.txt"
+            mem_usage = memory_usage(-1, interval=1, timeout=1)
             with open(test_filename,
                       "a") as infofile:
-                infofile.write(("%i :%i processed, took %.2f s \n" % (n_items_for_path, cs_ssv_id, cs_time)))
+                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i; current memory usage is %.2f MB \n" % (n_items_for_path, cs_ssv_id, cs_time, ssv_ids[0], ssv_ids[1], mem_usage[0])))
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
