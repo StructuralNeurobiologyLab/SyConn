@@ -122,7 +122,7 @@ else:
 print(f'Running on device: {device}')
 
 # set paths
-save_root = "/cajal/nvmescratch/users/arother/cnn_training/220930_valid_splits/"
+#save_root = "/cajal/nvmescratch/users/arother/cnn_training/220930_valid_splits/"
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
@@ -174,8 +174,6 @@ valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=
                                cv_val=cval, cellshape_only=cellshape_only,
                                use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
                                ctx_size=ctx, map_myelin=use_myelin)
-
-raise ValueError
 
 #valid_ds = None
 

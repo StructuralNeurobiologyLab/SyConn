@@ -266,6 +266,7 @@ def batchjob_script(params: list, name: str,
 
     # wait for jobs to be in SLURM memory
     time.sleep(10)
+
     # requeue failed jobs for `max_iterations`-times
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!
