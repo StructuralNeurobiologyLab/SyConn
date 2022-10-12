@@ -778,11 +778,11 @@ def _combine_and_split_cs_thread(args):
             csssv_attr_dc["cs_ids"] = list(cs_ids)
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
-            tm = o3d.geometry.TriangleMesh
+            tm = o3d.geometry.TriangleMesh()
             tm.triangles = o3d.utility.Vector3iVector(mesh_cc[0].reshape((-1, 3)))
             tm.vertices = o3d.utility.Vector3dVector(mesh_cc[1].reshape((-1, 3)))
-            tm.normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
-            assert tm.is_watertight()
+            tm.triangle_normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
+            watertight = tm.is_watertight()
             csssv_attr_dc["size"] = tm.get_volume // np.prod(scaling)
             #csssv_attr_dc["size"] = 0
 
@@ -793,8 +793,8 @@ def _combine_and_split_cs_thread(args):
             mem_usage = memory_usage(-1, interval=1, timeout=1)
             with open(test_filename,
                       "a") as infofile:
-                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i; current memory usage is %.2f MB \n" % (n_items_for_path, cs_ssv_id, cs_time,
-                                                                                                                       ssv_ids[0], ssv_ids[1], mem_usage[0])))
+                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i; current memory usage is %.2f MB, watertight = %s \n" % (n_items_for_path, cs_ssv_id, cs_time,
+                                                                                                                       ssv_ids[0], ssv_ids[1], mem_usage[0], watertight)))
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
