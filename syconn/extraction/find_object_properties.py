@@ -405,9 +405,9 @@ def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: n
                             if (neigh_id == 0) or (neigh_id == center_id):
                                 continue
                             if neigh_id in d:
-                                d[neigh_id] += 1
+                                d[neigh_id] += numba.uint64(1)
                             else:
-                                d[neigh_id] = 1
+                                d[neigh_id] = numba.uint64(1)
                 if len(d) != 0:
                     # get most common ID
                     most_comm = 0

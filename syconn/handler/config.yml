@@ -19,7 +19,7 @@ syntype_avail: False
 batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 
 # generic parameters for distributed processing
-mem_per_node:  999500 #249500  # in MB
+mem_per_node: 999500  # in MB
 ncores_per_node: 64
 ngpus_per_node: 2
 nnodes_total: 50

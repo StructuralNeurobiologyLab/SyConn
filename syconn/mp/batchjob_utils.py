@@ -232,10 +232,8 @@ def batchjob_script(params: list, name: str,
                     pkl.dump(param, f)
 
         os.chmod(this_sh_path, 0o744)
-        #cmd_exec = "{0} --output={1} --error={2} --time=4-0 --job-name={3} {4}".format(
-         #   additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
         cmd_exec = "{0} --output={1} --error={2} --job-name={3} {4}".format(
-           additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
+            additional_flags, job_log_path, job_err_path, job_name, this_sh_path)
         if job_id == 0:
             log_batchjob.debug(f'Starting jobs with command "{cmd_exec}".')
         job_exec_dc[job_id] = cmd_exec
@@ -266,7 +264,6 @@ def batchjob_script(params: list, name: str,
 
     # wait for jobs to be in SLURM memory
     time.sleep(10)
-
     # requeue failed jobs for `max_iterations`-times
     js_dc = jobstates_slurm(job_name, starttime)
     requeue_dc = {k: 0 for k in job2slurm_dc}  # use internal job IDs!

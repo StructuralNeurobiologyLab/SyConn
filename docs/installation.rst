@@ -7,7 +7,7 @@ Installation
 Setup
 =====
 
-Before you can set up SyConn, ensure that the
+Before you can set up SyConn2, ensure that the
 `conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/>`_
 package manager is installed on your system.
 Then you can install SyConn and all of its dependencies into a new conda
@@ -21,13 +21,20 @@ named "syco" by running::
     pip install --no-deps -v -e .
 
 
-The last command will install SyConn in
+The last command will install SyConn2 in
 `editable <https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs>`_
-mode, which is useful for development on SyConn itself. If you want to install
+mode, which is useful for development on SyConn2 itself. If you want to install
 it as a regular read-only package instead, replace the last command with::
 
     pip install --no-deps -v .
 
+
+To update the SyConn2 use::
+
+    pip install -e . --upgrade --no-deps
+
+
+This will also recompile cython code.
 
 To update the environment, e.g. if the environment file changed, use::
 
