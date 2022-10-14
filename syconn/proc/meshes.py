@@ -37,6 +37,7 @@ from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
 from ..reps.segmentation_helper import load_so_meshes_bulk
 from syconn.extraction.in_bounding_boxC import in_bounding_box
+from memory_profiler import memory_usage
 
 from skimage.measure import mesh_surface_area
 
@@ -1188,10 +1189,11 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         pts.append(pts_)
         norm_ = grad[nonzero_mask]
         norm.append(norm_)
+        mem_usage = memory_usage(-1, interval=1, timeout=1)
         if testfilename is not None:
             with open(testfilename,
                       "a") as infofile:
-                infofile.write(("loop ran for %i times \n" % (counter)))
+                infofile.write(("loop ran for %i times; current memory usage is %.2f MB \n" % (counter, mem_usage[0])))
         counter += 1
     norm = np.concatenate(norm)
     pts = np.concatenate(pts) * scale

@@ -30,7 +30,7 @@ except ImportError:
 from . import log_extraction
 from .. import global_params
 from ..backend.storage import AttributeDict, VoxelStorageDyn, MeshStorage, VoxelStorageLazyLoading
-from ..handler.basics import chunkify, load_pkl2obj
+from ..handler.basics import chunkify, load_pkl2obj, write_obj2pkl
 from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -702,7 +702,6 @@ def _combine_and_split_cs_thread(args):
     #if example_cs not in cs_ids:
     #    raise ValueError('example cs not in this worker')
 
-
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
     div_base = 1e3
@@ -716,6 +715,8 @@ def _combine_and_split_cs_thread(args):
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
     cs_ssv_id = base_id
+    max_voxel = 10 **6
+    excluded_ssv_ids = []
 
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
     #mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False, compress=True)
@@ -742,8 +743,12 @@ def _combine_and_split_cs_thread(args):
                                        disable_locking=True)
             vxl_iter_lst.append(vx_store.iter_voxelmask_offset(cs.id, overlap=1))
             vx_cnt += vx_store.object_size(cs.id)
-        if mesh_min_obj_vx > vx_cnt:
+        if mesh_min_obj_vx > vx_cnt or vx_cnt > max_voxel:
             ccs = []
+            if vx_cnt > max_voxel:
+                excluded_ssv_ids.append(ssv_ids)
+                with open(test_filename, "a") as infofile:
+                    infofile.write(("%i :%i excluded due to voxelsize larger %i \n" % (n_items_for_path, cs_ssv_id, max_voxel)))
         else:
             # generate connected component meshes; vertices are in nm
             ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, testfilename=test_filename, **meshing_kws)
@@ -778,13 +783,17 @@ def _combine_and_split_cs_thread(args):
             csssv_attr_dc["cs_ids"] = list(cs_ids)
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
-            tm = o3d.geometry.TriangleMesh()
-            tm.triangles = o3d.utility.Vector3iVector(mesh_cc[0].reshape((-1, 3)))
-            tm.vertices = o3d.utility.Vector3dVector(mesh_cc[1].reshape((-1, 3)))
-            tm.triangle_normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
-            watertight = tm.is_watertight()
-            csssv_attr_dc["size"] = tm.get_volume // np.prod(scaling)
-            #csssv_attr_dc["size"] = 0
+            #tm = o3d.geometry.TriangleMesh()
+            #tm.triangles = o3d.utility.Vector3iVector(mesh_cc[0].reshape((-1, 3)))
+            #tm.vertices = o3d.utility.Vector3dVector(mesh_cc[1].reshape((-1, 3)))
+            #tm.triangle_normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
+           # watertight = tm.is_watertight()
+            # orientable = tm.is_orientable()
+            #if watertight and orientable:
+                #csssv_attr_dc["size"] = tm.get_volume // np.prod(scaling)
+            #else:
+                #cssv_attr_dc["size"] = 0
+            csssv_attr_dc["size"] = 0
 
             # add cs_ssv dict to AttributeStorage
             attr_dc[cs_ssv_id] = csssv_attr_dc
@@ -793,8 +802,8 @@ def _combine_and_split_cs_thread(args):
             mem_usage = memory_usage(-1, interval=1, timeout=1)
             with open(test_filename,
                       "a") as infofile:
-                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i; current memory usage is %.2f MB, watertight = %s \n" % (n_items_for_path, cs_ssv_id, cs_time,
-                                                                                                                       ssv_ids[0], ssv_ids[1], mem_usage[0], watertight)))
+                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i; current memory usage is %.2f MB \n" % (n_items_for_path, cs_ssv_id, cs_time,
+                                                                                                                       ssv_ids[0], ssv_ids[1], mem_usage[0])))
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
@@ -811,6 +820,9 @@ def _combine_and_split_cs_thread(args):
         if n_items_for_path > n_per_voxel_path:
             attr_dc.push()
             #mesh_dc.push()
+            write_obj2pkl("%s/excluded_ssv_id_pairs.pkl" % base_dir, excluded_ssv_ids)
+            with open(test_filename,"a") as infofile:
+                infofile.write(("%i ssv pairs excluded due too large cs ids \n" % (len(excluded_ssv_ids))))
             cur_path_id += 1
             if len(voxel_rel_paths) == cur_path_id:
                 raise ValueError(f'Worker ran out of possible storage paths for storing {sd_cs_ssv.type}.')
@@ -826,6 +838,9 @@ def _combine_and_split_cs_thread(args):
 
     if n_items_for_path > 0:
         attr_dc.push()
+        write_obj2pkl("%s/excluded_ssv_id_pairs.pkl" % base_dir, excluded_ssv_ids)
+        with open(test_filename, "a") as infofile:
+            infofile.write(("%i ssv pairs excluded due too large cs ids \n" % (len(excluded_ssv_ids))))
         #mesh_dc.push()
 
 
