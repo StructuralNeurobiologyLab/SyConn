@@ -51,8 +51,8 @@ if __name__ == '__main__':
         ('use_point_models', True),
         ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
         ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
-        ('ncores_per_node', 20),
-        ('mem_per_node', 250000),
+        ('ncores_per_node', 64),
+        ('mem_per_node', 999500),
         ('ngpus_per_node', 2),
         ('nnodes_total', 4),
         ('cell_contacts',
