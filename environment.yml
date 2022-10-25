@@ -60,6 +60,7 @@ dependencies:
 
   # From -c menpo
   - menpo::osmesa
+  - conda-forge::mesalib
 
   # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
   - open3d-admin::open3d
