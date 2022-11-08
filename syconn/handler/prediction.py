@@ -601,7 +601,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         overwrite: bool = False,
                         cube_shape_kd: Optional[Tuple[int]] = None,
                         traindata_mean: float = 0.,
-                        traindata_std: float = 255.):
+                        traindata_std: float = 255., save_dir = None):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -721,11 +721,18 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if \
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
-
-    qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
-                       remove_jobfolder=True, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
-                               exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
-                                              'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
+    if save_dir is not None:
+        qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
+                           remove_jobfolder=True, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
+                           batchjob_folder=save_dir,
+                                   exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
+                                                  'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
+    else:
+        qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
+                           remove_jobfolder=True, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
+                           exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007',
+                                          'cajalg008', 'cajalg009',
+                                          'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
@@ -773,6 +780,7 @@ def dense_predictor(args):
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd = basics.kd_factory(path)
+        target_kd._cube_shape = [256, 256, 256]
         target_kd_dict[path] = target_kd
 
     # init Predictor
