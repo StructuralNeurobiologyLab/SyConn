@@ -1189,12 +1189,14 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         pts.append(pts_)
         norm_ = grad[nonzero_mask]
         norm.append(norm_)
+        '''
         mem_usage = memory_usage(-1, interval=1, timeout=1)
         if testfilename is not None:
             with open(testfilename,
                       "a") as infofile:
                 infofile.write(("loop ran for %i times; current memory usage is %.2f MB \n" % (counter, mem_usage[0])))
         counter += 1
+        '''
     norm = np.concatenate(norm)
     pts = np.concatenate(pts) * scale
     assert norm.shape == pts.shape, 'Incorrect shapes for normals and points.'

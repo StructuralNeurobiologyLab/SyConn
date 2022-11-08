@@ -678,7 +678,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log,
-                               batchjob_folder= save_dir, overwrite= True, additional_flags="--gres=gpu:0 --cpus-per-task 1",
+                               batchjob_folder= save_dir, overwrite= True, additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
                                exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
                                               'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
 
@@ -748,7 +748,7 @@ def _combine_and_split_cs_thread(args):
             if vx_cnt > max_voxel:
                 excluded_ssv_ids.append(ssv_ids)
                 with open(test_filename, "a") as infofile:
-                    infofile.write(("%i :%i excluded due to voxelsize larger %i \n" % (n_items_for_path, cs_ssv_id, max_voxel)))
+                    infofile.write(("%i :%i, ssv ids are %i %i excluded due to voxelsize larger %i \n" % (n_items_for_path, cs_ssv_id, ssv_ids[0], ssv_ids[1], max_voxel)))
         else:
             # generate connected component meshes; vertices are in nm
             ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, testfilename=test_filename, **meshing_kws)
@@ -799,11 +799,11 @@ def _combine_and_split_cs_thread(args):
             attr_dc[cs_ssv_id] = csssv_attr_dc
             cs_time = time.time() - start
             test_filename = base_dir + "/progress.txt"
-            mem_usage = memory_usage(-1, interval=1, timeout=1)
+            #mem_usage = memory_usage(-1, interval=1, timeout=1)
             with open(test_filename,
                       "a") as infofile:
-                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i; current memory usage is %.2f MB \n" % (n_items_for_path, cs_ssv_id, cs_time,
-                                                                                                                       ssv_ids[0], ssv_ids[1], mem_usage[0])))
+                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i \n" % (n_items_for_path, cs_ssv_id, cs_time,
+                                                                                                                       ssv_ids[0], ssv_ids[1])))
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
