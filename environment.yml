@@ -12,7 +12,7 @@ channels:
 dependencies:
   - cudatoolkit=11.6
   # From -c pytorch
-  - pytorch::pytorch  # can be > 1.9 if glibc >=2.27 is available
+  - pytorch::pytorch=1.12.1  # can be > 1.9 if glibc >=2.27 is available
   - torchvision
   # - pyg
   # - pytorch-sparse
@@ -63,7 +63,7 @@ dependencies:
   - conda-forge::mesalib
 
   # From -c open3d-admin; >0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
-  - open3d-admin::open3d
+  #- open3d-admin::open3d
 
   # For tests (optional):
   - pytest
@@ -76,6 +76,7 @@ dependencies:
 
   # Required dependencies that are not yet available via conda:
   - pip:
+    - open3d
     - zmesh
     - plyfile
     - torch_geometric == 2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
