@@ -723,7 +723,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
 
     qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
-                       remove_jobfolder=True, log=log, additional_flags="--gres=gpu:1")
+                       remove_jobfolder=True, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
+                               exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
+                                              'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
