@@ -604,7 +604,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         chunk_size: Tuple[int, int, int] = (1024, 1024, 512),
                         traindata_mean: float = 0.,
                         traindata_std: float = 255.,
-                        float16: bool = True):
+                        float16: bool = True, save_dir = None):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
