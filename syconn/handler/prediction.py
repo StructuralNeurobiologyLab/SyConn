@@ -719,11 +719,18 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     # init batchjob parameters
     multi_params = chunk_ids
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
-    multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
-                     overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
-                     target_kd_path_list, channel_thresholds, mag, cube_of_interest,
-                     traindata_mean, traindata_std, float16)
-                    for ch_ids in multi_params]
+    if save_dir is not None:
+        multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
+                         overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
+                         target_kd_path_list, channel_thresholds, mag, cube_of_interest,
+                         traindata_mean, traindata_std, float16)
+                        for ch_ids in multi_params]
+    else:
+        multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
+                         overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
+                         target_kd_path_list, channel_thresholds, mag, cube_of_interest,
+                         traindata_mean, traindata_std, float16, save_dir)
+                        for ch_ids in multi_params]
     log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if \
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
@@ -768,10 +775,17 @@ def dense_predictor(args):
     # TODO: remove chunk necessity
     # TODO: clean up (e.g. redundant chunk sizes, ...)
     #
-    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
-    target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest, traindata_mean, traindata_std, \
-    float16 = args
+    if len(args) == 18:
+        chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
+        target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest, traindata_mean, traindata_std, \
+        float16, save_dir = args
+    else:
+        chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
+        target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest, traindata_mean, traindata_std, \
+        float16 = args
+        save_dir = None
 
+    start = time.time()
     # init KnossosDataset:
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_p)
@@ -822,8 +836,12 @@ def dense_predictor(args):
                           f'{tile_shape} to reduce memory requirements.')
             ix = (ix + 1) % 3  # permute spatial dimension which is reduced
 
+    loading = time.time() - start
+    write_dir = save_dir + '/monitor_times/'
+
     # predict Chunks
     for ch_id in chunk_ids:
+        pred_start = time.time()
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
 
@@ -870,6 +888,12 @@ def dense_predictor(args):
                     offset=ch.coordinates * mag, data=data, data_mag=mag,
                     mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
+        pred_stop = time.time() - pred_start
+        chunk_filename = write_dir + f'/progress_chunk_{ch_id}.txt'
+        with open(chunk_filename, "a") as infofile:
+            infofile.write(("%i of %i chunks in worker done\n" % (
+            n_items_for_path, cs_ssv_id, ssv_ids[0], ssv_ids[1], max_voxel)))
+
 
 
 def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor', is_zyx=False,
