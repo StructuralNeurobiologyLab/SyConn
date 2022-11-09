@@ -596,12 +596,15 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        tile_shape: Tuple[int, int, int] = (256, 256, 128),
+                        overlap_shape_tiles: Tuple[int, int, int] = (64, 64, 32),
                         cube_of_interest: Optional[Tuple[np.ndarray]] = None,
                         overwrite: bool = False,
-                        cube_shape_kd: Optional[Tuple[int]] = None,
+                        cube_shape_kd: Optional[Tuple[int, int, int]] = None,
+                        chunk_size: Tuple[int, int, int] = (1024, 1024, 512),
                         traindata_mean: float = 0.,
-                        traindata_std: float = 255.):
+                        traindata_std: float = 255.,
+                        float16: bool = True):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -645,17 +648,19 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 tile_shape = (chunk_size / n_tiles).astype(np.int32)
                 # the final input shape must be a multiple of tile_shape
                 overlap_shape = tile_shape // 2
+        tile_shape: Prediction tile shape (xyz)
 
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
         overwrite: Overwrite existing KDs.
         cube_shape_kd: Cube shape used to store sub-volumes in KnossosDataset on the file system.
+        chunk_shape: Chunky ChunkDataset chunk size.
         traindata_mean: Mean value for pre-inference normalization. Will be subtracted from raw data.
             Choose the value that the model was trained with. Default: 0.
         traindata_std: Standard deviation value for pre-inference normalization
             Raw data will be divided by this value. Default: 255.
             Choose the value that the model was trained with.
-
+        float16: If `True` (default) perform inference with float16 type (faster, less memory needed).
     """
     if log is None:
         log = initialize_logging('dense_predictions', global_params.config.working_dir + '/logs/', overwrite=False)
@@ -676,12 +681,12 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if cube_shape_kd is None:
         cube_shape_kd = (256, 256, 256)
     # TODO: these should be config parameters
-    overlap_shape_tiles = np.array([30, 31, 20])
+    overlap_shape_tiles = np.array(overlap_shape_tiles)
     overlap_shape = overlap_shape_tiles
-    chunk_size = np.array([482, 481, 236])
+    chunk_size = np.array(chunk_size)
     # if qu.batchjob_enabled():
     #     chunk_size *= 2
-    tile_shape = [271, 181, 138]
+    tile_shape = np.array(tile_shape)
 
     cd = ChunkDataset()
     cd.initialize(kd, cube_of_interest[1], chunk_size, target_path + '/cd_tmp/',
@@ -716,7 +721,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
-                     target_kd_path_list, channel_thresholds, mag, cube_of_interest, traindata_mean, traindata_std)
+                     target_kd_path_list, channel_thresholds, mag, cube_of_interest,
+                     traindata_mean, traindata_std, float16)
                     for ch_ids in multi_params]
     log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if \
@@ -754,7 +760,8 @@ def dense_predictor(args):
     # TODO: clean up (e.g. redundant chunk sizes, ...)
     #
     chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size, n_channel, \
-    target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest, traindata_mean, traindata_std = args
+    target_channels, target_kd_path_list, channel_thresholds, mag, cube_of_interest, traindata_mean, traindata_std, \
+    float16 = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -785,10 +792,10 @@ def dense_predictor(args):
         try:
             out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int32)[::-1]  # ZYX
             out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
-            # TODO: float16 inference
             predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
                                   out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
-                                  apply_softmax=True, transform=normalize_transform)
+                                  apply_softmax=True, transform=normalize_transform,
+                                  float16=float16)
             predictor.model.ae = False
             _ = predictor.predict(np.zeros(out_shape[1:])[None, None])
             break
