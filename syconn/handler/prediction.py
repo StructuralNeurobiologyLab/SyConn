@@ -27,6 +27,7 @@ from scipy.special import softmax
 from scipy.stats import entropy
 from sklearn.decomposition import PCA
 from sklearn.neighbors import KNeighborsClassifier
+import time
 
 from .basics import read_txt_from_zip, get_filepaths_from_dir, \
     parse_cc_dict_from_kzip
@@ -723,13 +724,13 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                          overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                          target_kd_path_list, channel_thresholds, mag, cube_of_interest,
-                         traindata_mean, traindata_std, float16)
+                         traindata_mean, traindata_std, float16, save_dir)
                         for ch_ids in multi_params]
     else:
         multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                          overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                          target_kd_path_list, channel_thresholds, mag, cube_of_interest,
-                         traindata_mean, traindata_std, float16, save_dir)
+                         traindata_mean, traindata_std, float16)
                         for ch_ids in multi_params]
     log.info('Started dense prediction of {} in {:d} chunk(s).'.format(", ".join(target_names), len(chunk_ids)))
     n_cores_per_job = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] if \
@@ -838,10 +839,15 @@ def dense_predictor(args):
 
     loading = time.time() - start
     write_dir = save_dir + '/monitor_times/'
-
+    if not os.path.exists(write_dir):
+        os.mkdir(write_dir)
+    chunk_filename = write_dir + f'progress_chunk_{chunk_ids[0]}.txt'
+    with open(chunk_filename, "a") as infofile:
+        infofile.write(f'This chunk contains {len(chunk_ids)} chunks, id {chunk_ids[0]} to {chunk_ids[-1]} \n')
+        infofile.write(f'Loading took {loading} s \n')
     # predict Chunks
     for ch_id in chunk_ids:
-        pred_start = time.time()
+        start = time.time()
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
 
@@ -852,11 +858,14 @@ def dense_predictor(args):
                           dtype=np.int32)
         raw = kd.load_raw(size=size * mag, offset=coords * mag, mag=mag).astype(np.float32)
 
+        load_time = time.time() - start
+
         pred = dense_predicton_helper(raw, predictor,
                                       is_zyx=True, return_zyx=True)
 
         # slice out the original input volume along ZYX, i.e. the last three axes
         pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
+        pred_stop = time.time() - load_time
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
@@ -888,11 +897,11 @@ def dense_predictor(args):
                     offset=ch.coordinates * mag, data=data, data_mag=mag,
                     mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
-        pred_stop = time.time() - pred_start
-        chunk_filename = write_dir + f'/progress_chunk_{ch_id}.txt'
+        write_out = time.time() - pred_stop
         with open(chunk_filename, "a") as infofile:
-            infofile.write(("%i of %i chunks in worker done\n" % (
-            n_items_for_path, cs_ssv_id, ssv_ids[0], ssv_ids[1], max_voxel)))
+            infofile.write(
+                f'Chunk id {ch_id} done, took {load_time} s for loading, {pred_stop} s for prediction, {write_out} s for writing to kd \n')
+
 
 
 
