@@ -105,10 +105,23 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
             cube_of_interest_bb = np.array([np.zeros(3, dtype=np.int32), kd.boundary])
 
     # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
-    ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-                              cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
-                              n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
-    log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
+    #if cs SegmentationDataset exists already and should not be overwriten, use
+    #function to only extract syn contact sites
+    sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+                                             obj_type='cs', version=0)
+    if os.path.exists(sd_cs.path):
+        if overwrite:
+            ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                                      cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
+                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
+            log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
+        else:
+            ces.extract_contact_sites_syn(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                                      cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
+                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
+            log.info('SegmentationDatasets of type "syn" were generated.')
+    else:
+        log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
 
     # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,

@@ -859,13 +859,15 @@ def dense_predictor(args):
         raw = kd.load_raw(size=size * mag, offset=coords * mag, mag=mag).astype(np.float32)
 
         load_time = time.time() - start
+        start = time.time()
 
         pred = dense_predicton_helper(raw, predictor,
                                       is_zyx=True, return_zyx=True)
 
         # slice out the original input volume along ZYX, i.e. the last three axes
         pred = pred[..., ol[2]:-ol[2], ol[1]:-ol[1], ol[0]:-ol[0]]
-        pred_stop = time.time() - load_time
+        pred_stop = time.time() - start
+        start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
@@ -897,7 +899,7 @@ def dense_predictor(args):
                     offset=ch.coordinates * mag, data=data, data_mag=mag,
                     mags=[mag, mag * 2, mag * 4],
                     fast_resampling=True, upsample=False)
-        write_out = time.time() - pred_stop
+        write_out = time.time() - start
         with open(chunk_filename, "a") as infofile:
             infofile.write(
                 f'Chunk id {ch_id} done, took {load_time} s for loading, {pred_stop} s for prediction, {write_out} s for writing to kd \n')
