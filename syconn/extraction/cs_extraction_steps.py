@@ -1034,7 +1034,7 @@ def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
     basics.write_obj2pkl(f'{worker_dir_props}/tot_asym_cnt_{worker_nr}.pkl', tot_asym_cnt)
     basics.write_obj2pkl(f'{worker_dir_props}/tot_sym_cnt_{worker_nr}.pkl', tot_sym_cnt)
 
-    return worker_nr, dict(cs =list(cs_props[0].keys(), syn=list(syn_props[0].keys()))
+    return worker_nr, dict(cs =list(cs_props[0].keys()), syn=list(syn_props[0].keys()))
 
 def _write_props_to_onlysyn_thread(args):
     cs_ids_ch = args[0]
