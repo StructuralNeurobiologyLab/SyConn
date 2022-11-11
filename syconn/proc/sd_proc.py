@@ -37,7 +37,7 @@ from knossos_utils import chunky
 from typing import Optional, List, Union
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
+def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False, add_npy_param = None):
     """Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -47,7 +47,13 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         recompute: Whether or not to (re-)compute key information of each object (rep_coord, bounding_box, size).
         n_jobs: Number of jobs.
         compute_meshprops: Compute mesh properties. Will also calculate meshes (sparsely) if not available.
+        add_npy_param: additional parameter to extract from workers and save as .npy
     """
+    attr_for_npy = ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
+                             'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']
+    if add_npy_param is not None:
+        for param in add_npy_param:
+            attr_for_npy.append(param)
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
         if recompute or compute_meshprops:
@@ -91,8 +97,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                     attr_dict[attribute] += value
 
         for attribute in attr_dict:
-            if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                             'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
+            if attribute in attr_for_npy:
                 np.save(sd.path + "/%ss.npy" % attribute, np.array(attr_dict[attribute], dtype=object))
             else:
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
@@ -116,7 +121,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         log_proc.info(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
                       f'dataset_analysis:\n{res_keys}')
         out_files = out_files[file_mask > 0]
-        params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
+        params = [(attr, out_files, n_ids, sd.path, attr_for_npy) for attr in res_keys]
         qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
                            remove_jobfolder=True)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
@@ -133,15 +138,14 @@ def _dataset_analysis_check(out_file):
 
 
 def _dataset_analysis_collect(args):
-    attribute, out_files, n_ids, sd_path = args
+    attribute, out_files, n_ids, sd_path, attr_for_npy = args
     # start_multiprocess_imap obeys parameter order and therefore the
     # collected attributes will share the same ordering.
     n_jobs = min(len(out_files), global_params.config['ncores_per_node'] * 4)
     params = list(basics.chunkify([(p, attribute) for p in out_files], n_jobs))
     tmp_res = sm.start_multiprocess_imap(
         _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
-    if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
-                     'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
+    if attribute in attr_for_npy:
         tmp_res = [el for lst in tmp_res for el in lst]  # flatten lists
         tmp_res = np.array(tmp_res, dtype=object)
     else:
