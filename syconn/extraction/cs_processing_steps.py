@@ -324,7 +324,8 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False):
+                          nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False,
+                          exclude_nodes = []):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes ['cs_id', 'asym_prop', 'sym_prop', ].
@@ -391,7 +392,10 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(
-            multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log)
+            multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log,
+            additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+            exclude_nodes=exclude_nodes
+        )
 
 
 def _combine_and_split_syn_thread(args):

@@ -19,6 +19,7 @@ from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+import os as os
 
 
 def run_matrix_export():
@@ -63,7 +64,7 @@ def run_matrix_export():
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
                        cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
-                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
+                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None, exclude_nodes = []):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -107,26 +108,28 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
     #if cs SegmentationDataset exists already and should not be overwriten, use
     #function to only extract syn contact sites
-    sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+    sd_cs = SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
     if os.path.exists(sd_cs.path):
         if overwrite:
             ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                                       cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
-                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
+                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg, exclude_nodes = exclude_nodes)
             log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
         else:
-            ces.extract_contact_sites_syn(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+            log.info('SegmentationDataset of type "cs" already exists and overwrite set to False. \n'
+                     'Only SegmentationDataset of type "syn" will be generated.')
+            ces.extract_contact_sites_syns(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
                                       cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
-                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
-            log.info('SegmentationDatasets of type "syn" were generated.')
+                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg, exclude_nodes = exclude_nodes)
+            log.info('SegmentationDataset of type "syn" were generated.')
     else:
         log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
 
     # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
-                              log=log, n_folders_fs=n_folders_fs, overwrite=overwrite)
+                              log=log, n_folders_fs=n_folders_fs, overwrite=overwrite, exclude_nodes = exclude_nodes)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')

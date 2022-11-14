@@ -44,7 +44,7 @@ find_object_properties_cs_64bit, merge_voxel_dicts
 def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None,
                           n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
-                          transf_func_sj_seg: Optional[Callable] = None):
+                          transf_func_sj_seg: Optional[Callable] = None, exclude_nodes = []):
     """
     Extracts contact sites and their overlap with ``sj`` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
@@ -210,7 +210,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     cs_ids = []
     cs_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log, use_dill=True)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction", log=log, use_dill=True, exclude_nodes = exclude_nodes)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -285,7 +285,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         start_multiprocess_imap(_write_props_to_syn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_syn", log=log,
-                           n_cores=1, remove_jobfolder=True)
+                           n_cores=1, remove_jobfolder=True, exclude_nodes= exclude_nodes)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
     procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
@@ -630,7 +630,7 @@ def _write_props_to_syn_thread(args):
 def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None, log: Optional[Logger] = None,
                           max_n_jobs: Optional[int] = None, cube_of_interest_bb: Optional[np.ndarray] = None,
                           n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
-                          transf_func_sj_seg: Optional[Callable] = None):
+                          transf_func_sj_seg: Optional[Callable] = None, exclude_nodes = []):
     """
     Based on _contact_site_extraction but only for syn objects.
     Used if cs SegmentationDataset already exists, should not be overwritten
@@ -792,11 +792,13 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     # reduce step
     start = time.time()
     syn_worker_dc_fname = f'{global_params.config.temp_path}/syn_worker_dict.pkl'
-    dict_paths_tmp += [cs_worker_dc_fname, dir_props]
+    dict_paths_tmp += [syn_worker_dc_fname, dir_props]
     syn_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True)
+        path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
+                                         additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+                                         exclude_nodes=exclude_nodes)
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -859,7 +861,11 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           n_cores=1, remove_jobfolder=True)
+                           n_cores=1, remove_jobfolder=True,
+                           path_to_out=qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log,
+                                                          use_dill=True,
+                                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+                                                          exclude_nodes=exclude_nodes))
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
     procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
@@ -944,6 +950,7 @@ def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
     # cell segmentation
     kd = basics.kd_factory(knossos_path)
 
+    cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
     syn_voxels = {}
     tot_sym_cnt = {}
@@ -964,6 +971,7 @@ def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
                            mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
 
         contacts = np.asarray(data_cs)
+
 
         if transf_func_sj_seg is None:
             sj_d = (kd_sj.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2) >
