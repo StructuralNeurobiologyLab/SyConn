@@ -165,7 +165,7 @@ def _dataset_analysis_collect(args):
         assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
     np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
 
-def load_array_helper(args):
+def _load_array_helper(args):
     #same as _load_attr_helper but for list or arrays and not attr_dicts
     attr = args[0][1]
     for arg in args:
