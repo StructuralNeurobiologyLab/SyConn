@@ -98,8 +98,9 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False, a
             else:
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
     else:
-        path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-                                         suffix=sd.type)
+        #path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
+         #                                suffix=sd.type)
+        path_to_out = global_params.config.working_dir + '/SLURM/dataset_analysiscs_ssv_makgytsv/out'
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
@@ -148,8 +149,12 @@ def _dataset_analysis_collect(args):
     # collected attributes will share the same ordering.
     n_jobs = min(len(out_files), global_params.config['ncores_per_node'] * 4)
     params = list(basics.chunkify([(p, attribute) for p in out_files], n_jobs))
-    tmp_res = sm.start_multiprocess_imap(
-        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
+    if attribute in add_npy_param:
+        tmp_res = sm.start_multiprocess_imap(
+            _load_array_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
+    else:
+        tmp_res = sm.start_multiprocess_imap(
+            _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
     if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
                      'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
         tmp_res = [el for lst in tmp_res for el in lst]  # flatten lists
