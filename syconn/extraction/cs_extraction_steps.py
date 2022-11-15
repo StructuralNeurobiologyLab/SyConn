@@ -795,6 +795,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     dict_paths_tmp += [syn_worker_dc_fname, dir_props]
     syn_ids = []
     syn_worker_mapping = dict()  # cs include syns
+    raise ValueError
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
@@ -935,11 +936,15 @@ def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
                          'must differ.')
 
     # init target KD for cs and syn segmentation
+    # pass cube shape explicitely otherwise will use wrong cube shape and only return 0s
     kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
+    kd_cs._cube_shape = np.full(3, 256, dtype=np.int32)
     kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
+    kd_syn._cube_shape = np.full(3, 256, dtype=np.int32)
 
     # init. synaptic junction (sj) KD
     kd_sj = basics.kd_factory(global_params.config.kd_sj_path)
+    kd_sj._cube_shape = np.full(3, 256, dtype=np.int32)
     # init synapse type KD if available
     if global_params.config.syntype_available:
         kd_syntype_sym = basics.kd_factory(global_params.config.kd_sym_path)
