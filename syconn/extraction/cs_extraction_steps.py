@@ -938,7 +938,6 @@ def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
     # init target KD for cs and syn segmentation
     # pass cube shape explicitely otherwise will use wrong cube shape and only return 0s
     kd_cs = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/cs_seg/")
-    kd_cs._cube_shape = np.full(3, 256, dtype=np.int32)
     kd_syn = basics.kd_factory(f"{global_params.config.working_dir}/knossosdatasets/syn_seg/")
     kd_syn._cube_shape = np.full(3, 256, dtype=np.int32)
 
