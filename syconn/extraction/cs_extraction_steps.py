@@ -795,10 +795,9 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     dict_paths_tmp += [syn_worker_dc_fname, dir_props]
     syn_ids = []
     syn_worker_mapping = dict()  # cs include syns
-    raise ValueError
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
-                                         additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+                                         additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes)
         out_files = glob.glob(path_to_out + "/*")
 

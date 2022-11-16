@@ -37,7 +37,7 @@ from knossos_utils import chunky
 from typing import Optional, List, Union
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False, add_npy_param = None):
+def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
     """Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -118,12 +118,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False, a
         log_proc.info(f'Caching {len(res_keys)} attributes of {n_ids} objects in {sd} during '
                       f'dataset_analysis:\n{res_keys}')
         out_files = out_files[file_mask > 0]
-        if add_npy_param is None:
-            params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
-        else:
-            for param in add_npy_param:
-                res_keys.append(add_npy_param)
-            params = [(attr, out_files, n_ids, sd.path, add_npy_param) for attr in res_keys]
+        params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
         qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
                            remove_jobfolder=True)
         shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
@@ -140,40 +135,21 @@ def _dataset_analysis_check(out_file):
 
 
 def _dataset_analysis_collect(args):
-    if len(args) == 4:
-        attribute, out_files, n_ids, sd_path = args
-        add_npy_param = []
-    else:
-        attribute, out_files, n_ids, sd_path, add_npy_param = args
+    attribute, out_files, n_ids, sd_path, add_npy_param = args
     # start_multiprocess_imap obeys parameter order and therefore the
     # collected attributes will share the same ordering.
     n_jobs = min(len(out_files), global_params.config['ncores_per_node'] * 4)
     params = list(basics.chunkify([(p, attribute) for p in out_files], n_jobs))
-    if attribute in add_npy_param:
-        tmp_res = sm.start_multiprocess_imap(
-            _load_array_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
-    else:
-        tmp_res = sm.start_multiprocess_imap(
-            _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
+    tmp_res = sm.start_multiprocess_imap(
+        _load_attr_helper, params, nb_cpus=global_params.config['ncores_per_node'] // 2, debug=False)
     if attribute in ['cs_ids', 'mapping_mi_ids', 'mapping_mi_ratios', 'mapping_sj_ids',
                      'mapping_vc_ids', 'mapping_vc_ratios', 'mapping_sj_ratios']:
         tmp_res = [el for lst in tmp_res for el in lst]  # flatten lists
         tmp_res = np.array(tmp_res, dtype=object)
     else:
         tmp_res = np.concatenate(tmp_res)
-    if attribute not in add_npy_param:  
-        assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
+    assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
     np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
-
-def _load_array_helper(args):
-    #same as _load_attr_helper but for list or arrays and not attr_dicts
-    attr = args[0][1]
-    for arg in args:
-        fname, attr_ex = arg
-        assert attr == attr_ex
-        with open(fname, 'rb') as f:
-            dc = pkl.load(f)
-    return dc
 
 def _load_attr_helper(args):
     res = []

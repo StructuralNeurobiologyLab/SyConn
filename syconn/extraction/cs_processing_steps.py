@@ -393,7 +393,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     else:
         _ = qu.batchjob_script(
             multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log,
-            additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+            additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
             exclude_nodes=exclude_nodes
         )
 
