@@ -7,6 +7,7 @@ __pycache__/
 *.so
 *.cpp
 *.c
+*.o
 
 # Distribution / packaging
 .Python
@@ -63,6 +64,10 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 
+# IPython
+profile_default/
+ipython_config.py
+
 # PyCharm
 .idea/
 /.gitignore
@@ -70,3 +75,41 @@ target/
 
 # VSCode
 .vscode/
+
+# mkdocs documentation
+/site
+
+# Data files
+*.pkl
+*.raw
+*.h5
+*.npy
+*.npz
+*.csv
+*.bz2
+
+# Zip files
+*.zip
+*.gz
+*.tar
+
+# Model files
+*.pt
+*.pth
+*.pts
+*.ptx
+*.ckpt
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Ignore files without extension (without breaking things ;))
+* 
+!/**/  
+!*.*
