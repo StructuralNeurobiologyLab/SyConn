@@ -98,9 +98,9 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
             else:
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
     else:
-        #path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-         #                                suffix=sd.type)
-        path_to_out = global_params.config.working_dir + '/SLURM/dataset_analysiscs_ssv_makgytsv/out'
+        path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
+                                        suffix=sd.type)
+        #path_to_out = global_params.config.working_dir + '/SLURM/dataset_analysiscs_ssv_makgytsv/out'
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
@@ -135,7 +135,7 @@ def _dataset_analysis_check(out_file):
 
 
 def _dataset_analysis_collect(args):
-    attribute, out_files, n_ids, sd_path, add_npy_param = args
+    attribute, out_files, n_ids, sd_path = args
     # start_multiprocess_imap obeys parameter order and therefore the
     # collected attributes will share the same ordering.
     n_jobs = min(len(out_files), global_params.config['ncores_per_node'] * 4)

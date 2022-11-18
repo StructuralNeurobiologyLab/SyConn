@@ -794,6 +794,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     syn_worker_dc_fname = f'{global_params.config.temp_path}/syn_worker_dict.pkl'
     dict_paths_tmp += [syn_worker_dc_fname, dir_props]
     syn_ids = []
+    cs_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
@@ -808,7 +809,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)
             syn_ids.append(syn_ids_curr)
             cs_ids.append(cs_ids_curr)
-            cs_worker_mapping[worker_nr] = cs_ids_curr
+            syn_worker_mapping[worker_nr] = cs_ids_curr
     else:
         results = start_multiprocess_imap(_contact_site_extraction_syns_thread,
                                           multi_params, verbose=False, debug=False, use_dill=True)
@@ -817,7 +818,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
             cs_ids_curr = np.array(worker_res['cs'], dtype=np.uint64)
             syn_ids.append(syn_ids_curr)
             cs_ids.append(cs_ids_curr)
-            cs_worker_mapping[worker_nr] = cs_ids_curr
+            syn_worker_mapping[worker_nr] = cs_ids_curr
         del results
     log_extraction.debug(f'Collected partial results from {len(syn_worker_mapping)} workers.')
     with open(syn_worker_dc_fname, 'wb') as f:
@@ -861,11 +862,8 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           n_cores=1, remove_jobfolder=True,
-                           path_to_out=qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log,
-                                                          use_dill=True,
-                                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
-                                                          exclude_nodes=exclude_nodes))
+                           n_cores=1, remove_jobfolder=True,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+                                                          exclude_nodes=exclude_nodes)
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
     procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
