@@ -775,14 +775,16 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     sd_syn = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                               obj_type='syn', version=0)
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+
                                              obj_type='cs', version=0)
+    '''
     if os.path.exists(sd_syn.path):
         if overwrite:
             shutil.rmtree(sd_syn.path, ignore_errors=True)
         else:
             raise FileExistsError(f'Overwrite was set to False, but SegmentationDataset "syn"'
                                   f' already exists.')
-
+    '''
     # Initial contact site extraction
     cd_dir = global_params.config.temp_path + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
@@ -804,6 +806,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     dir_props = f"{global_params.config.temp_path}/tmp_props_cssyn/"
 
     # remove previous temporary results.
+    '''
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
@@ -814,18 +817,21 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
+    '''
 
     # init KD for syn
     path_kd = f"{global_params.config.working_dir}/knossosdatasets/syn_seg/"
+    '''
     if os.path.isdir(path_kd):
         log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
         shutil.rmtree(path_kd)
+    '''
     target_kd = knossosdataset.KnossosDataset()
     target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
     target_kd.scales = [scale, ]
-    target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-                                      mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+    #target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+    #                                  mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
 
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
@@ -841,9 +847,12 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     cs_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
+        '''
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes)
+        '''
+        path_to_out = 'cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/SLURM/contact_site_extraction_syns_znudoldu/out'
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -872,6 +881,9 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     syn_ids = np.unique(np.concatenate(syn_ids)).astype(np.uint64)
     n_syn = len(syn_ids)
     del syn_ids
+
+    cs_ids = np.unique(np.concatenate(cs_ids)).astype(np.uint64)
+    n_cs = len(cs_ids)
 
     dest_p = f'{global_params.config.temp_path}/storage_targets_cs.pkl'
     dict_paths_tmp.append(dest_p)
@@ -1140,7 +1152,7 @@ def _write_props_to_onlysyn_thread(args):
         res = start_multiprocess_imap(_write_props_collect_syns_helper, params, nb_cpus=nb_cores, show_progress=False,
                                       debug=False)
         for tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
-            if len(tmp_dcs_cs) == 0:
+            if len(tmp_dcs_syn) == 0:
                 continue
             # syn
             merge_prop_dicts([syn_props, tmp_dcs_syn])
@@ -1203,7 +1215,7 @@ def _write_props_to_onlysyn_thread(args):
 def _write_props_collect_syns_helper(args) -> Tuple[List[dict], List[dict], dict, dict, dict]:
     dir_props, worker_id, intersec = args
     if len(intersec) == 0:
-        return [{}, {}, {}], [{}, {}, {}], {}, {}, {}
+        return [{}, {}, {}], {}, {}, {}
     worker_dir_props = f"{dir_props}/{worker_id}/"
 
     # syn
