@@ -1139,6 +1139,7 @@ def _write_props_to_onlysyn_thread(args):
         sd_cs = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='cs',
                                                  working_dir=global_params.config.working_dir,
                                                  version=0)
+        cs_props = [{}, defaultdict(list), {}]
         syn_props = [{}, defaultdict(list), {}]
         cs_sym_cnt = {}
         cs_asym_cnt = {}
@@ -1149,11 +1150,14 @@ def _write_props_to_onlysyn_thread(args):
             syn_workers_tmp = pkl.load(f)
         params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in syn_workers_tmp.items()]
         del syn_workers_tmp
-        res = start_multiprocess_imap(_write_props_collect_syns_helper, params, nb_cpus=nb_cores, show_progress=False,
+        res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False,
                                       debug=False)
-        for tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
+        for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
             if len(tmp_dcs_syn) == 0:
                 continue
+            # cs
+            merge_prop_dicts([cs_props, tmp_dcs_cs])
+            del tmp_dcs_cs
             # syn
             merge_prop_dicts([syn_props, tmp_dcs_syn])
             del tmp_dcs_syn
@@ -1179,6 +1183,7 @@ def _write_props_to_onlysyn_thread(args):
             # write syn to dict
             if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
                 continue
+            size_cs = cs_props[2][cs_id]
             rp = np.array(syn_props[0][cs_id], dtype=np.int32)
             bbs = np.concatenate(syn_props[1][cs_id])
             size = syn_props[2][cs_id]
@@ -1211,41 +1216,6 @@ def _write_props_to_onlysyn_thread(args):
 
         voxel_dc.push()
         this_attr_dc.push()
-
-def _write_props_collect_syns_helper(args) -> Tuple[List[dict], List[dict], dict, dict, dict]:
-    dir_props, worker_id, intersec = args
-    if len(intersec) == 0:
-        return [{}, {}, {}], {}, {}, {}
-    worker_dir_props = f"{dir_props}/{worker_id}/"
-
-    # syn
-    fname = f'{worker_dir_props}/syn_props_{worker_id}.pkl'
-    dc = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/tot_sym_cnt_{worker_id}.pkl'
-    curr_sym_cnt = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/tot_asym_cnt_{worker_id}.pkl'
-    curr_asym_cnt = basics.load_pkl2obj(fname)
-    fname = f'{worker_dir_props}/syn_voxels_{worker_id}.npz'
-    curr_syn_vxs = np.load(fname)
-
-    tmp_dcs_syn = [dict(), defaultdict(list), dict()]
-    tmp_sym_dc = dict()
-    tmp_asym_dc = dict()
-    tmp_syn_vx = dict()
-    for k in intersec:
-        if k not in dc[0]:
-            continue
-        tmp_dcs_syn[0][k] = dc[0][k]
-        tmp_dcs_syn[1][k] = dc[1][k]
-        tmp_dcs_syn[2][k] = dc[2][k]
-        tmp_syn_vx[k] = curr_syn_vxs[str(k)]  # savez only allows string keys
-        if k in curr_sym_cnt:
-            tmp_sym_dc[k] = curr_sym_cnt[k]
-        if k in curr_asym_cnt:
-            tmp_asym_dc[k] = curr_asym_cnt[k]
-    return tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vx
-
-
 
 def _generate_storage_lookup(args):
     """
