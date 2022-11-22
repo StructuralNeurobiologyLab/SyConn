@@ -281,6 +281,7 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
     def mapper(x): return mapping_dc[x] if x in mapping_dc else 0
     # np.vectorize is not concurrent/more efficient than "map", just a more convenient.
     mapped_ssv_ids = np.vectorize(mapper)(sv_ids.reshape(-1)).reshape(sv_ids.shape)
+    raise ValueError
     log.debug(f'Mapped SV IDs to SSV IDs for all {sd_syn.type} objects.')
     del mapping_dc
     mask = np.all(mapped_ssv_ids > 0, axis=1)
@@ -351,7 +352,8 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     overwrite:
 
     """
-    ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
+    #ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir='ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2/', version=ssd_version)
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
     # TODO: this procedure creates folders with single and double digits, e.g. '0' and '00'. Single digit folders are
     #  not used during write-outs, they are probably generated within this method's makedirs
@@ -387,6 +389,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii],
                      syn_sd.version, sd_syn_ssv.version, cs_gap_nm) for
                     ii in range(n_used_paths)]
+    raise ValueError
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus, debug=False)

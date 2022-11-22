@@ -110,6 +110,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     #function to only extract syn contact sites
     sd_cs = SegmentationDataset(working_dir=global_params.config.working_dir,
                                              obj_type='cs', version=0)
+
     if os.path.exists(sd_cs.path):
         if overwrite:
             ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,

@@ -777,14 +777,12 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     sd_cs = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
 
                                              obj_type='cs', version=0)
-    '''
     if os.path.exists(sd_syn.path):
         if overwrite:
             shutil.rmtree(sd_syn.path, ignore_errors=True)
         else:
             raise FileExistsError(f'Overwrite was set to False, but SegmentationDataset "syn"'
                                   f' already exists.')
-    '''
     # Initial contact site extraction
     cd_dir = global_params.config.temp_path + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
@@ -806,7 +804,6 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     dir_props = f"{global_params.config.temp_path}/tmp_props_cssyn/"
 
     # remove previous temporary results.
-    '''
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
@@ -817,15 +814,12 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
-    '''
 
     # init KD for syn
     path_kd = f"{global_params.config.working_dir}/knossosdatasets/syn_seg/"
-    '''
     if os.path.isdir(path_kd):
         log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
         shutil.rmtree(path_kd)
-    '''
     target_kd = knossosdataset.KnossosDataset()
     target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
@@ -847,12 +841,9 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     cs_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-        '''
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes)
-        '''
-        path_to_out = 'cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/SLURM/contact_site_extraction_syns_znudoldu/out'
         out_files = glob.glob(path_to_out + "/*")
 
         for out_file in tqdm.tqdm(out_files, leave=False):
@@ -920,16 +911,17 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     # slightly increase ncores per worker to compensate IO related downtime
     multi_params = [(sv_id_block, n_folders_fs, path, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
+
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
                            n_cores=1, remove_jobfolder=True,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
                                                           exclude_nodes=exclude_nodes)
+
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
-    procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs),
-             Process(target=dataset_analysis, args=(sd_cs,), kwargs=da_kwargs)]
+    procs = [Process(target=dataset_analysis, args=(sd_syn,), kwargs=da_kwargs)]
     for p in procs:
         p.start()
     for p in procs:
@@ -1026,15 +1018,11 @@ def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
     for chunk in chunks:
         offset = np.array(chunk.coordinates - overlap)  # also used for loading synapse data
         size = 2 * overlap + np.array(chunk.size)  # also used for loading synapse data
-        data = kd.load_seg(size=size + 2 * stencil_offset,
-                           offset=offset - stencil_offset,
-                           mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
         data_cs = kd_cs.load_seg(size=size,
                            offset=offset,
-                           mag=1, datatype=np.uint64).astype(np.uint32, copy=False).swapaxes(0, 2)
+                           mag=1, datatype=np.uint64).swapaxes(0, 2)
 
         contacts = np.asarray(data_cs)
-
 
         if transf_func_sj_seg is None:
             sj_d = (kd_sj.load_raw(size=size, offset=offset, mag=1).swapaxes(0, 2) >
