@@ -1158,7 +1158,7 @@ def _pts_loader_local_skel_train(ssv_params: List[dict], out_point_label: Option
                 else:
                     pcd = o3d.geometry.PointCloud()
                     pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                    pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                    pcd, idcs, _ = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
                     base_points = np.max(idcs, axis=1)
                     base_points = np.random.choice(base_points, n_out_pts_curr,
                                                    replace=len(base_points) < n_out_pts_curr)
@@ -1260,7 +1260,7 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
         ssv.clear_cache()
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
             base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
         source_nodes = np.max(idcs, axis=1)
         batchsize = min(len(source_nodes), batchsize)
@@ -1320,7 +1320,7 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
                     else:
                         pcd = o3d.geometry.PointCloud()
                         pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                        pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
                         base_points = np.max(idcs, axis=1)
                         base_points = np.random.choice(base_points, n_out_pts,
                                                        replace=len(base_points) < n_out_pts)
@@ -1696,7 +1696,7 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
         labels = hc.labels[m]
         feats = hc.features[m]
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
             pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
             pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)
@@ -2181,7 +2181,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             # select source nodes for context extraction
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-            pcd, idcs = pcd.voxel_down_sample_and_trace(
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
                     base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
             bs = min(len(source_nodes), batchsize[ctx])
@@ -2518,7 +2518,7 @@ def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: 
         pcd = o3d.geometry.PointCloud()
         verts = sso.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(),
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(),
                                                     pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)
         idcs_dict[k] = idcs
