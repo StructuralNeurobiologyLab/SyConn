@@ -351,8 +351,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     overwrite:
 
     """
-    #ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir='ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2/', version=ssd_version)
+    ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
     # TODO: this procedure creates folders with single and double digits, e.g. '0' and '00'. Single digit folders are
     #  not used during write-outs, they are probably generated within this method's makedirs

@@ -110,12 +110,13 @@ def run_cell_embedding(max_n_jobs: Optional[int] = None):
     log.info('Finished extraction of whole-cell morphology embeddings.')
 
 
-def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
+def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None, exclude_nodes = []):
     """
     Run the celltype inference based on the ``img2scalar`` CMN.
 
     Args:
         max_n_jobs_gpu: Number of parallel GPU jobs.
+        exclude_nodes: nodes to exclude from processing
 
     Notes:
         Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd` and :func:`~run_neuron_rendering`.
@@ -140,7 +141,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
         multi_params = [(ixs, global_params.config.use_point_models) for ixs in multi_params]
         qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
                            n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                           remove_jobfolder=True)
+                           remove_jobfolder=True, exclude_nodes=exclude_nodes)
     log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
 
 

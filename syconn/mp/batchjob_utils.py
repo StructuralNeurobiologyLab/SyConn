@@ -286,7 +286,6 @@ def batchjob_script(params: list, name: str,
         # some reason (states: failed, out_out_memory, ..).
         for j in job_ids[(job_states != 'COMPLETED') & (job_states != 'PENDING')
                          & (job_states != 'RUNNING')]:
-            raise ValueError
             if requeue_dc[j] == max_iterations:
                 nb_failed += 1
                 continue

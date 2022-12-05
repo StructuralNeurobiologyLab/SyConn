@@ -591,7 +591,7 @@ def _load_ssv_hc(args):
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
         if map_myelin and k == 'sv':
-            pcd, idcs = pcd.voxel_down_sample_and_trace(
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
                 pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(), pcd.get_max_bound())
             vert_ixs = np.max(idcs, axis=1)
             sv_verts = np.asarray(pcd.points, dtype=np.float32)
@@ -672,7 +672,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
         nodes = np.max(idcs, axis=1)
         if seeded:
             np.random.seed(np.uint32(hash(frozenset((ssv_id, redundancy_ssv)))))
@@ -681,12 +681,15 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         np.random.shuffle(rand_ixs)
         rand_ixs = list(chunkify_successive(rand_ixs, batchsize))
         npoints_ssv = min(len(hc.vertices), npoints)
+        g = hc.graph()
         if min_npoints is not None:
             npoints_ssv = max(npoints_ssv, 4096)  # minimum number of nodes for the celltype classifaciton model
         if npoints_ssv == 0:
             log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
         if use_ctx_sampling:
-            node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
+            #node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
+            path = nx.single_source_dijkstra_path(g, source_nodes_all, weight='weight', cutoff=ctx_size)
+            node_ids_all = np.array(list(path.keys()))
         else:
             node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all], dtype=object)
         for ii in range(n_batches):
@@ -719,7 +722,10 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                             raise ValueError(msg)
                         source_node = source_nodes_all[sn_cnt]
                         if use_ctx_sampling:
-                            node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
+                            #node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
+                            path = nx.single_source_dijkstra_path(g, source_node, weight='weight',
+                                                                  cutoff=ctx_size)
+                            node_ids = np.array(list(path.keys()))
                         else:
                             node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                         sn_cnt += 1

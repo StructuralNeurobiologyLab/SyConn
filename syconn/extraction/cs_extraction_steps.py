@@ -783,6 +783,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         else:
             raise FileExistsError(f'Overwrite was set to False, but SegmentationDataset "syn"'
                                   f' already exists.')
+
     # Initial contact site extraction
     cd_dir = global_params.config.temp_path + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
@@ -804,6 +805,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     dir_props = f"{global_params.config.temp_path}/tmp_props_cssyn/"
 
     # remove previous temporary results.
+    '''
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
@@ -814,12 +816,14 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
-
+    '''
     # init KD for syn
     path_kd = f"{global_params.config.working_dir}/knossosdatasets/syn_seg/"
+    '''
     if os.path.isdir(path_kd):
         log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
         shutil.rmtree(path_kd)
+    '''
     target_kd = knossosdataset.KnossosDataset()
     target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
@@ -841,11 +845,13 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     cs_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
+        '''
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes)
+        '''
+        path_to_out = 'cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/SLURM/contact_site_extraction_syns_rsuykwsh/out'
         out_files = glob.glob(path_to_out + "/*")
-
         for out_file in tqdm.tqdm(out_files, leave=False):
             with open(out_file, 'rb') as f:
                 worker_nr, worker_res = pkl.load(f)
@@ -916,7 +922,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           n_cores=1, remove_jobfolder=True,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+                           n_cores=1, remove_jobfolder=True,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                                           exclude_nodes=exclude_nodes)
 
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
