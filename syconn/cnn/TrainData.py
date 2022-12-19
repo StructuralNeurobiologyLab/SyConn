@@ -189,7 +189,7 @@ if elektronn3_avail:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
                     self.ssd_kwargs, [self.sso_ids[item], ] * 2, self._batch_size * 2,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
-                    train=True, draw_local=True, cache=False, map_myelin=self.map_myelin,
+                    train=True, draw_local=True, cache=True, map_myelin=self.map_myelin,
                     use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
                     draw_local_dist=draw_local_dist)][0]
             else:
@@ -197,7 +197,7 @@ if elektronn3_avail:
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
                     use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
-                    train=True, cache=False, map_myelin=self.map_myelin)][0]
+                    train=True, cache=True, map_myelin=self.map_myelin)][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -275,19 +275,20 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
-            ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
+            ssd_kwargs = dict(working_dir="/ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2")
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
-            assert self.train, "Other mode than 'train' is not implemented."
-            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v4.csv"
+            #assert self.train, "Other mode than 'train' is not implemented."
+            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv"
+            #self.csv_p = "cajal/nvmescratch/users/arother/cnn_training/j0251_celltype_gt_short_test.csv"
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint64)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
                 ixs, cnt = np.unique(ssv_ids, return_counts=True)
                 raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
-            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v2') for el in str_labels], dtype=np.uint16)
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v3') for el in str_labels], dtype=np.uint16)
             if self.cv_val is not None and self.cv_val != -1:
                 assert self.cv_val < 10
                 kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
@@ -298,7 +299,10 @@ if elektronn3_avail:
                 self.splitting_dict = {'train': ssv_ids, 'valid': ssv_ids}  # use all data
                 log_cnn.critical(f'Using all GT data for training!')
             self.label_dc = {k: v for k, v in zip(ssv_ids, ssv_labels)}
-            self.sso_ids = self.splitting_dict['train']
+            if self.train:
+                self.sso_ids = self.splitting_dict['train']
+            else:
+                self.sso_ids = self.splitting_dict['valid']
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
@@ -306,12 +310,13 @@ if elektronn3_avail:
                 log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
-            if self.train:
+            return len(self.sso_ids) * 3
+            #if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
-                return len(self.sso_ids) * 60
-            else:
-                return max(len(self.sso_ids) // 5, 1)
+                #return len(self.sso_ids) * 3 #* 60
+            #else:
+                #return max(len(self.sso_ids) // 5, 1)
 
 
     class CellCloudGlia(Dataset):

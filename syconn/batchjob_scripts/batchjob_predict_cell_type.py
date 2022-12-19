@@ -32,7 +32,7 @@ ch, use_point_models = args
 if use_point_models:
     ssd_kwargs = dict(working_dir=global_params.config.working_dir)
     for el in basics.chunkify_successive(ch, 10000):
-        predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=el, show_progress=False)
+        predict_celltype_ssd(ssd_kwargs=ssd_kwargs, ssv_ids=el, show_progress=True)
 else:
     # multi view model properties
     model_props = global_params.config['celltypes']

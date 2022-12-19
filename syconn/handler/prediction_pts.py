@@ -32,12 +32,14 @@ from scipy.spatial import cKDTree
 from sklearn.preprocessing import label_binarize
 from syconn import global_params
 from syconn.handler import log_handler
-from syconn.handler.basics import chunkify_successive, chunkify
+from syconn.handler.basics import chunkify_successive, chunkify, load_pkl2obj
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.prediction import certainty_estimate
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject, semsegaxoness2skel
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+import pandas as pd
+
 
 # for readthedocs build
 try:
@@ -51,6 +53,21 @@ pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70,
                         glia=dict(sv=50, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100),
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 
+hc_cache_gt = {}
+#kdtree_cache_gt = {}
+
+def init_hc_cache_gt():
+    print("initialising cache")
+    v6_gt = pd.read_csv(
+        "wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv",
+        names=["cellids", "celltype"])
+    cellids = np.array(v6_gt["cellids"])
+    for cellid in cellids:
+        hc = load_pkl2obj('cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/hybrid_clouds_gt/%i_hc.pkl' % cellid)
+        hc_cache_gt[cellid] = hc
+
+
+init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -513,9 +530,18 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     return dict_out
 
 
-@functools.lru_cache(256)
+global_debug_cache = set()
+@functools.lru_cache(512)
 def _load_ssv_hc_cached(args):
+    global_debug_cache.add(args)
+    with open("/cajal/nvmescratch/users/arother/cnn_training/220915_test/chaching.txt", "a") as cachefile:
+        cachefile.write(f"cache used, size cache = {len(global_debug_cache)}, {global_debug_cache} \n")
     return _load_ssv_hc(args)
+
+def _load_ssv_hc_pkl(ssvid):
+    hc = hc_cache_gt[ssvid]
+    #hc = load_pkl2obj("cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl" % ssvid)
+    return hc
 
 
 def _load_ssv_hc(args):
@@ -563,7 +589,7 @@ def _load_ssv_hc(args):
         verts = ssv.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
         if map_myelin and k == 'sv':
-            pcd, idcs = pcd.voxel_down_sample_and_trace(
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
                 pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(), pcd.get_max_bound())
             vert_ixs = np.max(idcs, axis=1)
             sv_verts = np.asarray(pcd.points, dtype=np.float32)
@@ -644,7 +670,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
         nodes = np.max(idcs, axis=1)
         if seeded:
             np.random.seed(np.uint32(hash(frozenset((ssv_id, redundancy_ssv)))))
@@ -653,6 +679,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         np.random.shuffle(rand_ixs)
         rand_ixs = list(chunkify_successive(rand_ixs, batchsize))
         npoints_ssv = min(len(hc.vertices), npoints)
+        g = hc.graph()
         if min_npoints is not None:
             npoints_ssv = max(npoints_ssv, 4096)  # minimum number of nodes for the celltype classifaciton model
         if npoints_ssv == 0:
@@ -691,7 +718,10 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                             raise ValueError(msg)
                         source_node = source_nodes_all[sn_cnt]
                         if use_ctx_sampling:
-                            node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
+                            #node_ids = context_splitting_kdt(hc, [source_node], ctx_size)[0]
+                            path = nx.single_source_dijkstra_path(g, source_node, weight='weight',
+                                                                  cutoff=ctx_size)
+                            node_ids = np.array(list(path.keys()))
                         else:
                             node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                         sn_cnt += 1
@@ -772,13 +802,19 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
     else:
         ssv_ids = np.unique(ssv_ids)
         for curr_ssvid in ssv_ids:
-            ssv = ssd.get_super_segmentation_object(curr_ssvid)
+            #just for default values!
+            start = time.time()
+            hc = _load_ssv_hc_pkl(curr_ssvid)
+
+            #ssv = ssd.get_super_segmentation_object(curr_ssvid)
+            '''
             args = (ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin)
             if cache:
-                hc = _load_ssv_hc_cached(args)
+                #hc = _load_ssv_hc_cached(args)
             else:
                 hc = _load_ssv_hc(args)
             ssv.clear_cache()
+            '''
             # fluctuate context size in 1/4 samples
             if np.random.randint(0, 4) == 0:
                 ctx_size_fluct = max((np.random.randn(1)[0] * 0.1 + 0.7), 0.33) * ctx_size
@@ -790,9 +826,9 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
             npoints_ssv += npoints_add
             batch = np.zeros((batchsize, npoints_ssv, 3))
             batch_f = np.zeros((batchsize, npoints_ssv, len(feat_dc)))
-            ixs = np.ones((batchsize,), dtype=np.uint64) * ssv.id
+            ixs = np.ones((batchsize,), dtype=np.uint64) * curr_ssvid
             if len(hc.vertices) == 0:
-                log_handler.warning(f'Could not find any mesh vertex in {ssv}.')
+                log_handler.warning(f'Could not find any mesh vertex in {curr_ssvid}.')
                 cnt = batchsize
             else:
                 cnt = 0
@@ -812,14 +848,22 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                             neighs = np.array(list(paths.keys()), dtype=np.int32)
                             sn_new.append(np.random.choice(neighs, 1)[0])
                     source_nodes = sn_new
+                #kdt = cKDTree(hc.nodes)  # -> precomputed
+                #kdt = kdtree_cache_gt[curr_ssvid]
+                #use nx dijksta path as in context_splitting_graph_many
+                g = hc.graph()
                 for source_node in source_nodes:
                     cnt_ctx = 0
                     while True:
                         if cnt_ctx > 2*len(source_nodes):
-                            raise ValueError(f'Could not find context with > 0 vertices in {ssv}.')
+                            raise ValueError(f'Could not find context with > 0 vertices in {curr_ssvid}.')
                         cnt_ctx += 1
                         if use_ctx_sampling:
-                            node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
+                            #node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
+                            #node_ids = kdt.query_ball_point(hc.nodes[source_node], ctx_size_fluct)
+                            #this approach comes from the function context_splitting_graph_many
+                            path = nx.single_source_dijkstra_path(g, source_node, weight='weight', cutoff=ctx_size_fluct)
+                            node_ids = np.array(list(path.keys()))
                         else:
                             node_ids = bfs_vertices(hc, source_node, npoints_ssv)
                         hc_sub = extract_subset(hc, node_ids)[0]  # only pass HybridCloud
@@ -851,6 +895,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                     batch_f[cnt] = hc_sub.features
                     cnt += 1
             assert cnt == batchsize
+            print(f'{time.time() - start} - duration loop')
             yield ixs, (batch_f, batch)
 
 
@@ -1109,7 +1154,7 @@ def _pts_loader_local_skel_train(ssv_params: List[dict], out_point_label: Option
                 else:
                     pcd = o3d.geometry.PointCloud()
                     pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                    pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                    pcd, idcs, _ = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
                     base_points = np.max(idcs, axis=1)
                     base_points = np.random.choice(base_points, n_out_pts_curr,
                                                    replace=len(base_points) < n_out_pts_curr)
@@ -1211,7 +1256,7 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
         ssv.clear_cache()
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
             base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
         source_nodes = np.max(idcs, axis=1)
         batchsize = min(len(source_nodes), batchsize)
@@ -1271,7 +1316,7 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
                     else:
                         pcd = o3d.geometry.PointCloud()
                         pcd.points = o3d.utility.Vector3dVector(hc_sub.nodes)
-                        pcd, idcs = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
+                        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(500, pcd.get_min_bound(), pcd.get_max_bound())
                         base_points = np.max(idcs, axis=1)
                         base_points = np.random.choice(base_points, n_out_pts,
                                                        replace=len(base_points) < n_out_pts)
@@ -1647,7 +1692,7 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
         labels = hc.labels[m]
         feats = hc.features[m]
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
             pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
             pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)
@@ -1692,6 +1737,12 @@ def get_pt_kwargs(mdir: str) -> Tuple[dict, dict]:
     scale_fact = int(re.findall(r'_scale(\d+)_', mdir)[0])
     mkwargs = dict(use_norm=use_norm, track_running_stats=track_running_stats, act=activation, use_bias=use_bias)
     loader_kwargs = dict(ctx_size=ctx, scale_fact=scale_fact, npoints=npoints)
+    '''
+    mkwargs = dict(use_norm='gn',
+                   track_running_stats=False, act='relu', use_bias=True)
+    loader_kwargs = dict(ctx_size=20000, scale_fact=2000,
+                         npoints=50000)  # TODO: manually set by best guesses from training script, lookup
+    '''
     return mkwargs, loader_kwargs
 
 
@@ -1727,10 +1778,10 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         mpath = global_params.config.mpath_celltype_pts
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
-    n_classes = 8
+    n_classes = 15
     n_inputs = 5
     if 'j0251' in mpath:
-        n_classes = 11
+        n_classes = 15
     if '_myelin' in mpath:
         n_inputs += 1
     if '_noSyntype' in mpath:
@@ -2126,7 +2177,7 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
             # select source nodes for context extraction
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-            pcd, idcs = pcd.voxel_down_sample_and_trace(
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
                     base_node_dst, pcd.get_min_bound(), pcd.get_max_bound())
             source_nodes = np.max(idcs, axis=1)
             bs = min(len(source_nodes), batchsize[ctx])
@@ -2463,7 +2514,7 @@ def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: 
         pcd = o3d.geometry.PointCloud()
         verts = sso.load_mesh(k)[1].reshape(-1, 3)
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs = pcd.voxel_down_sample_and_trace(pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(),
+        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(pts_feat_ds_dict[pt_type][k], pcd.get_min_bound(),
                                                     pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)
         idcs_dict[k] = idcs

@@ -37,6 +37,7 @@ from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
 from ..reps.segmentation_helper import load_so_meshes_bulk
 from syconn.extraction.in_bounding_boxC import in_bounding_box
+from memory_profiler import memory_usage
 
 from skimage.measure import mesh_surface_area
 
@@ -1125,6 +1126,7 @@ def mesh_area_calc(mesh):
 
 
 def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scale: np.ndarray,
+                       testfilename = None,
                        vertex_size: float = 10, boundary_struct: Optional[np.ndarray] = None,
                        depth: int = 10, compute_connected_components: bool = True,
                        voxel_size_simplify: Optional[float] = None,
@@ -1166,6 +1168,7 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         # 26-connected
         boundary_struct = np.ones((3, 3, 3))
     pts, norm = [], []
+    counter = 1
     for m, off in tqdm.tqdm(voxel_iter, disable=not verbose, desc='VoxelLoad'):
         bndry = m.astype(np.float32) - binary_erosion(m, boundary_struct, iterations=1)
         if overlap > 0:
@@ -1186,6 +1189,14 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
         pts.append(pts_)
         norm_ = grad[nonzero_mask]
         norm.append(norm_)
+        '''
+        mem_usage = memory_usage(-1, interval=1, timeout=1)
+        if testfilename is not None:
+            with open(testfilename,
+                      "a") as infofile:
+                infofile.write(("loop ran for %i times; current memory usage is %.2f MB \n" % (counter, mem_usage[0])))
+        counter += 1
+        '''
     norm = np.concatenate(norm)
     pts = np.concatenate(pts) * scale
     assert norm.shape == pts.shape, 'Incorrect shapes for normals and points.'

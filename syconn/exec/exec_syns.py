@@ -19,6 +19,7 @@ from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+import os as os
 
 
 def run_matrix_export():
@@ -63,7 +64,7 @@ def run_matrix_export():
 def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 512), n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
                        cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
-                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
+                       overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None, exclude_nodes = []):
     """
     Run the synapse generation. Will create
     :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
@@ -93,7 +94,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
 
     kd_seg_path = global_params.config.kd_seg_path
     kd = kd_factory(kd_seg_path)
-
     if cube_of_interest_bb is None:
         try:
             cube_of_interest_bb = global_params.config.entries['cube_of_interest_bb']
@@ -105,19 +105,33 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
             cube_of_interest_bb = np.array([np.zeros(3, dtype=np.int32), kd.boundary])
 
     # create KDs and SDs for syn (fragment synapses) and cs (fragment contact sites)
-    ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-                              cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
-                              n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg)
-    log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
+    #if cs SegmentationDataset exists already and should not be overwriten, use
+    #function to only extract syn contact sites
+    sd_cs = SegmentationDataset(working_dir=global_params.config.working_dir,
+                                             obj_type='cs', version=0)
+
+    if os.path.exists(sd_cs.path):
+        if overwrite:
+            ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                                      cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
+                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg, exclude_nodes = exclude_nodes)
+            log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
+        else:
+            log.info('SegmentationDataset of type "cs" already exists and overwrite set to False. \n'
+                     'Only SegmentationDataset of type "syn" will be generated.')
+            ces.extract_contact_sites_syns(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                                      cube_of_interest_bb=cube_of_interest_bb, overwrite=overwrite,
+                                      n_folders_fs=n_folders_fs, transf_func_sj_seg=transf_func_sj_seg, exclude_nodes = exclude_nodes)
+            log.info('SegmentationDataset of type "syn" were generated.')
+    else:
+        log.info('SegmentationDatasets of type "cs" and "syn" were generated.')
 
     # create SD of type 'syn_ssv' -> cell-cell synapses
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
-                              log=log, n_folders_fs=n_folders_fs, overwrite=overwrite)
-
+                              log=log, n_folders_fs=n_folders_fs, overwrite=overwrite, exclude_nodes = exclude_nodes)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
-
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
@@ -131,13 +145,13 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
              f'objects, {n_sym} symmetric, {n_asym} asymmetric and '
              f'{(len(sd_syn_ssv.ids) / np.prod(dataset_vol) * 1e9):0.4f} synapses / µm^3.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
+    
 
     cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
-
+    
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
     log.info('Synapse prediction finished.')
-
     log.info('Collecting and writing syn_ssv objects to SSV attribute '
              'dictionary.')
     # This needs to be run after `classify_synssv_objects` and before

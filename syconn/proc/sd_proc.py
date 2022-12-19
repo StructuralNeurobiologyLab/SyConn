@@ -47,6 +47,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         recompute: Whether or not to (re-)compute key information of each object (rep_coord, bounding_box, size).
         n_jobs: Number of jobs.
         compute_meshprops: Compute mesh properties. Will also calculate meshes (sparsely) if not available.
+        add_npy_param: additional parameter to extract from workers and save as .npy, not in attr_dict
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
@@ -98,7 +99,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
     else:
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-                                         suffix=sd.type)
+                                        suffix=sd.type)
+        #path_to_out = global_params.config.working_dir + '/SLURM/dataset_analysiscs_ssv_makgytsv/out'
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
         res_keys = []
@@ -149,7 +151,6 @@ def _dataset_analysis_collect(args):
     assert tmp_res.shape[0] == n_ids, f'Shape mismatch during dataset_analysis of property {attribute}.'
     np.save(f"{sd_path}/{attribute}s.npy", tmp_res)
 
-
 def _load_attr_helper(args):
     res = []
     attr = args[0][1]
@@ -160,7 +161,6 @@ def _load_attr_helper(args):
             dc = pkl.load(f)
             if len(dc['id']) == 0:
                 continue
-
             value = dc[attr]
             if attr == 'id':
                 value = np.array(value, np.uint64)

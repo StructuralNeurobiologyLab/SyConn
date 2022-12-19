@@ -30,7 +30,7 @@ except ImportError:
 from . import log_extraction
 from .. import global_params
 from ..backend.storage import AttributeDict, VoxelStorageDyn, MeshStorage, VoxelStorageLazyLoading
-from ..handler.basics import chunkify
+from ..handler.basics import chunkify, load_pkl2obj, write_obj2pkl
 from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -39,6 +39,9 @@ from ..reps.super_segmentation_dataset import filter_ssd_by_total_pathlength
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
+from memory_profiler import memory_usage
+from syconn.proc.meshes import mesh_area_calc
+
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
@@ -321,7 +324,8 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False):
+                          nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False,
+                          exclude_nodes = []):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes ['cs_id', 'asym_prop', 'sym_prop', ].
@@ -388,7 +392,10 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(
-            multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log)
+            multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log,
+            additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
+            exclude_nodes=exclude_nodes
+        )
 
 
 def _combine_and_split_syn_thread(args):
@@ -607,7 +614,7 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
 
 
 def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_folders_fs=10000,
-                         log=None, overwrite=False):
+                         log=None, overwrite=False, rel_ssv_with_cs_ids = None, save_dir = None):
     """
     Creates 'cs_ssv' objects from 'cs' objects. Computes connected
     cs-objects on SSV level and re-calculates their attributes (mesh_area, size, ..).
@@ -628,42 +635,56 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     overwrite:
 
     """
+    if save_dir is None:
+        save_dir = wd
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
     cs_version = cs_sd.version
-    rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
+    if rel_ssv_with_cs_ids is None:
+        rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
 
-    n_used_paths = min(global_params.config.ncore_total * 30, len(storage_location_ids),
-                       len(rel_ssv_with_cs_ids))
+    #n_used_paths = min(global_params.config.ncore_total * 30, len(storage_location_ids),
+    #                   len(rel_ssv_with_cs_ids))
+    n_used_paths = min(len(storage_location_ids),len(rel_ssv_with_cs_ids))
     voxel_rel_paths = chunkify([subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids],
                                n_used_paths)
     # target SD for SSV cs objects
     sd_cs_ssv = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="0", create=False,
                                                  n_folders_fs=n_folders_fs)
+    '''
     if os.path.exists(sd_cs_ssv.so_storage_path):
         if not overwrite:
             raise FileExistsError(f'"{sd_cs_ssv.so_storage_path}" already exists, but overwrite was set to False.')
         shutil.rmtree(sd_cs_ssv.so_storage_path)
+    '''
+    if os.path.exists(save_dir):
+        if not overwrite:
+            raise FileExistsError(f'"{save_dir}" already exists, but overwrite was set to False.')
+        shutil.rmtree(save_dir)
 
     # prepare folder structure
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
     for p in voxel_rel_paths_2stage:
-        os.makedirs(sd_cs_ssv.so_storage_path + p)
+        #os.makedirs(sd_cs_ssv.so_storage_path + p)
+        os.makedirs(save_dir + '/storage/' + p)
 
     rel_ssv_with_cs_ids_items = list(rel_ssv_with_cs_ids.items())
 
     rel_csssv_to_cs_ids_items_chunked = chunkify(rel_ssv_with_cs_ids_items, n_used_paths)
     multi_params = [(wd, rel_csssv_to_cs_ids_items_chunked[ii], voxel_rel_paths[ii],
-                     cs_version, sd_cs_ssv.version) for
+                     cs_version, sd_cs_ssv.version, save_dir) for
                     ii in range(n_used_paths)]
     del rel_ssv_with_cs_ids_items, rel_csssv_to_cs_ids_items_chunked, voxel_rel_paths_2stage, voxel_rel_paths
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
-        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log)
+        _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=True, log=log,
+                               batchjob_folder= save_dir, overwrite= True, additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1",
+                               exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
+                                              'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
 
 
 def _combine_and_split_cs_thread(args):
@@ -672,13 +693,18 @@ def _combine_and_split_cs_thread(args):
     voxel_rel_paths = args[2]
     cs_version = args[3]
     cs_ssv_version = args[4]
-
+    save_dir = args[5]
     sd_cs_ssv = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version=cs_ssv_version)
     sd_cs = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
-
     scaling = sd_cs.scaling
     meshing_kws = global_params.config['meshes']['meshing_props_points']['cs_ssv']
     mesh_min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
+    #misclassified_astrocytes = load_pkl2obj("cajal/nvmescratch/users/arother/j0251v4_prep/pot_astro_ids.pkl")
+
+    #example_cs = 275781054487918910
+    #cs_ids = np.array(rel_ssv_with_cs_ids_items, dtype = object)[:, 1]
+    #if example_cs not in cs_ids:
+    #    raise ValueError('example cs not in this worker')
 
     use_new_subfold = global_params.config.use_new_subfold
     # TODO: add to config, also used in 'ix_from_subfold' if 'global_params.config.use_new_subfold=True'
@@ -687,20 +713,30 @@ def _combine_and_split_cs_thread(args):
     n_per_voxel_path = np.ceil(float(len(rel_ssv_with_cs_ids_items)) / len(voxel_rel_paths))
     n_items_for_path = 0
     cur_path_id = 0
-    base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+    #base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+    base_dir = save_dir + voxel_rel_paths[cur_path_id]
     os.makedirs(base_dir, exist_ok=True)
     # get ID/path to storage to save intermediate results
     base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
     cs_ssv_id = base_id
+    max_voxel = 10 **6
+    excluded_ssv_ids = []
 
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
-    mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False, compress=True)
-
+    #mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False, compress=True)
     # iterate over cell partners and their contact site IDs (each contact site is between two supervoxels
     # of the partner cells)
     for ssvpartners_enc, cs_ids in rel_ssv_with_cs_ids_items:
+        start = time.time()
         n_items_for_path += 1
         ssv_ids = ch.cs_id_to_partner_ids_vec([ssvpartners_enc])[0]
+
+        test_filename = base_dir + "/progress.txt"
+        #if np.any(np.in1d(ssv_ids, misclassified_astrocytes)):
+            #with open(test_filename,
+            #          "a") as infofile:
+            #    infofile.write(("%i :%i excluded due to misclassified astrocyte \n" % (n_items_for_path, cs_ssv_id)))
+            #continue
 
         # verify ssv_partner_ids
         cs_lst = sd_cs.get_segmentation_object(cs_ids)
@@ -711,38 +747,67 @@ def _combine_and_split_cs_thread(args):
                                        disable_locking=True)
             vxl_iter_lst.append(vx_store.iter_voxelmask_offset(cs.id, overlap=1))
             vx_cnt += vx_store.object_size(cs.id)
-        if mesh_min_obj_vx > vx_cnt:
+        if mesh_min_obj_vx > vx_cnt or vx_cnt > max_voxel:
             ccs = []
+            if vx_cnt > max_voxel:
+                excluded_ssv_ids.append(ssv_ids)
+                with open(test_filename, "a") as infofile:
+                    infofile.write(("%i :%i, ssv ids are %i %i excluded due to voxelsize larger %i \n" % (n_items_for_path, cs_ssv_id, ssv_ids[0], ssv_ids[1], max_voxel)))
         else:
             # generate connected component meshes; vertices are in nm
-            ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, **meshing_kws)
+            ccs = gen_mesh_voxelmask(chain(*vxl_iter_lst), scale=scaling, testfilename=test_filename, **meshing_kws)
+
 
         for mesh_cc in ccs:
-            cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id)
+            #cs_ssv = sd_cs_ssv.get_segmentation_object(cs_ssv_id, create = True)
+            '''
             if (os.path.abspath(cs_ssv.attr_dict_path)
                     != os.path.abspath(base_dir + "/attr_dict.pkl")):
                 raise ValueError(f'Path mis-match!')
+            '''
             csssv_attr_dc = dict(neuron_partners=ssv_ids)
             # don't store normals
+            '''
             cs_ssv._mesh = [mesh_cc[0], mesh_cc[1], np.zeros((0,), dtype=np.float32)]
             mesh_dc[cs_ssv.id] = cs_ssv.mesh
             csssv_attr_dc["mesh_bb"] = cs_ssv.mesh_bb
             csssv_attr_dc["mesh_area"] = cs_ssv.mesh_area
             csssv_attr_dc["bounding_box"] = (cs_ssv.mesh_bb // scaling).astype(np.int32)
+            '''
+            #rewrote part about mesh to not create an segmentationObject
+            #due to not being able to writ ein wd
+            cs_ssv_mesh = [mesh_cc[0], mesh_cc[1], np.zeros((0,), dtype=np.float32)]
+            verts = cs_ssv_mesh[1].reshape(-1, 3)
+            cs_ssv_mesh_bb =  np.array([np.min(verts, axis=0), np.max(verts, axis=0)], dtype=np.float32)
+            #mesh_dc[cs_ssv_id] = cs_ssv_mesh
+            csssv_attr_dc["mesh_bb"] = cs_ssv_mesh_bb
+            csssv_attr_dc["mesh_area"] = mesh_area_calc(cs_ssv_mesh)
+            csssv_attr_dc["bounding_box"] = (cs_ssv_mesh_bb // scaling).astype(np.int32)
             csssv_attr_dc["rep_coord"] = (seghelp.calc_center_of_mass(mesh_cc[1].reshape((-1, 3))) // scaling).astype(np.int64)
             csssv_attr_dc["cs_ids"] = list(cs_ids)
             # create open3d mesh instance to compute volume
             # # TODO: add this as soon open3d >= 0.11 is supported (glibc error on cluster prevents upgrade)
-            # tm = o3d.geometry.TriangleMesh
-            # tm.triangles = o3d.utility.Vector3iVector(mesh_cc[0].reshape((-1, 3)))
-            # tm.vertices = o3d.utility.Vector3dVector(mesh_cc[1].reshape((-1, 3)))
-            # tm.normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
-            # assert tm.is_watertight()
-            # csssv_attr_dc["size"] = tm.get_volume // np.prod(scaling)
+            #tm = o3d.geometry.TriangleMesh()
+            #tm.triangles = o3d.utility.Vector3iVector(mesh_cc[0].reshape((-1, 3)))
+            #tm.vertices = o3d.utility.Vector3dVector(mesh_cc[1].reshape((-1, 3)))
+            #tm.triangle_normals = o3d.utility.Vector3dVector(mesh_cc[2].reshape((-1, 3)))
+           # watertight = tm.is_watertight()
+            # orientable = tm.is_orientable()
+            #if watertight and orientable:
+                #csssv_attr_dc["size"] = tm.get_volume // np.prod(scaling)
+            #else:
+                #cssv_attr_dc["size"] = 0
             csssv_attr_dc["size"] = 0
 
             # add cs_ssv dict to AttributeStorage
             attr_dc[cs_ssv_id] = csssv_attr_dc
+            cs_time = time.time() - start
+            test_filename = base_dir + "/progress.txt"
+            #mem_usage = memory_usage(-1, interval=1, timeout=1)
+            with open(test_filename,
+                      "a") as infofile:
+                infofile.write(("%i :%i processed, took %.2f s, ids are %i, %i \n" % (n_items_for_path, cs_ssv_id, cs_time,
+                                                                                                                       ssv_ids[0], ssv_ids[1])))
             if use_new_subfold:
                 cs_ssv_id += np.uint(1)
                 if cs_ssv_id - base_id >= div_base:
@@ -758,7 +823,10 @@ def _combine_and_split_cs_thread(args):
 
         if n_items_for_path > n_per_voxel_path:
             attr_dc.push()
-            mesh_dc.push()
+            #mesh_dc.push()
+            write_obj2pkl("%s/excluded_ssv_id_pairs.pkl" % base_dir, excluded_ssv_ids)
+            with open(test_filename,"a") as infofile:
+                infofile.write(("%i ssv pairs excluded due too large cs ids \n" % (len(excluded_ssv_ids))))
             cur_path_id += 1
             if len(voxel_rel_paths) == cur_path_id:
                 raise ValueError(f'Worker ran out of possible storage paths for storing {sd_cs_ssv.type}.')
@@ -766,14 +834,18 @@ def _combine_and_split_cs_thread(args):
             id_chunk_cnt = 0
             base_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_cs.n_folders_fs)
             cs_ssv_id = base_id
-            base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+            #base_dir = sd_cs_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+            base_dir = save_dir + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
             attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
-            mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
+            #mesh_dc = MeshStorage(base_dir + "/mesh.pkl", read_only=False)
 
     if n_items_for_path > 0:
         attr_dc.push()
-        mesh_dc.push()
+        write_obj2pkl("%s/excluded_ssv_id_pairs.pkl" % base_dir, excluded_ssv_ids)
+        with open(test_filename, "a") as infofile:
+            infofile.write(("%i ssv pairs excluded due too large cs ids \n" % (len(excluded_ssv_ids))))
+        #mesh_dc.push()
 
 
 def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000, verbose=False):

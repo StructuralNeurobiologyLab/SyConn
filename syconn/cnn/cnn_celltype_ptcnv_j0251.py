@@ -24,10 +24,11 @@ parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
-parser.add_argument('--bs', type=int, default=10, help='Batch size')
+parser.add_argument('--bs', type=int, default=16, help='Batch size')
 parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
 parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
+parser.add_argument('--noamp', action='store_true', help='Disable automatic mixed precision')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--ctx', default=20000, help='Context size in nm', type=int)
 parser.add_argument('--use_bias', default=1, help='Use bias parameter in Convpoint layers.',
@@ -58,6 +59,7 @@ random.seed(random_seed)
 
 # define parameters
 use_cuda = not args.co
+use_amp = not args.noamp
 name = args.na
 batch_size = args.bs
 npoints = args.sp
@@ -78,12 +80,12 @@ eval_nr = random_seed  # number of repetition
 dr = 0.3
 track_running_stats = False
 use_norm = 'gn'
-num_classes = 11
+num_classes = 15
 onehot = True
 act = 'relu'
 use_myelin = False
 if name is None:
-    name = f'celltype_pts_j0251v2_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
+    name = f'celltype_pts_j0251v4_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}'
     if cellshape_only:
         name += '_cellshapeOnly'
     else:
@@ -120,6 +122,7 @@ else:
 print(f'Running on device: {device}')
 
 # set paths
+#save_root = "cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/221216_celltype_noval/"
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
@@ -167,11 +170,12 @@ valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_no
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                               cellshape_only=cellshape_only, use_syntype=use_syntype,
                               onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
-# valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
-#                               cv_val=cval, cellshape_only=cellshape_only,
-#                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-#                               ctx_size=ctx, map_myelin=use_myelin)
-valid_ds = None
+valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
+                               cv_val=cval, cellshape_only=cellshape_only,
+                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+                               ctx_size=ctx, map_myelin=use_myelin)
+
+#valid_ds = None
 
 # PREPARE AND START TRAINING #
 
@@ -212,16 +216,18 @@ trainer = Trainer3d(
     train_dataset=train_ds,
     valid_dataset=valid_ds,
     batchsize=1,
-    num_workers=20,
+    mixed_precision=use_amp,
+    num_workers=32,
     valid_metrics=valid_metrics,
     save_root=save_root,
     enable_save_trace=enable_save_trace,
     exp_name=name,
     schedulers={"lr": lr_sched},
     num_classes=num_classes,
-    # example_input=example_input,
+    example_input=example_input,
     dataloader_kwargs=dict(collate_fn=lambda x: x[0]),
     nbatch_avg=10,
+    tqdm_kwargs={"disable": False}
 )
 
 # Archiving training script, src folder, env info
