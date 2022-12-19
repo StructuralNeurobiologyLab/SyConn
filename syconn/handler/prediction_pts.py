@@ -63,10 +63,8 @@ def init_hc_cache_gt():
         names=["cellids", "celltype"])
     cellids = np.array(v6_gt["cellids"])
     for cellid in cellids:
-        hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl' % cellid)
+        hc = load_pkl2obj('cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/hybrid_clouds_gt/%i_hc.pkl' % cellid)
         hc_cache_gt[cellid] = hc
-        #kdtree = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_kdtree.pkl' % cellid)
-        #kdtree_cache_gt[cellid] = kdtree
 
 
 init_hc_cache_gt()
@@ -687,9 +685,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         if npoints_ssv == 0:
             log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
         if use_ctx_sampling:
-            #node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
-            path = nx.single_source_dijkstra_path(g, source_nodes_all, weight='weight', cutoff=ctx_size)
-            node_ids_all = np.array(list(path.keys()))
+            node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
         else:
             node_ids_all = np.array([bfs_vertices(hc, sn, npoints_ssv) for sn in source_nodes_all], dtype=object)
         for ii in range(n_batches):

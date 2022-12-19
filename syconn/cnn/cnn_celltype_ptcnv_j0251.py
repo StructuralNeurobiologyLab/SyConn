@@ -122,7 +122,7 @@ else:
 print(f'Running on device: {device}')
 
 # set paths
-#save_root = "/cajal/nvmescratch/users/arother/cnn_training/220930_valid_splits/"
+#save_root = "cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/221216_celltype_noval/"
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
