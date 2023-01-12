@@ -1,3 +1,8 @@
+# Ignore files without extension (without breaking things ;))
+* 
+!/**/  
+!*.*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -52,7 +57,7 @@ coverage.xml
 *.mo
 *.pot
 
-# Django stuff:
+# Logs:
 *.log
 
 # Sphinx documentation
@@ -87,6 +92,13 @@ ipython_config.py
 *.npz
 *.csv
 *.bz2
+*.json
+*.png
+*.txt
+
+# Cluster generated files
+events.out.tfevents.*
+core.cajalg*
 
 # Zip files
 *.zip
@@ -99,6 +111,10 @@ ipython_config.py
 *.pts
 *.ptx
 *.ckpt
+0-*.py
+
+# SyConn example data
+examples/*
 
 # Environments
 .env
@@ -108,8 +124,3 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-
-# Ignore files without extension (without breaking things ;))
-* 
-!/**/  
-!*.*
