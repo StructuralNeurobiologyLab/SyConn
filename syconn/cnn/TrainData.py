@@ -48,6 +48,10 @@ import glob
 from scipy import spatial, ndimage
 import time
 import socket
+try:
+    import open3d as o3d
+except ImportError:
+    pass  # for sphinx build
 # fix random seed.
 np.random.seed(0)
 
@@ -95,7 +99,7 @@ if elektronn3_avail:
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
             if os.path.isfile(split_dc_path):
-                if cv_val is -1:
+                if cv_val == -1:
                     log_cnn.critical(f'"cval_val" was set to -1. training will also '
                                      f'include validation data.')
                     split_dc = load_pkl2obj(split_dc_path)
@@ -275,20 +279,20 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
-            ssd_kwargs = dict(working_dir="/ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2")
+            ssd_kwargs = dict(working_dir="/cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811")
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
             #assert self.train, "Other mode than 'train' is not implemented."
-            self.csv_p = "/wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv"
-            #self.csv_p = "cajal/nvmescratch/users/arother/cnn_training/j0251_celltype_gt_short_test.csv"
+            verbose = kwargs.get('verbose', False)
+            self.csv_p = "/cajal/nvmescratch/projects/data/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv"
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint64)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
                 ixs, cnt = np.unique(ssv_ids, return_counts=True)
                 raise ValueError(f'Multi-usage of IDs! {ixs[cnt > 1]}')
             str_labels = df[:, 1]
-            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v3') for el in str_labels], dtype=np.uint16)
+            ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v4') for el in str_labels], dtype=np.uint16)
             if self.cv_val is not None and self.cv_val != -1:
                 assert self.cv_val < 10
                 kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
@@ -306,8 +310,9 @@ if elektronn3_avail:
             for k, v in self.splitting_dict.items():
                 classes, c_cnts = np.unique([self.label_dc[ix] for ix in
                                              self.splitting_dict[k]], return_counts=True)
-                log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
-                log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
+                if verbose:
+                    log_cnn.debug(f"{k} [labels, counts]: {classes}, {c_cnts}")
+                    log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
             return len(self.sso_ids) * 3
