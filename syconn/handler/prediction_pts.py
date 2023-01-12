@@ -59,15 +59,15 @@ hc_cache_gt = {}
 def init_hc_cache_gt():
     print("initialising cache")
     v6_gt = pd.read_csv(
-        "wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv",
+        "/cajal/nvmescratch/projects/data/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv",
         names=["cellids", "celltype"])
     cellids = np.array(v6_gt["cellids"])
     for cellid in cellids:
-        hc = load_pkl2obj('cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/hybrid_clouds_gt/%i_hc.pkl' % cellid)
+        hc = load_pkl2obj('/cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/hybrid_clouds_gt/%i_hc.pkl' % cellid)
         hc_cache_gt[cellid] = hc
 
 
-init_hc_cache_gt()
+# init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -613,7 +613,7 @@ def _load_ssv_hc(args):
         hc._edges = np.concatenate([hc._edges, pairs])
     return hc
 
-
+# Inference for celltypes
 def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndarray], int],
                             batchsize: int, npoints: int, ctx_size: float,
                             transform: Optional[Callable] = None, seeded: bool = False,
@@ -670,7 +670,13 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+
+        try:
+            pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        except DeprecationWarning as e:
+            log.warn(f"{e.args[0]}: Upgrade to open3d 0.9 or higher.")
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+            
         nodes = np.max(idcs, axis=1)
         if seeded:
             np.random.seed(np.uint32(hash(frozenset((ssv_id, redundancy_ssv)))))
@@ -684,6 +690,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             npoints_ssv = max(npoints_ssv, 4096)  # minimum number of nodes for the celltype classifaciton model
         if npoints_ssv == 0:
             log_handler.warn(f'Found SSV with 0 vertices: {ssv}')
+        # kdtree context sampling and djistra sampling
         if use_ctx_sampling:
             node_ids_all = np.array(context_splitting_kdt(hc, source_nodes_all, ctx_size), dtype=object)
         else:
@@ -747,7 +754,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             assert cnt == n_samples
             yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
 
-
+# Training for celltypes
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None, train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, use_ctx_sampling: bool = True, cache: Optional[bool] = True,
@@ -895,7 +902,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                     batch_f[cnt] = hc_sub.features
                     cnt += 1
             assert cnt == batchsize
-            print(f'{time.time() - start} - duration loop')
+            # print(f'{time.time() - start} - duration loop')
             yield ixs, (batch_f, batch)
 
 
@@ -987,7 +994,8 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
 
     """
     if pred_key is None:
-        pred_key = 'celltype_cnn_e3'
+        # pred_key = 'celltype_cnn_e3'
+        pred_key = 'celltype_pts_e3'
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_kwargs)
     sso.load_attr_dict()
@@ -1015,7 +1023,6 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
 
     cls = np.argmax(logit, axis=1).squeeze()
     cls_maj = collections.Counter(cls).most_common(1)[0][0]
-
     sso.save_attributes([pred_key, f"{pred_key}_probas", f"{pred_key}_certainty"],
                         [cls_maj, logit, certainty_estimate(logit, is_logit=True)])
 
@@ -1692,9 +1699,15 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
         labels = hc.labels[m]
         feats = hc.features[m]
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
-            pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
-            pcd.get_max_bound())
+        try:
+            pcd, idcs = pcd.voxel_down_sample_and_trace(
+                pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
+                pcd.get_max_bound())
+        except Exception as e:
+            DeprecationWarning(f'{e}: Upgrade to open3d 0.9 or higher.')
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
+                pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
+                pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)
         new_verts.append(np.asarray(pcd.points))
         new_labels.append(labels[idcs])
@@ -1918,9 +1931,11 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 
     """
     if pred_key is None:
-        pred_key = 'celltype_cnn_e3'
+        # pred_key = 'celltype_cnn_e3'
+        pred_key = 'celltype_pts_e3'
     if mpath is None:
-        mpath = global_params.config.mpath_celltype_pts
+        mpath = "/cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/19-12-22_celltype_all_gt/celltype_pts_j0251v4_scale2000_nb50000_ctx20000_relu_gn_AllGT_eval0/state_dict.pth"
+        # mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
     cellshape_only = False
     use_syntype = True
@@ -1936,6 +1951,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
                           loader_kwargs=dict(redundancy=20, map_myelin=map_myelin, use_syntype=use_syntype,
                                              cellshape_only=cellshape_only),
                           postproc_kwargs=dict(pred_key=pred_key, da_equals_tan=da_equals_tan))
+
     default_kwargs.update(add_kwargs)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
     if ssv_ids is None:

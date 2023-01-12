@@ -2612,7 +2612,7 @@ class SuperSegmentationObject(SegmentationBase):
                 raise ValueError(f'Unknown synapse sign {syn_sign}.')
         sym_syn_mesh = list(merge_someshes(sym_syns, use_new_subfold=self.config.use_new_subfold))
         asym_syn_mesh = list(merge_someshes(asym_syns, use_new_subfold=self.config.use_new_subfold))
-        if self.version is not "tmp":
+        if self.version != "tmp":
             mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
                                   disable_locking=not self.enable_locking)
             mesh_dc['syn_ssv_sym'] = sym_syn_mesh
@@ -3215,7 +3215,8 @@ class SuperSegmentationObject(SegmentationBase):
             Certainty measure based on the entropy of the cell type logits.
         """
         if pred_key is None:
-            pred_key = 'celltype_cnn_e3'
+            # pred_key = 'celltype_cnn_e3'
+            pred_key = 'celltype_pts_e3'
         cert = self.lookup_in_attribute_dict(pred_key + '_certainty')
         if cert is not None:
             return cert
