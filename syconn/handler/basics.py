@@ -10,7 +10,7 @@ import contextlib
 import gc
 import glob
 import os
-import pickle as pkl
+import pickle5 as pkl
 import re
 import shutil
 import signal
@@ -448,8 +448,8 @@ def data2kzip(kzip_path: str, fpaths, fnames_in_zip=None, force_overwrite=True,
         except Exception as e:
             log_handler.error("Couldn't open file {} for writing. Error: "
                               "{}".format(kzip_path, e))
-    for ii in range(nb_files):
-        os.remove(fpaths[ii])
+    # for ii in range(nb_files):
+    #     os.remove(fpaths[ii])
     if verbose:
         pbar.close()
         log_handler.info('Done writing files to .zip.')

@@ -26,12 +26,12 @@ parser.add_argument('--na', type=str, help='Experiment name',
                     default=None)
 parser.add_argument('--sr', type=str, help='Save root', default=None)
 parser.add_argument('--bs', type=int, default=8, help='Batch size')
-parser.add_argument('--sp', type=int, default=15000, help='Number of sample points')
-parser.add_argument('--scale_norm', type=int, default=5000, help='Scale factor for normalization')
+parser.add_argument('--sp', type=int, default=50000, help='Number of sample points')
+parser.add_argument('--scale_norm', type=int, default=2000, help='Scale factor for normalization')
 parser.add_argument('--co', action='store_true', help='Disable CUDA')
 parser.add_argument('--seed', default=0, help='Random seed', type=int)
 parser.add_argument('--use_bias', default=True, help='Use bias parameter in Convpoint layers.', type=bool)
-parser.add_argument('--ctx', default=15000, help='Context size in nm', type=float)
+parser.add_argument('--ctx', default=20000, help='Context size in nm', type=float)
 parser.add_argument(
     '-j', '--jit', metavar='MODE', default='disabled',  # TODO: does not work
     choices=['disabled', 'train', 'onsave'],
@@ -83,7 +83,8 @@ use_norm = 'gn'
 # ads: axon dendrite soma
 # abt: axon bouton terminal
 # fine: 'dendrite': 0, 'axon': 1, 'soma': 2, 'bouton': 3, 'terminal': 4, 'neck': 5, 'head': 6
-gt_type = 'dnho'
+# gt_type = 'dnho'
+gt_type = 'fine'
 num_classes = {'ads': 3, 'abt': 3, 'dnh': 3, 'fine': 7, 'dnho': 4}
 ignore_l = num_classes[gt_type]  # num_classes is also used as ignore label
 remap_dicts = {'ads': {3: 1, 4: 1, 5: 0, 6: 0},
@@ -101,8 +102,8 @@ if cellshape_only:
 act = 'relu'
 
 if name is None:
-    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{ctx}_{act}_nclass' \
-           f'{num_classes}_SegSmall'
+    name = f'semseg_pts_scale{scale_norm}_nb{npoints}_ctx{int(ctx)}_{act}_nclass' \
+           f'{num_classes[gt_type]}_SegSmall'
     if cellshape_only:
         name += '_cellshapeOnly'
     if use_syntype:
@@ -130,13 +131,13 @@ logger.info(f'Running on device: {device}')
 
 # set paths
 if save_root is None:
-    save_root = '/wholebrain/scratch/pschuber/e3_trainings_ptconv_dnho/'
+    save_root = f'/cajal/nvmescratch/users/hashirah/compartment_trainings_ptconv/ptx{args.sp}_ctx{int(args.ctx)}/'
 save_root = os.path.expanduser(save_root)
 
 # CREATE NETWORK AND PREPARE DATA SET
 
 # Model selection
-model = SegSmall(input_channels, num_classes, dropout=dr, use_norm=use_norm,
+model = SegSmall(input_channels, num_classes[gt_type], dropout=dr, use_norm=use_norm,
                  track_running_stats=track_running_stats, act=act, use_bias=use_bias)
 
 name += f'_eval{eval_nr}'
@@ -174,7 +175,8 @@ valid_transform = clouds.Compose([clouds.Center(),
 if gt_type == 'dnho':
     source_dir = '/wholebrain/songbird/j0126/GT/spgt_semseg/kzips/pkl_files/'
 else:
-    source_dir = '/wholebrain/songbird/j0251/groundtruth/compartment_gt/2021_11_08/train/hc_out_2021_11_fine/'
+    source_dir = '/cajal/nvmescratch/users/hashirah/compartment_trainings_ptconv/semseg_gt/train/'
+
 train_ds = CloudDataSemseg(npoints=npoints, transform=train_transform, use_subcell=use_subcell,
                            batch_size=batch_size, ctx_size=ctx, mask_borders_with_id=ignore_l,
                            source_dir=source_dir, remap_dict=remap_dicts[gt_type])

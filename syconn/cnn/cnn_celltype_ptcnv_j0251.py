@@ -122,7 +122,8 @@ else:
 print(f'Running on device: {device}')
 
 # set paths
-#save_root = "cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/221216_celltype_noval/"
+# save_root = "cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/221216_celltype_noval/"
+
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
@@ -137,6 +138,7 @@ if cval is not None:
     name += f'_CV{cval}'
 else:
     name += f'_AllGT'
+    
 name += f'_eval{eval_nr}'
 model = nn.DataParallel(model)
 
@@ -165,17 +167,22 @@ train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='norma
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
-valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
+
 
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                               cellshape_only=cellshape_only, use_syntype=use_syntype,
                               onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
-valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
+
+
+if cval == None or cval == -1:
+    valid_ds = None
+
+else:
+    valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
+    valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
                                cv_val=cval, cellshape_only=cellshape_only,
                                use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
                                ctx_size=ctx, map_myelin=use_myelin)
-
-#valid_ds = None
 
 # PREPARE AND START TRAINING #
 

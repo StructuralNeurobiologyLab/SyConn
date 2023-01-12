@@ -153,7 +153,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     chunk_list = np.array(chunk_list)[rand_ixs]
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
-    if overlap is "auto":
+    if overlap == "auto":
         if sigmas is None:
             max_sigma = np.zeros(3)
         else:

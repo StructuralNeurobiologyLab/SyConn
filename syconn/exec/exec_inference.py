@@ -124,7 +124,7 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None, exclude_nodes 
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.config.ngpu_total * 4 if qu.batchjob_enabled() else 2
     log = initialize_logging('celltype_prediction', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+                             overwrite=True)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     multi_params = ssd.ssv_ids[np.argsort(ssd.load_numpy_data('size'))[::-1]]
     log.info(f'Starting cell type prediction with {"points" if global_params.config.use_point_models else "views"}.')
@@ -139,10 +139,10 @@ def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None, exclude_nodes 
         # job parameter will be read sequentially, i.e. in order to provide only
         # one list as parameter one needs an additonal axis
         multi_params = [(ixs, global_params.config.use_point_models) for ixs in multi_params]
-        multi_params = multi_params[10:12]
-        qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:1",
+        # multi_params = multi_params[10:12]
+        qu.batchjob_script(multi_params, "predict_cell_type", log=log, suffix="", additional_flags="--gres=gpu:2 --partition=p.cajal",
                            n_cores=global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'],
-                           remove_jobfolder=True, exclude_nodes = exclude_nodes)
+                           remove_jobfolder=False, exclude_nodes = exclude_nodes)
     log.info(f'Finished prediction of {len(ssd.ssv_ids)} SSVs.')
 
 

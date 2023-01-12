@@ -37,7 +37,7 @@ from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 from ..proc import log_proc
 from ..reps.segmentation_helper import load_so_meshes_bulk
 from syconn.extraction.in_bounding_boxC import in_bounding_box
-from memory_profiler import memory_usage
+# from memory_profiler import memory_usage
 
 from skimage.measure import mesh_surface_area
 
