@@ -7,6 +7,7 @@ For the API documentation please refer to:
 .. toctree::
    :maxdepth: 1
 
+   instructions
    syconn
 ```
 
