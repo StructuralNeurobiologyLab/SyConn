@@ -836,7 +836,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     Writes the file ``config.yml`` to `working_dir` after adapting the
     attributes as given by the method input. This file can also only contain
     the values of attributes which should differ from the default config
-    at ``SyConn/syconn/handlers/config.yml``. SyConn refers to the latter in
+    at ``SyConn/syconn/handlers/config.yml``. SyConn refers to the latter if
     a parameter cannot be found in the config file inside the currently active
     working directory.
 
