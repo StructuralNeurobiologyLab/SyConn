@@ -94,8 +94,8 @@ if __name__ == '__main__':
                      os.path.abspath(os.path.curdir) + '/SyConnData',
                      os.path.abspath(os.path.curdir) + '/SyConn',
                      os.path.expanduser('~/SyConnData/'),
-                     os.path.expanduser('~/SyConn/')]:
-                     #os.path.expanduser('cajal/nvmescratch/projects/data/songbird/SyConn_v2_examples/data1')]: 
+                     os.path.expanduser('~/SyConn/'),
+                     os.path.expanduser('/cajal/nvmescratch/users/khegg/SyConnData')]: 
                      # Anm: above line was added and didnt worked out
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
         if os.path.isdir(h5_dir):

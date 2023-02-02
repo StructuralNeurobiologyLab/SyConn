@@ -1,3 +1,4 @@
+.. _syconnAPI:
 syconn API
 ==========
 
