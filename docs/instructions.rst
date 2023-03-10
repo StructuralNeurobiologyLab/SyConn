@@ -10,19 +10,23 @@ SyConn appropiatly.
     examples
 
 
+.. include:: doc.md
+   :parser: myst_parser.sphinx_
 
-# Documentation
 
-## Installation
-* Python 3.7
-* The whole pipeline was designed and tested on Linux systems
+.. _Installation:
+Installation
+------------
+Requirement:
+    * Python 3.7
+    * The whole pipeline was designed and tested on Linux systems
 
 Before you can set up SyConn, ensure that the
-[conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
+`conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/>`_
 package manager is installed on your system. Then you can install SyConn
 and all of its dependencies into a new conda
-[environment](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html)
-named "syconn2" by running:
+`environment <https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html>`_
+named "syconn2" by running::
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn
     cd SyConn
@@ -48,10 +52,10 @@ The last command prints a list, where for the package(Name) pytorch should be Bu
 
 
 The last command will install SyConn in
-[editable](https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs)
+`editable <https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs>`_
 mode, which is useful for development on SyConn itself. If you want to
 install it as a regular read-only package instead, replace the last
-command with:
+command with
 
     pip install .
 
@@ -117,69 +121,70 @@ and API code examples [here](api.md).
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
 
-* SyConn operates with a pre-defined [working directory and config files](config.md)
+    * SyConn operates with a pre-defined [working directory and config files](config.md)
 
-* Supervoxels (and cellular organelles) are organized as `SegmentationObject` which are
-handled by the `SegmentationDatasets`. For a more detailed description see [here](segmentation_datasets.md)).
+    * Supervoxels (and cellular organelles) are organized as `SegmentationObject` which are 
+    handled by the `SegmentationDatasets`. For a more detailed description see [here](segmentation_datasets.md)).
 
-* SyConn principally supports different [backends](backend.md) for data storage. The current default is a simple shared filesystem
-(such as lustre, Google Cloud Filestore or AWS Elastic File System).
+    * SyConn principally supports different [backends](backend.md) for data storage. The current default is a simple shared filesystem 
+    (such as lustre, Google Cloud Filestore or AWS Elastic File System).
 
-* Agglomerated supervoxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
- of super-SVs are usually defined in a region supervoxel graph which is used to initialize the SuperSegmentationDataset
-  ([SSD](super_segmentation_datasets.md)).
+    * Agglomerated supervoxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
+     of super-SVs are usually defined in a region supervoxel graph which is used to initialize the SuperSegmentationDataset 
+     ([SSD](super_segmentation_datasets.md)).
 
-* [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951)
- \- currently a fall-back to a sampling procedure is in use.
+    * [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm 
+    (https://ieeexplore.ieee.org/document/883951) \- currently a fall-back to a sampling procedure is in use.
 
-* [Mesh](meshes.md) generation and representation of supervoxels
+    * [Mesh](meshes.md) generation and representation of supervoxels
 
-* Multi-view representation of neuron reconstructions for [glia](glia_removal.md) and
+    * Multi-view representation of neuron reconstructions for [glia](glia_removal.md) and
  [neuron](neuron_analysis.md) analysis (published in [Nature Communications](https://www.nature.com/articles/s41467-019-10836-3))
 
 
-## Analysis steps
+
+## Analysis stepsss #ANM
 After initialization of the SDs (cell and sub-cellular structures, step 1 in the example run) and the SSD
 containing the agglomerated cell SVs (step 3), several analysis steps can be applied:
 
-* \[Optional] [Glia removal](glia_removal.md)
+    * \[Optional] [Glia removal](glia_removal.md)
 
-* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
-compartments (e.g. axons and spines) and to perform morphology based cell type classification (steps 3-7).
+    * [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular 
+    compartments (e.g. axons and spines) and to perform morphology based cell type classification (steps 3-7).
 
-* [Contact site extraction](contact_site_extraction.md) (step 4)
+    * [Contact site extraction](contact_site_extraction.md) (step 4)
 
-* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md) (steps 4 and 8)
+    * [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md) (steps 4 and 8)
 
 
 ## SyConn KNOSSOS viewer
 The following packages have to be available in the system's python2 interpreter
 (will differ from the conda environment):
 
-- numpy
-- lz4
-- requests
+    - numpy
+    - lz4
+    - requests
 
 In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
 
-- Wait until `start.py` finished. For starting the server manually run
-  `syconn.server --working_dir=<path>` which executes
-  `syconn/kplugin/server.py` and allows to visualize the analysis
-  results of the working directory at (`<path>`) in KNOSSOS. The server
-  address and port will be printed.
+    - Wait until `start.py` finished. For starting the server manually run 
+    `syconn.server --working_dir=<path>` which executes
+    `syconn/kplugin/server.py` and allows to visualize the analysis 
+    results of the working directory at (`<path>`) in KNOSSOS. The server 
+    address and port will be printed.
 
-- Download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
+    - Download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
 
-- In KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
+    - In KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
 `knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
 
-- Then go to Scripting (top row) -> Run file -> browse to
+    - Then go to Scripting (top row) -> Run file -> browse to
   `syconn/kplugin/syconn_knossos_viewer.py`, open it and enter the port
   and address of the syconn server.
 
-- After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
-list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.
- The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs;
- clicking the entry will trigger a jump to the synapse location) and their respective
- properties. In case the window does not pop-up check Scripting->Interpreter for errors.
+    - After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the 
+    list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport. 
+    The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs; 
+    clicking the entry will trigger a jump to the synapse location) and their respective 
+   properties. In case the window does not pop-up check Scripting->Interpreter for errors.
 

@@ -1,5 +1,5 @@
-.. _syconnAPI:
-syconn API
+.. _SyConnAPI:
+SyConn API
 ==========
 
 Subpackages

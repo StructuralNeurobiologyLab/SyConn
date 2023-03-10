@@ -10,10 +10,11 @@ Welcome to SyConn's documentation!
    syconn
 
 :ref:`Instructions <Instuctions>` explains the usage of SyConn (e.g. installation, application, etc.) 
-as well as further contents (e.g. basic functionality, data structures, etc.). In :ref:`SyConnAPI <syconnAPI>` 
-the used code functions are explained.
+as well as further contents (e.g. basic functionality, data structures, etc.). In :ref:`SyConnAPI <SyConnAPI>` 
+the code is documented.
 
 
 
 About SyConn
 ------------
+still in progress
