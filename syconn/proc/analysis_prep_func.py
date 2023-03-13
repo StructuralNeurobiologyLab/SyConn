@@ -12,11 +12,15 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 def find_full_cells_sso(cellid, celltype, soma_centre = True):
     """
     function finds full cells of a specific celltype if the cells have a dendrite, soma and axon in axoness_avg10000.
-    :param ssd: segmentation dataset
-    :param celltype: number of the celltype that is searched for; celltypes: j0126: STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6
-    # j0256: STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7, FS=8, LTS=9, NGF=10
-    :param soma_centre: if True calculates average of soma skeleton notes as approximation to the soma centre
-    :return: an array with cell_ids of the full_cells and if soma centre was calculated also a dictionary for each cell with its soma_centre
+    
+    Args:
+        ssd: segmentation dataset 
+        celltype: number of the celltype that is searched for; celltypes: j0126: STN=0, modulatory=1, MSN=2, LMAN=3, HVC=4, GP=5, INT=6 
+            # j0256: STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7, FS=8, LTS=9, NGF=10
+        soma_centre: if True calculates average of soma skeleton notes as approximation to the soma centre
+    
+    Returns:
+        array: an array with cell_ids of the full_cells and if soma centre was calculated also a dictionary for each cell with its soma_centre
     """
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     cell = ssd.get_super_segmentation_object(cellid)
@@ -43,11 +47,15 @@ def find_full_cells_sso(cellid, celltype, soma_centre = True):
 def synapse_amount_percell(celltype, sd_synssv,cellids, syn_proba):
     '''
     gives amount of synapses for each cell with defined synapse probability and writes it in a dictionary
-    :param celltype: celltype analysis is wanted for
-    :param sd_synssv: synapse daatset
-    :param syn_proba: synapse probability
-    :param cellids: cellids of cells wanted amount of synapses for
-    :return: dictionary with cell_ids as keys and amount of synapses
+    
+    Args:
+        celltype: celltype analysis is wanted for
+        sd_synssv: synapse daatset
+        syn_proba: synapse probability
+        cellids: cellids of cells wanted amount of synapses for
+    
+    Returns:
+        dict: dictionary with cell_ids as keys and amount of synapses
     '''
     syn_prob = sd_synssv.load_cached_data("syn_prob")
     m = syn_prob > syn_proba
