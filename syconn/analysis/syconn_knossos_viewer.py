@@ -47,13 +47,12 @@ class SyConnGateInteraction(object):
     def get_ssv_mesh(self, ssv_id):
         """
         Returns a mesh for a given ssv_id.
-        Parameters
-        ----------
-        ssv_id
 
-        Returns
-        -------
+        Args:
+            ssv_id:
 
+        Returns:
+        
         """
         r1 = self.session.get(self.server + '/ssv_ind/{0}'.format(ssv_id))
         r2 = self.session.get(self.server + '/ssv_vert/{0}'.format(ssv_id))
@@ -69,14 +68,11 @@ class SyConnGateInteraction(object):
         """
         Returns a skeleton for a given ssv_id.
 
-        Parameters
-        ----------
-        ssv_id : int
+         Args:
+            ssv_id:
 
-        Returns
-        -------
-        dict
-            Keys: "nodes", "edges", "diameters"
+        Returns:
+            dict: Keys: "nodes", "edges", "diameters"
         """
         r = self.session.get(self.server + '/ssv_skeleton/{0}'.format(ssv_id))
         skel = json.loads(r.content)
@@ -95,7 +91,7 @@ class SyConnGateInteraction(object):
         """
         Initialize mesh queue daemon workers.
 
-        :return:
+        Return:
         """
         for i in range(20):
             worker = Thread(target=self.get_download_queue_worker)
@@ -148,13 +144,11 @@ class SyConnGateInteraction(object):
         Returns a mesh for a given ssv_id and a specified obj_type.
         obj_type can be sj, vc, mi ATM.
 
-        Parameters
-        ----------
-        ssv_id
-        obj_type
+        Args:
+            ssv_id:
+            obj_type:
 
-        Returns
-        -------
+        Returns:
 
         """
         r1 = self.session.get(self.server + '/ssv_obj_ind/{0}/{1}'.format(ssv_id, obj_type))
@@ -168,8 +162,8 @@ class SyConnGateInteraction(object):
     def get_list_of_all_ssv_ids(self):
         """
         Returns a list of all ssvs in the dataset
-        Returns
-        -------
+
+        Returns:
 
         """
         r = self.session.get(self.server + '/ssv_list')
@@ -178,12 +172,10 @@ class SyConnGateInteraction(object):
     def get_svs_of_ssv(self, ssv_id):
         """
         Returns a list of all svs of a given ssv.
-        Parameters
-        ----------
-        ssv_id
+        Args:
+            ssv_id:
 
-        Returns
-        -------
+        Returns:
 
         """
         if ssv_id not in self.svs_from_ssv:
@@ -194,12 +186,10 @@ class SyConnGateInteraction(object):
     def get_ssv_of_sv(self, sv_id):
         """
         Gets the ssv for a given sv.
-        Parameters
-        ----------
-        sv_id
+        Args:
+            sv_id:
 
-        Returns
-        -------
+        Returns:
 
         """
         if sv_id not in self.ssv_from_sv_cache:
@@ -213,14 +203,11 @@ class SyConnGateInteraction(object):
         """
         Get SSV cell type if available.
 
-        Parameters
-        ----------
-        ssv_id : int
+        Args:
+            ssv_id(int): 
 
-        Returns
-        -------
-        str
-
+        Returns:
+            str:
         """
         # if not ssv_id in self.ct_from_cache:
         r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
@@ -237,8 +224,7 @@ class SyConnGateInteraction(object):
     def get_all_syn_metda_data(self):
         """
 
-        Returns
-        -------
+        Returns:
 
         """
         params = {'synthresh': self.synthresh, 'axodend_only': self.axodend_only}
@@ -251,17 +237,14 @@ class SyConnGateInteraction(object):
         `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)`
         on the server.
 
-        Parameters
-        ----------
-        so_id :
-        so_type :
-        attr_key :
-        attr_value :
+        Args:
+            so_id:
+            so_type:
+            attr_key:
+            attr_value:
 
-        Returns
-        -------
-        str | bytes
-            Server response
+        Returns:
+            str | bytes: Server response
         """
         r = self.session.get(self.server + '/push_so_attr/{}/{}/{}/{}'.format(
             so_id, so_type, attr_key, attr_value))
@@ -273,16 +256,13 @@ class SyConnGateInteraction(object):
         `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)`
         on the server.
 
-        Parameters
-        ----------
-        so_id :
-        so_type :
-        attr_key :
+        Args:
+            so_id:
+            so_type:
+            attr_key:
 
-        Returns
-        -------
-        str | bytes
-            Server response
+        Returns:
+            str | bytes: Server response
         """
         r = self.session.get(self.server + '/pull_so_attr/{}/{}/{}'.format(
             so_id, so_type, attr_key))
@@ -477,13 +457,11 @@ class main_class(QtGui.QDialog):
     cd_dict['neuron_partner_sp_1'] = \
         csd.load_numpy_data('partner_spiness')[:, 1].astype(np.int)
 
-        Parameters
-        ----------
-        index :
-        signal_block :
+        Args:
+            index:
+            signal_block:
 
-        Returns
-        -------
+        Returns:
 
         """
         # disable knossos signal emission first - O(n^2) otherwise
@@ -989,15 +967,12 @@ def int2str_label_converter(label, gt_type):
     """
     Converts integer label into semantic string.
 
-    Parameters
-    ----------
-    label : int
-    gt_type : str
-        e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
+    Args:
+        label(int):
+        gt_type(str): e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
 
-    Returns
-    -------
-    str
+    Returns:
+        str:
     """
     if type(label) is list:
         if len(label) != 1:

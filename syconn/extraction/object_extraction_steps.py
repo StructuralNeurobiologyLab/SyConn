@@ -63,73 +63,69 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
     segmentation is used to cut connected vesicle clouds across cells
     apart (only if membrane segmentation is provided).
 
-    Parameters
-    ----------
+    Args:
     cset : chunkdataset instance
-    filename : str
-        Filename of the prediction in the ChunkDataset.
-    hdf5names: list of str
+    filename (str) : Filename of the prediction in the ChunkDataset.
+    hdf5names (list): list of strings
         List of names/ labels to be extracted and processed from the prediction
         file.
-    overlap: str or np.array
+    overlap (str): str or np.array
         Defines the overlap with neighbouring chunks that is left for later
         processing steps; if 'auto' the overlap is calculated from the sigma and
         the stitch_overlap (here: [1., 1., 1.]) and the number of binary erosion
         in global_params.config['cell_objects']['extract_morph_op'].
-    sigmas: list of lists or None
+    sigmas (list): list of lists or None
         Defines the sigmas of the gaussian filters applied to the probability
         maps. Has to be the same length as hdf5names. If None no gaussian filter
         is applied.
-    thresholds: list of float or np.ndarray
+    thresholds(list of float or np.ndarray):
         Threshold for cutting the probability map. Has to be the same length as
         hdf5names. If None zeros are used instead (not recommended!)
-    chunk_list: list of
+    chunk_list(list): 
         Selective list of chunks for which this function should work on. If None
         all chunks are used.
-    debug: boolean
+    debug(bool): 
         If true multiprocessed steps only operate on one core using 'map' which
         allows for better error messages.
-    swapdata: boolean
+    swapdata(bool):
         If true an x-z swap is applied to the data prior to processing.
     prob_kd_path_dict:
-    membrane_filename: str
+    membrane_filename(str):
         One way to allow access to a membrane segmentation when processing
         vesicle clouds. Filename of the prediction in the chunkdataset. The
         threshold is currently set at 0.4.
-    membrane_kd_path: str
+    membrane_kd_path(str):
         One way to allow access to a membrane segmentation when processing
         vesicle clouds. Path to the knossosdataset containing a membrane
         segmentation. The threshold is currently set at 0.4.
-    hdf5_name_membrane: str
+    hdf5_name_membrane(str):
         When using the membrane_filename this key has to be given to access the
         data in the saved chunk.
-    fast_load: boolean
+    fast_load(bool):
         If true the data of chunk is blindly loaded without checking for enough
         offset to compute the overlap area. Faster, because no neighbouring
         chunk has to be accessed since the default case loads th overlap area
         from them.
-    suffix: str
+    suffix(str):
         Suffix for the intermediate results.
     nb_cpus:
-    transform_func: callable
+    transform_func(callable):
         Segmentation method which is applied.
-    transform_func_kwargs : dict
+    transform_func_kwargs(dict) :
         key word arguments for transform_func
-    load_from_kd_overlaycubes : bool
+    load_from_kd_overlaycubes(bool) :
         Load prob/seg data from overlaycubes instead of raw cubes.
     transf_func_kd_overlay :
         Method which is to applied to cube data if `load_from_kd_overlaycubes`
         is True.
     n_chunk_jobs:
 
-
-    Returns
-    -------
-    results_as_list: list
+    Returns:
+    results_as_list(list):
         list containing information about the number of connected components
         in each chunk
-    overlap: np.array
-    stitch overlap: np.array
+    overlap(np.array):
+    stitch overlap(np.array):
     """
     if transform_func is None:
         transform_func = _object_segmentation_thread
@@ -215,14 +211,11 @@ def _object_segmentation_thread(args):
      custom-made segmentation functions passed to 'object_segmentation' via
      'transform_func'-kwargs
 
-    Parameters
-    ----------
-    args : list
+    Args:
+        args(list) :
 
-    Returns
-    -------
-    list of lists
-        Results of connected component analysis
+    Returns:
+        list of lists: Results of connected component analysis
     """
     chunks = args[0]
     path_head_folder = args[1]
@@ -379,30 +372,29 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
     """
     Makes labels unique across chunks
 
-    Parameters
-    ----------
-    cset : chunkdataset instance
-    filename : str
-        Filename of the prediction in the chunkdataset
-    hdf5names: list of str
-        List of names/ labels to be extracted and processed from the prediction
-        file
-    chunk_list: list of int
-        Selective list of chunks for which this function should work on. If None
-        all chunks are used.
-    max_nb_dict: dictionary
-        Maps each chunk id to a integer describing which needs to be added to
-        all its entries
-    chunk_translator: Dict
-        Remapping from chunk ids to position in chunk_list
-    debug: boolean
-        If true multiprocessed steps only operate on one core using 'map' which
-        allows for better error messages
-    suffix: str
-        Suffix for the intermediate results
-    n_chunk_jobs: int
-        Number of total jobs.
-    nb_cpus: int
+    Args:
+        cset : chunkdataset instance
+        filename(str) :
+            Filename of the prediction in the chunkdataset
+        hdf5names(list): list of str
+            List of names/ labels to be extracted and processed from the prediction
+            file
+        chunk_list(list): list of int
+            Selective list of chunks for which this function should work on. If None
+            all chunks are used.
+        max_nb_dict(dict):
+            Maps each chunk id to a integer describing which needs to be added to
+            all its entries
+        chunk_translator(dict):
+            Remapping from chunk ids to position in chunk_list
+        debug(bool):
+            If true multiprocessed steps only operate on one core using 'map' which
+            allows for better error messages
+        suffix: str
+            Suffix for the intermediate results
+        n_chunk_jobs: int
+            Number of total jobs.
+        nb_cpus: int
     """
 
     if n_chunk_jobs is None:
@@ -457,34 +449,33 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
     """
     Creates a stitch list for the overlap region between chunks
 
-    Parameters
-    ----------
-    cset : chunkdataset instance
-    filename : str
-        Filename of the prediction in the chunkdataset
-    hdf5names: list of str
-        List of names/ labels to be extracted and processed from the prediction
-        file
-    chunk_list: list of int
-        Selective list of chunks for which this function should work on. If None
-        all chunks are used.
-    overlap: np.array
-        Defines the overlap with neighbouring chunks that is left for later
-        processing steps
-    stitch_overlap: np.array
-        Defines the overlap with neighbouring chunks that is left for stitching
-    debug: boolean
-        If true multiprocessed steps only operate on one core using 'map' which
-        allows for better error messages
-    suffix: str
-        Suffix for the intermediate results
-    nb_cpus: int
-        Number of cores used per worker.
-    n_chunk_jobs: int
-        Number of total jobs.
-    overlap_thresh : float
-                Overlap fraction of object in different chunks to be considered stitched.
-                If zero this behavior is disabled.
+    Args:
+        cset : chunkdataset instance
+        filename(str):
+            Filename of the prediction in the chunkdataset
+        hdf5names(list): list of str
+            List of names/ labels to be extracted and processed from the prediction
+            file
+        chunk_list(list): list of int
+            Selective list of chunks for which this function should work on. If None
+            all chunks are used.
+        overlap(np.array): np.array
+            Defines the overlap with neighbouring chunks that is left for later
+            processing steps
+        stitch_overlap: np.array
+            Defines the overlap with neighbouring chunks that is left for stitching
+        debug: boolean
+            If true multiprocessed steps only operate on one core using 'map' which
+            allows for better error messages
+        suffix: str
+            Suffix for the intermediate results
+        nb_cpus: int
+            Number of cores used per worker.
+        n_chunk_jobs: int
+            Number of total jobs.
+        overlap_thresh : float
+                    Overlap fraction of object in different chunks to be considered stitched.
+                    If zero this behavior is disabled.
 
     Returns
     -------

@@ -542,11 +542,9 @@ class MeshStorage(StorageClass):
     def __setitem__(self, key: int, mesh: List[np.ndarray]):
         """
 
-        Parameters
-        ----------
-        key : int/str
-        mesh : List[np.array]
-            [indices, vertices, normals, colors/labels]
+        Args:
+            key : int/str
+            mesh : List[np.array] particulary [indices, vertices, normals, colors/labels]
         """
         if len(mesh) == 2:
             mesh.append(np.zeros((0,), dtype=np.float32))
@@ -585,13 +583,11 @@ class SkeletonStorage(StorageClass):
     def __getitem__(self, item):
         """
 
-        Parameters
-        ----------
-        item : int/str
+        Args:
+            item: int/str
 
-        Returns
-        -------
-        dict
+        Returns:
+            dict
         """
         try:
             return self._cache_dc[item]
@@ -611,10 +607,9 @@ class SkeletonStorage(StorageClass):
     def __setitem__(self, key, skeleton):
         """
 
-        Parameters
-        ----------
-        key : int/str
-        skeleton : dict
+        Args:
+            key: int/str
+            skeleton : dict
             keys: nodes diameters edges and other attributes (uncompressed).
         """
         if self._cache_decomp:

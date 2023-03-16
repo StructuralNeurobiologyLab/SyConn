@@ -1203,21 +1203,20 @@ class CelltypeViews(MultiViewData):
         """
         USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
 
-        Parameters
-        ----------
-        inp_node :
-        out_node :
-        raw_only :
-        nb_views : int
-            Number of sampled views used for prediction of cell type
-        nb_views_renderinglocations : int
-            Number of views per rendering location
-        reduce_context :
-        binary_views :
-        reduce_context_fact :
-        load_data :
-        nb_cpus :
-        view_key : str
+        Args:
+            inp_node :
+            out_node :
+            raw_only :
+            nb_views (int) : 
+                Number of sampled views used for prediction of cell type
+            nb_views_renderinglocations(int) : 
+                Number of views per rendering location
+            reduce_context :
+            binary_views :
+            reduce_context_fact :
+            load_data :
+            nb_cpus :
+            view_key (str):
         """
         global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
         assert "areaxfs_v6" in global_params.config.working_dir
@@ -1281,13 +1280,11 @@ class CelltypeViews(MultiViewData):
         batches with this method compared to "getbatch" below. Might be due to less
         stochasticity (bigger cache).
 
-        Parameters
-        ----------
-        batch_size :
-        source :
+        Args:
+            batch_size :
+            source :
 
-        Returns
-        -------
+        Returns:
 
         """
         self._reseed()
@@ -1373,13 +1370,11 @@ class CelltypeViews(MultiViewData):
         batches with this method compared to "getbatch" below. Might be due to less
         stochasticity (bigger cache).
 
-        Parameters
-        ----------
-        batch_size :
-        source :
+        Args:
+            batch_size :
+            source :
 
-        Returns
-        -------
+        Returns:
 
         """
         self._reseed()
@@ -1532,22 +1527,22 @@ class CelltypeViewsJ0251(CelltypeViews):
         """
         USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
 
-        Parameters
-        ----------
+        Args:
         inp_node :
         out_node :
         raw_only :
-        nb_views : int
+        nb_views(int): 
             Number of sampled views used for prediction of cell type
-        nb_views_renderinglocations : int
+        nb_views_renderinglocations(int) : 
             Number of views per rendering location
         reduce_context :
         binary_views :
         reduce_context_fact :
         load_data :
         nb_cpus :
-        view_key : str
+        view_key(str) :
         """
+
         global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
         ctgt_key = None  # use standard ssv store
         assert "rag_flat_Jan2019_v3" in global_params.config.working_dir
@@ -2109,16 +2104,14 @@ class TripletData_SSV_nviews(Data):
 
 def transform_tripletN_data_SSV(orig_views):
     """
-    Parameters
-    ----------
-    orig_views : np.array
+    Args:
+        orig_views(np.array) : 
         shape: (batch size, nb channels, nb views, x, y)
-    Returns
-    -------
-    np.array
-        same shape as orig_views, but with with 50% more views, i.e. if nb views
-        was initially 6, then it is assumend that 3 and 3 views are used for the similar pair
-        and 3 random views will be added from a random different sample in this batch
+    Returns:
+        np.array: 
+            same shape as orig_views, but with with 50% more views, i.e. if nb views
+            was initially 6, then it is assumend that 3 and 3 views are used for the similar pair
+            and 3 random views will be added from a random different sample in this batch
     """
     # split into view to be compared to similar view and very likely view from different SV/SSV
     bigger_dist_d = np.array(orig_views, dtype=np.float32)  # copy
@@ -2246,18 +2239,14 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     """
     # TODO: unused.
 
-    Parameters
-    ----------
-    ssv_id : int
-        Supersupervoxel ID
-    label: int
+    Args:
+        ssv_id(int) : Supersupervoxel ID
+        label(int):
 
-    gt_type : str
-        e.g. 'axgt'
-    set_type : str
-        either one of: 'train', 'valid', 'test'
-    Returns
-    -------
+        gt_type(str): e.g. 'axgt'
+        set_type(str) : either one of: 'train', 'valid', 'test'
+
+    Returns:
 
     """
     # retrieve SSV from original SSD (which is used in Knossos-Plugin) and
