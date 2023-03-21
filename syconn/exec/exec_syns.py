@@ -22,7 +22,7 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 import os as os
 
 
-def run_matrix_export(exlcude_nodes = None):
+def run_matrix_export(exclude_nodes = None):
     """
     Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
     of the currently active working directory.
@@ -47,7 +47,7 @@ def run_matrix_export(exlcude_nodes = None):
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir, obj_type='syn_ssv')
 
-    cps.collect_properties_from_ssv_partners(global_params.config.working_dir, debug=False, exlcude_nodes = exclude_nodes)
+    cps.collect_properties_from_ssv_partners(global_params.config.working_dir, debug=False, exclude_nodes = exclude_nodes)
     #
     # collect new object attributes collected above partner axoness, celltypes, synapse probabilities etc,
     # no need to compute size/rep_coord etc. -> recompute=False
