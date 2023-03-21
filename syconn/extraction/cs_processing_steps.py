@@ -44,7 +44,7 @@ from syconn.proc.meshes import mesh_area_calc
 
 
 
-def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
+def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False, exclude_nodes = None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
@@ -86,7 +86,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     else:
         _ = qu.batchjob_script(
             multi_params, "collect_properties_from_ssv_partners",
-            remove_jobfolder=True)
+            remove_jobfolder=True, exclude_nodes=exclude_nodes)
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -102,7 +102,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             debug=debug)
     else:
         _ = qu.batchjob_script(
-            multi_params, "from_cell_to_syn_dict", remove_jobfolder=True)
+            multi_params, "from_cell_to_syn_dict", remove_jobfolder=True, exclude_nodes=exclude_nodes)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dicts
     # TODO: start as thread!
