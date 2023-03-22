@@ -35,7 +35,7 @@ from ..handler.config import initialize_logging
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import segmentation_helper as seghelp
-from ..reps.super_segmentation_dataset import filter_ssd_by_total_pathlength
+from ..reps.super_segmentation_dataset import filter_ssd_by_total_pathlength, SuperSegmentationDataset
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
@@ -163,13 +163,20 @@ def _collect_properties_from_ssv_partners_thread(args):
         except KeyError:
             ct = -1
         celltypes = [ct] * len(ssv_synids)
-
-        curr_ax, latent_morph = ssv_o.attr_for_coords(
-            ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
-
-        curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
         sh_vol = np.array([ssv_o.attr_dict['spinehead_vol'][syn_id] if syn_id in ssv_o.attr_dict['spinehead_vol']
                            else -1 for syn_id in ssv_synids], dtype=np.float32)
+
+        #TO DO: remove this modification again
+        #to use old skeletons for mapping: initialise cell again here from old wd
+
+        ssd_old = SuperSegmentationDataset(wd = '/cajal/nvmescrastch/projects/from_ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2')
+        ssv_old = ssd_old.get_super_segmentation_object(ssv_o.id)
+
+        curr_ax, latent_morph = ssv_old.attr_for_coords(
+            ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
+
+        curr_sp = ssv_old.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
+
 
         cache_dc['partner_spineheadvol'] = np.array(sh_vol)
         cache_dc['partner_axoness'] = curr_ax

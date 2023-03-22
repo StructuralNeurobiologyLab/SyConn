@@ -196,8 +196,8 @@ def run_spinehead_volume_calc():
 
     Subsequent call to :func:`~syconn.extraction.cs_processing_steps.collect_properties_from_ssv_partners` will
     add this property to the attribute dict of all `syn_ssv`. Calling :func:`syconn.proc.sd_proc.dataset_analysis`
-    accordingly collects all `syn_ssv` properties and makes them available as numpy arrays. These two steps are
-    performed in :func:`~run_matrix_export`.
+    accordingly collects all `syn_ssv` properties and makes them available as numpy arrays. This step needs to be
+    performed before run_matrix_export.
 
     """
     log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
