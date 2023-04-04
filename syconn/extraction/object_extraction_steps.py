@@ -477,10 +477,9 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                     Overlap fraction of object in different chunks to be considered stitched.
                     If zero this behavior is disabled.
 
-    Returns
-    -------
-    stitch_list: Dict
-        Dictionary of overlapping component ids
+    Returns:
+        stitch_list(dict):
+            Dictionary of overlapping component ids
     """
     if n_chunk_jobs is None:
         n_chunk_jobs = global_params.config.ncore_total
@@ -623,22 +622,20 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
     Creates a merge list from a stitch list by mapping all connected ids to
     one id
 
-    Parameters
-    ----------
-    hdf5names: list of str
-        List of names/ labels to be extracted and processed from the prediction
-        file
-    stitch_list: dictionary
-        Contains pairs of overlapping component ids for each hdf5name
-    max_labels : dictionary
-        Contains the number of different component ids for each hdf5name
+    Args:
+        hdf5names (list): list of str
+            List of names/ labels to be extracted and processed from the prediction
+            file
+        stitch_list (dict):
+            Contains pairs of overlapping component ids for each hdf5name
+        max_labels (dict): dictionary
+            Contains the number of different component ids for each hdf5name
 
-    Returns
-    -------
-    merge_dict: dictionary
-        mergelist for each hdf5name
-    merge_list_dict: dictionary
-        mergedict for each hdf5name
+    Returns:
+        merge_dict (dict):
+            mergelist for each hdf5name
+        merge_list_dict (dict):
+            mergedict for each hdf5name
     """
 
     merge_dict = {}
@@ -663,27 +660,26 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     """
     Applies merge list to all chunks
 
-    Parameters
-    ----------
-    cset : chunkdataset instance
-    chunk_list: list of int
-        Selective list of chunks for which this function should work on. If None
-        all chunks are used.
-    filename : str
-        Filename of the prediction in the chunkdataset
-    hdf5names: list of str
-        List of names/ labels to be extracted and processed from the prediction
-        file
-    merge_list_dict: dictionary
-        mergedict for each hdf5name
-    debug: boolean
-        If true multiprocessed steps only operate on one core using 'map' which
-        allows for better error messages
-    suffix: str
-        Suffix for the intermediate results
-    n_chunk_jobs: int
-        Number of total jobs.
-    nb_cpus:
+    Args:
+        cset : chunkdataset instance
+        chunk_list (list): list of int
+            Selective list of chunks for which this function should work on. If None
+            all chunks are used.
+        filename (str):
+            Filename of the prediction in the chunkdataset
+        hdf5names (list): list of str
+            List of names/ labels to be extracted and processed from the prediction
+            file
+        merge_list_dict (dict):
+            mergedict for each hdf5name
+        debug (bool):
+            If true multiprocessed steps only operate on one core using 'map' which
+            allows for better error messages
+        suffix (str):
+            Suffix for the intermediate results
+        n_chunk_jobs (int):
+            Number of total jobs.
+        nb_cpus:
     """
 
     multi_params = []

@@ -94,18 +94,16 @@ def start_multiprocess(func: Callable, params: list, debug: bool = False,
                        verbose: bool = False, nb_cpus: int = None):
     """
 
-    Parameters
-    ----------
-    func : function
-    params : function parameters
-    debug : boolean
-    verbose : bool
-    nb_cpus : int
+    Args:
+        func (callable) : function
+        params (list): function parameters
+        debug (bool):
+        verbose (bool): 
+        nb_cpus (int):
 
-    Returns
-    -------
-    result: list
-        list of function returns
+    Returns:
+        result (list):
+           list of function returns
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()
@@ -206,20 +204,18 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
                            nb_cpus=None):
     """
 
-    Parameters
-    ----------
-    func_name : str
-    params : List[List]
+    Args:
+    func_name (str):
+    params (list): List[List]
         each element in params must be object with attribute func_name
         (+ optional: kwargs)
-    debug : boolean
-    verbose : bool
-    nb_cpus : int
+    debug (bool):
+    verbose (bool):
+    nb_cpus (int):
 
-    Returns
-    -------
-    result: List
-        list of function returns
+    Returns:
+        result (list):
+            list of function returns
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()
@@ -254,13 +250,11 @@ def multi_helper_obj(args):
     Generic helper emthod for multiprocessed jobs. Calls the given object
     method.
 
-    Parameters
-    ----------
-    args : iterable
-        object, method name, optional: kwargs
+    Args:
+        args (Iterable):
+            object, method name, optional: kwargs
 
-    Returns
-    -------
+    Returns:
 
     """
     attr_str = args[0]

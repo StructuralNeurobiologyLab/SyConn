@@ -126,14 +126,12 @@ def subfold_from_ix(ix, n_folders, old_version=False):
     """
     # TODO: remove 'old_version' as soon as possible, currently there is one usage
 
-    Parameters
-    ----------
-    ix : int
-    n_folders: int
+    Args:
+        ix(int):
+        n_folders(int):
 
-    Returns
-    -------
-    str
+    Returns:
+        str:
     """
     assert n_folders % 10 == 0
     if not global_params.config.use_new_subfold:
@@ -141,18 +139,16 @@ def subfold_from_ix(ix, n_folders, old_version=False):
     else:
         return subfold_from_ix_new(ix, n_folders)
 
-
+def subfold_
 def subfold_from_ix_new(ix, n_folders):
     """
 
-    Parameters
-    ----------
-    ix : int
-    n_folders: int
+    Args:
+        ix(int):
+        n_folders(int):
 
-    Returns
-    -------
-    str
+    Returns:
+        str:
     """
     assert n_folders % 10 == 0
     order = int(np.log10(n_folders))
@@ -171,14 +167,12 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     """
     # TODO: remove 'old_version' as soon as possible, currently there is one usage
 
-    Parameters
-    ----------
-    ix : int
-    n_folders: int
+    Args:
+        ix(int):
+        n_folders(int):
 
-    Returns
-    -------
-    str
+    Returns:
+        str:
     """
     assert n_folders in [10 ** i for i in range(6)]
 
@@ -201,14 +195,12 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
 def ix_from_subfold(subfold, n_folders) -> int:
     """
 
-    Parameters
-    ----------
-    subfold :
-    n_folders:
+    Args:
+        subfold:
+        n_folders:
 
-    Returns
-    -------
-    int
+    Returns:
+        int:
     """
     if not global_params.config.use_new_subfold:
         return ix_from_subfold_OLD(subfold, n_folders)
@@ -219,13 +211,11 @@ def ix_from_subfold(subfold, n_folders) -> int:
 def ix_from_subfold_new(subfold, n_folders):
     """
 
-    Parameters
-    ----------
-    subfold : str
+    Args:
+        subfold(str):
 
-    Returns
-    -------
-    int
+    Returns:
+        int:
     """
     parts = subfold.strip("/").split("/")
     order = int(np.log10(n_folders))
@@ -239,13 +229,11 @@ def ix_from_subfold_new(subfold, n_folders):
 def ix_from_subfold_OLD(subfold, n_folders):
     """
 
-    Parameters
-    ----------
-    subfold : str
+    Args:
+        subfold(str):
 
-    Returns
-    -------
-    int
+    Returns:
+        int:
     """
 
     parts = subfold.strip("/").split("/")
@@ -261,13 +249,11 @@ def ix_from_subfold_OLD(subfold, n_folders):
 def subfold_from_ix_SSO(ix):
     """
 
-    Parameters
-    ----------
-    ix : int
+    Args:
+        ix(int):
 
-    Returns
-    -------
-    str
+    Returns:
+        str:
     """
 
     # raise NotImplementedError("Outdated")
@@ -278,13 +264,11 @@ def get_unique_subfold_ixs(n_folders):
     """
     Returns unique IDs each associated with a unique storage dict
 
-    Parameters
-    ----------
-    n_folders : int
+    Args:
+        n_folders(int):
 
-    Returns
-    -------
-    np.ndarray
+    Returns:
+        np.ndarray
     """
     if global_params.config.use_new_subfold:
         # TODO: this needs to be adapted as soon as `div_base` is changed in `subfold_from_ix`
@@ -301,27 +285,25 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     if return_color is True assigns those a color. Helper function to colorcode
     a set of coordinates (vertices) by known labels (rep_coords, rep_values).
 
-    Parameters
-    ----------
-    vertices : np.array
-        [N, 3]
-    rep_coords : np.array
-        [M ,3]
-    rep_values : np.array
-        [M, 1] int values to be color coded for each vertex; used as indices
-        for colors
-    colors : list
-        color for each rep_value
-    nb_cpus : int
-    k : int
-        Number of nearest neighbors (average prediction)
-    return_color : bool
-        If false it returns the majority vote for each index
+    Args:
+        vertices (np.array):
+            [N, 3]
+        rep_coords (np.array):
+            [M ,3]
+        rep_values (np.array):
+            [M, 1] int values to be color coded for each vertex; used as indices
+            for colors
+        colors (list):
+            color for each rep_value
+        nb_cpus (int):
+        k (int):
+            Number of nearest neighbors (average prediction)
+        return_color(bool):
+            If false it returns the majority vote for each index
 
-    Returns
-    -------
-    np. array [N, 4]
-        rgba values for every vertex from 0 to 255
+    Returns:
+        np.array [N, 4]
+            rgba values for every vertex from 0 to 255
     """
     if colors is None:
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
@@ -358,22 +340,20 @@ def assign_rep_values(target_coords, rep_coords, rep_values,
     Assigns values corresponding to representative coordinates to every target
     coordinate.
 
-    Parameters
-    ----------
-    target_coords : np.array
-        [N, 3]
-    rep_coords : np.array
-        [M ,3]
-    rep_values : np.array
-        [M, Z] any type of values for each rep_coord.
-    nb_cpus : int
-    return_ixs : bool
-        returns indices of k-closest rep_coord for every target coordinate
+    Args:
+        target_coords (np.array):
+            [N, 3]
+        rep_coords (np.array):
+            [M ,3]
+        rep_values (np.array):
+            [M, Z] any type of values for each rep_coord.
+        nb_cpus (int):
+        return_ixs(bool):
+            returns indices of k-closest rep_coord for every target coordinate
 
-    Returns
-    -------
-    np. array [N, Z]
-        representation values for every vertex
+    Returns:
+        np.array [N, Z]
+            representation values for every vertex
     """
     if not type(rep_values) is np.ndarray:
         rep_values = np.array(rep_values)
@@ -402,16 +382,14 @@ def surface_samples(coords: np.ndarray,
     At each grid center, collects coordinates within the given radius to
     calculate the center of mass which yields the sample location.
     
-    Parameters
-    ----------
-    coords : np.array
-    bin_sizes : np.array
-    max_nb_samples : int or None
-    r : int
+    Args:
+        coords (np.array):
+        bin_sizes (np.array):
+        max_nb_samples (int | None):
+        r (int):
 
-    Returns
-    -------
-    np.array
+    Returns:
+        np.array
     """
     coords = np.array(coords)  # create copy!
     offset = np.min(coords, axis=0)

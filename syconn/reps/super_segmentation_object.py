@@ -996,15 +996,13 @@ class SuperSegmentationObject(SegmentationBase):
         TODO: Currently does not support color array!
         TODO: add support for sym. asym synapse type
 
-        Parameters
-        ----------
-        obj_type : str
-        rewrite : bool
+        Args:
+            obj_type (str):
+            rewrite (bool):
 
-        Returns
-        -------
-        np.array, np.array, np.array
-            ind, vert, normals
+        Returns:
+            np.array, np.array, np.array:
+                ind, vert, normals
         """
         if not rewrite and self.mesh_exists(obj_type) and not \
                 self.version == "tmp":
@@ -1060,10 +1058,9 @@ class SuperSegmentationObject(SegmentationBase):
         Writes attributes to attribute dict on file system. Does not care about
         self.attr_dict.
 
-        Parameters
-        ----------
-        attr_keys : tuple of str
-        attr_values : tuple of items
+        Args:
+            attr_keys (tuple): tuple of str
+            attr_values (tuple): tuple of items
         """
         if self.version == 'tmp':
             log_reps.warning('"save_attributes" called but this SSV has version "tmp", attributes will'
@@ -2050,25 +2047,26 @@ class SuperSegmentationObject(SegmentationBase):
             This method then has to be called like:
                 'self.predict_semseg(m, 'spiness4', nb_views=4)'
 
-        Parameters
-        ----------
-        semseg_key : str
-        nb_views : Optional[int]
-        k : int
-        verbose : bool
-        raw_view_key : str
-            key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
-            If key does not exist, views will be re-rendered with properties defined
-            in :py:attr:`~config` or as given in the kwargs `ws`, `nb_views` and `comp_window`.
-        save : bool
-            If True, views will be saved.
-        ws : Tuple[int]
-            Window size in pixels [y, x]
-        comp_window : float
-            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
-        add_cellobjects: Add cell objects. Either bool or list of structures used to render. Only
-            used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
-        bs: Batch size during inference.
+        Args:
+            semseg_key (str):
+            nb_views (Optional[int]):
+            k (int):
+            verbose (bool):
+            raw_view_key (str):
+                Key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
+                If key does not exist, views will be re-rendered with properties defined
+                in :py:attr:`~config` or as given in the kwargs `ws`, `nb_views` and `comp_window`.
+            save (bool):
+                If True, views will be saved.
+            ws (tuple[int]):
+                Window size in pixels [y, x]
+            comp_window (float):
+                Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+            add_cellobjects: 
+                Add cell objects. Either bool or list of structures used to render. Only
+                used when `raw_view_key` or `nb_views` is None - then views are rendered on-the-fly.
+            bs: 
+                Batch size during inference.
         """
         view_props_default = self.config['views']['view_properties']
         if (nb_views is not None) or (raw_view_key is not None):
@@ -2929,23 +2927,21 @@ class SuperSegmentationObject(SegmentationBase):
         attribute stored in self.skeleton. If radius_nm is given, will
         assign majority attribute value.
 
-        Parameters
-        ----------
-        coords : np.array
-            Voxel coordinates, unscaled! [N, 3]
-        radius_nm : Optional[float]
-            If None, will only use attribute of nearest node, otherwise
-            majority attribute value is used.
-        attr_keys : List[str]
-            Attribute identifier
-        k : int
-            Number of nearest neighbors, only if `radius_nm` is None.
+        Args:
+            coords (np.array):
+                Voxel coordinates, unscaled! [N, 3]
+            radius_nm (Optional[float]):
+                If None, will only use attribute of nearest node, otherwise
+                majority attribute value is used.
+            attr_keys (List[str]):
+                Attribute identifier
+            k (int):
+                Number of nearest neighbors, only if `radius_nm` is None.
 
-        Returns
-        -------
-        List
-            Same length as coords. For every coordinate in coords returns the
-            majority label within radius_nm or [-1] if Key does not exist.
+        Returns:
+            list:
+                Same length as coords. For every coordinate in coords returns the
+                majority label within radius_nm or [-1] if Key does not exist.
         """
         if type(attr_keys) is str:
             attr_keys = [attr_keys]

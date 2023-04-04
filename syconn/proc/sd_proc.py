@@ -1301,12 +1301,10 @@ def merge_map_dicts(map_dicts):
     """
     Merge map dictionaries in-place. Values will be stored in first dictionary
 
-    Parameters
-    ----------
-    map_dicts
+    Args:
+        map_dicts:
 
-    Returns
-    -------
+    Returns:
 
     """
     tot_map = map_dicts[0]

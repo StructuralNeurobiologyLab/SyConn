@@ -24,20 +24,18 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
     """
     Calculates the chunk ids that are (partly) contained it the defined volume
 
-    Parameters
-    ----------
-    cset : ChunkDataset
-    offset : np.array
-        offset of the volume to the origin
-    size: np.array
-        size of the volume
+    Args:
+        cset : ChunkDataset
+        offset(np.array):
+            offset of the volume to the origin
+        size(np.array):
+            size of the volume
 
-    Returns
-    -------
-    chunk_list: List
-        chunk ids
-    dictionary: dict
-        with reverse mapping
+    Returns:
+        chunk_list(list):
+            chunk ids
+        dictionary(dict):
+            with reverse mapping
 
     """
 
