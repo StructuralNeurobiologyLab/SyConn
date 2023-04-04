@@ -131,11 +131,10 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
       The first two creations are EXPECTED to fail. The last one is expected to be
       successful.
 
-      Returns
-      -------
-      str
-          An assertion error in case any of the test case fails.
-          Logged to: logs/unitests.log
+      Returns:
+          str:
+              An assertion error in case any of the test case fails.
+              Logged to: logs/unitests.log
       """
     test_p = _setup_testfile('test1')
 
@@ -198,8 +197,9 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 def test_saving_loading_and_copying_process_for_Attribute_dict():
     """
     Checks the saving,loading and copying  functionality for an attribute dict
-    Returns An Assertion Error in case an exception is thrown
-    -------
+    
+    Returns:
+        An Assertion Error in case an exception is thrown
 
     """
     test_p = _setup_testfile('test2')
@@ -463,8 +463,9 @@ def test_basics_write_txt2kzip():
 
     """
     Checks the write_txt2kzip function in syconnfs.handler.basics
-    Returns an assertion error if an exception is thrown
-    -------
+
+    Returns:
+        An Assertion Error in case an exception is thrown
 
     """
 
@@ -486,8 +487,9 @@ def test_basics_write_data2kzip():
 
     """
     Checks the write_data2kzipfunction in syconn.handler.basics
-    Returns an assertion error if an exception is thrown
-    -------
+
+    Returns:
+        An Assertion Error in case an exception is thrown
 
     """
 
@@ -508,8 +510,9 @@ def test_basics_write_data2kzip():
 def test_read_txt_from_zip():
     """
     Tests reading of a text file from zip.
-    Returns an assertion error if an exception is thrown
-    -------
+
+    Returns:
+        An Assertion Error in case an exception is thrown
 
     """
     test_str = "testing_" + sys._getframe().f_code.co_name
@@ -532,8 +535,9 @@ def test_read_txt_from_zip():
 def test_remove_from_zip():
     """
     Tests removing of a text file from zip.
-    Returns an assertion error if an exception is thrown
-    -------
+
+    Returns:
+        An Assertion Error in case an exception is thrown
 
     """
     try:
