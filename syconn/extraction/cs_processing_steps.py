@@ -399,7 +399,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(
-            multi_params, "combine_and_split_syn", remove_jobfolder=True, log=log,
+            multi_params, "combine_and_split_syn", remove_jobfolder=False, log=log,
             additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
             exclude_nodes=exclude_nodes
         )
@@ -942,7 +942,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
     else:
         _ = qu.batchjob_script(
             multi_params, "map_objects_from_synssv_partners", log=log,
-            remove_jobfolder=True)
+            remove_jobfolder=False)
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -959,7 +959,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
     else:
         _ = qu.batchjob_script(
             multi_params, "objects_from_cell_to_syn_dict", log=log,
-            remove_jobfolder=True)
+            remove_jobfolder=False)
     if log is None:
         log = log_extraction
     log.debug('Deleting cache dictionaries now.')
@@ -1207,7 +1207,7 @@ def classify_synssv_objects(wd, obj_version=None, log=None, nb_cpus=None):
     else:
         _ = qu.batchjob_script(
             multi_params, "classify_synssv_objects", log=log,
-            remove_jobfolder=True)
+            remove_jobfolder=False)
 
 
 def _classify_synssv_objects_thread(args):

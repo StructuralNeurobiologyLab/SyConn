@@ -99,7 +99,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
                 np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
     else:
         path_to_out = qu.batchjob_script(multi_params, "dataset_analysis",
-                                        suffix=sd.type)
+                                        suffix=sd.type,remove_jobfolder=False)
         #path_to_out = global_params.config.working_dir + '/SLURM/dataset_analysiscs_ssv_makgytsv/out'
         out_files = np.array(glob.glob(path_to_out + "/*"))
 
@@ -120,8 +120,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
         out_files = out_files[file_mask > 0]
         params = [(attr, out_files, n_ids, sd.path) for attr in res_keys]
         qu.batchjob_script(params, 'dataset_analysis_collect', n_cores=global_params.config['ncores_per_node'],
-                           remove_jobfolder=True)
-        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
+                           remove_jobfolder=False)
+        #shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
 def _dataset_analysis_check(out_file):
