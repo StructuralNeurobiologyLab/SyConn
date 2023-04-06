@@ -847,7 +847,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
 
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
-                                         exclude_nodes=exclude_nodes)
+                                         exclude_nodes=exclude_nodes, remove_jobfolder=False)
 
         path_to_out = 'cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/SLURM/contact_site_extraction_syns_rsuykwsh/out'
         out_files = glob.glob(path_to_out + "/*")
@@ -921,7 +921,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           n_cores=1, remove_jobfolder=True,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
+                           n_cores=1, remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 48 --mem=600000",
                                                           exclude_nodes=exclude_nodes)
 
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
@@ -943,12 +943,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         elif os.path.isdir(p):
             shutil.rmtree(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
-    if qu.batchjob_enabled():
-        jobfolder = os.path.abspath(f'{path_to_out}/../')
-        try:
-            shutil.rmtree(jobfolder, ignore_errors=False)
-        except Exception as e:
-            log.error(f'Could not delete job folder at "{jobfolder}". {str(e)}')
+
 
 
 def _contact_site_extraction_syns_thread(args: Union[tuple, list]) \
