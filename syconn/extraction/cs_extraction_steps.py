@@ -827,8 +827,8 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
     target_kd.scales = [scale, ]
-    #target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-    #                                  mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+    target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+                                      mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
 
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
@@ -844,12 +844,9 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     cs_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
-
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes, remove_jobfolder=False)
-
-        path_to_out = 'cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/SLURM/contact_site_extraction_syns_rsuykwsh/out'
         out_files = glob.glob(path_to_out + "/*")
         for out_file in tqdm.tqdm(out_files, leave=False):
             with open(out_file, 'rb') as f:
@@ -916,12 +913,16 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     # slightly increase ncores per worker to compensate IO related downtime
     multi_params = [(sv_id_block, n_folders_fs, path, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
+    #for debugging: write out cs_ids where error occurs, remove afterwards
+    tmp_path_debug = global_params.config.temp_path + '/cs_debug/'
+    if not os.path.exists(tmp_path_debug):
+        os.mkdir(tmp_path_debug)
 
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           n_cores=1, remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 48 --mem=600000",
+                           remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 14 --mem=150000",
                                                           exclude_nodes=exclude_nodes)
 
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
@@ -1164,6 +1165,7 @@ def _write_props_to_onlysyn_thread(args):
         # this class is only used to query the voxel data
         voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
                                    read_only=False, disable_locking=True)
+        test_filename = global_params.config.temp_path + '/cs_debug/' + f"/{obj_id_mod}_cs_ids_errors.txt"
 
 
         ids_to_load_voxels = []
@@ -1199,7 +1201,11 @@ def _write_props_to_onlysyn_thread(args):
             voxel_dc.set_object_repcoord(cs_id, rp)
             ids_to_load_voxels.append(cs_id)
             # # write voxels explicitly - this assumes reasonably sized synapses
-            voxel_dc.set_voxel_cache(cs_id, np.array(syn_voxels[cs_id], dtype=np.uint32))
+            try:
+                voxel_dc.set_voxel_cache(cs_id, np.array(syn_voxels[cs_id], dtype=np.uint32))
+            except TypeError as te:
+                with open(test_filename, "a") as infofile:
+                    infofile.write(f'{cs_id}, {te}')
             del syn_voxels[cs_id]
 
         voxel_dc.push()
