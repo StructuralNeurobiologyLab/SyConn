@@ -917,7 +917,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    n_cores = 8 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
+    n_cores = 2 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
     # slightly increase ncores per worker to compensate IO related downtime
     multi_params = [(sv_id_block, n_folders_fs, path, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
@@ -931,7 +931,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
                            remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0",
-                           n_cores=n_cores,exclude_nodes=exclude_nodes)
+                           n_cores=1,exclude_nodes=exclude_nodes)
 
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
@@ -1155,6 +1155,8 @@ def _write_props_to_onlysyn_thread(args):
         del syn_workers_tmp
         with open(test_filename, "a") as infofile:
             infofile.write(f' Will start multiprocessing of _write_props_collect_helper now \n')
+        #this multiprocessing results in conflicts with SLURM, currently only working with one node!
+        #TO DO: enable multiprocessing without conflicts with SLURM
         res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False,
                                       debug=False)
         with open(test_filename, "a") as infofile:
