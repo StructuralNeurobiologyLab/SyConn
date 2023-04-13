@@ -805,7 +805,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     dir_props = f"{global_params.config.temp_path}/tmp_props_cssyn/"
 
     # remove previous temporary results.
-
+    '''
     if os.path.isdir(dir_props):
         if not overwrite:
             msg = f'Could not start extraction of supervoxel objects ' \
@@ -816,19 +816,23 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         log.debug(f'Found existing cache folder at {dir_props}. Removing it now.')
         shutil.rmtree(dir_props)
     os.makedirs(dir_props)
+    '''
+
     # init KD for syn
     path_kd = f"{global_params.config.working_dir}/knossosdatasets/syn_seg/"
-
+    '''
     if os.path.isdir(path_kd):
         log.debug('Found existing KD at {}. Removing it now.'.format(path_kd))
         shutil.rmtree(path_kd)
+    '''
+
 
     target_kd = knossosdataset.KnossosDataset()
     target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
     target_kd.scales = [scale, ]
-    target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-                                      mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+    #target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+    #                                  mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
 
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
@@ -844,9 +848,13 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     cs_ids = []
     syn_worker_mapping = dict()  # cs include syns
     if qu.batchjob_enabled():
+        '''
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
                                          additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes, remove_jobfolder=False)
+        '''
+
+        path_to_out = 'cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/SLURM/contact_site_extraction_syns_rgvyytpn/out'
         out_files = glob.glob(path_to_out + "/*")
         for out_file in tqdm.tqdm(out_files, leave=False):
             with open(out_file, 'rb') as f:
@@ -909,7 +917,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     max_n_jobs = min(max_n_jobs, len(storage_location_ids))
-    n_cores = 2 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
+    n_cores = 8 if qu.batchjob_enabled() else 1  # use additional cores for loading data from disk
     # slightly increase ncores per worker to compensate IO related downtime
     multi_params = [(sv_id_block, n_folders_fs, path, dir_props, n_cores)
                     for sv_id_block in basics.chunkify(storage_location_ids, max_n_jobs)]
@@ -922,8 +930,8 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 14 --mem=150000",
-                                                          exclude_nodes=exclude_nodes)
+                           remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0",
+                           n_cores=n_cores,exclude_nodes=exclude_nodes)
 
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)
     da_kwargs = dict(recompute=False, compute_meshprops=False)
@@ -1101,10 +1109,10 @@ def _write_props_to_onlysyn_thread(args):
     n_folders_fs = args[1]
     knossos_path = args[2]
     dir_props = args[3]
-    if len(args) < 6:
+    if len(args) < 5:
         nb_cores = 4
     else:
-        nb_cores = args[5]
+        nb_cores = args[4]
     min_obj_vx_dc = global_params.config['cell_objects']['min_obj_vx']
     tmp_path = global_params.config.temp_path
     if global_params.config.use_new_subfold:
@@ -1112,7 +1120,13 @@ def _write_props_to_onlysyn_thread(args):
     else:
         target_dir_func = rep_helper.subfold_from_ix_OLD
 
+    test_filename = global_params.config.temp_path + '/cs_debug/' + f"/{cs_ids_ch[0]}_cs_ids_errors.txt"
+    with open(test_filename, "a") as infofile:
+        infofile.write(f' Started batchjob script now, will be iterating over {len(cs_ids_ch)} dest paths \n')
+
     for obj_id_mod in cs_ids_ch:
+        with open(test_filename, "a") as infofile:
+            infofile.write(f' Now processing {obj_id_mod} \n')
         # get destination paths for the current objects
         dest_dc_tmp = CompressedStorage(f'{tmp_path}/storage_targets_cs.pkl', disable_locking=True)
         k = target_dir_func(obj_id_mod, n_folders_fs)
@@ -1139,8 +1153,12 @@ def _write_props_to_onlysyn_thread(args):
             syn_workers_tmp = pkl.load(f)
         params = [(dir_props, worker_id, np.intersect1d(obj_ids, obj_keys)) for worker_id, obj_ids in syn_workers_tmp.items()]
         del syn_workers_tmp
+        with open(test_filename, "a") as infofile:
+            infofile.write(f' Will start multiprocessing of _write_props_collect_helper now \n')
         res = start_multiprocess_imap(_write_props_collect_helper, params, nb_cpus=nb_cores, show_progress=False,
                                       debug=False)
+        with open(test_filename, "a") as infofile:
+            infofile.write(f' Multiprocessing done \n')
         for tmp_dcs_cs, tmp_dcs_syn, tmp_sym_dc, tmp_asym_dc, tmp_syn_vxs in res:
             if len(tmp_dcs_syn) == 0:
                 continue
@@ -1165,10 +1183,11 @@ def _write_props_to_onlysyn_thread(args):
         # this class is only used to query the voxel data
         voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=knossos_path,
                                    read_only=False, disable_locking=True)
-        test_filename = global_params.config.temp_path + '/cs_debug/' + f"/{obj_id_mod}_cs_ids_errors.txt"
 
 
         ids_to_load_voxels = []
+        with open(test_filename, "a") as infofile:
+            infofile.write(f' Will iterate now over {len(obj_keys)} cs_ids \n')
         for cs_id in obj_keys:
             # write syn to dict
             if cs_id not in syn_props[0] or syn_props[2][cs_id] < min_obj_vx_dc['syn']:
@@ -1201,13 +1220,11 @@ def _write_props_to_onlysyn_thread(args):
             voxel_dc.set_object_repcoord(cs_id, rp)
             ids_to_load_voxels.append(cs_id)
             # # write voxels explicitly - this assumes reasonably sized synapses
-            try:
-                voxel_dc.set_voxel_cache(cs_id, np.array(syn_voxels[cs_id], dtype=np.uint32))
-            except TypeError as te:
-                with open(test_filename, "a") as infofile:
-                    infofile.write(f'{cs_id}, {te}')
+            voxel_dc.set_voxel_cache(cs_id, np.array(syn_voxels[cs_id], dtype=np.uint32))
             del syn_voxels[cs_id]
 
+        with open(test_filename, "a") as infofile:
+            infofile.write(f'{len(obj_keys)} processed, saving now')
         voxel_dc.push()
         this_attr_dc.push()
 
