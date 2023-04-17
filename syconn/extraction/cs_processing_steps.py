@@ -1224,10 +1224,14 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
+    path_syn_rfc = f'{global_params.wd}/syn_rfc/rfc'
     try:
-        rfc = joblib.load(global_params.config.mpath_syn_rfc)
+        #TO DO: change paths in config or replace old model
+        #rfc = joblib.load(global_params.config.mpath_syn_rfc)
+        rfc = joblib.load(path_syn_rfc)
     except ImportError:
-        rfc = joblib.load(global_params.config.mpath_syn_rfc_fallback)
+         #rfc = joblib.load(global_params.config.mpath_syn_rfc_fallback)
+         print('new model could not be loaded')
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
