@@ -145,19 +145,17 @@ def hist(vals, labels=None, dest_path=None, axis_labels=None, x_lim=None,
 def fscore(rec, prec, beta=1.):
     """Calculates f-score with beta value
 
-    Parameters
-    ----------
-    rec : np.array
-        recall
-    prec : np.array
-        precision
-    beta : float
-        weighting of precision
+    Args:
+        rec(np.array):
+            recall
+        prec(np.array):
+            precision
+        beta(float):
+            weighting of precision
 
-    Returns
-    -------
-    np.array
-        f-score
+    Returns:
+        np.array:
+            f-score
     """
     prec = np.array(prec)
     rec = np.array(rec)
@@ -250,14 +248,13 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     """
     Create clustering summary and save results to folder.
 
-    Parameters
-    ----------
-    train_d :
-    train_l :
-    valid_d :
-    valid_l :
-    fold : str
-        destination folder
+    Args:
+        train_d :
+        train_l :
+        valid_d :
+        valid_l :
+        fold(str):
+            destination folder
     """
     if prefix == "celltype":
         target_names = ["EA", "MSN", "GP", "INT"]
@@ -374,16 +371,15 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
                    target_names=None):
     """
 
-    Parameters
-    ----------
-    ds_d : np.array
-        data in feature space, e.g. (#data, #feature)
-    ds_l :
-        sparse labels, i.e. (#data, 1)
-    dest_path: str
-        file name of plot
-    pca: PCA
-        prefitted PCA object to use to prject data of ds_d
+    Args:
+        ds_d(np.array):
+            data in feature space, e.g. (#data, #feature)
+        ds_l:
+            sparse labels, i.e. (#data, 1)
+        dest_path(str):
+            file name of plot
+        pca: PCA
+            prefitted PCA object to use to prject data of ds_d
     """
     log_proc.info("Starting pca visualisation.")
     # pca vis
@@ -479,16 +475,15 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
                     do_3d=False, cmap_ident="prism", **tsne_kwargs):
     """
 
-    Parameters
-    ----------
-    ds_d : np.array
-        data in feature space, e.g. (#data, #feature)
-    ds_l :
-        sparse labels, i.e. (#data, 1)
-    dest_path: str
-        file name of plot
-    pca: PCA
-        prefitted PCA object to use to prject data of ds_d
+    Args:
+        ds_d(np.array):
+            data in feature space, e.g. (#data, #feature)
+        ds_l:
+            sparse labels, i.e. (#data, 1)
+        dest_path(str):
+            file name of plot
+        pca: PCA
+            prefitted PCA object to use to prject data of ds_d
     """
     # tsne vis
     log_proc.info("Starting tSNE visualisation.")

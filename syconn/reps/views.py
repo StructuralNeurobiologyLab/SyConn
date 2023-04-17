@@ -15,14 +15,13 @@ class ViewContainer(object):
     def __init__(self, view_dir, views=None, nb_views=2, clahe=False):
         """
 
-        Parameters
-        ----------
-        view_dir : str
-        views : dict
-        nb_views : int
-            Number of views per location, i.e. how many perspectives are stored
-            for each multi-view
-        clahe: bool
+        Args:
+            view_dir (str):
+            views (dict):
+            nb_views (int):
+                Number of views per location, i.e. how many perspectives are stored
+                for each multi-view
+            clahe (bool):
         """
         self.clahe = clahe
         self.view_dir = view_dir
@@ -134,9 +133,8 @@ def plot_n_views(view_array):
     """
     So far for a grid of 20 views. TODO: make it adaptable to input length.
 
-    Parameters
-    ----------
-    view_array : numpy.array
+    Args:
+        view_array (np.array):
     """
     import matplotlib.pyplot as plt
     nb_views = len(view_array)

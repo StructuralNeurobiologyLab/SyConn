@@ -15,15 +15,12 @@ def dense_matrix(sv, edge_size):
     """
     Get dense matrix representation of coordinates
 
-    Parameters
-    ----------
-    sv : np.array
-    edge_size : int
+    Args:
+        sv(np.array):
+        edge_size(int):
 
-    Returns
-    -------
-    np.array
-
+    Returns:
+        np.array
     """
     mat = np.zeros([edge_size] * 3, dtype=np.uint64)
     mat[sv[:, 0], sv[:, 1], sv[:, 2]] = 1
@@ -49,17 +46,14 @@ def cut_array_in_one_dim(array, start, end, dim):
     """
     Cuts an array along a dimension
 
-    Parameters
-    ----------
-    array: np.array
-    start: int
-    end: int
-    dim: int
+    Args:
+        array(np.array):
+        start(int):
+        end(int):
+        dim(int):
 
-    Returns
-    -------
-    array: np.array
-
+    Returns:
+        array: np.array
     """
     start = int(start)
     end = int(end)
@@ -89,10 +83,14 @@ def crop_bool_array(arr):
     """
     Crops a bool array to its True region
 
-    :param arr: 3d bool array
-        array to crop
-    :return: 3d bool array, list
-        cropped array, offset
+    Args:
+        arr: 3d bool array to crop
+        
+    Returns:
+        - 3d bool array
+        - list
+        - cropped array
+        - offset
     """
     in_mask_indices = [np.flatnonzero(arr.sum(axis=(1, 2))),
                        np.flatnonzero(arr.sum(axis=(0, 2))),

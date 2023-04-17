@@ -59,13 +59,11 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
         * 'latent_morph': Local morphology embeddings of the pre- and post-
           synaptic partners.
 
-    Parameters
-    ----------
-    wd : str
-    obj_version : str
-    ssd_version : str
-        Number of parallel jobs
-    debug : bool
+    Args:
+        wd(str):
+        obj_version (str):
+        ssd_version (str) : Number of parallel jobs
+        debug : bool
     """
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
@@ -115,10 +113,9 @@ def _collect_properties_from_ssv_partners_thread(args):
     Notes:
         * SSV objects that do not have any mesh vertex will be assigned zero values for all properties.
 
-    Parameters
-    ----------
-    args : Tuple
-        see 'collect_properties_from_ssv_partners'
+    Args
+        args(tuple) :
+            see 'collect_properties_from_ssv_partners'
     """
     wd, obj_version, ssd_version, ssv_ids = args
 
@@ -335,16 +332,15 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         * 'cs_id'/'cs_ids' is the same as syn_id ('syn' are just a subset of 'cs', preserving the IDs).
 
 
-    Parameters
-    ----------
-    wd :
-    cs_gap_nm :
-    ssd_version :
-    syn_version :
-    nb_cpus :
-    log:
-    n_folders_fs:
-    overwrite:
+    Args:
+        wd :
+        cs_gap_nm :
+        ssd_version :
+        syn_version :
+        nb_cpus :
+        log:
+        n_folders_fs:
+        overwrite:
 
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
@@ -617,15 +613,14 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     Notes:
         * 'rep_coord' property is calculated as the mesh vertex closest to the center of mass of all mesh vertices.
 
-    Parameters
-    ----------
-    wd :
-    ssd_version :
-    cs_version :
-    nb_cpus :
-    log:
-    n_folders_fs:
-    overwrite:
+    Args:
+        wd :
+        ssd_version :
+        cs_version :
+        nb_cpus :
+        log:
+        n_folders_fs:
+        overwrite:
 
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
@@ -1135,10 +1130,9 @@ def _classify_synssv_objects_thread(args):
     """
     Helper function of 'classify_synssv_objects'.
 
-    Parameters
-    ----------
-    args : Tuple
-        see 'classify_synssv_objects'
+    Args:
+        args : Tuple
+            see 'classify_synssv_objects'
     """
     so_dir_paths, wd, obj_version = args
 
@@ -1411,13 +1405,11 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject) -> list:
     """
     Collects syn_ssv feature for synapse prediction using an RFC.
 
-    Parameters
-    ----------
-    synssv_o : SegmentationObject
+    Args:
+        synssv_o : SegmentationObject
 
-    Returns
-    -------
-    List
+    Returns:
+        list
     """
     features = [synssv_o.size, synssv_o.mesh_area]
 
@@ -1444,13 +1436,14 @@ def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] 
     """
     Writes .csv and optionally .kzip (large memory consumption) summary file of connectivity matrix.
 
-    Parameters
-    ----------
-    obj_version : str
-    dest_folder : Path to csv file.
-    threshold_syn : Threshold applied to filter synapses. Defaults to 0, i.e. exporting all synapses.
-    export_kzip: Export connectivity matrix as kzip - high memory consumption.
-    log: Logger.
+    Args:
+        obj_version (str):
+        dest_folder : Path to csv file.
+        threshold_syn : 
+            Threshold applied to filter synapses. Defaults to 0, i.e. exporting all synapses.
+        export_kzip: 
+            Export connectivity matrix as kzip - high memory consumption.
+        log: Logger.
     """
     if threshold_syn is None:
         threshold_syn = global_params.config['cell_objects']['thresh_synssv_proba']

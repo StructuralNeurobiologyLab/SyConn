@@ -679,17 +679,14 @@ def _generate_storage_lookup(args):
     object IDs in `id_chunk` (used for SegmentationObjects) by calling
     `rep_helper.subfold_from_ix`
 
-    Parameters
-    ----------
-    args : List or Tuple
-        id_chunk: SegmentationObject IDs
-        req_subfold_keys : keys of requested storages
-        n_folders_fs : number of folders
+    Args:
+        args : List or Tuple
+            id_chunk: SegmentationObject IDs
+            req_subfold_keys : keys of requested storages
+            n_folders_fs : number of folders
 
-    Returns
-    -------
-    Dict
-        look-up dictionary: [key -> value] storage destination -> list of IDs
+    Returns:
+        dict: look-up dictionary: [key -> value] storage destination -> list of IDs
     """
     id_chunk, req_subfold_keys, n_folders_fs = args
     dest_dc_tmp = defaultdict(list)

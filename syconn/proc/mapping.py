@@ -21,13 +21,13 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     Map glia properties within subvolume to SegmentationObject (cs). Requires
     attribute 'neuron_partners'.
 
-    Parameters
-    ----------
-    so : SegmentationObject
-    box_size : np.array
-        size in voxels (XYZ), default: (500, 500, 250)
-    min_frag_size : int
-    overwrite : bool
+    Args:
+        so: 
+            SegmentationObject
+        box_size(np.array):
+            size in voxels (XYZ), default: (500, 500, 250)
+        min_frag_size(int):
+        overwrite(bool): 
     """
     if not overwrite:
         so.load_attr_dict()
@@ -94,18 +94,16 @@ def get_glia_coverage(seg, neuron_ids, glia_ids, max_dist, scale):
     and glia are treated as two classes and coverage is defined as neuron
     boundary voxels close (within max_dist) to the glia boundary.
 
-    Parameters
-    ----------
-    seg : np.array
-    neuron_ids : list
-    glia_ids : list
-    max_dist : int/float
-    scale : np.array
+    Args:
+        seg(np.array):
+        neuron_ids(list):
+        glia_ids(list):
+        max_dist(int|float):
+        scale(np.array):
 
-    Returns
-    -------
-    int, float
-        Number and fraction of neuron boundary voxels close to glia boundary
+    Returns:
+        int | float:
+            Number and fraction of neuron boundary voxels close to glia boundary
     """
     # TODO: Revisit and check compliance with uint64 SV IDs
     seg = np.array(seg, np.int64)
@@ -129,16 +127,14 @@ def crop_box_to_bndry(offset, box_size, bndry):
     Restricts box_size and offset to valid values, i.e. within an upper
     limit (bndry) and a lower limit (0, 0, 0).
 
-    Parameters
-    ----------
-    offset : np.array
-    box_size : np.array / list
-    bndry : np.array
+    Args:
+        offset(np.array):
+        box_size(np.array | list) :
+        bndry(np.array):
 
-    Returns
-    -------
-    np.array
-        Valid box size and offset
+    Returns:
+        np.array:
+            Valid box size and offset
     """
     diff = offset.copy() + box_size.copy() - bndry
     if np.any(diff > 0):

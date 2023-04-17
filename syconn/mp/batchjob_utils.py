@@ -393,26 +393,24 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, py
     # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available.
 
-    Parameters
-    ----------
-    params : List[Any]
-    name : str
-    n_cores : int
-        CPUs per job.
-    suffix : str
-    script_folder : str
-    python_path : str
-    remove_jobfolder : bool
-    show_progress : bool
-    log: Logger
-        Logger.
-    overwrite:
-    job_folder:
+    Args:
+        params list[Any]:
+        name (str):
+        n_cores (int):
+            CPUs per job.
+        suffix (str):
+        script_folder (str):
+        python_path (str):
+        remove_jobfolder (bool):
+        show_progress (bool):
+        log: Logger
+            Logger.
+        overwrite:
+        job_folder:
 
-    Returns
-    -------
-    str
-        Path to output.
+    Returns:
+        str:
+            Path to output.
     """
     if python_path is None:
         python_path = python_path_global
@@ -632,15 +630,13 @@ def number_of_running_processes(job_name):
     """
     Calculates the number of running jobs using qstat/squeue
 
-    Parameters
-    ----------
-    job_name: str
-        job_name as shown in qstats
+    Args:
+        job_name (str):
+            job_name as shown in qstats
 
-    Returns
-    -------
-    nb_jobs: int
-        number of running jobs
+    Returns:
+        nb_jobs (int):
+            number of running jobs
 
     """
     if global_params.config['batch_proc_system'] == 'QSUB':
@@ -662,13 +658,11 @@ def delete_jobs_by_name(job_name):
     """
     Deletes a group of jobs that have the same name
 
-    Parameters
-    ----------
-    job_name: str
-        job_name as shown in qstats
+    Args:
+        job_name (str):
+            job_name as shown in qstats
 
-    Returns
-    -------
+    Returns:
 
     """
     if global_params.config['batch_proc_system'] == 'QSUB':

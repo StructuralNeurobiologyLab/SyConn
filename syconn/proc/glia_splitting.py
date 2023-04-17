@@ -80,11 +80,10 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
     Stores astrocyte and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx edge list
     and as knossos merge list.
 
-    Parameters
-    ----------
-    rag : SV agglomeration
-    min_ssv_size : Bounding box diagonal in nm
-    log: Logger
+    Args:
+        rag : SV agglomeration
+        min_ssv_size : Bounding box diagonal in nm
+        log: Logger
     """
     if log is None:
         log = log_proc
@@ -167,9 +166,8 @@ def transform_rag_edgelist2pkl(rag):
     Stores networkx graph as dictionary mapping (1) SSV IDs to lists of SV IDs
      and (2) SSV IDs to subgraphs (networkx)
 
-    Parameters
-    ----------
-    rag : networkx.Graph
+    Args:
+        rag : networkx.Graph
     """
     ccs = (rag.subgraph(c) for c in nx.connected_components(rag))
     cc_dict_graph = {}

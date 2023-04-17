@@ -32,17 +32,15 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
     """
     Computes contact sites between supver voxels and returns contact site voxel
 
-    Parameters
-    ----------
-    coords_a : np.array
-    coords_b : np.array
-    max_hull_dist : int
-        Maximum distance between voxels in coods_a and coords_b
+    Args:
+        coords_a : np.array
+        coords_b : np.array
+        max_hull_dist (int):
+            Maximum distance between voxels in coods_a and coords_b
 
-    Returns
-    -------
-    np.array
-        contact site coordinates
+    Returns:
+        np.array:
+            contact site coordinates
     """
     assert max_hull_dist >= 1
     if len(coords_a) == 0 or len(coords_b) == 0:
@@ -68,15 +66,14 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
 def fast_check_sing_comp(sv, max_dist=5):
     """
     Fast check if super voxel is single connected component by subsampling
-    Parameters
-    ----------
-    sv : np.array
-    max_dist : int
+    
+    Args:
+        sv : np.array
+        max_dist (int):
 
-    Returns
-    -------
-    bool
-        True if single connected component
+    Returns:
+        bool:
+            True if single connected component
     """
     if len(sv) == 0:
         return True
@@ -99,16 +96,15 @@ def conn_comp(sv, max_dist):
 def single_conn_comp(sv, max_dist=2, ref_coord=None, return_bool=False):
     """
     Returns single connected component of coordinates.
-    Parameters
-    ----------
-    sv : np.array
-    max_dist : int
-    ref_coord : np.array
-    return_bool : bool
+    
+    Args:
+        sv : np.array
+        max_dist (int):
+        ref_coord : np.array
+        return_bool (bool):
 
-    Returns
-    -------
-    np.array
+    Returns:
+        np.array
     """
     # if fast_check_sing_comp(sv):
     #     return sv
@@ -131,14 +127,12 @@ def single_conn_comp_img(img, background=1.0):
     Returns connected component in image which is located at the center.
     TODO: add 'max component' option
 
-    Parameters
-    ----------
-    img : np.array
-    background : float
+    Args:
+        img : np.array
+        background (float):
 
-    Returns
-    -------
-    np.array
+    Returns:
+        np.array
     """
     orig_shape = img.shape
     img = np.squeeze(img)
@@ -161,13 +155,11 @@ def apply_equalhist(arr):
     """
     If cv2 is available applies histogram normalization on array.
 
-    Parameters
-    ----------
-    arr : np.array
+    Args:
+        arr : np.array
 
 
-    Returns
-    -------
+    Returns:
 
     """
     if not __cv2__:
@@ -186,16 +178,14 @@ def apply_clahe(arr, clipLimit=4.0, tileGridSize=(8, 8), ret_normalized=True):
     """
     If cv2 is available applies clahe filter on array.
 
-    Parameters
-    ----------
-    arr : np.array
-    clipLimit : float
-    tileGridSize : tuple of int
-    ret_normalized : bool
+    Args:
+        arr : np.array
+        clipLimit (float):
+        tileGridSize (tuple): tuple of int
+        ret_normalized (bool):
 
-    Returns
-    -------
-    np.array
+    Returns:
+        np.array
     """
     if not __cv2__:
         try:
@@ -222,15 +212,13 @@ def apply_clahe_plain(arr, clipLimit, tileGridSize):
 
 def normalize_img(img, max_val=255):
     """
-    Parameters
-    ----------
-    img : np.array
-    max_val : int or float
+    Args:
+        img : np.array
+        max_val : int or float
 
-    Returns
-    -------
-    np.array
-        Normalized image
+    Returns:
+        np.array
+            Normalized image
     """
     img = img.astype(np.float32)
     img -= img.min()
@@ -243,15 +231,13 @@ def apply_pca(sv, pca=None):
     """
     Apply principal component analysis and return rotated supervoxel
 
-    Parameters
-    ----------
-    sv : np.array [N x 3]
-        super voxel
-    pca : PCA
-        prefitted pca
+    Args:
+        sv : np.array [N x 3]
+            super voxel
+        pca : PCA
+            prefitted pca
 
-    Returns
-    -------
+    Returns:
         super voxel coordinates rotated in principle component system
     """
     if pca is None:
@@ -266,14 +252,12 @@ def remove_outlier(sv, edge_size):
     """
     Removes outlier in array sv beyond [0, edge_sizes]
 
-    Parameters
-    ----------
-    sv : np.array
-    edge_size : int
+    Args:
+        sv : np.array
+        edge_size (int) :
 
-    Returns
-    -------
-    np.array
+    Returns:
+        np.array
     """
     inlier = (sv[:, 0] >= 0) & (sv[:, 0] < edge_size) & (sv[:, 1] >= 0) & \
              (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
@@ -295,16 +279,14 @@ def normalize_vol(sv, edge_size, center_coord):
     """
     returns cube with given edge size and sv centered at center coordinate
 
-    Parameters
-    ----------
-    sv :  np.array [N x 3]
-        coordinates of voxels in supervoxel
-    edge_size : int
-        edge size of returned cube
-    center_coord : np.array
+    Args:
+        sv :  np.array [N x 3]
+            coordinates of voxels in supervoxel
+        edge_size : int
+            edge size of returned cube
+        center_coord : np.array
 
-    Returns
-    -------
+    Returns:
         np.array
     """
     translation = np.ones(3) * edge_size / 2. - center_coord
@@ -320,15 +302,13 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False,
     """
     Wrapper function for dilation
 
-    Parameters
-    ----------
-    overlay
-    n_dilations
-    use_find_objects
-    background_only
+    Args:
+        overlay
+        n_dilations
+        use_find_objects
+        background_only
 
-    Returns
-    -------
+    Returns:
 
     """
     return multi_mop(ndimage.binary_dilation, overlay, n_dilations,
@@ -345,17 +325,15 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
         * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
           ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
 
-    Parameters
-    ----------
-    mop_func
-    overlay
-    n_iters
-    use_find_objects
-    mop_kwargs
-    verbose
+    Args:
+        mop_func
+        overlay
+        n_iters
+        use_find_objects
+        mop_kwargs
+        verbose
 
-    Returns
-    -------
+    Returns:
 
     """
     if mop_kwargs is None:

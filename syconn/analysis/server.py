@@ -166,8 +166,10 @@ class SyConnBackend(object):
     def ssv_mesh(self, ssv_id):
         """
         Get mesh for ssv_id.
-        :param ssv_id: int
-        :return: dict
+        Args:
+            ss_vid (int): id of ssv
+        Returns:
+            dict:
         """
         start = time.time()
         self.logger.info('Loading ssv mesh {}'.format(ssv_id))
@@ -184,8 +186,10 @@ class SyConnBackend(object):
 
     def ssv_ind(self, ssv_id):
         """
-        :param ssv_id: int
-        :return: dict
+        Args:
+            ssv_id (int):
+        Returns:
+            dict:
         """
         start = time.time()
         self.logger.info('Loading {} ssv mesh indices'.format(ssv_id))
@@ -201,8 +205,10 @@ class SyConnBackend(object):
     def ssv_vert(self, ssv_id):
         """
         Get mesh vertices for ssv_id.
-        :param ssv_id: int
-        :return: dict
+        Args:
+            ssv_id (int):
+        Returns:
+            dict:
         """
         start = time.time()
         self.logger.info('Loading ssv {} mesh vertices'.format(ssv_id))
@@ -218,8 +224,10 @@ class SyConnBackend(object):
     def ssv_skeleton(self, ssv_id):
         """
         Get mesh vertices for ssv_id.
-        :param ssv_id: int
-        :return: dict
+        Args:
+            ssv_id (int):
+        Returns:
+            dict:
         """
         self.logger.info('Loading ssv skeleton {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
@@ -253,8 +261,10 @@ class SyConnBackend(object):
     def ssv_norm(self, ssv_id):
         """
         Get mesh normals for ssv_id.
-        :param ssv_id: int
-        :return: dict
+        Args:
+            ssv_id (int):
+        Returns:
+            dict:
         """
         # not needed for K
         return {'norm': []}
@@ -274,9 +284,11 @@ class SyConnBackend(object):
     def ssv_obj_ind(self, ssv_id, obj_type):
         """
         Get mesh indices of a specific obj type for ssv_id.
-        :param ssv_id: int
-        :param obj_type: str
-        :return: dict
+        Args:
+            ssv_id (int):
+            obj_type (str):
+        Returns:
+            dict:
         """
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh indices'
@@ -302,9 +314,11 @@ class SyConnBackend(object):
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
         Get mesh vertices  of a specific obj type for ssv_id.
-        :param ssv_id: int
-        :param obj_type: str
-        :return: dict
+        Args:
+            ssv_id (int):
+            obj_type (str):
+        Returns:
+            dict:
         """
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh vertices'
@@ -330,9 +344,11 @@ class SyConnBackend(object):
     def ssv_obj_norm(self, ssv_id, obj_type):
         """
         Get mesh normals of a specific obj type for ssv_id.
-        :param ssv_id: int
-        :param obj_type: str
-        :return: dict
+        Args:
+            ssv_id (int):
+            obj_type (str):
+        Returns:
+            dict:
         """
         return {'norm': []}
         start = time.time()
@@ -361,15 +377,17 @@ class SyConnBackend(object):
     def ssv_list(self):
         """
         Returns all ssvs in dataset.
-        :return: dict
+        Return:
+            dict:
         """
         return {'ssvs': list(self.ssd.ssv_ids)}
 
     def ssv_of_sv(self, sv_id):
         """
         Returns the ssv for a given sv_id.
-        :param sv_id:
-        :return:
+        Args:
+            sv_id: 
+        Returns:
         """
         sv_id = int(sv_id)
         try:
@@ -382,8 +400,9 @@ class SyConnBackend(object):
     def ct_of_ssv(self, ssv_id):
         """
         Returns the CT for a given SSV ID.
-        :param ssv_id:
-        :return:
+        Args:
+            sv_id: 
+        Returns:
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
@@ -413,7 +432,8 @@ class SyConnBackend(object):
     def svs_of_ssv(self, ssv_id):
         """
         Returns all sv ids for a ssv_id.
-        :return: dict
+        Returns:
+            dict:
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.nb_cpus = self.nb_cpus
@@ -425,7 +445,7 @@ class SyConnBackend(object):
         Returns all synapse meta data. This works only well for fast
         connections and less than 1e6 synapses or so. `synthresh` is transmitted
         with a scaling factor of 1000 (-> maximum precision is 4 digits).
-        :return:
+        Returns:
         """
         synthresh = params['synthresh']
         axodend_only = params['axodend_only']
@@ -451,8 +471,7 @@ class SyConnBackend(object):
         """
         TODO: Requires adaptions of 'SyConnBackend' class
         Returns all synapse objs of a given ssv_id.
-        :return:
-
+        Returns:
         """
         syns = dict()
         # not the most efficient approach, a cached map might be necessary for
@@ -472,8 +491,9 @@ class SyConnBackend(object):
         Return the syn objs where this ssv_id is post synaptic,
         i.e. this ssv_id receives the synapse.
 
-        :param ssv_id:
-        :return:
+        Args:
+            sv_id: 
+        Returns:
         """
         syns = dict()
         # not the most efficient approach, a cached map might be necessary for
@@ -494,15 +514,13 @@ class SyConnBackend(object):
         Generic attribute pull, return empty string if key did not exist. Could be optimized
         with the assumption that all attributes have been cached as numpy arrays.
 
-        Parameters
-        ----------
-        so_id : int
-        so_type : str
-        attr_key : str
+        Args:
+            so_id (int):
+            so_type(str):
+            attr_key (str):
 
-        Returns
-        -------
-        str
+        Returns:
+            str:
         """
         if so_type not in self.sds:
             self.sds[so_type] = SegmentationDataset(obj_type=so_type)
@@ -518,18 +536,16 @@ class SyConnBackend(object):
         Generic attribute pull, return empty string if key did not exist. Could be optimized
         with the assumption that all attributes have been cached as numpy arrays.
 
-        Parameters
-        ----------
-        so_id : int
-        so_type : str
-        attr_key : str
-        attr_value :
+        Args:
+            so_id (int):
+            so_type(str):
+            attr_key (str):
+            attr_value
 
-        Returns
-        -------
-        bytes
-            Empty string of everything went well
+        Returns:
+            bytes: Empty string of everything went well
         """
+        
         if so_type not in self.sds:
             self.sds[so_type] = SegmentationDataset(obj_type=so_type)
         sd = self.sds[so_type]
