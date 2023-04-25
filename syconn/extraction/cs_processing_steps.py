@@ -1338,17 +1338,23 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
         df = pandas.read_excel(path2file, header=0, names=[
             'ixs', 'coord', 'pre', 'post', 'syn', 'doublechecked', 'triplechecked', '?', 'comments']).values
         df = df[:, :7]
+        synaptic = 0
+        non_synaptic = 0
         for ix in range(df.shape[0]):
             c_orig = df[ix, 5]
             c = df[ix, 6]
             if type(c) != float and 'yes' in c:
                 unified_comment = 'synaptic'
+                synaptic += 1
             elif type(c) != float and 'no' in c:
                 unified_comment = 'non-synaptic'
+                non_synaptic += 1
             elif 'yes' in c_orig:
                 unified_comment = 'synaptic'
+                synaptic += 1
             elif 'no' in c_orig:
                 unified_comment = 'non-synaptic'
+                non_synaptic += 1
             else:
                 log.warn(f'Did not understand GT comment "{c}". Skipping')
                 continue
@@ -1357,6 +1363,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
 
     labels = np.array(labels)
     label_coords = np.array(label_coords)
+    log.info(f'Before filtering: {synaptic} synaptic labels and {non_synaptic} non_synaptic labels')
 
     # get deterministic order by sorting by coordinate first and then seeded shuffling
     ixs = [i[0] for i in sorted(enumerate(label_coords),
@@ -1389,8 +1396,15 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     if np.sum(mask) == 0:
         raise ValueError
     synssv_ids = synssv_ids[mask]
+    not_mapped_labels = labels[mask == 0]
+    not_mapped_syn = not_mapped_labels[not_mapped_labels == 'synaptic']
+    not_mapped_nonsyn = not_mapped_labels[not_mapped_labels == 'non-synaptic']
     labels = labels[mask]
+    mapped_syn = labels[labels == 'synaptic']
+    mapped_nonsyn = labels[labels == 'non-synaptic']
     log.info(f'Found {np.sum(mask)}/{len(mask)} samples with a distance < {max_dist_vx} vx to the target.')
+    log.info(f'Excluding {len(not_mapped_syn)} synaptic labels and {len(not_mapped_nonsyn)} non_synaptic labels after filtering')
+    log.info(f'Training with {len(mapped_syn)} synaptic labels and {len(mapped_nonsyn)} non_synaptic labels after filtering')
 
     log.info(f'Synapse features will now be generated.')
     features = []
