@@ -1,5 +1,8 @@
-/*
 .wy-side-nav-search {
-    background-color: #ffffff;
+    background: rgb(255, 255, 255);
 }
-*/
+
+.wy-side-nav-search > div.version,
+.wy-side-nav-search > a {
+  color: #2472a4;
+}
