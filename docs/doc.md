@@ -1,5 +1,3 @@
-# Documentation
-
 ## Installation
 * Python 3.7
 * The whole pipeline was designed and tested on Linux systems
