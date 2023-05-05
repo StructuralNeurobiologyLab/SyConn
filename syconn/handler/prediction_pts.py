@@ -67,7 +67,7 @@ def init_hc_cache_gt():
         hc_cache_gt[cellid] = hc
 
 
-init_hc_cache_gt()
+#init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -670,7 +670,11 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        try:
+            pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        except DeprecationWarning as e:
+            log.warn(f"{e.args[0]}: Upgrade to open3d 0.9 or higher.")
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
         nodes = np.max(idcs, axis=1)
         if seeded:
             np.random.seed(np.uint32(hash(frozenset((ssv_id, redundancy_ssv)))))
