@@ -166,13 +166,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         sh_vol = np.array([ssv_o.attr_dict['spinehead_vol'][syn_id] if syn_id in ssv_o.attr_dict['spinehead_vol']
                            else -1 for syn_id in ssv_synids], dtype=np.float32)
 
-        #TO DO: remove this modification again
-        #to use old skeletons for mapping: initialise cell again here from old wd
-
-        ssd_old = SuperSegmentationDataset(wd = '/cajal/nvmescrastch/projects/from_ssdscratch/songbird/j0251/j0251_72_seg_20210127_agglo2')
-        ssv_old = ssd_old.get_super_segmentation_object(ssv_o.id)
-
-        curr_ax, latent_morph = ssv_old.attr_for_coords(
+        curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
         curr_sp = ssv_old.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
