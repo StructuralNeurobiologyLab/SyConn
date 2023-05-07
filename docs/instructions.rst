@@ -1,8 +1,19 @@
 .. _Instuctions:
+
 Instructions
 ============
-This chapter provides  some basic knowledge in order to use 
-SyConn appropiatly.
+This chapter provides some basic knowledge in order to use 
+SyConn appropiatly. You will find the main points on this page 
+divided into the subchapters
+
+.. contents::
+   :local:
+
+More detailed files are linked in the respective chapter as in the 
+navigation bar (left).
+
+.. .. include:: doc.md
+..     :parser: myst_parser.sphinx_
 
 
 Installation
@@ -26,28 +37,11 @@ named “syconn2” by running:
    conda activate syconn2
    pip install -e .
 
-ANM: When creating the environment, make sure to have a available GPU in
-order to install pytorch on a GPU instead a CPU - this has (what ???)
-computational reasons. To test for this Run: nvidia-smi if you dont see
-an row according to at least one GPU you dont have one in use. To change
-this, run srun –time=2-0 –gres=gpu:1 –mem=100000 –tasks 1 –cpus-per-task
-8 –pty bash
-
-Activate your env: conda activate SyConn2
-
-::
-
-   conda list torch #pytorch on GPU?
-
-The last command prints a list, where for the package(Name) pytorch
-should be Build with a cuda driver (see picture)
-
 The last command will install SyConn in
 `editable <https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs>`__
 mode, which is useful for development on SyConn itself. If you want to
 install it as a regular read-only package instead, replace the last
 command with:
-
 ::
 
    pip install .
@@ -67,13 +61,26 @@ If you encounter
 with open3d, you need to upgrade your system or downgrade open3d to
 ``<=0.9``.
 
+ANM: When creating the environment, make sure to have a available GPU in
+order to install pytorch on a GPU instead a CPU.  
+.. this has (what ???) computational reasons. 
+To test for this Run: nvidia-smi if you dont see an row according to at 
+least one GPU you dont have one in use. To change this, run::
+
+    srun –time=2-0 –gres=gpu:1 –mem=100000 –tasks 1 –cpus-per-task 8 –pty bash
+
+To check if it worked properly see if pytorch is build with a **cuda** driver::
+
+   conda activate syconn2
+   conda list pytorch
+
+
+
 Example run
 -----------
 
 Place the example data and models (provided upon request) in
-``~/SyConnData/``, cd to ``SyConn/examples/`` and run
-
-::
+``~/SyConnData/``, cd to ``SyConn/examples/`` and run::
 
    python start.py [--working_dir=..]
 
@@ -81,7 +88,7 @@ The example script analyzes the EM data together with the cell
 segmentation, probability maps of sub-cellular structures (mitochondria,
 vesicle clouds and synaptic junctions) and synapse type (inhibitory,
 excitatory). For adding further cell organelles to this pipeline see
-`here <cellorganelle_integration.md>`__.
+`here <cellorganelle_integration.md`_.
 
 The data format for raw image and segmentation data is based on
 ``KnossosDataset`` (see
@@ -222,12 +229,7 @@ KNOSSOS-plugin follow these steps:
 
 .. .. toctree::
 
-..     installation
-..     examples
 
-
-.. .. include:: doc.md
-..     :parser: myst_parser.sphinx_
 
 
 
