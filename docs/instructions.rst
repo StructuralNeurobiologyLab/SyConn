@@ -88,7 +88,7 @@ The example script analyzes the EM data together with the cell
 segmentation, probability maps of sub-cellular structures (mitochondria,
 vesicle clouds and synaptic junctions) and synapse type (inhibitory,
 excitatory). For adding further cell organelles to this pipeline see
-`here <cellorganelle_integration.md`_.
+:doc:`here <cellorganelle_integration>`.
 
 The data format for raw image and segmentation data is based on
 ``KnossosDataset`` (see
@@ -125,10 +125,14 @@ Example scripts and API usage
 -----------------------------
 
 An introduction on how to use the example scripts can be found
-`here <examples.md>`__ and API code examples `here <api.md>`__.
+:doc:`here <examples>` and API code examples :doc:`here <api>`.
 
 Flowchart of SyConn
 -------------------
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=2880&amp;h=1200">
+
+
 
 Package structure and data classes
 ----------------------------------
