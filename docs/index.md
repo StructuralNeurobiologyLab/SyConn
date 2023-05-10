@@ -11,9 +11,9 @@ SyConn2 works with both on-site high-performance compute environments and rentab
    :maxdepth: 1
 
    instructions
-   syconn
+   syconnapi
 ```
-:ref:`Instructions <Instuctions>` explains the usage of SyConn (e.g. installation, application, etc.) as well as further contents (e.g. basic functionality, data structures, etc.). In :ref:`SyConn API <syconnAPI>` the used code functions are explained.
+:ref:`Instructions <Instuctions>` explains the usage of SyConn (e.g. installation, application, etc.) as well as further contents (e.g. basic functionality, data structures, etc.). In :ref:`SyConn API <syconnapi>` the used code functions are explained.
 
 
 

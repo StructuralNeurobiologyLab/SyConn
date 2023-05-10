@@ -13,6 +13,7 @@ The documentation is divided into the following section:
 
    instructions
    syconnapi
+   testapi
 
 :ref:`Instructions <Instuctions>` explains the usage of SyConn (installation, usage, etc.) 
 as well as further contents (basic functionality, data structures, etc.). In :ref:`SyConnAPI <SyConnAPI>` 

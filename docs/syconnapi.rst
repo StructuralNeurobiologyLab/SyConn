@@ -6,6 +6,7 @@ Subpackages
 -----------
 
 .. toctree::
+    :maxdepth: 1
 
     syconn.reps
     syconn.exec
@@ -16,10 +17,11 @@ Subpackages
     syconn.mp
 
 
-Module contents
----------------
 
-.. automodule:: syconn
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. Module contents
+.. ---------------
+
+.. .. automodule:: syconnapi
+..     :members:
+..     :undoc-members:
+..     :show-inheritance:

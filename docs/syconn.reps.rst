@@ -3,6 +3,18 @@ syconn.reps package
 
 Submodules
 ----------
+.. toctree::
+
+    syconn.reps.super\_segmentation\_dataset module
+    syconn.reps.super\_segmentation\_object module
+    syconn.reps.super\_segmentation\_helper module
+    syconn.reps.segmentation module
+    syconn.reps.segmentation module
+    syconn.reps.segmentation\_helper module
+    syconn.reps.super\_segmentation module
+    syconn.reps.rep\_helper module
+
+test some text
 
 syconn.reps.super\_segmentation\_dataset module
 -----------------------------------------------
