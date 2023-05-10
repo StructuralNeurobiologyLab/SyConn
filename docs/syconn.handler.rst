@@ -3,6 +3,8 @@ syconn.handler package
 
 Submodules
 ----------
+.. contents::
+    
 
 syconn.handler.basics module
 ----------------------------

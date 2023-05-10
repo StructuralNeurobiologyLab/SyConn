@@ -3,6 +3,8 @@ syconn.exec package
 
 Submodules
 ----------
+.. contents::
+
 
 syconn.exec.exec\_init module
 ----------------------------------------------

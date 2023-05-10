@@ -3,6 +3,8 @@ syconn.extraction package
 
 Submodules
 ----------
+.. contents::
+    
 
 syconn.extraction.cs\_extraction\_steps module
 ----------------------------------------------

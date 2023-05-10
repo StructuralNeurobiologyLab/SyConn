@@ -6,6 +6,7 @@ This chapter provides some basic knowledge in order to use
 SyConn appropiatly. You will find the main points on this page 
 divided into the subchapters
 
+
 .. contents::
    :local:
 
@@ -223,4 +224,3 @@ KNOSSOS-plugin follow these steps:
    tuples of cell IDs; clicking the entry will trigger a jump to the
    synapse location) and their respective properties. In case the window
    does not pop-up check Scripting->Interpreter for errors.
-   

@@ -3,10 +3,7 @@ syconn.proc package
 
 Submodules
 ----------
-
 .. contents::
-
-
 
 
 syconn.proc.general module
