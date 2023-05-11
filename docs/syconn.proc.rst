@@ -3,8 +3,22 @@ syconn.proc package
 
 Submodules
 ----------
-.. contents::
 
+- :ref:`syconn.proc.general module`
+- :ref:`syconn.proc.graphs module`
+- :ref:`syconn.proc.image module`
+- :ref:`syconn.proc.mapping module`
+- :ref:`syconn.proc.meshes module`
+- :ref:`syconn.proc.rendering module`
+- :ref:`syconn.proc.sd\_proc module`
+- :ref:`syconn.proc.skel\_based\_classifier module`
+- :ref:`syconn.proc.skel\_based\_classifier\_helper module`
+- :ref:`syconn.proc.ssd\_proc module`
+- :ref:`syconn.proc.stats module`
+
+
+
+.. _syconn.proc.general module:
 
 syconn.proc.general module
 --------------------------
@@ -14,6 +28,9 @@ syconn.proc.general module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.proc.graphs module:
+
 syconn.proc.graphs module
 -------------------------
 
@@ -21,6 +38,9 @@ syconn.proc.graphs module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.proc.image module:
 
 syconn.proc.image module
 ------------------------
@@ -30,6 +50,9 @@ syconn.proc.image module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.proc.mapping module:
+
 syconn.proc.mapping module
 --------------------------
 
@@ -37,6 +60,9 @@ syconn.proc.mapping module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.proc.meshes module:
 
 syconn.proc.meshes module
 -------------------------
@@ -46,6 +72,9 @@ syconn.proc.meshes module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.proc.rendering module:
+
 syconn.proc.rendering module
 ----------------------------
 
@@ -53,6 +82,9 @@ syconn.proc.rendering module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.proc.sd\_proc module:
 
 syconn.proc.sd\_proc module
 ---------------------------
@@ -62,6 +94,9 @@ syconn.proc.sd\_proc module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.proc.skel\_based\_classifier module:
+
 syconn.proc.skel\_based\_classifier module
 ------------------------------------------
 
@@ -69,6 +104,9 @@ syconn.proc.skel\_based\_classifier module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.proc.skel\_based\_classifier\_helper module:
 
 syconn.proc.skel\_based\_classifier\_helper module
 --------------------------------------------------
@@ -78,6 +116,9 @@ syconn.proc.skel\_based\_classifier\_helper module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.proc.ssd\_assembly module:
+
 syconn.proc.ssd\_assembly module
 --------------------------------
 
@@ -86,6 +127,9 @@ syconn.proc.ssd\_assembly module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.proc.ssd\_proc module:
+
 syconn.proc.ssd\_proc module
 ----------------------------
 
@@ -93,6 +137,9 @@ syconn.proc.ssd\_proc module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.proc.stats module:
 
 syconn.proc.stats module
 ------------------------
@@ -103,10 +150,10 @@ syconn.proc.stats module
     :show-inheritance:
 
 
-Module contents
----------------
+.. Module contents
+.. ---------------
 
-.. automodule:: syconn.proc
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. .. automodule:: syconn.proc
+..     :members:
+..     :undoc-members:
+..     :show-inheritance:

@@ -3,8 +3,15 @@ syconn.handler package
 
 Submodules
 ----------
-.. contents::
-    
+- :ref:`syconn.handler.basics module`
+- :ref:`syconn.handler.compression module`
+- :ref:`syconn.handler.prediction module`
+- :ref:`syconn.handler.config module`
+- :ref:`syconn.handler.logger module`
+
+
+
+.. _syconn.handler.basics module:
 
 syconn.handler.basics module
 ----------------------------
@@ -14,6 +21,9 @@ syconn.handler.basics module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.handler.compression module:
+
 syconn.handler.compression module
 ---------------------------------
 
@@ -21,6 +31,9 @@ syconn.handler.compression module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.handler.prediction module:
 
 syconn.handler.prediction module
 --------------------------------
@@ -30,6 +43,9 @@ syconn.handler.prediction module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.handler.config module:
+
 syconn.handler.config module
 --------------------------------
 
@@ -37,6 +53,9 @@ syconn.handler.config module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.handler.logger module:
 
 syconn.handler.logger module
 --------------------------------
@@ -47,10 +66,10 @@ syconn.handler.logger module
     :show-inheritance:
 
 
-Module contents
----------------
+.. Module contents
+.. ---------------
 
-.. automodule:: syconn.handler
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. .. automodule:: syconn.handler
+..     :members:
+..     :undoc-members:
+..     :show-inheritance:

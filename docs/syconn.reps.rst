@@ -3,8 +3,17 @@ syconn.reps package
 
 Submodules
 ----------
-.. contents::
 
+- :ref:`syconn.reps.super\_segmentation\_dataset module`
+- :ref:`syconn.reps.super\_segmentation\_object module`
+- :ref:`syconn.reps.super\_segmentation\_helper module`
+- :ref:`syconn.reps.segmentation module`
+- :ref:`syconn.reps.segmentation\_helper module`
+- :ref:`syconn.reps.super\_segmentation module`
+- :ref:`syconn.reps.rep\_helper module`
+
+
+.. _syconn.reps.super\_segmentation\_dataset module:
 
 syconn.reps.super\_segmentation\_dataset module
 -----------------------------------------------
@@ -14,6 +23,9 @@ syconn.reps.super\_segmentation\_dataset module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.reps.super\_segmentation\_object module:
+
 syconn.reps.super\_segmentation\_object module
 ----------------------------------------------
 
@@ -21,6 +33,9 @@ syconn.reps.super\_segmentation\_object module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.reps.super\_segmentation\_helper module:
 
 syconn.reps.super\_segmentation\_helper module
 ----------------------------------------------
@@ -30,6 +45,9 @@ syconn.reps.super\_segmentation\_helper module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.reps.segmentation module:
+
 syconn.reps.segmentation module
 -------------------------------
 
@@ -37,6 +55,9 @@ syconn.reps.segmentation module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.reps.segmentation\_helper module:
 
 syconn.reps.segmentation\_helper module
 ---------------------------------------
@@ -46,6 +67,9 @@ syconn.reps.segmentation\_helper module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.reps.super\_segmentation module:
+
 syconn.reps.super\_segmentation module
 --------------------------------------
 
@@ -53,6 +77,9 @@ syconn.reps.super\_segmentation module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.reps.rep\_helper module:
 
 syconn.reps.rep\_helper module
 ------------------------------
@@ -62,10 +89,12 @@ syconn.reps.rep\_helper module
     :undoc-members:
     :show-inheritance:
 
-Module contents
----------------
 
-.. automodule:: syconn.reps
-    :members:
-    :undoc-members:
-    :show-inheritance:
+
+.. Module contents
+.. ---------------
+
+.. .. automodule:: syconn.reps
+..     :members:
+..     :undoc-members:
+..     :show-inheritance:

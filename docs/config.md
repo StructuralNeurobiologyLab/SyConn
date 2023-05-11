@@ -12,13 +12,13 @@ implemented in `syconn.handler.config`. The default values can be found at
 be found in the config file of the current working directory.
 
 
-# Modifying parameters in a config file
+## Modifying parameters in a config file
 Parameters can be adapted while creating the config file for a new run.
 In the script that starts the whole pipeline, e.g. `example_run.py` or `full_run.py`,
 one has to extend the `key_val_pairs_conf` list by a tuple (key, value).
 
 
-# Working directory
+## Working directory
 The working directory stores SegmentationDatasets and SuperSegmentationDatasets
 of the initial, the glia split RAG, the cell organelles and contact sites /
 synapses and is specified in `syconn.global_params.py`. The above config has to

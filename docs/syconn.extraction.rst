@@ -3,8 +3,14 @@ syconn.extraction package
 
 Submodules
 ----------
-.. contents::
+- :ref:`syconn.extraction.cs\_extraction\_steps module`
+- :ref:`syconn.extraction.cs\_processing\_steps modulemodule`
+- :ref:`syconn.extraction.object\_extraction\_steps module`
+- :ref:`syconn.extraction.object\_extraction\_wrapper module`
+
+
     
+.. _syconn.extraction.cs\_extraction\_steps module:
 
 syconn.extraction.cs\_extraction\_steps module
 ----------------------------------------------
@@ -14,6 +20,9 @@ syconn.extraction.cs\_extraction\_steps module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.extraction.cs\_processing\_steps module:
+
 syconn.extraction.cs\_processing\_steps module
 ----------------------------------------------
 
@@ -22,6 +31,9 @@ syconn.extraction.cs\_processing\_steps module
     :undoc-members:
     :show-inheritance:
 
+
+.. _syconn.extraction.object\_extraction\_steps module:
+
 syconn.extraction.object\_extraction\_steps module
 --------------------------------------------------
 
@@ -29,6 +41,9 @@ syconn.extraction.object\_extraction\_steps module
     :members:
     :undoc-members:
     :show-inheritance:
+
+
+.. _syconn.extraction.object\_extraction\_wrapper module:
 
 syconn.extraction.object\_extraction\_wrapper module
 ----------------------------------------------------
@@ -39,10 +54,10 @@ syconn.extraction.object\_extraction\_wrapper module
     :show-inheritance:
 
 
-Module contents
----------------
+.. Module contents
+.. ---------------
 
-.. automodule:: syconn.extraction
-    :members:
-    :undoc-members:
-    :show-inheritance:
+.. .. automodule:: syconn.extraction
+..     :members:
+..     :undoc-members:
+..     :show-inheritance:

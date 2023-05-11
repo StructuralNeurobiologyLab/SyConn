@@ -1,4 +1,6 @@
+
 # Contact Site Extraction
+
 Contact sites are extracted from an existing segmentation. The main functionality is in
 `syconn.extraction.cs_extraction_steps` and `syconn.extraction.cs_processing_steps`.
 
@@ -12,11 +14,13 @@ It consists of two steps: (1) Finding and extracting contact sites between super
   because an oversegmentation is necessary in these cases.
 
 ## Prerequisites
+
 * Knossos- and SegmentationDataset of the supervoxel segmentation
 * SuperSegmentationDataset containg the cell reconstructions (SV-agglomeration/RAG)
 * KnossosDataset of symmetric, asymmetric and SJ predictions (WIP)
 
 ## Finding Contact Sites
+
 # TODO: this needs to be adapted to the new extraction procedure
 
 Contact sites are detected from a segmentation stored in knossos overlaycubes and saved to a chunk dataset (see `chunk_prediction` for details on how to create chunk datasets).
@@ -42,6 +46,7 @@ Next, the resulting contact sites are overlapped with synaptic
 This creates a new `SegmentationDataset` of type `synn`. These are contact site objects that overlapped at least with one voxel with a synaptic junction `SegmentationObject`.
 
 ## Aggregating Contact Sites
+
 To agglomerate 'syn' objects, the SV-agglomeration i.e. SSVs are required. Based on their region-adjacency graph SV-wise 'syn' objects
 are agglomerated to 'syn_ssv' objects, stored in a SegmentationDataset.
 
@@ -50,7 +55,3 @@ are agglomerated to 'syn_ssv' objects, stored in a SegmentationDataset.
 
 It combines contact sites between the same supersupervoxels and splits them based on a
 maximal voxel distance of `cs_gap_nm` which can be specified in `syconn/config/global_params.py`.
-
-
-
-

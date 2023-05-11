@@ -60,23 +60,32 @@ If you encounter
 with open3d, you need to upgrade your system or downgrade open3d to
 ``<=0.9``.
 
-ANM: When creating the environment, make sure to have a available GPU in
-order to install pytorch on a GPU instead a CPU.  
-.. this has (what ???) computational reasons. 
-To test for this Run: nvidia-smi if you dont see an row according to at 
-least one GPU you dont have one in use. To change this, run::
+.. ANM: When creating the environment, make sure to have a available GPU in
+.. order to install pytorch on a GPU instead a CPU.  
+.. .. this has (what ???) computational reasons. 
+.. To test for this Run:: 
 
-    srun –time=2-0 –gres=gpu:1 –mem=100000 –tasks 1 –cpus-per-task 8 –pty bash
+..    nvidia-smi
 
-To check if it worked properly see if pytorch is build with a **cuda** driver::
+.. if you dont see an row according to at least one GPU you dont have one in use.
+.. To change this, run::
 
-   conda activate syconn2
-   conda list pytorch
+..     srun –time=2-0 –gres=gpu:1 –mem=100000 –tasks 1 –cpus-per-task 8 –pty bash
 
+.. To check if it worked properly see if pytorch is build with a **cuda** driver::
+
+..    conda activate syconn2
+..    conda list pytorch
 
 
 Example run
 -----------
+
+.. toctree:: 
+   :hidden:
+
+   cellorganelle_integration
+
 
 Place the example data and models (provided upon request) in
 ``~/SyConnData/``, cd to ``SyConn/examples/`` and run::
@@ -88,6 +97,7 @@ segmentation, probability maps of sub-cellular structures (mitochondria,
 vesicle clouds and synaptic junctions) and synapse type (inhibitory,
 excitatory). For adding further cell organelles to this pipeline see
 :doc:`here <cellorganelle_integration>`.
+
 
 The data format for raw image and segmentation data is based on
 ``KnossosDataset`` (see
@@ -123,6 +133,12 @@ example cube of shape [1100 1100 600] (1.452e-06 mm^3; 0.726 GVx) after
 Example scripts and API usage
 -----------------------------
 
+.. toctree::
+   :hidden:
+
+   examples
+   api
+
 An introduction on how to use the example scripts can be found
 :doc:`here <examples>` and API code examples :doc:`here <api>`.
 
@@ -134,6 +150,20 @@ Flowchart of SyConn
 
 Package structure and data classes
 ----------------------------------
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   config
+   segmentation_datasets
+   backend
+   super_segmentation_objects
+   super_segmentation_datasets
+   skeletons
+   meshes
+   glia_removal
+   neuron_analysis   
 
 The basic data structures and initialization procedures are explained in
 the following sections:
@@ -169,6 +199,14 @@ the following sections:
 
 Analysis steps
 --------------
+
+.. toctree::
+   :hidden:
+
+   glia_removal
+   neuron_analysis
+   contact_site_extraction
+   contact_site_classification
 
 After initialization of the SDs (cell and sub-cellular structures, step
 1 in the example run) and the SSD containing the agglomerated cell SVs
