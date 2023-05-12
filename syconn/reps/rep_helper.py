@@ -139,7 +139,7 @@ def subfold_from_ix(ix, n_folders, old_version=False):
     else:
         return subfold_from_ix_new(ix, n_folders)
 
-def subfold_
+
 def subfold_from_ix_new(ix, n_folders):
     """
 
