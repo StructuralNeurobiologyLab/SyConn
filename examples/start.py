@@ -39,7 +39,7 @@ if __name__ == '__main__':
     example_cube_id = int(args.example_cube)
     log_level = args.log_level
     if args.working_dir == "":  # by default use cube dependent working dir
-        args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)   
+        args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir) + "/"
 
     # set up basic parameter, log, working directory and config file
