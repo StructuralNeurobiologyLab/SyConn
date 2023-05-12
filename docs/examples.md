@@ -81,7 +81,7 @@ Make sure all dependencies within the lambda expressions are imported
 in `batchjob_object_segmentation.py` (here: numpy).
 
 
-# Prediction examples
+## Prediction examples
 
 This section introduces minimal examples for parts of SyConn. The corresponding python scripts
 can be found in `SyConn/examples/`.

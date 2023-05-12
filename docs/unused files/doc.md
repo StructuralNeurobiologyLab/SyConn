@@ -1,5 +1,3 @@
-# Documentation
-
 ## Installation
 * Python 3.7
 * The whole pipeline was designed and tested on Linux systems
@@ -16,6 +14,7 @@ named "syconn2" by running:
     conda env create -f environment.yml -n syconn2 python=3.7
     conda activate syconn2
     pip install -e .
+
 
 
 The last command will install SyConn in
