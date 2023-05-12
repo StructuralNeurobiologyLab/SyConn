@@ -15,21 +15,6 @@ named "syconn2" by running:
     conda activate syconn2
     pip install -e .
 
-ANM:
-When creating the environment, make sure to have a available GPU in order to install pytorch on a GPU instead a CPU - 
-this has (what ???) computational reasons. To test for this Run:
-    nvidia-smi
-if you dont see an row according to at least one GPU you dont have one in use. To change this, run
-    srun --time=2-0 --gres=gpu:1 --mem=100000 --tasks 1 --cpus-per-task 8 --pty bash
-
-Activate your env:
-    conda activate SyConn2
-
-    conda list torch #pytorch on GPU?
-
-The last command prints a list, where for the package(Name) pytorch should be Build with a cuda driver (see picture)
-
-
 
 
 The last command will install SyConn in
