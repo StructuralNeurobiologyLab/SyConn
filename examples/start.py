@@ -40,7 +40,6 @@ if __name__ == '__main__':
     log_level = args.log_level
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)   
-        #Anm: path example_cube still available? should be cajal/nvmescratch/projects/data/songbird/SyConn_v2_examples
     example_wd = os.path.expanduser(args.working_dir) + "/"
 
     # set up basic parameter, log, working directory and config file
@@ -94,9 +93,7 @@ if __name__ == '__main__':
                      os.path.abspath(os.path.curdir) + '/SyConnData',
                      os.path.abspath(os.path.curdir) + '/SyConn',
                      os.path.expanduser('~/SyConnData/'),
-                     os.path.expanduser('~/SyConn/'),
-                     os.path.expanduser('/cajal/nvmescratch/users/khegg/SyConnData')]: 
-                     # Anm: above line was added and didnt worked out
+                     os.path.expanduser('~/SyConn/')]:
         h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
         if os.path.isdir(h5_dir):
             break
