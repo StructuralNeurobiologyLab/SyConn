@@ -58,23 +58,6 @@ If you encounter
 with open3d, you need to upgrade your system or downgrade open3d to
 ``<=0.9``.
 
-.. ANM: When creating the environment, make sure to have a available GPU in
-.. order to install pytorch on a GPU instead a CPU.  
-.. .. this has (what ???) computational reasons. 
-.. To test for this Run:: 
-
-..    nvidia-smi
-
-.. if you dont see an row according to at least one GPU you dont have one in use.
-.. To change this, run::
-
-..     srun –time=2-0 –gres=gpu:1 –mem=100000 –tasks 1 –cpus-per-task 8 –pty bash
-
-.. To check if it worked properly see if pytorch is build with a **cuda** driver::
-
-..    conda activate syconn2
-..    conda list pytorch
-
 
 Example run
 -----------
