@@ -10,9 +10,7 @@ divided into the subchapters
 .. contents::
    :local:
 
-More details are linked in the respective chapters but unfortunately 
-you have to use the back button in your browser to return to this page
-(documentation in progress).
+More details are linked in the respective chapters.
 
 
 Installation
