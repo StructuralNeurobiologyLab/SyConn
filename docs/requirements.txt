@@ -2,7 +2,7 @@ myst_parser
 sphinx >=3.0,<=4.2
 sphinx-autodoc-typehints >=1.11,<=1.12
 sphinx_rtd_theme
-docutils>=0.14,<0.18
+docutils>=0.14,<0.17
 
 git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
 git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
