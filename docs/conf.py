@@ -197,7 +197,7 @@ html_logo = "./_static/logo_SyConn.png"
 # bottom, using the given strftime format.
 # The empty string is equivalent to '%b %d, %Y'.
 #
-html_last_updated_fmt = '%b %d, %Y'
+# html_last_updated_fmt = '%b %d, %Y'
 
 # If true, SmartyPants will be used to convert quotes and dashes to
 # typographically correct entities.
