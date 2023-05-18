@@ -70,7 +70,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'SyConn2'
-copyright = u'2021, SyConn team'
+copyright = u'2023, SyConn team.'
 author = u'Philipp Schubert, Jörgen Kornfeld'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -197,7 +197,7 @@ html_logo = "./_static/logo_SyConn.png"
 # bottom, using the given strftime format.
 # The empty string is equivalent to '%b %d, %Y'.
 #
-# html_last_updated_fmt = None
+# html_last_updated_fmt = '%b %d, %Y'
 
 # If true, SmartyPants will be used to convert quotes and dashes to
 # typographically correct entities.
@@ -235,7 +235,7 @@ html_show_sourcelink = True
 
 # If true, "(C) Copyright ..." is shown in the HTML footer. Default is True.
 #
-# html_show_copyright = True
+html_show_copyright = True
 
 # If true, an OpenSearch description file will be output, and all pages will
 # contain a <link> tag referring to it.  The value of this option must be the
