@@ -70,7 +70,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'SyConn2'
-copyright = u'2023, SyConn team'
+copyright = u'2023, SyConn team.'
 author = u'Philipp Schubert, Jörgen Kornfeld'
 
 # The version info for the project you're documenting, acts as replacement for
