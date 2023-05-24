@@ -86,7 +86,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     else:
         _ = qu.batchjob_script(
             multi_params, "collect_properties_from_ssv_partners",
-            remove_jobfolder=True, exclude_nodes=exclude_nodes)
+            remove_jobfolder=False, exclude_nodes=exclude_nodes, additional_flags='--mem=12000')
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -102,7 +102,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             debug=debug)
     else:
         _ = qu.batchjob_script(
-            multi_params, "from_cell_to_syn_dict", remove_jobfolder=True, exclude_nodes=exclude_nodes)
+            multi_params, "from_cell_to_syn_dict", remove_jobfolder=False, exclude_nodes=exclude_nodes)
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dicts
     # TODO: start as thread!
@@ -169,7 +169,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
-        curr_sp = ssv_old.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
+        curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness', **semseg2coords_kwargs)
 
 
         cache_dc['partner_spineheadvol'] = np.array(sh_vol)
@@ -936,7 +936,7 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
     else:
         _ = qu.batchjob_script(
             multi_params, "map_objects_from_synssv_partners", log=log,
-            remove_jobfolder=False)
+            remove_jobfolder=False, additional_flags='--mem=12000')
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
