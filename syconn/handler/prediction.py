@@ -650,8 +650,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 overlap_shape = tile_shape // 2
         tile_shape: Prediction tile shape (xyz)
 
-        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
-            coordinate in voxels in the respective magnification (see kwarg `mag`).
+        cube_of_interest: Offset and size of the volume of interest in voxels (xyz)
+            in the respective magnification (see kwarg `mag`).
         overwrite: Overwrite existing KDs.
         cube_shape_kd: Cube shape used to store sub-volumes in KnossosDataset on the file system.
         chunk_shape: Chunky ChunkDataset chunk size.
@@ -792,7 +792,7 @@ def dense_predictor(args):
         try:
             out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int32)[::-1]  # ZYX
             out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
-            predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
+            predictor = Predictor(model_p, strict_shapes=False, tile_shape=tile_shape[::-1],
                                   out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
                                   apply_softmax=True, transform=normalize_transform,
                                   float16=float16)
