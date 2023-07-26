@@ -20,7 +20,7 @@ dependencies:
   # From conda-forge and defaults
   - python    # (3.6 should also work)
   - pip
-  - cxx-compiler
+  - cxx-compiler # for g++
   - lemon
   - vigra
   - freeglut
