@@ -13,7 +13,7 @@ ctypedef fused n_type:
 
 ctypedef vector[int] int_vec
 ctypedef vector[int_vec] int_vec_vec
-ctypedef vector[n_type[:, :, :]] uintarr_vec
+
 ctypedef vector[unordered_map[uint64_t, int_vec]] umvec_rc
 ctypedef vector[unordered_map[uint64_t, int_vec_vec]] umvec_bb
 ctypedef vector[unordered_map[uint64_t, int]] umvec_size
