@@ -18,8 +18,9 @@ dependencies:
   # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python >= 3.9  # (3.6 should also work)
+  - python    # (3.6 should also work)
   - pip
+  - cxx-compiler
   - lemon
   - vigra
   - freeglut
