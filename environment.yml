@@ -9,7 +9,7 @@ channels:
   - menpo
   - open3d-admin 
   - nvidia
-  # - pyg
+  #- pyg
 dependencies:
   - pytorch-cuda=11.7
   # From -c pytorch
@@ -76,6 +76,7 @@ dependencies:
   - sphinx_rtd_theme
   - sphinx-autodoc-typehints
 
+  #- pyg::torch-scatter
   - pip:
     - open3d  #Note(ada):didn't work
     - zmesh
@@ -83,9 +84,9 @@ dependencies:
     - torch_geometric==2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
     - --find-links https://data.pyg.org/whl/torch-1.12.0+cu116.html
     - torch-sparse
-    #- torch-scatter # NOTE(ada): we installed it via conda, "conda install pytorch-scatter -c pyg"
+    - torch-scatter
     # Pre-release packages
-    #- git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3 #NOTE(ada): we did download it but with pip install elektronn3
+    - elektronn3 #- git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3 #NOTE(ada): we did download it but with pip install elektronn3
     - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
 
