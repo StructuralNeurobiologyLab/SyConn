@@ -19,7 +19,7 @@ dependencies:
   # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python=3.8    # (3.6 should also work)
+  - python=3.7    # (3.6 should also work) NOTE(ada): because open3d was not available for python3.8: glibc 2.18 not found
   - pip
   - cxx-compiler # for g++
   - lemon
@@ -78,7 +78,7 @@ dependencies:
 
   #- pyg::torch-scatter
   - pip:
-    - open3d  #Note(ada):didn't work
+    - open3d==0.9.0  #Note(ada):>0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
     - zmesh
     - plyfile
     - torch_geometric==2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
