@@ -868,6 +868,7 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
     Based on compartmentalize_mesh but uses skeleton coordinates and axoness prediction. Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
     on axoness prediction of SV's contained in SuperSuperVoxel ssv. Skeleton of cell needs to be loaded.
     If not enough soma skeleton nodes or only ones far away from surface, might not find the corresponding vertices.
+    To get coordinates from vertices of a given compartment use sso.label_dict('vertex')['axoness'] or ['spiness'].
     Args:
         ssv: SuperSegmentationObject
         pred_key_appendix: str
