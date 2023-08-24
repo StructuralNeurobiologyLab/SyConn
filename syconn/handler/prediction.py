@@ -605,7 +605,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         chunk_size: Tuple[int, int, int] = (1024, 1024, 512),
                         traindata_mean: float = 0.,
                         traindata_std: float = 255.,
-                        float16: bool = True, save_dir = None):
+                        float16: bool = True, save_dir = None,
+                        exclude_nodes = None):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
     knossos dataset located at `kd_path`.
@@ -703,6 +704,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 log.error(msg)
                 raise ValueError(msg)
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
+            if path == global_params.config.working_dir:
+                raise ValueError('The directory you want to delete is the whole working directory')
             shutil.rmtree(path)
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
@@ -710,9 +713,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         scale = np.array(global_params.config['scaling'])
         target_kd.scales = [scale, ]
         # TODO: use pyk conf!
-        target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2 ** x for x in range(6)],
-                                          create_pyk_conf=False, create_knossos_conf=True)
+        target_kd.initialize(path, boundary = kd.boundary, scale = kd.scale,
+                                          experiment_name=kd.experiment_name, cube_shape=cube_shape_kd)
         try:  # make sure init works
             basics.kd_factory(path)
         except ValueError as e:
@@ -737,16 +739,13 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         qu.batchjob_enabled() else global_params.config['ncores_per_node']
     if save_dir is not None:
         qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
-                           remove_jobfolder=True, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
+                           remove_jobfolder=False, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
                            batchjob_folder=save_dir,
-                                   exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007', 'cajalg008', 'cajalg009',
-                                                  'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
+                                   exclude_nodes=exclude_nodes)
     else:
         qu.batchjob_script(multi_params, "predict_dense", n_cores=n_cores_per_job, suffix='_' + '_'.join(target_names),
-                           remove_jobfolder=True, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
-                           exclude_nodes=['cajalg002', 'cajalg003', 'cajalg004', 'cajalg005', 'cajalg006', 'cajalg007',
-                                          'cajalg008', 'cajalg009',
-                                          'cajalg010', 'cajalg011', 'cajalg012', 'cajalg013', 'cajalg014', 'cajalg015'])
+                           remove_jobfolder=False, log=log, additional_flags="--time=7-0 --gres=gpu:1 --cpus-per-task 4",
+                           exclude_nodes=exclude_nodes)
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
@@ -789,7 +788,8 @@ def dense_predictor(args):
     start = time.time()
     # init KnossosDataset:
     kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_p)
+    #kd.initialize_from_knossos_path(kd_p)
+    kd.initialize_from_conf(kd_p)
 
     # init ChunkDataset:
     cd = ChunkDataset()

@@ -258,6 +258,7 @@ class VoxelStorageDyn(CompressedStorage):
                 log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorageDyn` object (stored at "{}") '
                                  'from `{}` to `{}`.'.format(inp, old_p, new_p))
                 self._dc_intern['meta']['voxeldata_path'] = voxeldata_path
+                self.push()
         voxeldata_path = self._dc_intern['meta']['voxeldata_path']
         if voxel_mode:
             if voxeldata_path is None:

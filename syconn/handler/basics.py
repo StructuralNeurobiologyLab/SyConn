@@ -58,6 +58,9 @@ def kd_factory(kd_path: str, channel: str = 'jpg'):
     elif len(glob.glob(f'{kd_path}/*.pyk.conf')) == 1:
         pyk_confs = glob.glob(f'{kd_path}/*.pyk.conf')
         kd.initialize_from_pyknossos_path(pyk_confs[0])
+    elif len(glob.glob(f'{kd_path}/*.k.toml')) == 1:
+        confs = glob.glob(f'{kd_path}/*.k.toml')
+        kd.initialize_from_toml(confs[0])
     elif os.path.isfile(kd_path + "/mag1/knossos.conf"):
         # Initializes the dataset by parsing the knossos.conf in path + "mag1"
         kd_path += "/mag1/knossos.conf"
