@@ -138,6 +138,8 @@ def batchjob_script(params: list, name: str,
         if not overwrite:
             raise FileExistsError(f'Batchjob folder already exists at "{batchjob_folder}". Please'
                                   f' make sure it is safe for deletion, then set overwrite=True')
+        if batchjob_folder == wd:
+            raise ValueError('The directory you want to delete is the whole working directory')
         shutil.rmtree(batchjob_folder, ignore_errors=True)
     batchjob_folder = batchjob_folder.rstrip('/')
     # Check if fallback is required

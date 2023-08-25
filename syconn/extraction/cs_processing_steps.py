@@ -664,7 +664,6 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
             if sd_cs_ssv.so_storage_path == wd:
                 raise ValueError('The directory you want to delete is the whole working directory')        
             shutil.rmtree(sd_cs_ssv.so_storage_path)
-
     # prepare folder structure
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
