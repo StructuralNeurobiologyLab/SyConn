@@ -7,20 +7,19 @@ channels:
   - conda-forge
   - defaults
   - menpo
-  - open3d-admin 
-  #- pyg
+  - open3d-admin
+  # - pyg
 dependencies:
+  - cudatoolkit=11.6
   # From -c pytorch
-  - cudatoolkit=10.2       
-  - pytorch==1.5.1 # can be > 1.9 if glibc >=2.27 is available NOTE(ada):pinning version because elektronn3 didnt work
-  - torchvision==0.6.1 
+  - pytorch::pytorch=1.12.1  # can be > 1.9 if glibc >=2.27 is available
+  - torchvision
   # - pyg
   # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python=3.7    # (3.6 should also work) NOTE(ada): because open3d was not available for python3.8: glibc 2.18 not found
+  - python > 3.8  # (3.6 should also work)
   - pip
-  - cxx-compiler # for g++
   - lemon
   - vigra
   - freeglut
@@ -42,7 +41,7 @@ dependencies:
   - scipy < 1.9   # <1.9 because n_jobs parameter in every tree query was removed. Can be >=1.9 if refactored in the whole project
   - termcolor
   # fix version due to stored RFC models.
-  - scikit-learn = 0.21.3
+  - scikit-learn >= 0.24.1
   - scikit-image
   - opencv
   - numba >0.48  # =0.48 led to freeze when importing elektronn3.data
@@ -75,17 +74,17 @@ dependencies:
   - sphinx_rtd_theme
   - sphinx-autodoc-typehints
 
-  #- pyg::torch-scatter
+  # Required dependencies that are not yet available via conda:
   - pip:
-    - open3d==0.9.0  #Note(ada):>0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
+    - open3d
     - zmesh
     - plyfile
-    - torch_geometric==2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
+    - torch_geometric == 2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
     - --find-links https://data.pyg.org/whl/torch-1.12.0+cu116.html
     - torch-sparse
     - torch-scatter
     # Pre-release packages
-    - git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3 
+    - git+https://github.com/mpinb/elektronn3.git@syconn2-mod#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
 
@@ -101,5 +100,3 @@ dependencies:
     #for skeletonisation
     - fill-voids
 
-
-  
