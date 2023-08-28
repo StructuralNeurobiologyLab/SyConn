@@ -76,7 +76,7 @@ dependencies:
 
   # Required dependencies that are not yet available via conda:
   - pip:
-    - open3d
+    - open3d<=0.9
     - zmesh
     - plyfile
     - torch_geometric == 2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
