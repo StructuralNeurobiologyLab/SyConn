@@ -80,10 +80,7 @@ dependencies:
     - open3d<=0.9
     - zmesh
     - plyfile
-    - torch_geometric == 2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
-    - --find-links https://data.pyg.org/whl/torch-1.12.0+cu116.html
-    - torch-sparse
-    - torch-scatter
+    - torch_geometric == 2.3.1
     # Pre-release packages
     - git+https://github.com/mpinb/elektronn3.git@syconn2-mod#egg=elektronn3
     - git+https://github.com/mpinb/knossos_utils.git@syconn2-mod#egg=knossos_utils
