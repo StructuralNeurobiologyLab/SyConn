@@ -1926,7 +1926,8 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     mpath = os.path.expanduser(mpath)
     if os.path.isdir(mpath):
         # multiple models
-        mpaths = glob.glob(mpath + '*/state_dict.pth')
+        #mpaths = glob.glob(mpath + '*/state_dict.pth')
+        mpaths = glob.glob(mpath + '*.pth')
     else:
         # single model
         mpaths = [mpath]
@@ -1967,7 +1968,7 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
             batchsizes[ctx] = int(batchsizes[ctx]*default_kwargs['bs'])
         default_kwargs['bs'] = batchsizes
     out_dc = predict_pts_plain(ssd_kwargs,
-                               model_loader=get_cmpt_model_pts,
+                               model_loader=get_cpmt_model_pts_OLD,
                                loader_func=pts_loader_cpmt,
                                pred_func=pts_pred_cmpt,
                                postproc_func=pts_postproc_cpmt,
@@ -1997,7 +1998,7 @@ def get_cpmt_model_pts_OLD(mpath: Optional[str] = None, device='cuda', pred_type
     mpath = os.path.expanduser(mpath)
     if os.path.isdir(mpath):
         # multiple models
-        mpaths = glob.glob(mpath + '*/*.pth')
+        mpaths = glob.glob(mpath + '*.pth')
     else:
         # single model, must contain 'cmpt' in its name
         mpaths = [mpath]
@@ -2223,9 +2224,9 @@ def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
             high = bs * (ii + 1)
             with torch.no_grad():
                 # transpose is required for lcp architectures
-                g_inp = [torch.from_numpy(i[low:high]).to(device).float().transpose(1, 2) for i in model_inp]
+                g_inp = [torch.from_numpy(i[low:high]).to(device).float() for i in model_inp]
                 out = m[batch_progress[2]](*g_inp)
-                out = out.transpose(1, 2).cpu().numpy()
+                out = out.cpu().numpy()
                 masks = batch_mask[low:high]
                 # filter vertices which belong to sv (discard predictions for cell organelles)
                 out = out[masks]
@@ -2435,7 +2436,7 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
     ctx = int(re.findall(r'_ctx(\d+)_', mdir)[-1])
     feat_dim = int(re.findall(r'_fdim(\d+)', mdir)[-1])
     class_num = int(re.findall(r'_cnum(\d+)', mdir)[-1])
-    pred_type = re.findall(r'_types([^_]+)_', mdir)[-1]
+    pred_type = re.findall(r'_t([^_]+)_', mdir)[-1]
     batchsize = int(re.findall(r'_bs(\d+)_', mdir)[-1])
     # TODO: Fix neighbor_nums or create extra model
     mkwargs = dict(input_channels=feat_dim, output_channels=class_num, use_norm=use_norm, use_bias=use_bias,
