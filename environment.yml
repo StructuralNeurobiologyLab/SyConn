@@ -20,6 +20,7 @@ dependencies:
   # From conda-forge and defaults
   - python=3.7  # (3.6 should also work)
   - pip
+  #- gxx_linux-64
   - lemon
   - vigra
   - freeglut
@@ -85,7 +86,7 @@ dependencies:
     - torch-scatter
     # Pre-release packages
     - git+https://github.com/mpinb/elektronn3.git@syconn2-mod#egg=elektronn3
-    - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
+    - git+https://github.com/mpinb/knossos_utils.git@syconn2-mod#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
 
     # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
