@@ -42,7 +42,7 @@ dependencies:
   - scipy < 1.9   # <1.9 because n_jobs parameter in every tree query was removed. Can be >=1.9 if refactored in the whole project
   - termcolor
   # fix version due to stored RFC models.
-  - scikit-learn >= 0.24.1
+  - scikit-learn = 0.21.3
   - scikit-image
   - opencv
   - numba >0.48  # =0.48 led to freeze when importing elektronn3.data

@@ -21,8 +21,8 @@ Installation
 
 Before you can set up SyConn, ensure that the
 `mamba <https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-installation>`__
-package manager is installed on your system and that `gcc` and `g++` is available (tested version: 11.2.0).
-Then you can install SyConn and all of its dependencies into a new conda
+package manager is installed on your system. Then you can install SyConn and
+all of its dependencies into a new conda
 `environment <https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html>`__
 named “syconn2” by running:
 
@@ -30,7 +30,7 @@ named “syconn2” by running:
 
    git clone https://github.com/StructuralNeurobiologyLab/SyConn
    cd SyConn
-   CXX=g++; CC=gcc; conda env create -n syconn2 -f environment.yml
+   mamba env create -n syconn2 -f environment.yml
    mamba activate syconn2
    pip install -e .
 
