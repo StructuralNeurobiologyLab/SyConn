@@ -7,20 +7,20 @@ channels:
   - conda-forge
   - defaults
   - menpo
-  - open3d-admin 
-  #- pyg
+  - open3d-admin
+  # - pyg
 dependencies:
+  - cudatoolkit=11.6
   # From -c pytorch
-  - cudatoolkit=10.2       
-  - pytorch==1.5.1 # can be > 1.9 if glibc >=2.27 is available NOTE(ada):pinning version because elektronn3 didnt work
-  - torchvision==0.6.1 
+  - pytorch::pytorch=1.12.1  # can be > 1.9 if glibc >=2.27 is available
+  - torchvision
   # - pyg
   # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python=3.7    # (3.6 should also work) NOTE(ada): because open3d was not available for python3.8: glibc 2.18 not found
+  - python=3.7  # (3.6 should also work)
   - pip
-  - cxx-compiler # for g++
+  #- gxx_linux-64
   - lemon
   - vigra
   - freeglut
@@ -75,18 +75,15 @@ dependencies:
   - sphinx_rtd_theme
   - sphinx-autodoc-typehints
 
-  #- pyg::torch-scatter
+  # Required dependencies that are not yet available via conda:
   - pip:
-    - open3d==0.9.0  #Note(ada):>0.9.0 throws /lib64/libm.so.6: version `GLIBC_2.27' not found
+    - open3d<=0.9
     - zmesh
     - plyfile
-    - torch_geometric==2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
-    - --find-links https://data.pyg.org/whl/torch-1.12.0+cu116.html
-    - torch-sparse
-    - torch-scatter
+    - torch_geometric == 2.3.1
     # Pre-release packages
-    - git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3 
-    - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
+    - git+https://github.com/mpinb/elektronn3.git@syconn2-mod#egg=elektronn3
+    - git+https://github.com/mpinb/knossos_utils.git@syconn2-mod#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
 
     # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices
@@ -101,5 +98,3 @@ dependencies:
     #for skeletonisation
     - fill-voids
 
-
-  
