@@ -201,7 +201,7 @@ After initialization of the SDs (cell and sub-cellular structures, step
 SyConn KNOSSOS viewer
 ---------------------
 
-This setup assumes that you run Linux (or WSL on Linux). If you don't
+This setup assumes that you run Linux (or WSL on Windows). If you don't
 have requried packages installed, you additional need ``sudo`` rights or
 ask your system administrator to install them for you.
 
