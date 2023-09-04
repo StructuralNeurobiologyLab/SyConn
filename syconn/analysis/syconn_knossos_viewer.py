@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-from typing import Dict, Any
 
 from PythonQt import QtGui, Qt, QtCore
 from PythonQt.QtGui import QTableWidget, QTableWidgetItem
@@ -27,7 +26,7 @@ class SyConnGateInteraction(object):
     """
     Query the SyConn backend server.
     """
-    ct_from_cache: Dict[Any, Any]
+    ct_from_cache = {} # type: Dict[Any, Any]
 
     def __init__(self, server, synthresh=0.5, axodend_only=True):
         self.server = server
