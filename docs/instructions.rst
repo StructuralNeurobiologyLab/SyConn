@@ -248,6 +248,11 @@ KNOSSOS-plugin follow these steps:
 
       sudo apt install libfuse2
 
+   if AppImage complains about ``error while loading shared libraries: libGL.so.1: cannot open shared object file: No such file or directory`` you need to [install](https://stackoverflow.com/a/68666500) it:
+   ::
+
+      sudo apt install libgl1
+
 -  In KNOSSOS -> File -> Choose Dataset -> browse to your working
    directory and open ``knossosdatasets/seg/mag1/knossos.conf`` with
    enabled ‘load_segmentation_overlay’ (at the bottom of the dialog).
