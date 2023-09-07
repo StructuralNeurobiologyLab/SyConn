@@ -18,8 +18,9 @@ dependencies:
   # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python >= 3.9  # (3.6 should also work)
+  - python=3.7  # (3.6 should also work)
   - pip
+  #- gxx_linux-64
   - lemon
   - vigra
   - freeglut
@@ -41,7 +42,7 @@ dependencies:
   - scipy < 1.9   # <1.9 because n_jobs parameter in every tree query was removed. Can be >=1.9 if refactored in the whole project
   - termcolor
   # fix version due to stored RFC models.
-  - scikit-learn >= 0.24.1
+  - scikit-learn = 0.21.3
   - scikit-image
   - opencv
   - numba >0.48  # =0.48 led to freeze when importing elektronn3.data
@@ -76,16 +77,13 @@ dependencies:
 
   # Required dependencies that are not yet available via conda:
   - pip:
-    - open3d
+    - open3d<=0.9
     - zmesh
     - plyfile
-    - torch_geometric == 2.0.2  # 2.0.3 is incompatible with lcp.knn.quantized_sampling
-    - --find-links https://data.pyg.org/whl/torch-1.12.0+cu116.html
-    - torch-sparse
-    - torch-scatter
+    - torch_geometric == 2.3.1
     # Pre-release packages
-    - git+https://github.com/ELEKTRONN/elektronn3.git@syconn2#egg=elektronn3
-    - git+https://github.com/knossos-project/knossos_utils.git@syconn2#egg=knossos_utils
+    - git+https://github.com/mpinb/elektronn3.git@syconn2-mod#egg=elektronn3
+    - git+https://github.com/mpinb/knossos_utils.git@syconn2-mod#egg=knossos_utils
     - git+https://github.com/StructuralNeurobiologyLab/MorphX.git@v0.1#egg=MorphX
 
     # cloud-volume >=4 throws an error in simple_merge during np.concatenate if any skeleton has no vertices

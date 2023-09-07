@@ -1411,16 +1411,17 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject) -> list:
     Returns:
         list
     """
-    features = [synssv_o.size, synssv_o.mesh_area]
+    # print(synssv_o.attr_dict.keys())
+    features = [synssv_o.size, synssv_o.mesh_area, synssv_o.attr_dict["syn_type_sym_ratio"]] #NOTE(ada): we need to delete 3
 
     partner_ids = synssv_o.attr_dict["neuron_partners"]
     for i_partner_id, partner_id in enumerate(partner_ids):
         features.append(synssv_o.attr_dict["n_mi_objs_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_mi_vxs_%d" % i_partner_id])
-        features.append(synssv_o.attr_dict["min_dst_mi_nm_%d" % i_partner_id])
+        #features.append(synssv_o.attr_dict["min_dst_mi_nm_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_vc_objs_%d" % i_partner_id])
         features.append(synssv_o.attr_dict["n_vc_vxs_%d" % i_partner_id])
-        features.append(synssv_o.attr_dict["min_dst_vc_nm_%d" % i_partner_id])
+        #features.append(synssv_o.attr_dict["min_dst_vc_nm_%d" % i_partner_id])
     return features
 
 

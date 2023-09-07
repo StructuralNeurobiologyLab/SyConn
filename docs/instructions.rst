@@ -20,9 +20,9 @@ Installation
 - The whole pipeline was designed and tested on Linux systems
 
 Before you can set up SyConn, ensure that the
-`conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/>`__
-package manager is installed on your system. Then you can install SyConn
-and all of its dependencies into a new conda
+`mamba <https://mamba.readthedocs.io/en/latest/mamba-installation.html#mamba-installation>`__
+package manager is installed on your system. Then you can install SyConn and
+all of its dependencies into a new conda
 `environment <https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html>`__
 named “syconn2” by running:
 
@@ -30,8 +30,8 @@ named “syconn2” by running:
 
    git clone https://github.com/StructuralNeurobiologyLab/SyConn
    cd SyConn
-   conda env create -f environment.yml -n syconn2 python=3.7
-   conda activate syconn2
+   mamba env create -n syconn2 -f environment.yml
+   mamba activate syconn2
    pip install -e .
 
 The last command will install SyConn in
@@ -42,12 +42,6 @@ command with:
 ::
 
    pip install .
-
-To update the environment, e.g. if the environment file changed, use:
-
-::
-
-   conda env update --name syco --file environment.yml --prune
 
 If you encounter
 
@@ -207,6 +201,10 @@ After initialization of the SDs (cell and sub-cellular structures, step
 SyConn KNOSSOS viewer
 ---------------------
 
+This setup assumes that you run Linux (or WSL on Windows). If you don't
+have requried packages installed, you additional need ``sudo`` rights or
+ask your system administrator to install them for you.
+
 The following packages have to be available in the system’s python2
 interpreter (will differ from the conda environment):
 
@@ -214,25 +212,54 @@ interpreter (will differ from the conda environment):
 -  lz4
 -  requests
 
+One approach is to install them via `pip`:
+::
+
+   wget -P ~/.local/lib https://bootstrap.pypa.io/pip/2.7/get-pip.py
+   python2 ~/.local/lib/get-pip.py --user
+   python2 -m pip install numpy requests lz4
+
 In order to inspect the resulting data via the SyConnViewer
 KNOSSOS-plugin follow these steps:
 
 -  Wait until ``start.py`` finished. For starting the server manually
-   run ``syconn.server --working_dir=<path>`` which executes
-   ``syconn/kplugin/server.py`` and allows to visualize the analysis
+   run ``syconn.server --working_dir=<path>`` in the syconn conda environment
+   which executes ``syconn/analysis/server.py`` and allows to visualize the analysis
    results of the working directory at (``<path>``) in KNOSSOS. The
    server address and port will be printed.
 
--  Download and run the nightly build of KNOSSOS
-   (https://github.com/knossos-project/knossos/releases/tag/nightly)
+-  Download and run version 5.1 of KNOSSOS
+   (https://github.com/knossos-project/knossos/releases/tag/v5.1)
+   ::
+
+      wget https://github.com/knossos-project/knossos/releases/download/v5.1/linux.KNOSSOS-5.1.AppImage
+      chmod u+x linux.KNOSSOS-5.1.AppImage
+      ./linux.KNOSSOS-5.1.AppImage
+
+   Possible pitfalls:
+   ``libpython2.7.so.1.0: cannot open shared object file: No such file or directory``
+   you need to install the python-devtool package on your system:
+   ::
+
+      sudo apt install libpython2.7
+
+   If the AppImage complains about missing ``fusermount`` you need to install it (i.e. on Ubuntu 22.04)
+   ::
+
+      sudo apt install libfuse2
+
+   if AppImage complains about ``error while loading shared libraries: libGL.so.1: cannot open shared object file: No such file or directory`` you need to [install](https://stackoverflow.com/a/68666500) it:
+   ::
+
+      sudo apt install libgl1
 
 -  In KNOSSOS -> File -> Choose Dataset -> browse to your working
    directory and open ``knossosdatasets/seg/mag1/knossos.conf`` with
    enabled ‘load_segmentation_overlay’ (at the bottom of the dialog).
 
 -  Then go to Scripting (top row) -> Run file -> browse to
-   ``syconn/kplugin/syconn_knossos_viewer.py``, open it and enter the
-   port and address of the syconn server.
+   ``syconn/analysis/syconn_knossos_viewer.py``, open it and enter the
+   port and address of the syconn server as printed in the terminal.
 
 -  After the SyConnViewer window has opened, the selection of
    segmentation fragments in the slice-viewports (exploration mode) or
