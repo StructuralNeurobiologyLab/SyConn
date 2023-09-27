@@ -395,7 +395,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     else:
         _ = qu.batchjob_script(
             multi_params, "combine_and_split_syn", remove_jobfolder=False, log=log,
-            additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
+            additional_flags="--time=2-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
             exclude_nodes=exclude_nodes
         )
 
@@ -644,7 +644,6 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
         rel_ssv_with_cs_ids = filter_relevant_syn(cs_sd, ssd, log=log)
     del ssd, cs_sd
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
-
     #n_used_paths = min(global_params.config.ncore_total * 30, len(storage_location_ids),
     #                   len(rel_ssv_with_cs_ids))
     n_used_paths = min(len(storage_location_ids),len(rel_ssv_with_cs_ids))
@@ -653,7 +652,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
     # target SD for SSV cs objects
     sd_cs_ssv = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="0", create=False,
                                                  n_folders_fs=n_folders_fs)
-
+    '''
     if os.path.exists(sd_cs_ssv.so_storage_path):
         if not overwrite:
             raise FileExistsError(f'"{sd_cs_ssv.so_storage_path}" already exists, but overwrite was set to False.')
@@ -664,11 +663,14 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
             if sd_cs_ssv.so_storage_path == wd:
                 raise ValueError('The directory you want to delete is the whole working directory')        
             shutil.rmtree(sd_cs_ssv.so_storage_path)
+    '''
     # prepare folder structure
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
                                         for ix in storage_location_ids])
+    '''
     for p in voxel_rel_paths_2stage:
         os.makedirs(sd_cs_ssv.so_storage_path + p)
+    '''
 
     rel_ssv_with_cs_ids_items = list(rel_ssv_with_cs_ids.items())
 
@@ -681,7 +683,7 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
         _ = sm.start_multiprocess_imap(_combine_and_split_cs_thread, multi_params, nb_cpus=nb_cpus, debug=False)
     else:
         _ = qu.batchjob_script(multi_params, "combine_and_split_cs", remove_jobfolder=False, log=log, overwrite = False,
-                                   additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=85000",
+                                   additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=70000 --nice=1000",
                                    exclude_nodes=exclude_nodes)
 
 

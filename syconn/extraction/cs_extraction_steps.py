@@ -831,8 +831,9 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     target_kd._cube_shape = cube_shape
     scale = np.array(global_params.config['scaling'])
     target_kd.scales = [scale, ]
-    target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
-                                      mags=[1, ], create_pyk_conf=True, create_knossos_conf=False)
+    target_kd.initialize(path_kd, kd.experiment_name, kd.boundary, scale = scale, cube_shape=cube_shape)
+    #target_kd.initialize_without_conf(path_kd, kd.boundary, scale, kd.experiment_name,
+    #                                  mags=[1, ], create_knossos_conf=True)
 
     multi_params = []
     iter_params = basics.chunkify(chunk_list, max_n_jobs)
@@ -850,7 +851,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
     if qu.batchjob_enabled():
 
         path_to_out = qu.batchjob_script(multi_params, "contact_site_extraction_syns", log=log, use_dill=True,
-                                         additional_flags="--time=7-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
+                                         additional_flags="--time=2-0 --gres=gpu:0 --cpus-per-task 1 --mem=30000",
                                          exclude_nodes=exclude_nodes, remove_jobfolder=False)
 
 
@@ -931,7 +932,7 @@ def extract_contact_sites_syns(chunk_size: Optional[Tuple[int, int, int]] = None
         start_multiprocess_imap(_write_props_to_onlysyn_thread, multi_params, debug=False)
     else:
         qu.batchjob_script(multi_params, "write_props_to_onlysyn", log=log,
-                           remove_jobfolder=False,additional_flags="--time=7-0 --gres=gpu:0 --mem=12000",
+                           remove_jobfolder=False,additional_flags="--time=2-0 --gres=gpu:0 --mem=12000",
                            n_cores=1,exclude_nodes=exclude_nodes)
 
     # Mesh props are not computed as this is done for the agglomerated versions (only syn_ssv)

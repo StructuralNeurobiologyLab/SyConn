@@ -152,7 +152,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
 
     log.info('Cellular organelles were mapped to "syn_ssv".')
-    
+    raise ValueError
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
     log.info('Synapse prediction finished.')
     log.info('Collecting and writing syn_ssv objects to SSV attribute '
