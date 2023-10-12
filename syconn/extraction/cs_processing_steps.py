@@ -1314,9 +1314,9 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
             raise FileExistsError(f'File with mapped synssv objects already exists '
                                   f'at "{mapped_synssv_objects_kzip}"')
         os.remove(mapped_synssv_objects_kzip)
-    label_coords = []
-    labels = []
     if path2file.endswith('k.zip'):
+        label_coords = []
+        labels = []
         anno = skeleton_utils.load_skeleton(path2file)['Synapse annotation']
         for node in anno.getNodes():
             c = node.getComment()
@@ -1324,37 +1324,22 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
                 continue
             labels.append(c)
             label_coords.append(np.array(node.getCoordinate()))
+        labels = np.array(labels)
+        label_coords = np.array(label_coords)
     else:
-        df = pandas.read_excel(path2file, header=0, names=[
-            'ixs', 'coord', 'pre', 'post', 'syn', 'doublechecked', 'triplechecked', '?', 'comments']).values
-        df = df[:, :7]
-        synaptic = 0
-        non_synaptic = 0
-        for ix in range(df.shape[0]):
-            c_orig = df[ix, 5]
-            c = df[ix, 6]
-            if type(c) != float and 'yes' in c:
-                unified_comment = 'synaptic'
-                synaptic += 1
-            elif type(c) != float and 'no' in c:
-                unified_comment = 'non-synaptic'
-                non_synaptic += 1
-            elif 'yes' in c_orig:
-                unified_comment = 'synaptic'
-                synaptic += 1
-            elif 'no' in c_orig:
-                unified_comment = 'non-synaptic'
-                non_synaptic += 1
-            else:
-                log.warn(f'Did not understand GT comment "{c}". Skipping')
-                continue
-            labels.append(unified_comment)
-            label_coords.append(np.array(df[ix, 1].split(','), dtype=np.float32))
+        #df = pandas.read_excel(path2file, header=0, names=[
+        #    'ixs', 'coord', 'pre', 'post', 'syn', 'doublechecked', 'triplechecked', '?', 'comments']).values
+        #new format of gt file
+        df = pandas.read_csv(path2file)
+        labels = np.array(df['final'])
+        labels[labels == 'yes'] = 'synaptic'
+        labels[labels == 'no'] = 'non-synaptic'
+        label_coords = np.array([df['coord x'], df['coord y'], df['coord z']]).transpose()
+        synaptic = len(labels[labels == 'synaptic'])
+        non_synaptic = len(labels[labels == 'non-synaptic'])
 
-    labels = np.array(labels)
     label_coords = np.array(label_coords)
     log.info(f'Before filtering: {synaptic} synaptic labels and {non_synaptic} non_synaptic labels')
-
     # get deterministic order by sorting by coordinate first and then seeded shuffling
     ixs = [i[0] for i in sorted(enumerate(label_coords),
                                 key=lambda x: [x[1][0], x[1][1], x[1][2]])]
