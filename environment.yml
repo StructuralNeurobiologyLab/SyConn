@@ -16,7 +16,7 @@ dependencies:
   # - pytorch-sparse
 
   # From conda-forge and defaults
-  - python >= 3.9  # (3.6 should also work)
+  - python >= 3.9,<3.11
   - pip
   - lemon
   - vigra
@@ -49,7 +49,7 @@ dependencies:
   - joblib
   - seaborn >=0.11
   - pyyaml
-  - cython
+  - cython <3  # extension modules are currently not compatible with cython 3
   - colorlog
   # for pandas xls support
   - xlrd >=1.0.0
