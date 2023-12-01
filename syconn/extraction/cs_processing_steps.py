@@ -1393,7 +1393,7 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     log.info('Performing 10-fold cross validation.')
     rfc = ensemble.RandomForestClassifier(n_estimators=2000, max_features='sqrt',
                                           n_jobs=1, random_state=0,
-                                          oob_score=True, class_weight = 'balanced')
+                                          oob_score=True)
     mask_annotated = (labels == "synaptic") | (labels == 'non-synaptic')
     v_features = features[mask_annotated]
     v_labels = labels[mask_annotated]

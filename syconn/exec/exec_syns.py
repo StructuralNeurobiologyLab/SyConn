@@ -91,7 +91,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     """
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
-
+    '''
     kd_seg_path = global_params.config.kd_seg_path
     kd = kd_factory(kd_seg_path)
     if cube_of_interest_bb is None:
@@ -130,12 +130,12 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs, overwrite=overwrite, exclude_nodes = exclude_nodes)
-
+    '''
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
-
+    '''
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
@@ -148,7 +148,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
              f'{(len(sd_syn_ssv.ids) / np.prod(dataset_vol) * 1e9):0.4f} synapses / µm^3.')
     assert n_sym + n_asym == len(sd_syn_ssv.ids)
 
-
+    
     cps.map_objects_from_synssv_partners(global_params.config.working_dir, log=log)
 
     log.info('Cellular organelles were mapped to "syn_ssv".')
@@ -161,6 +161,7 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
     # just collect new data: ``recompute=False``
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
+    '''
     map_synssv_objects(log=log)
     log.info('Finished.')
 

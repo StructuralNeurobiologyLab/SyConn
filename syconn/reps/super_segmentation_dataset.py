@@ -468,7 +468,7 @@ class SuperSegmentationDataset(SegmentationBase):
             (int or Iterable[int]).
         """
         kwargs_def = dict(ssd_type=self.type, create=create, scaling=self.scaling, object_caching=caching,
-                          voxel_caching=caching, mesh_caching=caching, view_caching=caching, enable_locking_so=False,
+                          voxel_caching=caching, _caching=caching, view_caching=caching, enable_locking_so=False,
                           enable_locking=self.sso_locking, config=self.config)
         if caching is None:
             caching = self.sso_caching
