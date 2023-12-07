@@ -58,16 +58,16 @@ hc_cache_gt = {}
 
 def init_hc_cache_gt():
     print("initialising cache")
-    v6_gt = pd.read_csv(
-        "wholebrain/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv",
+    v7_gt = pd.read_csv(
+        "cajal/nvmescratch/projects/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v7_j0251_72_seg_20210127_agglo2_IDs.csv",
         names=["cellids", "celltype"])
-    cellids = np.array(v6_gt["cellids"])
+    cellids = np.array(v7_gt["cellids"])
     for cellid in cellids:
-        hc = load_pkl2obj('cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/hybrid_clouds_gt/%i_hc.pkl' % cellid)
+        hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/231202_hybrid_clouds_gt/%i_hc.pkl' % cellid)
         hc_cache_gt[cellid] = hc
 
 
-#init_hc_cache_gt()
+init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
