@@ -170,14 +170,15 @@ train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val
                               onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)
 
 
-if cval is not None and cval != -1:
+if cval == None or cval == -1:
+    valid_ds = None
+
+else:
     valid_transform = clouds.Compose([clouds.Center(), clouds.Normalization(scale_norm)])
     valid_ds = CellCloudDataJ0251(npoints=npoints, transform=valid_transform, train=False,
-                                  cv_val=cval, cellshape_only=cellshape_only,
-                                  use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
-                                  ctx_size=ctx, map_myelin=use_myelin)
-else:
-    valid_ds = None
+                               cv_val=cval, cellshape_only=cellshape_only,
+                               use_syntype=use_syntype, onehot=onehot, batch_size=batch_size,
+                               ctx_size=ctx, map_myelin=use_myelin)
 
 # PREPARE AND START TRAINING #
 
