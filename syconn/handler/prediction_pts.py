@@ -67,7 +67,7 @@ def init_hc_cache_gt():
         hc_cache_gt[cellid] = hc
 
 
-init_hc_cache_gt()
+#init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -664,10 +664,10 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
     for ssv_id in ssv_ids:
         redundancy_ssv = int(redundancy)
         n_batches = max(int(np.ceil(redundancy_ssv / batchsize)), 1)
-        ssv = ssd.get_super_segmentation_object(ssv_id)
+        #ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv = SuperSegmentationObject(ssv_id)
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin))
         ssv.clear_cache()
-
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
         try:
@@ -899,7 +899,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                     batch_f[cnt] = hc_sub.features
                     cnt += 1
             assert cnt == batchsize
-            print(f'{time.time() - start} - duration loop')
+            #print(f'{time.time() - start} - duration loop')
             yield ixs, (batch_f, batch)
 
 
@@ -991,7 +991,7 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
 
     """
     if pred_key is None:
-        pred_key = 'celltype_cnn_e3'
+        pred_key = 'celltype_pts_e3'
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_kwargs)
     sso.load_attr_dict()
@@ -1696,9 +1696,15 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
         labels = hc.labels[m]
         feats = hc.features[m]
         pcd.points = o3d.utility.Vector3dVector(verts)
-        pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
-            pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
-            pcd.get_max_bound())
+        try:
+            pcd, idcs = pcd.voxel_down_sample_and_trace(
+                pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
+                pcd.get_max_bound())
+        except Exception as e:
+            DeprecationWarning(f'{e}: Upgrade to open3d 0.9 or higher.')
+            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(
+                pts_feat_ds_dict[gt_type][ident_str], pcd.get_min_bound(),
+                pcd.get_max_bound())
         idcs = np.max(idcs, axis=1)
         new_verts.append(np.asarray(pcd.points))
         new_labels.append(labels[idcs])
@@ -1782,10 +1788,10 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
         mpath = global_params.config.mpath_celltype_pts
     from elektronn3.models.convpoint import ModelNet40
     mkwargs, loader_kwargs = get_pt_kwargs(mpath)
-    n_classes = 15
+    n_classes = 17
     n_inputs = 5
     if 'j0251' in mpath:
-        n_classes = 15
+        n_classes = 17
     if '_myelin' in mpath:
         n_inputs += 1
     if '_noSyntype' in mpath:
@@ -1922,7 +1928,7 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
 
     """
     if pred_key is None:
-        pred_key = 'celltype_cnn_e3'
+        pred_key = 'celltype_pts_e3'
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     loader_kwargs = get_pt_kwargs(mpath)[1]
