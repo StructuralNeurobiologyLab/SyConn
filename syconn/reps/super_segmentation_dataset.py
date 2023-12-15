@@ -551,7 +551,7 @@ class SuperSegmentationDataset(SegmentationBase):
             self.save_mapping_dict()
 
     def save_dataset_deep(self, extract_only: bool = False, attr_keys: Iterable[str] = (), n_jobs: Optional[int] = None,
-                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True):
+                          nb_cpus: Optional[int] = None, use_batchjob=True, new_mapping: bool = True, exclude_nodes = None):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
@@ -573,7 +573,7 @@ class SuperSegmentationDataset(SegmentationBase):
 
         """
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
-                          new_mapping=new_mapping, overwrite=self.overwrite, use_batchjob=use_batchjob)
+                          new_mapping=new_mapping, overwrite=self.overwrite, use_batchjob=use_batchjob, exclude_nodes = None)
 
     def save_version_dict(self):
         """
@@ -624,7 +624,7 @@ class SuperSegmentationDataset(SegmentationBase):
 
 def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False, attr_keys: Iterable = (),
                       n_jobs: Optional[int] = None, nb_cpus: Optional[int] = None, use_batchjob=True,
-                      new_mapping: bool = True, overwrite=False):
+                      new_mapping: bool = True, overwrite=False, exclude_nodes = None):
     """
     Saves attributes of all SSVs within the given SSD and computes properties like size and representative
     coordinate. `id.npy` order may change after repeated runs.
@@ -700,7 +700,8 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
         results = sm.start_multiprocess(_write_super_segmentation_dataset_thread, multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.batchjob_script(multi_params, "write_super_segmentation_dataset", n_cores=nb_cpus)
+        path_to_out = qu.batchjob_script(multi_params, "write_super_segmentation_dataset", n_cores=nb_cpus, exclude_nodes=exclude_nodes,
+                                         additional_flags='--mem=10000')
 
         out_files = glob.glob(path_to_out + "/*")
         results = []

@@ -67,7 +67,7 @@ def init_hc_cache_gt():
         hc_cache_gt[cellid] = hc
 
 
-#init_hc_cache_gt()
+init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -665,7 +665,7 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         redundancy_ssv = int(redundancy)
         n_batches = max(int(np.ceil(redundancy_ssv / batchsize)), 1)
         #ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv = SuperSegmentationObject(ssv_id)
+        ssv = ssd.get_super_segmentation_object(ssv_id)
         hc = _load_ssv_hc((ssv, tuple(feat_dc.keys()), tuple(feat_dc.values()), 'celltype', None, map_myelin))
         ssv.clear_cache()
         pcd = o3d.geometry.PointCloud()
