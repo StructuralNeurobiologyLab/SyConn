@@ -28,6 +28,15 @@ sg_state = None
 
 @app.route('/ssv_skeleton/<ssv_id>', methods=['GET'])
 def route_ssv_skeleton(ssv_id):
+    """
+    This function routes the skeleton of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        str: A JSON string of the skeleton data.
+    """
     d = sg_state.backend.ssv_skeleton(ssv_id)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
@@ -37,6 +46,15 @@ def route_ssv_skeleton(ssv_id):
 
 @app.route('/ssv_mesh/<ssv_id>', methods=['GET'])
 def route_ssv_mesh(ssv_id):
+    """
+    This function routes the mesh of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        str: A JSON string of the mesh data.
+    """
     d = sg_state.backend.ssv_mesh(ssv_id)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
@@ -46,79 +64,207 @@ def route_ssv_mesh(ssv_id):
 
 @app.route('/ssv_ind/<ssv_id>', methods=['GET'])
 def route_ssv_ind(ssv_id):
+    """
+    This function routes the indices of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        dict: A dictionary of the indices data.
+    """
     d = sg_state.backend.ssv_ind(ssv_id)
     return d
 
 
 @app.route('/ssv_vert/<ssv_id>', methods=['GET'])
 def route_ssv_vert(ssv_id):
+    """
+    This function routes the vertices of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        dict: A dictionary of the vertices data.
+    """
     d = sg_state.backend.ssv_vert(ssv_id)
     return d
 
 
 @app.route('/ssv_norm/<ssv_id>', methods=['GET'])
 def route_ssv_norm(ssv_id):
+    """
+    This function routes the normals of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        dict: A dictionary of the normals data.
+    """
     d = sg_state.backend.ssv_norm(ssv_id)
     return d
 
 
 @app.route('/ssv_obj_vert/<ssv_id>/<obj_type>', methods=['GET'])
 def ssv_obj_vert(ssv_id, obj_type):
+    """
+    This function routes the vertices of a specific object type in a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        obj_type (str): The type of the object.
+        
+    Returns:
+        dict: A dictionary of the vertices data.
+    """
     d = sg_state.backend.ssv_obj_vert(ssv_id, obj_type)
     return d
 
 
 @app.route('/ssv_obj_ind/<ssv_id>/<obj_type>', methods=['GET'])
 def ssv_obj_ind(ssv_id, obj_type):
+    """
+    This function routes the indices of a specific object type in a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        obj_type (str): The type of the object.
+        
+    Returns:
+        dict: A dictionary of the indices data.
+    """
     d = sg_state.backend.ssv_obj_ind(ssv_id, obj_type)
     return d
 
 
 @app.route('/ssv_obj_norm/<ssv_id>/<obj_type>', methods=['GET'])
 def ssv_obj_norm(ssv_id, obj_type):
+    """
+    This function routes the normals of a specific object type in a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        obj_type (str): The type of the object.
+        
+    Returns:
+        dict: A dictionary of the normals data.
+    """
     d = sg_state.backend.ssv_obj_norm(ssv_id, obj_type)
     return d
 
 
 @app.route('/ssv_list', methods=['GET'])
 def route_ssv_list():
+    """
+    This function routes the list of all super-segmentation volumes (SSVs).
+    
+    Returns:
+        str: A JSON string of the list of SSVs.
+    """
     return json.dumps(sg_state.backend.ssv_list(), cls=MyEncoder)
 
 
 @app.route('/pull_so_attr/<so_id>/<so_type>/<attr_key>', methods=['GET'])
 def pull_so_attr(so_id, so_type, attr_key):
+    """
+    This function pulls a specific attribute of a segmentation object (SO) given its ID, type, and attribute key.
+    
+    Args:
+        so_id (int): The ID of the SO.
+        so_type (str): The type of the SO.
+        attr_key (str): The key of the attribute.
+        
+    Returns:
+        str: A JSON string of the attribute value.
+    """
     return json.dumps(sg_state.backend.pull_so_attr(so_id, so_type, attr_key),
                       cls=MyEncoder)
 
 
 @app.route('/push_so_attr/<so_id>/<so_type>/<attr_key>/<attr_value>', methods=['GET'])
 def push_so_attr(so_id, so_type, attr_key, attr_value):
+    """
+    This function pushes a specific attribute to a segmentation object (SO) given its ID, type, attribute key, and value.
+    
+    Args:
+        so_id (int): The ID of the SO.
+        so_type (str): The type of the SO.
+        attr_key (str): The key of the attribute.
+        attr_value: The value of the attribute.
+        
+    Returns:
+        str: A JSON string of the result of the push operation.
+    """
     return json.dumps(sg_state.backend.push_so_attr(so_id, so_type, attr_key, attr_value),
                       cls=MyEncoder)
 
 
 @app.route('/svs_of_ssv/<ssv_id>', methods=['GET'])
 def route_svs_of_ssv(ssv_id):
+    """
+    This function routes the segmentation volumes (SVs) of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        str: A JSON string of the list of SVs.
+    """
     return json.dumps(sg_state.backend.svs_of_ssv(ssv_id), cls=MyEncoder)
 
 
 @app.route('/ssv_of_sv/<sv_id>', methods=['GET'])
 def route_ssv_of_sv(sv_id):
+    """
+    This function routes the super-segmentation volume (SSV) of a segmentation volume (SV) given its ID.
+    
+    Args:
+        sv_id (int): The ID of the SV.
+        
+    Returns:
+        str: A JSON string of the SSV.
+    """
     return json.dumps(sg_state.backend.ssv_of_sv(sv_id), cls=MyEncoder)
 
 
 @app.route('/ct_of_ssv/<ssv_id>', methods=['GET'])
 def route_ct_of_sv(ssv_id):
+    """
+    This function routes the cell type (CT) of a super-segmentation volume (SSV) given its ID.
+    
+    Args:
+        ssv_id (int): The ID of the SSV.
+        
+    Returns:
+        str: A JSON string of the CT.
+    """
     return json.dumps(sg_state.backend.ct_of_ssv(ssv_id), cls=MyEncoder)
 
 
 @app.route('/all_syn_meta/<params>', methods=['GET'])
 def route_all_syn_meta(params):
+    """
+    This function routes all synapse metadata given a set of parameters.
+    
+    Args:
+        params (str): A JSON string of the parameters.
+        
+    Returns:
+        str: A JSON string of the synapse metadata.
+    """
     return json.dumps(sg_state.backend.all_syn_meta_data(json.loads(params)), cls=MyEncoder)
 
 
 @app.route("/", methods=['GET'])
 def route_hello():
+    """
+    This function routes the welcome message of the SyConnGate.
+    
+    Returns:
+        str: A JSON string of the welcome message.
+    """
     return json.dumps({'Welcome to': 'SyConnGate'}, cls=MyEncoder)
 
 
@@ -126,20 +272,18 @@ class SyConnBackend(object):
     def __init__(self, syconn_path: str = '', logger=None, synthresh=0.5,
                  axodend_only=True):
         """
-        Initializes a SyConn backend for operation.
-        This includes in-memory initialization of the
-        most important caches. Currently, SyConn Gate
-        does not support backend data changes and the server needs
-        to restart for changes to be valid. If the backend data
-        is changed while the server is running, old content
-        might be served.
-        All backend functions must return dicts.
-
+        Initializes a SyConn backend for operation. This includes in-memory initialization of the
+        most important caches. Currently, SyConn Gate does not support backend data changes and the
+        server needs to restart for changes to be valid. If the backend data is changed while the 
+        server is running, old content might be served. All backend functions must return dicts.
+        
         Args:
-            syconn_path:
-            logger:
-            synthresh: All synapses below `synthresh` will be excluded.
-            axodend_only: If True, only axo-dendritic synapses will be loaded.
+            syconn_path (str): Path to the SyConn directory.
+            logger (logging.Logger, optional): Logger for the backend. Defaults to None.
+            synthresh (float, optional): Threshold for synapses. All synapses below this value will 
+                be excluded. Defaults to 0.5.
+            axodend_only (bool, optional): If True, only axo-dendritic synapses will be loaded. 
+                Defaults to True.
         """
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
@@ -165,11 +309,13 @@ class SyConnBackend(object):
 
     def ssv_mesh(self, ssv_id):
         """
-        Get mesh for ssv_id.
+        Retrieves the mesh for a given SuperSegmentationObject (SSO) ID.
+        
         Args:
-            ss_vid (int): id of ssv
+            ssv_id (int): ID of the SSO.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh data for the SSO.
         """
         start = time.time()
         self.logger.info('Loading ssv mesh {}'.format(ssv_id))
@@ -186,10 +332,13 @@ class SyConnBackend(object):
 
     def ssv_ind(self, ssv_id):
         """
+        Retrieves the mesh indices for a given SuperSegmentationObject (SSO) ID.
+        
         Args:
-            ssv_id (int):
+            ssv_id (int): ID of the SSO.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh indices for the SSO.
         """
         start = time.time()
         self.logger.info('Loading {} ssv mesh indices'.format(ssv_id))
@@ -204,11 +353,13 @@ class SyConnBackend(object):
 
     def ssv_vert(self, ssv_id):
         """
-        Get mesh vertices for ssv_id.
+        Retrieves the mesh vertices for a given SuperSegmentationObject (SSO) ID.
+        
         Args:
-            ssv_id (int):
+            ssv_id (int): ID of the SSO.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh vertices for the SSO.
         """
         start = time.time()
         self.logger.info('Loading ssv {} mesh vertices'.format(ssv_id))
@@ -223,11 +374,13 @@ class SyConnBackend(object):
 
     def ssv_skeleton(self, ssv_id):
         """
-        Get mesh vertices for ssv_id.
+        Retrieves the skeleton for a given SuperSegmentationObject (SSO) ID.
+        
         Args:
-            ssv_id (int):
+            ssv_id (int): ID of the SSO.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the skeleton data for the SSO.
         """
         self.logger.info('Loading ssv skeleton {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
@@ -260,11 +413,13 @@ class SyConnBackend(object):
 
     def ssv_norm(self, ssv_id):
         """
-        Get mesh normals for ssv_id.
+        Retrieves the mesh normals for a given SuperSegmentationObject (SSO) ID.
+        
         Args:
-            ssv_id (int):
+            ssv_id (int): ID of the SSO.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh normals for the SSO.
         """
         # not needed for K
         return {'norm': []}
@@ -283,12 +438,15 @@ class SyConnBackend(object):
 
     def ssv_obj_ind(self, ssv_id, obj_type):
         """
-        Get mesh indices of a specific obj type for ssv_id.
+        Retrieves the mesh indices of a specific object type for a given SuperSegmentationObject 
+        (SSO) ID.
+        
         Args:
-            ssv_id (int):
-            obj_type (str):
+            ssv_id (int): ID of the SSO.
+            obj_type (str): Type of the object.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh indices for the specific object type of the SSO.
         """
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh indices'
@@ -313,12 +471,15 @@ class SyConnBackend(object):
 
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
-        Get mesh vertices  of a specific obj type for ssv_id.
+        Retrieves the mesh vertices of a specific object type for a given SuperSegmentationObject 
+        (SSO) ID.
+        
         Args:
-            ssv_id (int):
-            obj_type (str):
+            ssv_id (int): ID of the SSO.
+            obj_type (str): Type of the object.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh vertices for the specific object type of the SSO.
         """
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh vertices'
@@ -343,12 +504,15 @@ class SyConnBackend(object):
 
     def ssv_obj_norm(self, ssv_id, obj_type):
         """
-        Get mesh normals of a specific obj type for ssv_id.
+        Retrieves the mesh normals of a specific object type for a given SuperSegmentationObject 
+        (SSO) ID.
+        
         Args:
-            ssv_id (int):
-            obj_type (str):
+            ssv_id (int): ID of the SSO.
+            obj_type (str): Type of the object.
+        
         Returns:
-            dict:
+            dict: Dictionary containing the mesh normals for the specific object type of the SSO.
         """
         return {'norm': []}
         start = time.time()
@@ -376,18 +540,22 @@ class SyConnBackend(object):
 
     def ssv_list(self):
         """
-        Returns all ssvs in dataset.
-        Return:
-            dict:
+        Retrieves all SuperSegmentationObjects (SSOs) in the dataset.
+        
+        Returns:
+            dict: Dictionary containing all SSOs in the dataset.
         """
         return {'ssvs': list(self.ssd.ssv_ids)}
 
     def ssv_of_sv(self, sv_id):
         """
-        Returns the ssv for a given sv_id.
+        Retrieves the SuperSegmentationObject (SSO) for a given Supervoxel (SV) ID.
+        
         Args:
-            sv_id: 
+            sv_id (int): ID of the SV.
+        
         Returns:
+            dict: Dictionary containing the SSO for the given SV.
         """
         sv_id = int(sv_id)
         try:
@@ -559,6 +727,14 @@ class SyConnBackend(object):
 
 class ServerState(object):
     def __init__(self, host=None, port=None):
+        """
+        Initializes the ServerState object with the given host and port. 
+        Also, initializes the SyConnBackend and logs the server status.
+        
+        Args:
+            host (str, optional): IP address of the server.
+            port (int, optional): Port of the server.
+        """
         self.logger = log_gate
         self.host = host
         self.port = port
@@ -587,6 +763,15 @@ class MyEncoder(json.JSONEncoder):
     From https://stackoverflow.com/questions/27050108/convert-numpy-type-to-python/27050186#27050186
     """
     def default(self, obj):
+        """
+        Overrides the default method of JSONEncoder. 
+        
+        Args:
+            obj: Object to be encoded.
+        
+        Returns:
+            Encoded object.
+        """
         if isinstance(obj, np.integer):
             return int(obj)
         elif isinstance(obj, np.floating):
@@ -599,14 +784,16 @@ class MyEncoder(json.JSONEncoder):
 
 def main():
     """
+    Main function to start the server. The server can be run alternatively by setting 
+    the FLASK_APP environment variable to 'server.py' and running the flask command.
+    
     Alternative way of running the server is currently:
     export FLASK_APP=server.py
     flask run --host=0.0.0.0 --port=10001 --debugger
-
+    
     OR
-
+    
     FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 10001
-
     """
     global sg_state
     parser = argparse.ArgumentParser(description='SyConn Gate')

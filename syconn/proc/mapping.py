@@ -18,16 +18,17 @@ from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     """
-    Map glia properties within subvolume to SegmentationObject (cs). Requires
-    attribute 'neuron_partners'.
-
+    Maps glia properties within a subvolume to a SegmentationObject (cs). This function requires
+    the attribute 'neuron_partners'.
+    
     Args:
-        so: 
-            SegmentationObject
-        box_size(np.array):
-            size in voxels (XYZ), default: (500, 500, 250)
-        min_frag_size(int):
-        overwrite(bool): 
+        so (SegmentationObject): The SegmentationObject to which glia properties are mapped.
+        box_size (np.array, optional): The size in voxels (XYZ). Defaults to (500, 500, 250).
+        min_frag_size (int, optional): The minimum fragment size. Defaults to 10.
+        overwrite (bool, optional): If True, overwrites existing data. Defaults to True.
+    
+    Returns:
+        None: This function doesn't return anything; it modifies the SegmentationObject in-place.
     """
     if not overwrite:
         so.load_attr_dict()
@@ -90,20 +91,19 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
 
 def get_glia_coverage(seg, neuron_ids, glia_ids, max_dist, scale):
     """
-    Computes the glia coverage of neurons in a segmentation volume. Neurons
-    and glia are treated as two classes and coverage is defined as neuron
-    boundary voxels close (within max_dist) to the glia boundary.
-
+    Computes the glia coverage of neurons in a segmentation volume. Neurons and glia are treated
+    as two classes and coverage is defined as neuron boundary voxels close (within max_dist) to
+    the glia boundary.
+    
     Args:
-        seg(np.array):
-        neuron_ids(list):
-        glia_ids(list):
-        max_dist(int|float):
-        scale(np.array):
-
+        seg (np.array): The segmentation volume.
+        neuron_ids (list): The list of neuron IDs.
+        glia_ids (list): The list of glia IDs.
+        max_dist (int|float): The maximum distance for a voxel to be considered close.
+        scale (np.array): The scaling factor for the segmentation volume.
+    
     Returns:
-        int | float:
-            Number and fraction of neuron boundary voxels close to glia boundary
+        int | float: The number and fraction of neuron boundary voxels close to the glia boundary.
     """
     # TODO: Revisit and check compliance with uint64 SV IDs
     seg = np.array(seg, np.int64)
@@ -124,17 +124,16 @@ def get_glia_coverage(seg, neuron_ids, glia_ids, max_dist, scale):
 
 def crop_box_to_bndry(offset, box_size, bndry):
     """
-    Restricts box_size and offset to valid values, i.e. within an upper
-    limit (bndry) and a lower limit (0, 0, 0).
-
+    Restricts box_size and offset to valid values, i.e., within an upper limit (bndry) and a lower
+    limit (0, 0, 0).
+    
     Args:
-        offset(np.array):
-        box_size(np.array | list) :
-        bndry(np.array):
-
+        offset (np.array): The offset of the box.
+        box_size (np.array | list): The size of the box.
+        bndry (np.array): The boundary of the box.
+    
     Returns:
-        np.array:
-            Valid box size and offset
+        np.array: The valid box size and offset.
     """
     diff = offset.copy() + box_size.copy() - bndry
     if np.any(diff > 0):

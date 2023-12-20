@@ -22,24 +22,22 @@ MyPool = multiprocessing.Pool
 def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs: int,
                      use_kwargs: bool = False, front_num: int = 0, show_progress: bool = True,
                      use_dill: bool = False) -> list:
-    """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
-     A parallel version of the map function with a progress bar.
-
+    """
+    Executes a function in parallel over an array with a progress bar.
+    
     Args:
-        array (array-like): An array to iterate over.
-        function (function): A python function to apply to the elements of
-            array n_jobs (int, default=16): The number of cores to use
-        use_kwargs (boolean, default=False): Whether to consider the
-            elements of array as dictionaries of keyword arguments to function
-        front_num (int, default=3): The number of iterations to run
-            serially before kicking off the parallel job.
-            Useful for catching bugs.
-        n_jobs:
-        show_progress: show progress
-        use_dill:
-
+        array (Union[list, np.ndarray]): An array to iterate over.
+        function (Callable): A python function to apply to the elements of array.
+        n_jobs (int): The number of cores to use.
+        use_kwargs (bool, optional): If True, elements of array are considered as dictionaries of 
+            keyword arguments to function. Defaults to False.
+        front_num (int, optional): The number of iterations to run serially before kicking off the 
+            parallel job. Useful for catching bugs. Defaults to 0.
+        show_progress (bool, optional): If True, shows progress bar. Defaults to True.
+        use_dill (bool, optional): If True, uses dill to serialize data. Defaults to False.
+    
     Returns:
-        [function(array[0]), function(array[1]), ...]
+        list: Returns a list of results from applying the function to the array.
     """
     # We run the first few iterations serially to catch bugs
     if front_num > 0:
@@ -86,6 +84,15 @@ def parallel_process(array: Union[list, np.ndarray], function: Callable, n_jobs:
 
 
 def _run_dill_encoded(payload):
+    """
+    Decodes a dill encoded payload and executes the function with the arguments.
+    
+    Args:
+        payload (bytes): A dill encoded payload containing a function and its arguments.
+    
+    Returns:
+        Any: The result of the function execution.
+    """
     fun, args = dill.loads(payload)
     return fun(args)
 
@@ -93,17 +100,18 @@ def _run_dill_encoded(payload):
 def start_multiprocess(func: Callable, params: list, debug: bool = False,
                        verbose: bool = False, nb_cpus: int = None):
     """
-
+    Executes a function in parallel with multiple parameters.
+    
     Args:
-        func (callable) : function
-        params (list): function parameters
-        debug (bool):
-        verbose (bool): 
-        nb_cpus (int):
-
+        func (Callable): The function to execute.
+        params (list): The parameters for the function.
+        debug (bool, optional): If True, uses only one CPU. Defaults to False.
+        verbose (bool, optional): If True, prints debug information. Defaults 
+        to False.
+        nb_cpus (int, optional): The number of CPUs to use. Defaults to None.
+    
     Returns:
-        result (list):
-           list of function returns
+        list: A list of results from the function execution.
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()
@@ -140,20 +148,21 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
                             ignore_cpu_cnt=False, desc: str = None,
                             use_dill: bool = False):
     """
-
+    Executes a function in parallel with multiple parameters using imap.
+    
     Args:
-        func:
-        params:
-        debug:
-        verbose:
-        nb_cpus:
-        show_progress:
-        ignore_cpu_cnt:
-        desc: Task description. Used for progress bar.
-        use_dill:
-
+        func (Callable): The function to execute.
+        params (list): The parameters for the function.
+        debug (bool, optional): If True, uses only one CPU. Defaults to False.
+        verbose (bool, optional): If True, prints debug information. Defaults to False.
+        nb_cpus (int, optional): The number of CPUs to use. Defaults to None.
+        show_progress (bool, optional): If True, shows a progress bar. Defaults to True.
+        ignore_cpu_cnt (bool, optional): If True, ignores CPU count limit. Defaults to False.
+        desc (str, optional): Task description. Used for progress bar. Defaults to None.
+        use_dill (bool, optional): If True, uses dill to serialize data. Defaults to False.
+    
     Returns:
-        list of function returns.
+        list: A list of results from the function execution.
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()
@@ -203,19 +212,20 @@ def start_multiprocess_imap(func: Callable, params, debug=False, verbose=False,
 def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
                            nb_cpus=None):
     """
-
+    Executes a function of an object in parallel with multiple parameters.
+    
     Args:
-    func_name (str):
-    params (list): List[List]
-        each element in params must be object with attribute func_name
-        (+ optional: kwargs)
-    debug (bool):
-    verbose (bool):
-    nb_cpus (int):
-
+        func_name (str): The name of the function to execute.
+        params (list): The parameters for the function. Each element in params 
+        must be an object with attribute func_name (+ optional: kwargs).
+        debug (bool, optional): If True, uses only one CPU. Defaults to False.
+        verbose (bool, optional): If True, prints debug information. Defaults to 
+        False.
+        nb_cpus (int, optional): The number of CPUs to use. Defaults to None.
+    
     Returns:
-        result (list):
-            list of function returns
+        list: A list of results from the function execution. Each element in the 
+        list is a function return.
     """
     if nb_cpus is None:
         nb_cpus = cpu_count()
@@ -247,15 +257,13 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
 
 def multi_helper_obj(args):
     """
-    Generic helper emthod for multiprocessed jobs. Calls the given object
-    method.
-
+    Helper method for multiprocessed jobs. Calls the given object method.
+    
     Args:
-        args (Iterable):
-            object, method name, optional: kwargs
-
+        args (Iterable): Contains object, method name, and optional kwargs.
+    
     Returns:
-
+        Any: The result of the method execution.
     """
     attr_str = args[0]
     obj = args[1]

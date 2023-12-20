@@ -31,6 +31,13 @@ from elektronn3.data import transforms
 
 
 def get_model():
+    """
+    This function creates and returns a model for semantic segmentation of spine based on multiviews.
+    The model is a Fully Convolutional Network (FCN) with a VGGNet as the base network.
+    
+    Returns:
+        model (torch.nn.Module): The FCN model with VGGNet as the base network.
+    """
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
     model = FCNs(base_net=vgg_model, n_class=6)
     # model = UNet(in_channels=4, out_channels=6, n_blocks=5, start_filts=32,

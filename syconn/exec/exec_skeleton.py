@@ -27,13 +27,17 @@ from syconn.handler.basics import load_pkl2obj, write_obj2pkl
 def run_skeleton_generation(cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
                             map_myelin: Optional[bool] = None, ncores_skelgen: int = 2):
     """
-
+    This function generates the skeleton of the cell reconstruction. It decides whether to use the 
+    kimimaro tool for volume-based skeletonization or the fallback method for SSV-based skeletonization 
+    based on the global parameters.
+    
     Args:
-        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower
-            coord, upper coord)
-        map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
+        cube_of_interest_bb (Optional[Union[tuple, np.ndarray]]): Partial volume of the data set. 
+            Bounding box in mag 1 voxels: (lower coord, upper coord).
+        map_myelin (Optional[bool]): If True, maps myelin predictions at every 
+            ``skeleton['nodes']`` in 
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
-        ncores_skelgen: Number of cores used during skeleton generation.
+        ncores_skelgen (int): Number of cores used during skeleton generation.
     """
     if global_params.config.use_kimimaro:
         # volume-based
@@ -46,13 +50,14 @@ def run_skeleton_generation(cube_of_interest_bb: Optional[Union[tuple, np.ndarra
 
 def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myelin: Optional[bool] = None):
     """
-    Generate the cell reconstruction skeletons.
-
+    This function generates the cell reconstruction skeletons using the fallback 
+    method. The fallback method is SSV-based skeletonization on mesh vertices.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
-        map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
+        max_n_jobs (Optional[int]): Number of parallel jobs.
+        map_myelin (Optional[bool]): If True, maps myelin predictions at every 
+            ``skeleton['nodes']`` in 
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
-
     """
     if map_myelin is None:
         map_myelin = os.path.isdir(global_params.config.working_dir + '/knossosdatasets/myelin/')
@@ -81,12 +86,12 @@ def run_skeleton_generation_fallback(max_n_jobs: Optional[int] = None, map_myeli
 
 def map_myelin_global(max_n_jobs: Optional[int] = None):
     """
-    Stand-alone myelin mapping to cell reconstruction skeletons. See kwarg ``map_myelin``
-    in :func:`run_skeleton_generation` for a mapping right after skeleton generation.
-
+    This function maps myelin to cell reconstruction skeletons globally. It is a standalone 
+    function that can be used for mapping right after skeleton generation. See kwarg 
+    ``map_myelin`` in :func:`run_skeleton_generation`.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
-
+        max_n_jobs (Optional[int]): Number of parallel jobs.
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ncore_total * 2
@@ -116,18 +121,21 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
                                  cube_size: np.ndarray = None, cube_of_interest_bb: Optional[tuple] = None,
                                  ds: Optional[np.ndarray] = None, ncores_skelgen: int = 2):
     """
-    Generate the cell reconstruction skeletons with the kimimaro tool. functions are in
-    proc.sekelton, GSUB_kimimaromerge, QSUB_kimimaroskelgen
-
+    This function generates the cell reconstruction skeletons using the kimimaro tool. The kimimaro 
+    tool is used for volume-based skeletonization. The functions are in proc.sekelton, 
+    GSUB_kimimaromerge, QSUB_kimimaroskelgen.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
-        map_myelin: Map myelin predictions at every ``skeleton['nodes']`` in
+        max_n_jobs (Optional[int]): Number of parallel jobs.
+        map_myelin (Optional[bool]): If True, maps myelin predictions at every 
+            ``skeleton['nodes']`` in 
             :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`.
-        cube_size: Cube size used within each worker. This should be as big as possible to prevent
-            un-centered skeletons in cell compartments with big diameters. In mag 1 voxels.
-        cube_of_interest_bb: Partial volume of the data set. Bounding box in mag 1 voxels: (lower coord, upper coord)
-        ds: Downsampling.
-        ncores_skelgen: Number of cores used during skeleton generation.
+        cube_size (np.ndarray): Cube size used within each worker. This should be as big as possible 
+            to prevent un-centered skeletons in cell compartments with big diameters. In mag 1 voxels.
+        cube_of_interest_bb (Optional[tuple]): Partial volume of the data set. Bounding box in mag 1 
+            voxels: (lower coord, upper coord).
+        ds (Optional[np.ndarray]): Downsampling.
+        ncores_skelgen (int): Number of cores used during skeleton generation.
     """
     if not os.path.exists(global_params.config.temp_path):
         os.mkdir(global_params.config.temp_path)
@@ -199,6 +207,15 @@ def run_kimimaro_skeletonization(max_n_jobs: Optional[int] = None, map_myelin: O
 
 
 def _collect_paths(p: str) -> dict:
+    """
+    This function collects the paths of the cell reconstruction skeletons.
+    
+    Args:
+        p (str): Path to the pickle file containing cell IDs.
+    
+    Returns:
+        dict: A dictionary with cell IDs as keys and paths as values.
+    """
     partial_res = load_pkl2obj(p)
     res = {cellid: p for cellid in partial_res}
     return res

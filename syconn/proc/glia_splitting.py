@@ -25,8 +25,10 @@ from ..reps.super_segmentation_object import SuperSegmentationObject
 
 def run_glia_splitting():
     """
-    Start astrocyte splitting -> generate final connected components of neuron vs.
-    glia SVs.
+    This function initiates the astrocyte splitting process, generating the final
+    connected components of neuron vs. glia SuperVoxels (SVs). It loads the 
+    connected components (CC) dictionary from the glia directory, sorts the values 
+    in descending order, and then starts the batch job script for glia splitting.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
@@ -36,9 +38,12 @@ def run_glia_splitting():
 
 def collect_glia_sv():
     """
-    Collect astrocyte super voxels (as returned by astrocyte splitting) from all 'sv'
-    SegmentationObjects contained in 'sv' SegmentationDataset (always uses
-    default version as defined in config.yml).
+    This function collects astrocyte SuperVoxels (SVs) from all 'sv' SegmentationObjects 
+    contained in 'sv' SegmentationDataset. It loads the connected components (CC) dictionary 
+    from the glia directory, gets single SV glia probabilities which were not included in the 
+    old RAG, and then collects the astrocyte SVs. It also saves the collected SVs and neuron 
+    predictions in the glia directory. This function always uses the default version as 
+    defined in the config.yml.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag.pkl")
     # get single SV glia probas which were not included in the old RAG
@@ -64,6 +69,18 @@ def collect_glia_sv():
 
 
 def collect_gliaSV_helper(cc_ixs):
+    """
+    This helper function collects astrocyte SuperVoxels (SVs) for a given list of connected 
+    components indices. It initializes a SuperSegmentationObject for each index, loads its 
+    attribute dictionary, and appends the astrocyte SVs to the list. It returns the list as a 
+    numpy array.
+    
+    Args:
+        cc_ixs (list): List of connected components indices.
+    
+    Returns:
+        np.array: Array of astrocyte SuperVoxels (SVs).
+    """
     astrocyte_svs = []
     for cc_ix in cc_ixs:
         sso = SuperSegmentationObject(cc_ix, working_dir=global_params.config.working_dir,
@@ -77,13 +94,15 @@ def collect_gliaSV_helper(cc_ixs):
 def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
                             log: Optional[Logger] = None):
     """
-    Stores astrocyte and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx edge list
-    and as knossos merge list.
-
+    This function stores astrocyte and neuron Region Adjacency Graphs (RAGs) as networkx edge 
+    lists and as knossos merge lists in "wd + /glia/" or "wd + /neuron/". It creates neuron and 
+    astrocyte RAGs, prepares a SuperVoxel (SV) size dictionary, removes small neuron and 
+    astrocyte connected components (CCs), and writes the CCs to files.
+    
     Args:
-        rag : SV agglomeration
-        min_ssv_size : Bounding box diagonal in nm
-        log: Logger
+        rag (Union[nx.Graph, str]): SV agglomeration.
+        min_ssv_size (float): Minimum bounding box diagonal in nm.
+        log (Optional[Logger]): Logger for logging information. If None, the default logger is used.
     """
     if log is None:
         log = log_proc
@@ -163,11 +182,16 @@ def write_astrocyte_svgraph(rag: Union[nx.Graph, str], min_ssv_size: float,
 
 def transform_rag_edgelist2pkl(rag):
     """
-    Stores networkx graph as dictionary mapping (1) SSV IDs to lists of SV IDs
-     and (2) SSV IDs to subgraphs (networkx)
+    This function stores a networkx graph as a dictionary mapping SuperSegmentationObject (SSO) 
+    IDs to lists of SuperVoxel (SV) IDs and SSO IDs to subgraphs. It iterates over the connected 
+    components of the graph, creates dictionaries mapping the minimum index of each component to 
+    the list of nodes and the subgraph, and writes these dictionaries to pickle files.
 
     Args:
-        rag : networkx.Graph
+        rag (nx.Graph): The Region Adjacency Graph (RAG) to be transformed.
+
+    Raises:
+        ValueError: If multiple SuperSegmentationObject (SSO) IDs are encountered in the same connected component.
     """
     ccs = (rag.subgraph(c) for c in nx.connected_components(rag))
     cc_dict_graph = {}

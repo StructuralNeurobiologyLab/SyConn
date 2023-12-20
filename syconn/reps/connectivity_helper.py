@@ -25,6 +25,15 @@ from scipy import ndimage
 
 
 def cs_id_to_partner_ids_vec(cs_ids):
+    """
+    Converts contact site IDs to a 2D array of partner supervoxel IDs.
+    
+    Args:
+        cs_ids (np.ndarray): An array of contact site IDs.
+    
+    Returns:
+        np.ndarray: A 2D array where each row contains the two supervoxel IDs that form a contact site.
+    """
     sv_ids = np.right_shift(cs_ids, 32)
     sv_ids = np.concatenate((sv_ids[:, None], (cs_ids - np.left_shift(sv_ids, 32))[:, None]),
                             axis=1)
@@ -33,14 +42,16 @@ def cs_id_to_partner_ids_vec(cs_ids):
 
 def cs_id_to_partner_inverse(partner_ids: Union[np.ndarray, list]) -> int:
     """
-    Input permutation invariant transformation to bit-shift-based ID, which is used for `syn` and `cs`
-    :class:`~syconn.reps.segmentation.SegmentationObject`.
-
+    Converts a pair of partner supervoxel IDs to a single ID for use in `syn` and `cs`
+    with :class:`~syconn.reps.segmentation.SegmentationObject`.
+    
     Args:
-        partner_ids: :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` IDs.
-
+        partner_ids (Union[np.ndarray, list]): An array or list containing two IDs from
+        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`.
+    
     Returns:
-        Contact site or synapse fragment ID.
+        int: The unique ID generated from the pair of supervoxel IDs, representing a
+        contact site or synapse fragment.
     """
     partner_ids = np.sort(partner_ids).astype(np.uint32)
     return (partner_ids[0] << 32) + partner_ids[1]
@@ -48,14 +59,17 @@ def cs_id_to_partner_inverse(partner_ids: Union[np.ndarray, list]) -> int:
 
 def connectivity_to_nx_graph(cd_dict):
     """
-    Creates a directed networkx graph with attributes from the
-    stored raw connectivity data.
-
+    Constructs a directed NetworkX graph from raw connectivity data.
+    
     Args:
-        cd_dict(dict):
-
+        cd_dict (dict): A dictionary containing raw connectivity data with
+                        keys like 'ids', 'neuron_partner_ax_0', 
+                        'ssv_partner_0', and 'ssv_partner_1'.
+    
     Returns:
-
+        nx.DiGraph: A directed graph where nodes represent supervoxels and 
+                    edges represent synaptic connections, based on the 
+                    stored raw connectivity data.
     """
     nxg = nx.DiGraph()
     start = time.time()
@@ -80,20 +94,23 @@ def connectivity_to_nx_graph(cd_dict):
 def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
                           syn_version=None):
     """
-    Loads all cached data from a contact site segmentation dataset into a
-    dictionary for further processing.
-
+    Loads all cached data from a synapse segmentation dataset into a dictionary.
+    
     Args:
-        wd(str):
-        syn_version(str):
-        thresh_syn_prob(float):
-            All synapses below `thresh_syn_prob` will be filtered.
-        axodend_only: 
-            If True, returns only axo-dendritic synapse, all
-            synapses otherwise.
-
+        wd(str): Working directory where the synapse segmentation dataset is
+                 located.
+        syn_version(str): Version identifier for the synapse segmentation
+                          dataset.
+        thresh_syn_prob(float, Optional): Threshold for synapse probability;
+                                          synapses below this value are
+                                          filtered. Used to omit synapses
+                                          below `thresh_syn_prob`.
+        axodend_only (bool): If True, only axo-dendritic synapses are
+                             returned, otherwise all synapses.
+    
     Returns:
-
+        dict: A dictionary containing filtered synapse data for further
+              processing.
     """
     if wd is None:
         wd = global_params.config.working_dir
@@ -162,22 +179,25 @@ def load_cached_data_dict(thresh_syn_prob=None, axodend_only=True, wd=None,
 
 def generate_wiring_array(log: Optional[Logger] = None, **load_cached_data_dict_kwargs):
     """
-    Creates a 2D wiring array with quadratic shape (#cells x #cells) sorted by
-    cell type. X-axis: post-synaptic partners, y: pre-synaptic partners.
-    Assumes label 1 in 'partner_axoness' represents axon compartments. Does not
-    support ``axodend_only=False``!
-    Required for :func:`~plot_wiring` and :func:`plot_cumul_wiring`.
-
-    Notes:
-        * Work-in-progress.
-
+    Generates a 2D wiring array representing synaptic connections between cells,
+    sorted by cell type. X-axis represents post-synaptic partners, y-axis shows 
+    pre-synaptic partners. Assumes label 1 in 'partner_axoness' signifies axon 
+    compartments. Does not support `axodend_only=False`.
+    
     Args:
-        log: Logger.
-        **load_cached_data_dict_kwargs: See :func:`~load_cached_data_dict`
-
+        log (Optional[Logger]): Logger for recording messages. If not provided, a
+        default logger will be used.
+        **load_cached_data_dict_kwargs: Keyword arguments for the 
+        `load_cached_data_dict` function. See :func:`~load_cached_data_dict` for
+        more details.
+    
     Returns:
-        The wiring diagram as a 2D array.
-
+        tuple: A tuple containing the wiring diagram as a 2D array and the borders
+        between cell types.
+    
+    Notes:
+        * This function is a work-in-progress and required for functions like
+          :func:`~plot_wiring` and :func:`plot_cumul_wiring`.
     """
     if 'axodend_only=True' in load_cached_data_dict_kwargs:
         raise ValueError("'axodend_only=False' is not supported!")
@@ -232,25 +252,21 @@ def generate_wiring_array(log: Optional[Logger] = None, **load_cached_data_dict_
 
 
 def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, log: Optional[Logger] = None):
-    """Plot type sorted connectivity matrix. Saved in folder given by `path`.
-
+    """
+    Plot a sorted connectivity matrix and save it to the provided path.
+    
     Notes:
         * Work-in-progress.
         * `wiring` is generated by :func:`~generate_wiring_array`.
-
+    
     Args:
-        path:
-            Path to directory.
-        wiring :
-            Quadratic 2D array of size #cells x #cells, x-axis: dendrite partners, y: axon partners.
-        den_borders:
-            Cell type borders on post synaptic site. Used to split the connectivity matrix into quadrants.
-        ax_borders:
-            Cell type borders on pre synaptic site. Used to split the connectivity matrix into quadrants.
-        cumul:
-            Accumulate quadrant values.
-        log:
-            Logger.
+        path (str): Directory path where the plot will be saved.
+        wiring (np.ndarray): 2D quadratic array size #cells x #cells, with x-axis representing dendrite 
+                             partners, and y-axis axon partners.
+        den_borders (list): List of indices marking post-synaptic cell type borders.
+        ax_borders (list): List of indices marking pre-synaptic cell type borders.
+        cumul (bool): If True, accumulates quadrant values in the matrix.
+        log (Optional[Logger]): Logger for recording messages, if provided.
     """
     if log is None:
         log = log_reps
@@ -375,20 +391,20 @@ def plot_wiring(path, wiring, den_borders, ax_borders, cumul=False, log: Optiona
 
 def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0, log: Optional[Logger] = None):
     """
-    Synaptic area between cell type pairs. Synaptic areas are summed and then
-    divided by the number of cell pairs to compute the average cumulated synaptic area
-    between each
-
+    Computes and plots the average cumulative synaptic area between cell types.
+    This function takes the total synaptic area across all cell type pairs, computes the
+    average, and generates a plot saving the result to the specified path.
+    
     Notes:
         * Work-in-progress.
         * `wiring` is generated by :func:`~generate_wiring_array`.
-
+    
     Args:
-        path:
-        wiring:
-        borders:
-        min_cumul_synarea:
-        log: Logger.
+        path (str): Directory path where the plot will be saved.
+        wiring (np.ndarray): 2D array representing the wiring diagram.
+        borders (list): List of indices marking borders between cell types.
+        min_cumul_synarea (float): Threshold for synaptic area inclusion in the plot.
+        log (Logger): Logger for recording messages.
     """
     cumul_matrix = np.zeros([len(borders) + 1, len(borders) + 1])
     borders = [0] + list(borders) + [wiring.shape[1]]
@@ -414,9 +430,16 @@ def plot_cumul_wiring(path, wiring, borders, min_cumul_synarea=0, log: Optional[
 
 
 def make_colormap(seq):
-    """Return a LinearSegmentedColormap
-    seq: a sequence of floats and RGB-tuples. The floats should be increasing
-    and in the interval (0,1).
+    """
+    Creates a LinearSegmentedColormap from a sequence of floats and RGB tuples.
+    
+    Args:
+        seq (list): A sequence of floats and RGB-tuples. The floats should be
+                    increasing and within the interval (0,1).
+    
+    Returns:
+        mcolors.LinearSegmentedColormap: A colormap object for mapping normalized
+                                         data values to RGBA colors.
     """
     seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
     cdict = {'red': [], 'green': [], 'blue': []}
@@ -432,9 +455,17 @@ def make_colormap(seq):
 
 def diverge_map(high=(239 / 255., 65 / 255., 50 / 255.),
                 low=(39 / 255., 184 / 255., 148 / 255.)):
-    """Low and high are colors that will be used for the two
-    ends of the spectrum. they can be either color strings
-    or rgb color tuples
+    """
+    Creates a diverging colormap from two specified colors.
+    
+    Args:
+        high (tuple or str): Color for the high end of the spectrum. Can be a color
+            string or an RGB tuple.
+        low (tuple or str): Color for the low end of the spectrum. Can be a color
+            string or an RGB tuple.
+    
+    Returns:
+        mcolors.LinearSegmentedColormap: A diverging colormap object.
     """
     c = mcolors.ColorConverter().to_rgb
     if isinstance(low, str): low = c(low)
@@ -445,13 +476,19 @@ def diverge_map(high=(239 / 255., 65 / 255., 50 / 255.),
 def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltype: float = None,
                              r=(0.05, 2)):
     """
+    Generates histograms of synaptic connectivity for the J0251 dataset based on 
+    probability thresholds.
+    
     Args:
-        proba_thresh_syn: Synapse probability. Filters synapses below threshold.
-        proba_thresh_celltype: Cell type probability. Filters cells below threshold.
-        r: Range of synapse mesh area (um^2).
-
+        proba_thresh_syn (float): Synapse probability. Filters synapses below the 
+                                  threshold.
+        proba_thresh_celltype (Optional[float]): Cell type probability. Filters cells 
+                                                below the threshold.
+        r (tuple): Range of synapse mesh area (um^2) to consider.
+    
     Returns:
-
+        None: This function does not return a value but generates and saves histogram 
+              plots.
     """
     from syconn.handler.prediction import int2str_converter, certainty_estimate
     from syconn.reps.segmentation import SegmentationDataset
@@ -539,17 +576,17 @@ def connectivity_hists_j0251(proba_thresh_syn: float = 0.8, proba_thresh_celltyp
 
 def create_kde(dest_p, qs, ls=20, legend=False, r=None, **kwargs):
     """
-
-
+    Creates and saves a kernel density estimate plot for the given data.
+    
     Args:
-        dest_p:
-        qs:
-        r:
-        legend:
-        ls:
-
+        dest_p (str): Destination path for the saved plot.
+        qs (pd.DataFrame): Dataframe containing the data to plot.
+        ls (int): Label size for the plot.
+        legend (bool): Whether to include a legend in the plot.
+        r (Optional[tuple]): Range for the x-axis of the plot.
+    
     Returns:
-
+        None: This function does not return a value but generates and saves a KDE plot.
     """
     r = np.array(r)
     import seaborn as sns

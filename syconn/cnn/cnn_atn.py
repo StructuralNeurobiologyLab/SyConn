@@ -20,7 +20,13 @@ Z_DIM = 25
 
 class RepresentationNetwork(nn.Module):
     """
-    Encoder network
+    This class defines the encoder network, a subclass of PyTorch's nn.Module.
+    
+    Args:
+        n_in_channels (int): The number of input channels.
+        n_out_channels (int): The number of output channels.
+        dr (float): The dropout rate.
+        leaky_relu (bool): If True, use LeakyReLU activation function, else use ReLU.
     """
     def __init__(self, n_in_channels, n_out_channels, dr=.0,
                  leaky_relu=True):
@@ -47,6 +53,15 @@ class RepresentationNetwork(nn.Module):
         )
 
     def forward(self, x):
+        """
+        Defines the forward pass of the RepresentationNetwork.
+        
+        Args:
+            x (torch.Tensor): The input tensor.
+            
+        Returns:
+            torch.Tensor: The output tensor.
+        """
         x = self.conv(x)  # representation network
         x = x.view(1, x.size()[0], -1)  # x.view(1, x.size()[0], -1) #flatten and # add auxiliary axis
         x = self.fc(x)
@@ -56,20 +71,35 @@ class RepresentationNetwork(nn.Module):
 
 class RepNetwork_v2(nn.Module):
     """
-    Wrapper to extend input dimension to match requirements of `StackedConv2Scalar`
+    This class is a wrapper to extend input dimension to match requirements of 
+    `StackedConv2Scalar`. It is a subclass of the PyTorch nn.Module class.
     """
     def __init__(self):
         super().__init__()
         self.base_net = StackedConv2Scalar(in_channels=4, n_classes=Z_DIM, dropout_rate=0.05, act='relu')
 
     def forward(self, x):
+        """
+        Defines the forward pass of the RepNetwork_v2.
+        
+        Args:
+            x (torch.Tensor): The input tensor.
+            
+        Returns:
+            torch.Tensor: The output tensor.
+        """
         x = x.unsqueeze(-3)
         return self.base_net(x)
 
 
 class D_net_gauss(nn.Module):
     """
-    adapted from https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/aae/aae.py
+    This class defines a network for a Gaussian discriminator. It is a subclass of the PyTorch 
+    nn.Module class. It is adapted from 
+    https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/aae/aae.py.
+    
+    Args:
+        z_dim (int): The dimension of the latent space.
     """
     def __init__(self, z_dim):
         super(D_net_gauss, self).__init__()
@@ -83,19 +113,43 @@ class D_net_gauss(nn.Module):
         )
 
     def forward(self, z):
+        """
+        Defines the forward pass of the D_net_gauss.
+        
+        Args:
+            z (torch.Tensor): The input tensor.
+            
+        Returns:
+            torch.Tensor: The output tensor.
+        """
         x = self.fc(z)
         return x
 
 
 class TripletNet(nn.Module):
     """
-    adapted from https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py
+    This class defines a Triplet Network, a subclass of the PyTorch nn.Module class. 
+    It is adapted from https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py.
+    
+    Args:
+        rep_net (nn.Module): The representation network to be used.
     """
     def __init__(self, rep_net):
         super().__init__()
         self.rep_net = rep_net
 
     def forward(self, x, y, z):
+        """
+        Defines the forward pass of the TripletNet.
+        
+        Args:
+            x (torch.Tensor): The first input tensor.
+            y (torch.Tensor): The second input tensor.
+            z (torch.Tensor): The third input tensor.
+            
+        Returns:
+            tuple: The distances and representations of the input tensors.
+        """
         z_0 = self.rep_net(x)
         z_1 = self.rep_net(y)
         z_2 = self.rep_net(z)
@@ -109,6 +163,12 @@ class TripletNet(nn.Module):
 
 
 def get_model():
+    """
+    This function creates and returns a Triplet Network model.
+    
+    Returns:
+        nn.Module: The Triplet Network model.
+    """
     device = torch.device('cuda')
     RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=Z_DIM, dr=0.1,
                                    leaky_relu=False)

@@ -19,28 +19,26 @@ from ..reps.super_segmentation import SuperSegmentationObject
 
 def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     """
-    Initializes cell reconstruction from k.zip file.
-    The k.zip needs the following content:
-        - Mesh files: 'sv.ply', 'mi.ply', 'sj.ply', 'vc.ply'
-        - meta dict: 'meta.pkl'
-        - [Optional] Rendering locations: 'sample_locations.pkl'
-          (currently broekn to use .npy, fixed in python 3.7)
-        - [Optional] Supervoxel graph: 'rag.bz2'
-        - [Optional] Skeleton representation: 'skeleton.pkl'
-        - [Optional] attribute dict: 'attr_dict.pkl'
-
+    Initializes a SuperSegmentationObject (SSO) from a k.zip file. The k.zip file should contain
+    mesh files ('sv.ply', 'mi.ply', 'sj.ply', 'vc.ply'), a meta dictionary ('meta.pkl'), and
+    optionally rendering locations ('sample_locations.pkl'), a supervoxel graph ('rag.bz2'), a
+    skeleton representation ('skeleton.pkl'), and an attribute dictionary ('attr_dict.pkl').
+    Note: Currently broken to use .npy for rendering locations, fixed in python 3.7.
+    
     Args:
-        path: str
-            Path to kzip which contains SSV data
-        load_as_tmp: bool
-            If True then `working_dir` and `version_dict` in meta.pkl dictionary is
-            not passed to SSO constructor, instead all version will be set to 'tmp'
-            and working directory will be None. Used to process SSO independent on working directory.
-        sso_id: int
-            ID of SSV, if not given looks for the first scalar occurrence in `path`
-
-    Returns: SuperSegmentationObject
-
+        path (str): Path to the k.zip file containing SSO data.
+        load_as_tmp (bool, optional): If True, the 'working_dir' and 'version_dict' in the
+            meta.pkl dictionary are not passed to the SSO constructor. Instead, all versions will
+            be set to 'tmp' and the working directory will be None. This is used to process the SSO
+            independent of the working directory. Defaults to True.
+        sso_id (int, optional): ID of the SSO. If not provided, the function looks for the first
+            scalar occurrence in `path`. Defaults to None.
+    
+    Returns:
+        SuperSegmentationObject: Initialized SSO.
+    
+    Raises:
+        ValueError: If 'load_as_tmp' is False and no SSO ID is found in the meta dictionary.
     """
     if sso_id is None:
         sso_id = int(re.findall(r"/(\d+).", path)[0])
@@ -134,4 +132,13 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
 
 
 def init_ssd_from_kzips(dir_path):
+    """
+    Placeholder function for initializing a SuperSegmentationDataset (SSD) from multiple k.zip files.
+    
+    Args:
+        dir_path (str): Directory path containing the k.zip files.
+    
+    Returns:
+        None
+    """
     pass

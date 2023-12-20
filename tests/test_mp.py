@@ -11,12 +11,27 @@ import time
 
 
 def chunks(l, n):
-    """Yield successive n-sized chunks from l."""
+    """
+    This function generates n-sized chunks from a given list.
+    
+    Args:
+        l (list): The list to be divided into chunks.
+        n (int): The size of each chunk.
+        
+    Yields:
+        list: A chunk of the original list of size n.
+    """
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
 
 def func(x):
+    """
+    This function performs a series of mathematical operations on a given numpy array.
+    
+    Args:
+        x (np.array): The input numpy array on which the operations are performed.
+    """
     for i in range(100):
         _ = np.linalg.norm(np.sqrt(x ** 2) * 5 / x * x ** 2 - x + x, axis=0)
 

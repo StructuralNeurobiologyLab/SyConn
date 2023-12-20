@@ -31,29 +31,23 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmen
 
 def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job: int = 1, overwrite: bool = False):
     """
-    Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
-    ``version=0`` at the currently active working directory based on the SV graph
-    at :attr:`~syconn.handler.config.DynConfig.neuron_svgraph_path`. In case astrocyte splitting is active,
-    this will be the SV graph after astrocyte removal, if it was disabled it is identical to ``pruned_svgraph.bz2``.
-
+    This function creates a SuperSegmentationDataset with version 0 at the currently active working directory based on
+    the SV graph at the neuron_svgraph_path. If astrocyte splitting is active, this will be the SV graph after
+    astrocyte removal, if it was disabled it is identical to pruned_svgraph.bz2.
+    
     Args:
-        apply_ssv_size_threshold: Apply filter with minimum bounding box diagonal. This is usually not needed as the
-            filter is applied either in :func:`~run_create_rag` (prior_astrocyte_removal=False) or during the astrocyte
-            separation.
-        ncores_per_job: Number of cores per worker for
-            :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
-        overwrite:
-
+        apply_ssv_size_threshold (bool): If True, applies a filter with minimum bounding box diagonal. This is usually
+            not needed as the filter is applied either in run_create_rag (prior_astrocyte_removal=False) or during the
+            astrocyte separation.
+        ncores_per_job (int): Number of cores per worker for SuperSegmentationDataset.save_dataset_deep.
+        overwrite (bool): If True, overwrites existing data.
+    
     Notes:
-        * This is a memory intensiv step, consider increasing `ncores_per_job`.
-        * Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
-          optionally :func:`~run_astrocyte_splitting`.
+        * This is a memory intensive step, consider increasing `ncores_per_job`.
+        * Requires init_cell_subcell_sds and optionally run_astrocyte_splitting.
         * Networkx requires a lot of memory for >1e9 edges, graph_tool and igraph are not usable for this either.
-          Currently the work-around is to not use the graph information when storing the cell SV graph, but only the
+          Currently the workaround is to not use the graph information when storing the cell SV graph, but only the
           connected component as a graph with N-1 edges (N nodes). [TODO]
-
-    Returns:
-
     """
     working_dir = global_params.config.working_dir
     log = initialize_logging('ssd_generation', working_dir + '/logs/', overwrite=False)
@@ -124,6 +118,15 @@ def run_create_neuron_ssd(apply_ssv_size_threshold: bool = False, ncores_per_job
 
 
 def _ssv_svgraph_writer(args):
+    """
+    This function writes the SV graph of a SuperSegmentationObject (SSO) to a file. The SV graph is a "dummy" graph
+    created from the list of supervoxels (SVs) belonging to the SSO. If the SSO contains only one SV, an edge is added
+    between the single SV to itself to form a valid graph. The function also checks if the SV graph is connected and
+    issues a warning if it is not. The SV graph is then written to the edgelist_path of the SSO.
+    
+    Args:
+        args (tuple): A tuple containing a list of SSO IDs and a list of lists of SVs belonging to each SSO.
+    """
     ssv_ids, sv_lists = args
     config = global_params.config
     for ssv_id, sv_list in zip(ssv_ids, sv_lists):
@@ -139,13 +142,13 @@ def _ssv_svgraph_writer(args):
 
 def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     """
-    Initialize :class:`~syconn.reps.segmentation.SegmentationDataset` of given
-    supervoxel type `co`.
-
+    This function initializes a SegmentationDataset of a given supervoxel type.
+    
     Args:
-        co: Cellular organelle identifier (e.g. 'mi', 'vc', ...).
-        max_n_jobs: Number of parallel jobs.
-        log: Logger.
+        co (str): Cellular organelle identifier (e.g. 'mi', 'vc', ...).
+        max_n_jobs (int): Number of parallel jobs.
+        log (Optional[Logger]): Logger object for logging progress and debug 
+        information.
     """
     sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
                                  version="0")
@@ -168,20 +171,14 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
             cube_of_interest_bb: Tuple[np.ndarray],
             log: Logger):
     """
-    Replaced by a single call of :func:`~generate_subcell_kd_from_proba`.
-
-    Initializes a per-object segmentation KnossosDataset for the given supervoxel type
-    `co` based on an initial prediction which location has to be defined in the config.yml file
-    for the `co` object, e.g. ``'kd_mi'`` for ``co='mi'``
-    (see :func:`~syconn.handler.config.generate_default_conf`). Results will be stored as a
-    KnossosDataset at `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
-    Appropriate parameters have to be set inside the config.yml file, see
-    :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
-    or :func:`~syconn.handler.config.generate_default_conf` for more details.
-
+    This function initializes a per-object segmentation KnossosDataset for the given 
+    supervoxel type based on an initial prediction. The location of the prediction has 
+    to be defined in the config.yml file for the object. The results will be stored as 
+    a KnossosDataset at "{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co).
+    
     Examples:
         Was used to process sub-cellular structures independently:
-
+    
                 ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
                     load_cellorganelles_from_kd_overlaycubes, cube_of_interest_bb, log])
                     for co in global_params.config['process_cell_organelles']]
@@ -192,17 +189,14 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
                     p.join()
                     if p.exitcode != 0:
                         raise Exception(f'Worker {p.name} stopped unexpectedly with exit code {p.exitcode}.')
-
+    
     Args:
-        co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
-            vesicle clouds.
+        co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for vesicle clouds.
         chunk_size: Size of the cube which are processed by each worker.
-        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
-            data.
-        load_cellorganelles_from_kd_overlaycubes:
-        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
-            which is processed.
-        log: Logger.
+        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation data.
+        load_cellorganelles_from_kd_overlaycubes: If True, loads cell organelles from kd overlay cubes.
+        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset which is processed.
+        log: Logger object for logging progress and debug information.
     """
     oew.generate_subcell_kd_from_proba(
         co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
@@ -218,28 +212,25 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
                           cube_of_interest_bb: Optional[Union[tuple, np.ndarray]] = None,
                           overwrite=False):
     """
-    Convert binary class segmentation mask of sub-cellular structure predictions into an isntance segmentation
-    using connected components / watershed.
-    Subsequently, the properties of sub-cellular structures (voxel count, coordinate, bounding box, mesh, ..) and
-    their associations with cell fragments (calculating the overlap between every sub-cellular structure and
-    cell fragment instance) are extracted.
-
+    Converts a binary class segmentation mask of sub-cellular structure predictions into an instance segmentation
+    using connected components / watershed. Then, it extracts the properties of sub-cellular structures (voxel count,
+    coordinate, bounding box, mesh, etc.) and their associations with cell fragments by calculating the overlap
+    between every sub-cellular structure and cell fragment instance.
+    
     Args:
-        chunk_size: Size of the cube which are processed by each worker.
-        n_folders_fs: Number of folders used to create the folder structure in
-            the resulting :class:`~syconn.reps.segmentation.SegmentationDataset`
-            for the cell supervoxels (``version='sv'``).
-        n_folders_fs_sc: Number of folders used to create the folder structure in
-            the resulting :class:`~syconn.reps.segmentation.SegmentationDataset`
-            for the cell organelle supervxeols (e.g. ``version='mi'``).
-        max_n_jobs: Number of parallel jobs.
-        load_cellorganelles_from_kd_overlaycubes:
-        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
-            data.
-        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
-            which is processed (minimum and maximum coordinates in mag1 voxels,
-            XYZ).
-        overwrite: If True, will overwrite existing data.
+        chunk_size (Optional[Tuple[int, int, int]]): Size of the cube which are processed by each worker.
+        n_folders_fs (int): Number of folders used to create the folder structure in the resulting 
+            SegmentationDataset for the cell supervoxels.
+        n_folders_fs_sc (int): Number of folders used to create the folder structure in the resulting 
+            SegmentationDataset for the cell organelle supervoxels.
+        max_n_jobs (Optional[int]): Number of parallel jobs.
+        load_cellorganelles_from_kd_overlaycubes (bool): If True, cell organelles will be loaded from 
+            KnossosDataset overlay cubes.
+        transf_func_kd_overlay (Optional[Dict[Any, Callable]]): Transformation function applied on the probability 
+            map or segmentation data.
+        cube_of_interest_bb (Optional[Union[tuple, np.ndarray]]): Bounding box of the (sub-) volume of the dataset 
+            which is processed (minimum and maximum coordinates in mag1 voxels, XYZ).
+        overwrite (bool): If True, will overwrite existing data.
     """
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=True)
@@ -299,16 +290,16 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
 def run_create_rag(graph_node_dtype=None):
     # TODO: use BinarySearchStore
     """
-    If ``global_params.config.prior_astrocyte_removal==True``:
-        stores pruned RAG at ``global_params.config.pruned_svgraph_path``, required for all glia
-        removal steps. :func:`~syconn.exec.exec_inference.run_astrocyte_splitting`
-        will finally store the neuron SV graph.
-    else:
-        stores pruned SV graph at :attr:`~syconn.handler.config.DynConfig.pruned_svgraph_path`,
-        required by :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
-
+    Stores pruned Region Adjacency Graph (RAG) or pruned supervoxel (SV) graph based on the 
+    configuration. If 'prior_astrocyte_removal' is set to True in the configuration, it stores 
+    the pruned RAG at `global_params.config.pruned_svgraph_path`, required for all glia removal 
+    steps. :func:`~syconn.exec.exec_inference.run_astrocyte_splitting` will finally store the 
+    neuron SV graph. Otherwise, it stores the pruned SV graph at 
+    :attr:`~syconn.handler.config.DynConfig.pruned_svgraph_path`, required by 
+    :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
+    
     Args:
-        graph_node_dtype: Defaults to ``np.uint64``.
+        graph_node_dtype (Optional): Data type of the graph nodes. Defaults to np.uint64.
     """
     log = initialize_logging('sd_generation', global_params.config.working_dir +
                              '/logs/', overwrite=False)

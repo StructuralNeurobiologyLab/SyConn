@@ -15,17 +15,25 @@ import shutil
 from syconn.proc.analysis_prep_func import synapse_amount_percell
 
 def find_full_cells(ct_list, filename, syn_amount=True):
-    '''
-    # celltypes: j0256: STN = 0, DA = 1, MSN = 2, LMAN = 3, HVC = 4, TAN = 5, GPe = 6, GPi = 7,
-#                      FS=8, LTS=9, NGF=10
+    """
+    Finds full cells of given cell types and saves their IDs and soma locations in dictionaries.
+    
+    This function identifies full cells of specified cell types in a SuperSegmentationDataset, 
+    and saves their IDs and soma locations in dictionaries. If the `syn_amount` parameter is 
+    True, it also creates a dictionary with the amount of synapses per cell. The dictionaries 
+    are saved in the directory specified by `filename`.
+    
     Args:
-        ct_list: list of celltypes in int
-        filename: name of directory dictionaries are saved in
-        syn_amount: if True, also create a dictionary with amount of synapses per cell
-
+        ct_list (list): List of cell types as integers. Cell types are mapped as follows:
+                        STN = 0, DA = 1, MSN = 2, LMAN = 3, HVC = 4, TAN = 5, GPe = 6, GPi = 7,
+                        FS = 8, LTS = 9, NGF = 10.
+        filename (str): Name of the directory where dictionaries are saved.
+        syn_amount (bool, optional): If True, also create a dictionary with the amount of 
+                                      synapses per cell. Default is True.
+    
     Returns:
-
-    '''
+        None. The function saves dictionaries in the directory specified by `filename`.
+    """
 
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     sd_synssv = SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir)

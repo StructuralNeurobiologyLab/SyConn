@@ -46,6 +46,9 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
                           n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
                           transf_func_sj_seg: Optional[Callable] = None):
     """
+    hashirah: this docstring looks entirely similar to what
+    we already have. Is GPT skipping this?
+    
     Extracts contact sites and their overlap with ``sj`` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
     respectively. If synapse type is available, this information will be stored
@@ -53,14 +56,14 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
     objects (keys: ``sym_prop``, ``asym_prop``). These properties will further be used by
     :func:`~syconn.extraction.cs_processing_steps.combine_and_split_syn` which aggregates per-SV synapse
     fragments (syn) to per-SSV synapses (syn_ssv).
-
+    
     Examples:
         The synapse type labels and KnossosDatasets are defined in the `config.yml` file and can be set
         initially by changing the following attributes depending on how the synapse type prediction is stored.
-
+    
         (i) The type prediction is stored as segmentation in a single data set with three
         labels (0: background, 1: symmetric, 2: asymmetric):
-
+    
             kd_asym_path = root_dir + 'kd_asym_sym/'
             kd_sym_path = root_dir + 'kd_asym_sym/'
             key_val_pairs_conf = [
@@ -69,11 +72,11 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             ]
                 generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
                           key_value_pairs=key_val_pairs_conf)
-
-
+    
+    
         (ii) The type prediction is stored as segmentation in a two data sets each with two
         labels (0: background, 1: symmetric and 0: background, 1: asymmetric):
-
+    
             kd_asym_path = root_dir + 'kd_asym/'
             kd_sym_path = root_dir + 'kd_sym/'
             key_val_pairs_conf = [
@@ -82,11 +85,11 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             ]
                 generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
                           key_value_pairs=key_val_pairs_conf)
-
-
+    
+    
         (iii) The type prediction is stored as probability map in the raw channel (uint8, range: 0..255)
         in a data set for each type:
-
+    
             kd_asym_path = root_dir + 'kd_asym/'
             kd_sym_path = root_dir + 'kd_sym/'
             key_val_pairs_conf = [
@@ -95,12 +98,12 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
             ]
                 generate_default_conf(working_dir, kd_sym=kd_sym_path, kd_asym=kd_asym_path,
                           key_value_pairs=key_val_pairs_conf)
-
+    
     Notes:
         * Deletes existing KnossosDataset and SegmentationDataset of type 'syn' and 'cs'!
         * Replaced ``find_contact_sites``, ``extract_agg_contact_sites``, `
           `syn_gen_via_cset`` and ``extract_synapse_type``.
-
+    
     Args:
         chunk_size: Sub-cube volume which is processed at a time.
         log: Logger.
@@ -112,7 +115,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
         overwrite: Overwrite existing cache.
         transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
             sj foreground.
-
     """
     if extract_cs_syntype is None:
         msg = '`extract_contact_sites` requires the cythonized method ' \
@@ -317,21 +319,27 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
 def _contact_site_extraction_thread(args: Union[tuple, list]) \
         -> Tuple[int, Dict[str, List[dict]]]:
     """
-    Helper function to extract properties of ``cs`` and ``syn`` objects.
+    hashirah: Arguments need not be explained in the first
+    paragraph of the docstring. The "Args" section does it
+    for them. 
 
+    This function is a helper function that extracts properties of 'cs' and 'syn' objects. It takes
+    a tuple or list of arguments which includes 'Chunk' objects and a path to KnossosDataset 
+    containing the cell supervoxels. It returns two lists of dictionaries for 'cs' and 'syn' objects 
+    which include representative coordinates, bounding box and voxel count, and per-synapse counts 
+    of symmetric and asymmetric voxels.
+    
     Args:
-        args:
-            * ``Chunk`` objects
-            * Path to KnossosDataset containing the cell supervoxels.
-
+        args (Union[tuple, list]): A tuple or list that includes 'Chunk' objects and a path to 
+        KnossosDataset containing the cell supervoxels.
+    
     Todo:
         * Get rid of the second argument -> use config parameter instead.
-
+    
     Returns:
-        Two lists of dictionaries (representative coordinates, bounding box and
-        voxel count) for ``cs`` and ``syn`` objects, per-synapse counts of
-        symmetric and asymmetric voxels.
-
+        Tuple[int, Dict[str, List[dict]]]: Returns a tuple where the first element is an integer 
+        and the second element is a dictionary that contains two lists of dictionaries for 'cs' 
+        and 'syn' objects, per-synapse counts of symmetric and asymmetric voxels.
     """
     chunks = args[0]
     knossos_path = args[1]
@@ -496,6 +504,19 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
 
 # iterate over the subcellular SV ID chunks
 def _write_props_to_syn_thread(args):
+    """
+    Writes properties of contact sites and synapses to their respective dictionaries.
+    This function is designed to be used in a multi-threaded environment.
+    
+    Args:
+        args: A list containing the following elements:
+            - cs_ids_ch: Chunk of contact site IDs.
+            - n_folders_fs: Number of folders used for organizing supervoxel data.
+            - knossos_path: Path to the KnossosDataset containing the cell supervoxels.
+            - knossos_path_cs: Path to the KnossosDataset containing the contact sites.
+            - dir_props: Directory containing properties of the objects.
+            - nb_cores (optional): Number of cores to use for multiprocessing. Defaults to 4 if not provided.
+    """
     cs_ids_ch = args[0]
     n_folders_fs = args[1]
     knossos_path = args[2]
@@ -629,6 +650,20 @@ def _write_props_to_syn_thread(args):
 
 
 def _write_props_collect_helper(args) -> Tuple[List[dict], List[dict], dict, dict, dict]:
+    """
+    Helper function to collect properties of contact sites and synapses from worker directories.
+    This function is designed to be used in a multi-threaded environment.
+    
+    Args:
+        args: A tuple containing the following elements:
+            - dir_props: Directory containing properties of the objects.
+            - worker_id: ID of the worker thread.
+            - intersec: Intersection of object IDs.
+    
+    Returns:
+        Tuple: Contains dictionaries of contact site properties, synapse properties, 
+        symmetric synapse counts, asymmetric synapse counts, and synapse voxels.
+    """
     dir_props, worker_id, intersec = args
     if len(intersec) == 0:
         return [{}, {}, {}], [{}, {}, {}], {}, {}, {}
@@ -677,14 +712,14 @@ def _generate_storage_lookup(args):
     """
     Generates a look-up dictionary for given storage destinations to corresponding
     object IDs in `id_chunk` (used for SegmentationObjects) by calling
-    `rep_helper.subfold_from_ix`
-
+    `rep_helper.subfold_from_ix`.
+    
     Args:
         args : List or Tuple
-            id_chunk: SegmentationObject IDs
-            req_subfold_keys : keys of requested storages
-            n_folders_fs : number of folders
-
+            - id_chunk: SegmentationObject IDs
+            - req_subfold_keys : keys of requested storages
+            - n_folders_fs : number of folders
+    
     Returns:
         dict: look-up dictionary: [key -> value] storage destination -> list of IDs
     """

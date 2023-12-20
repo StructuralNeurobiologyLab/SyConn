@@ -26,13 +26,47 @@ Z_DIM = 10
 
 class TripletNet(nn.Module):
     """
-    adapted from https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py
+    This class defines a Triplet Network model, a type of deep metric learning model. The 
+    Triplet Network model is used to learn useful representations by distance comparisons. The 
+    model takes an anchor, a positive of the same class as anchor, and a negative of a different 
+    class as inputs, and learns to minimize the distance between the anchor and the positive and 
+    maximize the distance between the anchor and the negative. This implementation is adapted 
+    from https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py
+    
+    Args:
+        rep_net: The base network to be used for representation learning.
     """
     def __init__(self, rep_net):
+        """
+        Initializes the TripletNet with the provided base network for representation learning.
+        
+        Args:
+            rep_net: The base network to be used for representation learning.
+        """
         super().__init__()
         self.rep_net = rep_net
 
     def forward(self, x0, x1, x2):
+        """
+        Defines the forward pass for the TripletNet. If the model is in training mode, it takes 
+        three inputs: an anchor, a positive of the same class as anchor, and a negative of a 
+        different class. It then computes the representations for these inputs using the base 
+        network and calculates the pairwise distances between the anchor and the positive and 
+        between the anchor and the negative. If the model is not in training mode, it takes only 
+        the anchor as input and computes its representation using the base network.
+        
+        Args:
+            x0: The anchor input.
+            x1: The positive input of the same class as the anchor.
+            x2: The negative input of a different class.
+        
+        Returns:
+            dist_a: The distance between the anchor and the positive.
+            dist_b: The distance between the anchor and the negative.
+            z_0: The representation of the anchor.
+            z_1: The representation of the positive.
+            z_2: The representation of the negative.
+        """
         if not self.training:
             assert x1 is None and x2 is None
             return self.rep_net(x0[0], x0[1])

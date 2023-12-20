@@ -26,14 +26,15 @@ from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 
 def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     """
-    Render the default views as defined in ``global_params`` [WIP] of small
-    neuron reconstructions. Helper method of :func:`~run_neuron_rendering`.
-
+    This function renders the default views of small neuron reconstructions as defined in 
+    `global_params`. It is a helper method of `run_neuron_rendering`.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
-
+        max_n_jobs (Optional[int]): The maximum number of parallel jobs. If not provided, 
+        it defaults to None.
+    
     Notes:
-        Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
+        This function requires `syconn.exec.exec_init.run_create_neuron_ssd`.
     """
 
     if max_n_jobs is None:
@@ -91,14 +92,15 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
 
 def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
     """
-    Render the default views as defined in ``global_params`` [WIP] of huge
-    neuron reconstructions. Helper method of :func:`~run_neuron_rendering`.
-
+    This function renders the default views of huge neuron reconstructions as defined in 
+    `global_params`. It is a helper method of `run_neuron_rendering`.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
-
+        max_n_jobs (Optional[int]): The maximum number of parallel jobs. If not provided, 
+        it defaults to None.
+    
     Notes:
-        Requires :py:func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
+        This function requires `syconn.exec.exec_init.run_create_neuron_ssd`.
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.config['nnodes_total'] * 2
@@ -141,13 +143,14 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
 
 def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     """
-    Render the default views as defined in ``global_params`` [WIP].
-
+    This function renders the default views as defined in `global_params`.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
-
+        max_n_jobs (Optional[int]): The maximum number of parallel jobs. If not 
+        provided, it defaults to None.
+    
     Notes:
-        Requires :func:`~syconn.exec.exec_init.run_create_neuron_ssd`.
+        This function requires `syconn.exec.exec_init.run_create_neuron_ssd`.
     """
     log = initialize_logging('neuron_rendering',
                              global_params.config.working_dir + '/logs/')
@@ -176,12 +179,11 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
 
 def _run_huge_ssv_render_worker(q: Queue, q_out: Queue):
     """
-    Helper method of :func:`~run_astrocyte_rendering`.
-
+    This function is a helper method of `run_astrocyte_rendering`.
+    
     Args:
-        q: Input queue.
-        q_out: Output queue.
-
+        q (Queue): The input queue.
+        q_out (Queue): The output queue.
     """
     while True:
         inp = q.get()
@@ -205,13 +207,22 @@ def _run_huge_ssv_render_worker(q: Queue, q_out: Queue):
 
 def run_astrocyte_rendering(max_n_jobs: Optional[int] = None):
     """
-    Uses the pruned RAG at ``global_params.config.pruned_svgraph_path``
-    (stored as edge list .bz2 file) which is computed in
-    :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to aggregate the
-    rendering context from the underlying supervoxel graph.
-
+    This function is responsible for rendering the astrocyte using the pruned RAG stored at 
+    `global_params.config.pruned_svgraph_path`. The pruned RAG is computed in 
+    `syconn.exec.exec_init.init_cell_subcell_sds` and is used to aggregate the rendering context 
+    from the underlying supervoxel graph. The function also handles the rendering of small and 
+    large SSVs separately, and checks for completeness of the rendering process.
+    
     Args:
-        max_n_jobs: Number of parallel jobs.
+        max_n_jobs (Optional[int]): The maximum number of parallel jobs to be used for the 
+        rendering process. If not provided, it defaults to the total number of GPUs multiplied 
+        by 4 if the `pyopengl_platform` is set to 'egl', otherwise it defaults to the total 
+        number of cores multiplied by 4.
+    
+    Raises:
+        Exception: If any of the worker processes stop unexpectedly.
+        ValueError: If not all `_run_huge_ssv_render_worker` jobs complete successfully or if 
+        not all SVs are rendered completely.
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.config.ngpu_total * 4 if \

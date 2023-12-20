@@ -35,6 +35,10 @@ except ImportError as e:
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
+    """
+    This function is an alias for the object_segmentation function. It takes in any number of arguments
+    and keyword arguments and passes them directly to the object_segmentation function.
+    """
     # alias
     return object_segmentation(*args, **kwargs)
 
@@ -48,84 +52,40 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         transform_func_kwargs=None, transf_func_kd_overlay=None,
                         load_from_kd_overlaycubes=False, n_chunk_jobs=None):
     """
-    Extracts connected component from probability maps.
-
-    By default the following procedure is used:
-    1. Gaussian filter (defined by sigma)
-    2. Thresholding (defined by threshold)
-    3. Connected components analysis
-
-    If `transform_func` is set, the specified method will be applied by every
-    worker on the chunk's probability map to generate the segmentation instead.
-    Add `transform_func_kwargs` in case `transform_func` specific arguments.
-
-    In case of vesicle clouds (hdf5_name in ["p4", "vc"]) the membrane
-    segmentation is used to cut connected vesicle clouds across cells
+    Extracts connected components from probability maps using a default procedure of Gaussian filtering,
+    thresholding, and connected components analysis. If a transform_func is provided, it is applied by each
+    worker on the chunk's probability map to generate the segmentation instead. 
+    
+    In case of vesicle clouds, the membrane segmentation is used to cut connected vesicle clouds across cells
     apart (only if membrane segmentation is provided).
-
+    
     Args:
-    cset : chunkdataset instance
-    filename (str) : Filename of the prediction in the ChunkDataset.
-    hdf5names (list): list of strings
-        List of names/ labels to be extracted and processed from the prediction
-        file.
-    overlap (str): str or np.array
-        Defines the overlap with neighbouring chunks that is left for later
-        processing steps; if 'auto' the overlap is calculated from the sigma and
-        the stitch_overlap (here: [1., 1., 1.]) and the number of binary erosion
-        in global_params.config['cell_objects']['extract_morph_op'].
-    sigmas (list): list of lists or None
-        Defines the sigmas of the gaussian filters applied to the probability
-        maps. Has to be the same length as hdf5names. If None no gaussian filter
-        is applied.
-    thresholds(list of float or np.ndarray):
-        Threshold for cutting the probability map. Has to be the same length as
-        hdf5names. If None zeros are used instead (not recommended!)
-    chunk_list(list): 
-        Selective list of chunks for which this function should work on. If None
-        all chunks are used.
-    debug(bool): 
-        If true multiprocessed steps only operate on one core using 'map' which
-        allows for better error messages.
-    swapdata(bool):
-        If true an x-z swap is applied to the data prior to processing.
-    prob_kd_path_dict:
-    membrane_filename(str):
-        One way to allow access to a membrane segmentation when processing
-        vesicle clouds. Filename of the prediction in the chunkdataset. The
-        threshold is currently set at 0.4.
-    membrane_kd_path(str):
-        One way to allow access to a membrane segmentation when processing
-        vesicle clouds. Path to the knossosdataset containing a membrane
-        segmentation. The threshold is currently set at 0.4.
-    hdf5_name_membrane(str):
-        When using the membrane_filename this key has to be given to access the
-        data in the saved chunk.
-    fast_load(bool):
-        If true the data of chunk is blindly loaded without checking for enough
-        offset to compute the overlap area. Faster, because no neighbouring
-        chunk has to be accessed since the default case loads th overlap area
-        from them.
-    suffix(str):
-        Suffix for the intermediate results.
-    nb_cpus:
-    transform_func(callable):
-        Segmentation method which is applied.
-    transform_func_kwargs(dict) :
-        key word arguments for transform_func
-    load_from_kd_overlaycubes(bool) :
-        Load prob/seg data from overlaycubes instead of raw cubes.
-    transf_func_kd_overlay :
-        Method which is to applied to cube data if `load_from_kd_overlaycubes`
-        is True.
-    n_chunk_jobs:
-
+        cset (ChunkDataset): Instance of the chunkdataset.
+        filename (str): Filename of the prediction in the ChunkDataset.
+        hdf5names (list): List of names/labels to be extracted and processed from the prediction file.
+        overlap (str or np.array): Defines the overlap with neighbouring chunks left for later processing steps.
+        sigmas (list): Defines the sigmas of the gaussian filters applied to the probability maps.
+        thresholds (list): Threshold for cutting the probability map.
+        chunk_list (list): Selective list of chunks for this function to work on.
+        debug (bool): If true, multiprocessed steps only operate on one core using 'map'.
+        swapdata (bool): If true, an x-z swap is applied to the data prior to processing.
+        prob_kd_path_dict (dict): Dictionary containing probability knossosdataset paths.
+        membrane_filename (str): Filename of the prediction in the chunkdataset for membrane segmentation.
+        membrane_kd_path (str): Path to the knossosdataset containing a membrane segmentation.
+        hdf5_name_membrane (str): Key to access the data in the saved chunk when using the membrane_filename.
+        fast_load (bool): If true, the data of chunk is loaded without checking for enough offset.
+        suffix (str): Suffix for the intermediate results.
+        nb_cpus (int): Number of CPUs to use.
+        transform_func (callable): Segmentation method which is applied.
+        transform_func_kwargs (dict): Key word arguments for transform_func.
+        transf_func_kd_overlay (callable): Method applied to cube data if `load_from_kd_overlaycubes` is True.
+        load_from_kd_overlaycubes (bool): Load prob/seg data from overlaycubes instead of raw cubes.
+        n_chunk_jobs (int): Number of total jobs.
+    
     Returns:
-    results_as_list(list):
-        list containing information about the number of connected components
-        in each chunk
-    overlap(np.array):
-    stitch overlap(np.array):
+        results_as_list (list): List containing information about the number of connected components in each chunk.
+        overlap (np.array): Overlap array.
+        stitch_overlap (np.array): Stitch overlap array.
     """
     if transform_func is None:
         transform_func = _object_segmentation_thread
@@ -203,19 +163,33 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
 
 def _object_segmentation_thread(args):
     """
-    Default worker of object_segmentation. Performs a gaussian blur with
-     subsequent thresholding to extract connected components of a probability
-     map. Result summaries are returned and connected components are stored as
-     .h5 files.
-     TODO: Add generic '_segmentation_thread' to enable a clean support of
-     custom-made segmentation functions passed to 'object_segmentation' via
-     'transform_func'-kwargs
-
+    This function is the default worker of object_segmentation. It performs a gaussian blur with
+    subsequent thresholding to extract connected components of a probability map. Result summaries 
+    are returned and connected components are stored as .h5 files. 
+    
     Args:
-        args(list) :
-
+        args(list): A list containing the following elements:
+            - chunks: List of chunks to be processed.
+            - path_head_folder: Path to the head folder.
+            - filename: Name of the file.
+            - hdf5names: List of hdf5 names.
+            - overlap: Overlap value.
+            - sigmas: List of sigma values for gaussian filter.
+            - thresholds: List of threshold values.
+            - swapdata: Boolean value indicating whether to swap data or not.
+            - prob_kd_path_dict: Dictionary containing probability knossosdataset paths.
+            - membrane_filename: Name of the membrane file.
+            - membrane_kd_path: Path to the membrane knossosdataset.
+            - hdf5_name_membrane: hdf5 name for the membrane.
+            - fast_load: Boolean value indicating whether to load data fast or not.
+            - suffix: Suffix for the intermediate results.
+            - transform_func_kwargs: Dictionary containing keyword arguments for transform function.
+            - load_from_kd_overlaycubes: Boolean value indicating whether to load from overlay cubes or not.
+            - transf_func_kd_overlay: Function to be applied to cube data if `load_from_kd_overlaycubes` is True.
+    
     Returns:
-        list of lists: Results of connected component analysis
+        list of lists: Results of connected component analysis. Each list contains chunk number, hdf5 name, 
+        and maximum label.
     """
     chunks = args[0]
     path_head_folder = args[1]
@@ -370,31 +344,23 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                        chunk_translator, debug, suffix="",
                        n_chunk_jobs=None, nb_cpus=1):
     """
-    Makes labels unique across chunks
-
+    This function makes labels unique across chunks.
+    
     Args:
-        cset : chunkdataset instance
-        filename(str) :
-            Filename of the prediction in the chunkdataset
-        hdf5names(list): list of str
-            List of names/ labels to be extracted and processed from the prediction
-            file
-        chunk_list(list): list of int
-            Selective list of chunks for which this function should work on. If None
-            all chunks are used.
-        max_nb_dict(dict):
-            Maps each chunk id to a integer describing which needs to be added to
-            all its entries
-        chunk_translator(dict):
-            Remapping from chunk ids to position in chunk_list
-        debug(bool):
-            If true multiprocessed steps only operate on one core using 'map' which
-            allows for better error messages
-        suffix: str
-            Suffix for the intermediate results
-        n_chunk_jobs: int
-            Number of total jobs.
-        nb_cpus: int
+        cset (ChunkDataset instance): Instance of the ChunkDataset.
+        filename (str): Filename of the prediction in the ChunkDataset.
+        hdf5names (list): List of names/ labels to be extracted and processed from 
+                          the prediction file.
+        chunk_list (list): Selective list of chunks for which this function should 
+                           work on. If None, all chunks are used.
+        max_nb_dict (dict): Maps each chunk id to an integer describing which needs 
+                            to be added to all its entries.
+        chunk_translator (dict): Remapping from chunk ids to position in chunk_list.
+        debug (bool): If true, multiprocessed steps only operate on one core using 
+                      'map' which allows for better error messages.
+        suffix (str): Suffix for the intermediate results.
+        n_chunk_jobs (int): Number of total jobs.
+        nb_cpus (int): Number of cores used per worker.
     """
 
     if n_chunk_jobs is None:
@@ -424,6 +390,17 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
 
 
 def _make_unique_labels_thread(func_args):
+    """
+    This function is a worker function that makes labels unique across chunks in a multi-threaded environment.
+    
+    Args:
+        func_args (list): A list of arguments. Each argument is a list containing the following elements:
+            - chunk: Chunk to be processed.
+            - filename: Name of the file.
+            - hdf5names: List of hdf5 names.
+            - this_max_nb_dict: Dictionary mapping each chunk id to a integer.
+            - suffix: Suffix for the intermediate results.
+    """
     for args in func_args:
         chunk = args[0]
         filename = args[1]
@@ -447,39 +424,24 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                      overlap, debug, suffix="", nb_cpus=None,
                      overlap_thresh=0, n_chunk_jobs=None):
     """
-    Creates a stitch list for the overlap region between chunks
-
+    Creates a stitch list for the overlap region between chunks. This function is used to identify
+    the overlapping regions between chunks and create a list of these regions for further processing.
+    
     Args:
-        cset : chunkdataset instance
-        filename(str):
-            Filename of the prediction in the chunkdataset
-        hdf5names(list): list of str
-            List of names/ labels to be extracted and processed from the prediction
-            file
-        chunk_list(list): list of int
-            Selective list of chunks for which this function should work on. If None
-            all chunks are used.
-        overlap(np.array): np.array
-            Defines the overlap with neighbouring chunks that is left for later
-            processing steps
-        stitch_overlap: np.array
-            Defines the overlap with neighbouring chunks that is left for stitching
-        debug: boolean
-            If true multiprocessed steps only operate on one core using 'map' which
-            allows for better error messages
-        suffix: str
-            Suffix for the intermediate results
-        nb_cpus: int
-            Number of cores used per worker.
-        n_chunk_jobs: int
-            Number of total jobs.
-        overlap_thresh : float
-                    Overlap fraction of object in different chunks to be considered stitched.
-                    If zero this behavior is disabled.
-
+        cset (ChunkDataset): Instance of the chunkdataset.
+        filename (str): Name of the prediction file in the chunkdataset.
+        hdf5names (list): List of labels to be extracted and processed from the prediction file.
+        chunk_list (list): List of chunks for which this function should work on. If None, all chunks are used.
+        stitch_overlap (np.array): Defines the overlap with neighbouring chunks that is left for stitching.
+        overlap (np.array): Defines the overlap with neighbouring chunks that is left for later processing steps.
+        debug (bool): If true, multiprocessed steps only operate on one core using 'map' for better error messages.
+        suffix (str): Suffix for the intermediate results.
+        nb_cpus (int): Number of cores used per worker.
+        overlap_thresh (float): Overlap fraction of object in different chunks to be considered stitched.
+        n_chunk_jobs (int): Number of total jobs.
+    
     Returns:
-        stitch_list(dict):
-            Dictionary of overlapping component ids
+        stitch_list (dict): Dictionary of overlapping component ids.
     """
     if n_chunk_jobs is None:
         n_chunk_jobs = global_params.config.ncore_total
@@ -527,6 +489,16 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
 
 def _make_stitch_list_thread(args):
+    """
+    This function is a helper function for the make_stitch_list function. It is used to create a stitch list
+    for a specific chunk in a separate thread.
+    
+    Args:
+        args (list): List of arguments required for the function.
+    
+    Returns:
+        map_dict (dict): Dictionary of overlapping component ids for each hdf5name.
+    """
     cpath_head_folder = args[0]
     nb_chunks = args[1]
     filename = args[2]
@@ -619,23 +591,21 @@ def _make_stitch_list_thread(args):
 
 def make_merge_list(hdf5names, stitch_list, max_labels):
     """
-    Creates a merge list from a stitch list by mapping all connected ids to
-    one id
-
+    Creates a merge list from a stitch list by mapping all connected ids to one id. 
+    This function is used to create a list of labels that need to be merged based on 
+    the stitch list.
+    
     Args:
-        hdf5names (list): list of str
-            List of names/ labels to be extracted and processed from the prediction
-            file
-        stitch_list (dict):
-            Contains pairs of overlapping component ids for each hdf5name
-        max_labels (dict): dictionary
-            Contains the number of different component ids for each hdf5name
-
+        hdf5names (list): List of labels to be extracted and processed from the 
+            prediction file.
+        stitch_list (dict): Contains pairs of overlapping component ids for each 
+            hdf5name.
+        max_labels (dict): Contains the number of different component ids for each 
+            hdf5name.
+    
     Returns:
-        merge_dict (dict):
-            mergelist for each hdf5name
-        merge_list_dict (dict):
-            mergedict for each hdf5name
+        merge_dict (dict): Mergelist for each hdf5name.
+        merge_list_dict (dict): Mergedict for each hdf5name.
     """
 
     merge_dict = {}
@@ -658,28 +628,19 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                      debug, suffix="", n_chunk_jobs=None, nb_cpus=1):
     """
-    Applies merge list to all chunks
-
+    Applies merge list to all chunks. This function is used to apply the merge list to all chunks in the
+    chunkdataset.
+    
     Args:
-        cset : chunkdataset instance
-        chunk_list (list): list of int
-            Selective list of chunks for which this function should work on. If None
-            all chunks are used.
-        filename (str):
-            Filename of the prediction in the chunkdataset
-        hdf5names (list): list of str
-            List of names/ labels to be extracted and processed from the prediction
-            file
-        merge_list_dict (dict):
-            mergedict for each hdf5name
-        debug (bool):
-            If true multiprocessed steps only operate on one core using 'map' which
-            allows for better error messages
-        suffix (str):
-            Suffix for the intermediate results
-        n_chunk_jobs (int):
-            Number of total jobs.
-        nb_cpus:
+        cset (ChunkDataset): Instance of the chunkdataset.
+        chunk_list (list): List of chunks for which this function should work on. If None, all chunks are used.
+        filename (str): Name of the prediction file in the chunkdataset.
+        hdf5names (list): List of labels to be extracted and processed from the prediction file.
+        merge_list_dict (dict): Mergedict for each hdf5name.
+        debug (bool): If true, multiprocessed steps only operate on one core using 'map' for better error messages.
+        suffix (str): Suffix for the intermediate results.
+        n_chunk_jobs (int): Number of total jobs.
+        nb_cpus (int): Number of cores used per worker.
     """
 
     multi_params = []
@@ -706,6 +667,13 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
 
 
 def _apply_merge_list_thread(args):
+    """
+    This function is a helper function for the apply_merge_list function. It is used to apply the merge list
+    to a specific chunk in a separate thread.
+    
+    Args:
+        args (list): List of arguments required for the function.
+    """
     chunks = args[0]
     filename = args[1]
     hdf5names = args[2]
@@ -741,34 +709,34 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
                                n_max_job=None, unified_labels=False, orig_dtype=np.uint8, log=None,
                                compresslevel=None):
     """
-    Batchjob version of :class:`knossos_utils.chunky.ChunkDataset.export_cset_to_kd`
-    method, see ``knossos_utils.chunky`` for details.
-
+    This function exports a chunk dataset to a Knossos dataset in a batch job. It is a batch job 
+    version of the ChunkDataset.export_cset_to_kd method. 
+    
     Notes:
         * KnossosDataset needs to be initialized beforehand (see
           :func:`~KnossosDataset.initialize_without_conf`).
         * Only works if data mag = 1.
-
+    
     Args:
-        target_kd_paths: Target KnossosDatasets.
-        cset: Source ChunkDataset.
-        name:
-        hdf5names:
-        n_cores:
-        offset:
-        size:
-        stride:
-        overwrite:
-        as_raw:
-        fast_downsampling:
-        n_max_job:
-        unified_labels:
-        orig_dtype:
-        log:
-        compresslevel: Compression level in case segmentation data is written for (seg.sz.zip files).
-
+        target_kd_paths (dict): The target Knossos datasets.
+        cset (ChunkDataset): The source chunk dataset.
+        name (str): The name of the chunk dataset.
+        hdf5names (list): The names of the HDF5 files.
+        n_cores (int, optional): The number of cores to use. Defaults to 1.
+        offset (tuple, optional): The offset for the chunk dataset. Defaults to None.
+        size (tuple, optional): The size of the chunk dataset. Defaults to None.
+        stride (tuple, optional): The stride for the chunk dataset. Defaults to (4 * 128, 4 * 128, 4 * 128).
+        overwrite (bool, optional): Whether to overwrite existing data. Defaults to False.
+        as_raw (bool, optional): Whether to save the data as raw data. Defaults to False.
+        fast_downsampling (bool, optional): Whether to use fast downsampling. Defaults to False.
+        n_max_job (int, optional): The maximum number of jobs. Defaults to None.
+        unified_labels (bool, optional): Whether to use unified labels. Defaults to False.
+        orig_dtype (np.dtype, optional): The original data type. Defaults to np.uint8.
+        log (str, optional): The log file. Defaults to None.
+        compresslevel (int, optional): The compression level for segmentation data. Defaults to None.
+    
     Returns:
-
+        None
     """
     if n_max_job is None:
         n_max_job = global_params.config.ncore_total
@@ -811,8 +779,19 @@ def export_cset_to_kd_batchjob(target_kd_paths, cset, name, hdf5names, n_cores=1
 
 
 def _export_cset_as_kds_thread(args):
-    """Helper function.
-    TODO: refactor.
+    """
+    This function is a helper function for exporting a chunk dataset to a Knossos dataset. It is 
+    used to handle the multithreading part of the export process.
+    
+    Args:
+        args (list): A list of arguments needed for the export process. The arguments include 
+        coordinates, size, chunk dataset path, target Knossos dataset paths, name, HDF5 names, 
+        whether to save as raw data, whether to use unified labels, number of threads, original 
+        data type, whether to use fast downsampling, whether to overwrite existing data, and 
+        compression level.
+    
+    Returns:
+        None
     """
     coords = args[0]
     size = np.array(args[1])

@@ -12,26 +12,34 @@ from syconn.handler.prediction import predict_dense_to_kd
 def predict_myelin(kd_raw_path: str = None,
                    cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Generates a probability map for myelinated neuron voxels at
-    ``global_params.config.working_dir + '/knossosdatasets/myelin/'`` stored
-    in the raw channel, i.e. as uint8 (0..255).
-
+    Generates a probability map for myelinated neuron voxels. The map is stored in the raw 
+    channel as uint8 (0..255) at the path specified by 
+    `global_params.config.working_dir + '/knossosdatasets/myelin/'`.
+    
+    Args:
+        kd_raw_path (str, optional): Path to the KnossosDataset of the raw data. If not 
+            provided, `global_params.config.kd_seg_path` is used.
+        cube_of_interest (Tuple[np.ndarray], optional): Bounding box of the volume of interest. 
+            It specifies the minimum and maximum coordinate in voxels in the respective 
+            magnification.
+    
     Examples:
         The entire myelin prediction for a single cell reconstruction including a smoothing
         is implemented as follows::
-
+    
             from syconn import global_params
             from syconn.reps.super_segmentation import *
-            from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
-
+            from syconn.reps.super_segmentation_helper import map_myelin2coords, 
+                majorityvote_skeleton_property
+    
             # init. example data set
             global_params.wd = '~/SyConn/example_cube1/'
-
+    
             # initialize example cell reconstruction
             ssd = SuperSegmentationDataset()
             ssv = list(ssd.ssvs)[0]
             ssv.load_skeleton()
-
+    
             # get myelin predictions
             myelinated = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
             ssv.skeleton["myelin"] = myelinated
@@ -40,12 +48,6 @@ def predict_myelin(kd_raw_path: str = None,
             # store results as a KNOSSOS readable k.zip file
             ssv.save_skeleton_to_kzip(dest_path='~/{}_myelin.k.zip'.format(ssv.id),
                 additional_keys=['myelin', 'myelin_avg10000'])
-
-    Args:
-        kd_raw_path: Path to the KnossosDataset of the raw data.
-        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
-            coordinate in voxels in the respective magnification (see kwarg `mag`).
-
     """
     if kd_raw_path is None:
         kd_raw_path = global_params.config.kd_seg_path
@@ -56,17 +58,17 @@ def predict_myelin(kd_raw_path: str = None,
 
 def predict_synapsetype(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Generates synapse type predictions at every dataset voxel stored in
-    ``global_params.config.working_dir + '/knossosdatasets/syntype_v2/'`` as
-    overlay.
-
+    Generates synapse type predictions at every dataset voxel. The predictions 
+    are stored as an overlay at the path specified by 
+    `global_params.config.working_dir + '/knossosdatasets/syntype_v2/'`.
+    
+    Args:
+        cube_of_interest (Tuple[np.ndarray], optional): Bounding box of the 
+        volume of interest. It specifies the minimum and maximum coordinate in 
+        voxels in the respective magnification.
+    
     Notes:
         Label 1: asymmetric, label 2: symmetric.
-
-    Args:
-        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
-            coordinate in voxels in the respective magnification (see kwarg `mag`).
-
     """
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
@@ -78,21 +80,21 @@ def predict_synapsetype(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
 
 def predict_cellorganelles(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Generates synapse type predictions at every dataset voxel stored in
-    ``global_params.config.working_dir + '/knossosdatasets/synapsetype/'`` as
-    overlay.
-
+    Generates synapse type predictions at every dataset voxel. The predictions are 
+    stored as an overlay at the path specified by 
+    `global_params.config.working_dir + '/knossosdatasets/synapsetype/'`.
+    
+    Args:
+        cube_of_interest (Tuple[np.ndarray], optional): Bounding box of the volume 
+        of interest. It specifies the minimum and maximum coordinate in voxels in 
+        the respective magnification.
+    
     Notes:
         Labels:
             * 0: Background.
             * 1: Mitochondria.
             * 2: Vesicle clouds.
             * 3: Synaptic junction.
-
-    Args:
-        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
-            coordinate in voxels in the respective magnification (see kwarg `mag`).
-
     """
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
@@ -104,19 +106,17 @@ def predict_cellorganelles(cube_of_interest: Optional[Tuple[np.ndarray]] = None)
 
 def predict_er(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Generates ER predictions at every dataset voxel stored in
-    ``global_params.config.working_dir + '/knossosdatasets/er/'`` as
-    overlay.
-
+    Generates ER predictions at every dataset voxel. The predictions are stored as an overlay
+    at the path specified by `global_params.config.working_dir + '/knossosdatasets/er/'`.
+    
+    Args:
+        cube_of_interest (Tuple[np.ndarray], optional): Bounding box of the volume of interest. It
+            specifies the minimum and maximum coordinate in voxels in the respective magnification.
+    
     Notes:
         Labels:
             * 0: Background.
             * 1: ER
-
-    Args:
-        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
-            coordinate in voxels in the respective magnification (see kwarg `mag`).
-
     """
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',
@@ -128,19 +128,17 @@ def predict_er(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
 
 def predict_golgi(cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Generates golgi predictions at every dataset voxel stored in
-    ``global_params.config.working_dir + '/knossosdatasets/golgi/'`` as
-    overlay.
-
+    Generates golgi predictions at every dataset voxel. The predictions are stored as an overlay
+    at the path specified by `global_params.config.working_dir + '/knossosdatasets/golgi/'`.
+    
+    Args:
+        cube_of_interest (Tuple[np.ndarray], optional): Bounding box of the volume of interest. It
+            specifies the minimum and maximum coordinate in voxels in the respective magnification.
+    
     Notes:
         Labels:
             * 0: Background.
             * 1: Golgi Apparatus
-
-    Args:
-        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
-            coordinate in voxels in the respective magnification (see kwarg `mag`).
-
     """
     predict_dense_to_kd(global_params.config.kd_seg_path,
                         global_params.config.working_dir + '/knossosdatasets/',

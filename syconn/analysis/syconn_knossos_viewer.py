@@ -25,11 +25,23 @@ import numpy as np
 
 class SyConnGateInteraction(object):
     """
-    Query the SyConn backend server.
+    This class is used to interact with the SyConn backend server. It provides methods to query
+    the server and retrieve data related to SuperSegmentationObjects (SSVs), such as meshes, 
+    skeletons, and metadata. It also provides methods to push and pull attributes of segmentation 
+    objects to and from the server.
     """
     ct_from_cache: Dict[Any, Any]
 
     def __init__(self, server, synthresh=0.5, axodend_only=True):
+        """
+        Initializes the SyConnGateInteraction object.
+        
+        Args:
+            server (str): The URL of the SyConn backend server.
+            synthresh (float, optional): The threshold for synapse detection. Defaults to 0.5.
+            axodend_only (bool, optional): If True, only axodendritic synapses are considered.
+                Defaults to True.
+        """
         self.server = server
         self.session = requests.Session()
         self.ssv_from_sv_cache = dict()
@@ -46,13 +58,13 @@ class SyConnGateInteraction(object):
 
     def get_ssv_mesh(self, ssv_id):
         """
-        Returns a mesh for a given ssv_id.
-
-        Args:
-            ssv_id:
-
-        Returns:
+        Retrieves the mesh for a given SuperSegmentationObject (SSV) from the SyConn backend server.
         
+        Args:
+            ssv_id (int): The ID of the SSV.
+        
+        Returns:
+            tuple: A tuple containing the indices, vertices, and normals of the mesh.
         """
         r1 = self.session.get(self.server + '/ssv_ind/{0}'.format(ssv_id))
         r2 = self.session.get(self.server + '/ssv_vert/{0}'.format(ssv_id))
@@ -66,13 +78,13 @@ class SyConnGateInteraction(object):
 
     def get_ssv_skel(self, ssv_id):
         """
-        Returns a skeleton for a given ssv_id.
-
-         Args:
-            ssv_id:
-
+        Retrieves the skeleton for a given SuperSegmentationObject (SSV) from the SyConn backend server.
+        
+        Args:
+            ssv_id (int): The ID of the SSV.
+        
         Returns:
-            dict: Keys: "nodes", "edges", "diameters"
+            dict: A dictionary containing the nodes, edges, and diameters of the skeleton.
         """
         r = self.session.get(self.server + '/ssv_skeleton/{0}'.format(ssv_id))
         skel = json.loads(r.content)
@@ -89,9 +101,8 @@ class SyConnGateInteraction(object):
 
     def init_get_download_queue_worker(self):
         """
-        Initialize mesh queue daemon workers.
-
-        Return:
+        Initializes daemon workers for the mesh queue. This method starts 20 daemon 
+        workers that continuously process download requests from the queue.
         """
         for i in range(20):
             worker = Thread(target=self.get_download_queue_worker)
@@ -101,10 +112,17 @@ class SyConnGateInteraction(object):
         return
 
     def wait_for_all_downloads(self):
+        """
+        Pauses the execution of the program until all download requests in the queue have been processed.
+        """
         while not self.get_download_done.empty():
             time.sleep(0.05)
 
     def get_download_queue_worker(self):
+        """
+        Processes download requests from the queue. This method is intended to be run in a separate
+        thread and runs in an infinite loop, continuously processing download requests.
+        """
         while True:
             # this is blocking and therefore fine
             get_request = self.get_download_queue.get()
@@ -115,6 +133,14 @@ class SyConnGateInteraction(object):
         return
 
     def add_ssv_obj_mesh_to_down_queue(self, ssv_id, obj_type):
+        """
+        Adds a request to download the mesh of a specific object type associated with a given
+        SuperSegmentationObject (SSV) to the download queue.
+        
+        Args:
+            ssv_id (int): The ID of the SSV.
+            obj_type (str): The type of the object (e.g., 'sj', 'vc', 'mi').
+        """
         # if this queue is empty, all downloads will be done,
         # a poor man's sync mechanism
         for i in range(3):
@@ -125,6 +151,17 @@ class SyConnGateInteraction(object):
         self.get_download_queue.put('/ssv_obj_norm/{0}/{1}'.format(ssv_id, obj_type))
 
     def get_ssv_obj_mesh_from_results_store(self, ssv_id, obj_type):
+        """
+        Retrieves the mesh of a specific object type associated with a given SuperSegmentationObject (SSV)
+        from the results store.
+        
+        Args:
+            ssv_id (int): The ID of the SSV.
+            obj_type (str): The type of the object (e.g., 'sj', 'vc', 'mi').
+        
+        Returns:
+            tuple: A tuple containing the indices, vertices, and normals of the mesh.
+        """
         ind_hash = '/ssv_obj_ind/{0}/{1}'.format(ssv_id, obj_type)
         vert_hash = '/ssv_obj_vert/{0}/{1}'.format(ssv_id, obj_type)
         norm_hash = '/ssv_obj_norm/{0}/{1}'.format(ssv_id, obj_type)
@@ -141,15 +178,15 @@ class SyConnGateInteraction(object):
 
     def get_ssv_obj_mesh(self, ssv_id, obj_type):
         """
-        Returns a mesh for a given ssv_id and a specified obj_type.
-        obj_type can be sj, vc, mi ATM.
-
+        Retrieves the mesh for a given SuperSegmentationObject (SSV) and a specified object type
+        from the SyConn backend server.
+        
         Args:
-            ssv_id:
-            obj_type:
-
+            ssv_id (int): The ID of the SSV.
+            obj_type (str): The type of the object (e.g., 'sj', 'vc', 'mi').
+        
         Returns:
-
+            tuple: A tuple containing the indices, vertices, and normals of the mesh.
         """
         r1 = self.session.get(self.server + '/ssv_obj_ind/{0}/{1}'.format(ssv_id, obj_type))
         r2 = self.session.get(self.server + '/ssv_obj_vert/{0}/{1}'.format(ssv_id, obj_type))
@@ -161,22 +198,24 @@ class SyConnGateInteraction(object):
 
     def get_list_of_all_ssv_ids(self):
         """
-        Returns a list of all ssvs in the dataset
-
+        Retrieves a list of all SuperSegmentationObject (SSV) IDs from the SyConn backend server.
+        
         Returns:
-
+            list: A list of all SSV IDs in the dataset.
         """
         r = self.session.get(self.server + '/ssv_list')
         return json.loads(r.content)
 
     def get_svs_of_ssv(self, ssv_id):
         """
-        Returns a list of all svs of a given ssv.
+        Retrieves a list of all Supervoxel (SV) IDs associated with a given 
+        SuperSegmentationObject (SSV) from the SyConn backend server.
+        
         Args:
-            ssv_id:
-
+            ssv_id (int): The ID of the SSV.
+        
         Returns:
-
+            list: A list of all SV IDs associated with the SSV.
         """
         if ssv_id not in self.svs_from_ssv:
             r = self.session.get(self.server + '/svs_of_ssv/{0}'.format(ssv_id))
@@ -185,12 +224,14 @@ class SyConnGateInteraction(object):
 
     def get_ssv_of_sv(self, sv_id):
         """
-        Gets the ssv for a given sv.
+        Retrieves the SuperSegmentationObject (SSV) ID associated with a given Supervoxel (SV)
+        from the SyConn backend server.
+        
         Args:
-            sv_id:
-
+            sv_id (int): The ID of the SV.
+        
         Returns:
-
+            int: The ID of the SSV associated with the SV.
         """
         if sv_id not in self.ssv_from_sv_cache:
             start = time.time()
@@ -201,13 +242,14 @@ class SyConnGateInteraction(object):
 
     def get_celltype_of_ssv(self, ssv_id):
         """
-        Get SSV cell type if available.
-
+        Retrieves the cell type of a given SuperSegmentationObject (SSV) from the SyConn backend server,
+        if available.
+        
         Args:
-            ssv_id(int): 
-
+            ssv_id (int): The ID of the SSV.
+        
         Returns:
-            str:
+            tuple: A tuple containing the cell type and the certainty of the cell type prediction.
         """
         # if not ssv_id in self.ct_from_cache:
         r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
@@ -223,9 +265,10 @@ class SyConnGateInteraction(object):
 
     def get_all_syn_metda_data(self):
         """
-
+        Retrieves all synapse metadata from the SyConn backend server.
+        
         Returns:
-
+            dict: A dictionary containing all synapse metadata.
         """
         params = {'synthresh': self.synthresh, 'axodend_only': self.axodend_only}
         r = self.session.get('{}/all_syn_meta/{}'.format(self.server, json.dumps(params)))
@@ -233,18 +276,19 @@ class SyConnGateInteraction(object):
 
     def push_so_attr(self, so_id, so_type, attr_key, attr_value):
         """
-        Will invoke `so.save_attributes([attr_key], [attr_value)` of
-        `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)`
-        on the server.
-
+        Pushes an attribute of a segmentation object to the SyConn backend server. This is 
+        achieved by invoking `so.save_attributes([attr_key], [attr_value])` of 
+        `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)` on the 
+        server.
+        
         Args:
-            so_id:
-            so_type:
-            attr_key:
-            attr_value:
-
+            so_id (int): The ID of the segmentation object.
+            so_type (str): The type of the segmentation object.
+            attr_key (str): The key of the attribute.
+            attr_value (str): The value of the attribute.
+        
         Returns:
-            str | bytes: Server response
+            str | bytes: The server response.
         """
         r = self.session.get(self.server + '/push_so_attr/{}/{}/{}/{}'.format(
             so_id, so_type, attr_key, attr_value))
@@ -252,17 +296,18 @@ class SyConnGateInteraction(object):
 
     def pull_so_attr(self, so_id, so_type, attr_key):
         """
-        Will invoke `so.save_attributes([attr_key], [attr_value)` of
-        `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)`
-        on the server.
-
+        Pulls an attribute of a segmentation object from the SyConn backend server. This is 
+        achieved by invoking `so.save_attributes([attr_key], [attr_value])` of 
+        `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)` on the 
+        server.
+        
         Args:
-            so_id:
-            so_type:
-            attr_key:
-
+            so_id (int): The ID of the segmentation object.
+            so_type (str): The type of the segmentation object.
+            attr_key (str): The key of the attribute.
+        
         Returns:
-            str | bytes: Server response
+            str | bytes: The server response.
         """
         r = self.session.get(self.server + '/pull_so_attr/{}/{}/{}'.format(
             so_id, so_type, attr_key))
@@ -271,15 +316,28 @@ class SyConnGateInteraction(object):
 
 class InputDialog(QtGui.QDialog):
     """
-    https://stackoverflow.com/questions/7046882/launch-a-pyqt-window-from-a-main-pyqt-window-and-get-the-user-input
-
-    inputter = InputDialog(mainWindowUI, title="comments", label="comments", text="")
-    inputter.exec_()
-    comment = inputter.text.text()
-    print comment
+    This class is used to create a dialog window in PyQt. The dialog window is used to get 
+    user input. The user input can be a comment. The dialog window includes fields for port, 
+    host, dataset, synapse probability threshold and a toggle button for axo-dendritic 
+    synapse only option.
+    
+    Example:
+        inputter = InputDialog(mainWindowUI, title="comments", label="comments", text="")
+        inputter.exec_()
+        comment = inputter.text.text()
+        print comment
+    
+    Reference:
+        https://stackoverflow.com/questions/7046882/launch-a-pyqt-window-from-a-main-pyqt-window-and-get-the-user-input
     """
 
     def __init__(self, parent=None):
+        """
+        Initializes the InputDialog object. Sets up the layout and widgets for the dialog window.
+        
+        Args:
+            parent (QtGui.QWidget, optional): The parent widget. Defaults to None.
+        """
         QtGui.QWidget.__init__(self, parent)
         self.aborted = False
         # --Layout Stuff---------------------------#
@@ -336,6 +394,9 @@ class InputDialog(QtGui.QDialog):
         self.setWindowTitle("SyConnGate Settings")
 
     def abort_button_clicked(self):
+        """
+        Handles the event when the abort button is clicked. Sets the aborted attribute to True and closes the dialog.
+        """
         print('Closing SyConnGate.')
         self.aborted = True
         self.close()
@@ -343,9 +404,17 @@ class InputDialog(QtGui.QDialog):
 
 class main_class(QtGui.QDialog):
     """
-    KNOSSOS plugin class for the SyConn KNOSSOS viewer.
+    This class is a KNOSSOS plugin for the SyConn KNOSSOS viewer. It provides functionalities to 
+    interact with the SyConn backend server, visualize synaptic connections, and manipulate the 
+    3D view of the KNOSSOS viewer.
     """
     def __init__(self, parent=KnossosModule.knossos_global_mainwindow):
+        """
+        Initializes the main_class object. It sets up the connection with the SyConn server and initializes the GUI.
+        
+        Args:
+            parent (KnossosModule): The parent KnossosModule object.
+        """
         #Qt.QApplication.processEvents()
         super(main_class, self).__init__(parent, Qt.Qt.WA_DeleteOnClose)
         try:
@@ -392,10 +461,18 @@ class main_class(QtGui.QDialog):
                 pass
 
     def release_gil_hack(self):
+        """
+        This function is a hack to release the Global Interpreter Lock (GIL) for a short period of time. 
+        This allows other threads to run.
+        """
         time.sleep(0.01)
         return
 
     def init_syconn(self):
+        """
+        Initializes the connection with the SyConn server. It sets up the server address and creates a 
+        SyConnGateInteraction object.
+        """
         # move to config file
         syconn_gate_server = 'http://{}:{}'.format(self.host, self.port)
         self.syconn_gate = SyConnGateInteraction(syconn_gate_server,
@@ -403,6 +480,10 @@ class main_class(QtGui.QDialog):
                                                  self._axodend_only)
 
     def populate_ssv_list(self):
+        """
+        Populates the list of Super-Synaptic Vesicles (SSVs) by querying the SyConn server. The SSVs are then 
+        displayed in the GUI.
+        """
         all_ssv_ids = self.syconn_gate.get_list_of_all_ssv_ids()['ssvs']
         for ssv_id in all_ssv_ids:
             item = QtGui.QStandardItem(str(int(ssv_id)))
@@ -412,6 +493,9 @@ class main_class(QtGui.QDialog):
         return
 
     def populate_syn_list(self):
+        """
+        Populates the list of synapses by querying the SyConn server. The synapses are then displayed in the GUI.
+        """
         self.all_syns = self.syconn_gate.get_all_syn_metda_data()
         for syn in zip(self.all_syns['ssv_partner_0'], self.all_syns['ssv_partner_1']):
             item = QtGui.QStandardItem(str(syn))
@@ -420,6 +504,12 @@ class main_class(QtGui.QDialog):
         return
 
     def on_ssv_selector_changed(self, index):
+        """
+        Handles the event when the selected SSV in the GUI is changed. It updates the currently selected SSV.
+        
+        Args:
+            index (int): The index of the newly selected SSV.
+        """
         self.ssv_selected1 = int(self.ssv_selector.model().itemData(index)[0])
         #current, previous
         #print('selected: ' + str(self.ssv_selector.model().itemData(index)[0]))
@@ -429,40 +519,17 @@ class main_class(QtGui.QDialog):
 
     def on_syn_selector_changed(self, index, signal_block=True):
         """
-        `all_syns` contains the following keys:
-    cd_dict['syn_size'] =\
-        csd.load_numpy_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
-    cd_dict['synaptivity_proba'] = \
-        csd.load_numpy_data('syn_prob')
-    cd_dict['coord_x'] = \
-        csd.load_numpy_data('rep_coord')[:, 0].astype(np.int)
-    cd_dict['coord_y'] = \
-        csd.load_numpy_data('rep_coord')[:, 1].astype(np.int)
-    cd_dict['coord_z'] = \
-        csd.load_numpy_data('rep_coord')[:, 2].astype(np.int)
-    cd_dict['ssv_partner_0'] = \
-        csd.load_numpy_data('neuron_partners')[:, 0].astype(np.int)
-    cd_dict['ssv_partner_1'] = \
-        csd.load_numpy_data('neuron_partners')[:, 1].astype(np.int)
-    cd_dict['neuron_partner_ax_0'] = \
-        csd.load_numpy_data('partner_axoness')[:, 0].astype(np.int)
-    cd_dict['neuron_partner_ax_1'] = \
-        csd.load_numpy_data('partner_axoness')[:, 1].astype(np.int)
-    cd_dict['neuron_partner_ct_0'] = \
-        csd.load_numpy_data('partner_celltypes')[:, 0].astype(np.int)
-    cd_dict['neuron_partner_ct_1'] = \
-        csd.load_numpy_data('partner_celltypes')[:, 1].astype(np.int)
-    cd_dict['neuron_partner_sp_0'] = \
-        csd.load_numpy_data('partner_spiness')[:, 0].astype(np.int)
-    cd_dict['neuron_partner_sp_1'] = \
-        csd.load_numpy_data('partner_spiness')[:, 1].astype(np.int)
-
+        Handles the event when the selected synapse in the GUI is changed. It updates the currently selected 
+        synapse and displays its properties in the GUI. The `all_syns` dictionary contains keys such as 
+        'syn_size', 'synaptivity_proba', 'coord_x', 'coord_y', 'coord_z', 'ssv_partner_0', 'ssv_partner_1', 
+        'neuron_partner_ax_0', 'neuron_partner_ax_1', 'neuron_partner_ct_0', 'neuron_partner_ct_1', 
+        'neuron_partner_sp_0', 'neuron_partner_sp_1', each associated with specific data loaded via 
+        csd.load_numpy_data function.
+        
         Args:
-            index:
-            signal_block:
-
-        Returns:
-
+            index (int): The index of the newly selected synapse.
+            signal_block (bool): If True, blocks the emission of signals by the KnossosModule during the 
+            execution of this function.
         """
         # disable knossos signal emission first - O(n^2) otherwise
         if signal_block:
@@ -534,6 +601,12 @@ class main_class(QtGui.QDialog):
         return
 
     def build_gui(self):
+        """
+        Builds the GUI for the SyConn Viewer. It includes buttons for showing neurites and synapses, 
+        selectors for SSVs and synapses, fields for direct input of SSV and synapse IDs, and fields 
+        for displaying cell type and synapse information. It also sets up the connections between 
+        GUI elements and their corresponding functions.
+        """
         self.setWindowFlags(Qt.Qt.Window)
         layout = QtGui.QGridLayout()
         layout.setSpacing(10)
@@ -697,6 +770,11 @@ class main_class(QtGui.QDialog):
 
 
     def exploration_mode_callback_check(self):
+        """
+        Checks if the exploration mode is active. If it is, it updates the displayed SSVs and synapses 
+        based on the currently selected segmentation objects in Knossos. If the exploration mode is not 
+        active, it does nothing.
+        """
         #if self.exploration_mode_chk_box.isChecked():
             #print('expl')
         sel_seg_objs = KnossosModule.segmentation.selected_objects()
@@ -760,6 +838,12 @@ class main_class(QtGui.QDialog):
         return
 
     def remove_ssv_from_knossos(self, ssv_id):
+        """
+        Removes the specified SSV and its corresponding meshes from Knossos.
+        
+        Args:
+            ssv_id (int): ID of the SSV to be removed.
+        """
         return
         KnossosModule.skeleton.delete_tree(ssv_id)
         # check whether there are object meshes that need to be deleted as well
@@ -772,9 +856,17 @@ class main_class(QtGui.QDialog):
                 KnossosModule.skeleton.delete_tree(obj_id_to_test)
 
     def show_button_selected_neurite_clicked(self):
+        """
+        Handles the event when the 'Show selected neurite' button is clicked. It updates the displayed 
+        SSVs and synapses based on the currently selected segmentation objects in Knossos.
+        """
         self.exploration_mode_callback_check()
 
     def show_button_neurite_clicked(self):
+        """
+        Handles the event when the 'Show neurite' button is clicked. It displays the SSVs and synapses 
+        specified in the direct SSV ID input field.
+        """
         try:
              ssvs = [x.strip() for x in self.direct_ssv_id_input.text.split(',')]
              ssvs = map(int, ssvs)
@@ -788,6 +880,10 @@ class main_class(QtGui.QDialog):
         return
 
     def show_button_synapse_clicked(self):
+        """
+        Handles the event when the 'Show synapse' button is clicked. It displays the synapse specified 
+        in the direct synapse ID input field.
+        """
         try:
             self.syn_selected1 = int(self.direct_syn_id_input.text)
         except:
@@ -801,6 +897,10 @@ class main_class(QtGui.QDialog):
         return
 
     def clear_knossos_view_button_clicked(self):
+        """
+        Handles the event when the 'Clear view' button is clicked. It removes all objects from the 
+        segmentation and all trees from the skeleton in Knossos.
+        """
         # delete all existing objects in mergelist
         all_objects = KnossosModule.segmentation.objects()
         [KnossosModule.segmentation.remove_object(obj) for obj in all_objects]
@@ -812,6 +912,10 @@ class main_class(QtGui.QDialog):
         return
 
     def send_synapsetype_label_button_clicked(self):
+        """
+        Handles the event when the 'Send' button is clicked. It sends the synapse type label specified 
+        in the synapse type label text field to the SyConn backend.
+        """
         syntype_label = self.synapsetype_label_text.text.decode()
         if not syntype_label in ["-1", "0", "1"]:
             self.send_button_response_label.setText("INVALID LABEL '{}'".format(syntype_label))
@@ -828,10 +932,22 @@ class main_class(QtGui.QDialog):
         return
 
     def update_celltype(self, ssv_id):
+        """
+        Updates the cell type field in the GUI based on the specified SSV.
+        
+        Args:
+            ssv_id (int): ID of the SSV whose cell type is to be displayed.
+        """
         ct, certainty = self.syconn_gate.get_celltype_of_ssv(ssv_id)
         self.celltype_field.setText("CellType: {} ({})".format(ct, certainty))
 
     def ssv_to_knossos(self, ssv_id):
+        """
+        Adds the given ssv_id to the Knossos segmentation and creates a 'fake' knossos tree for each obj mesh category.
+        
+        Args:
+            ssv_id (int): The id of the ssv to be added to the Knossos segmentation.
+        """
         start_tot = time.time()
         #self.clear_knossos_view_button_clicked()
 
@@ -889,6 +1005,13 @@ class main_class(QtGui.QDialog):
         return
 
     def ssv_skel_to_knossos_tree(self, ssv_id, signal_block=True):
+        """
+        Adds the skeleton of the given ssv_id to the Knossos tree.
+        
+        Args:
+            ssv_id (int): The id of the ssv whose skeleton is to be added to the Knossos tree.
+            signal_block (bool, optional): If True, Knossos signal emission is disabled. Defaults to True.
+        """
         # disable knossos signal emission first - O(n^2) otherwise
         start = time.time()
         if signal_block:
@@ -935,6 +1058,16 @@ class main_class(QtGui.QDialog):
 
 
 def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
+    """
+    Loads the mesh of a given ssv_id and adds it to the Knossos tree.
+    
+    Args:
+        gate_obj (object): The gate object used to interact with the SyConn backend server.
+        ssv_id (int): The id of the ssv whose mesh is to be loaded.
+        tree_id (int): The id of the tree in the Knossos segmentation.
+        obj_type (str): The type of the object (e.g., 'mi', 'vc', 'syn_ssv').
+        color (tuple): The color to be used for the mesh in the Knossos viewer.
+    """
     start = time.time()
     mesh = gate_obj.syconn_gate.get_ssv_obj_mesh(ssv_id, obj_type)
     print("Download time:", time.time() - start)
@@ -950,10 +1083,30 @@ def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
 
 
 def mesh_loader_threaded(gate_obj, ssv_id, tree_id, obj_type, color):
+    """
+    Adds the mesh of a given ssv_id to the download queue.
+    
+    Args:
+        gate_obj (object): The gate object used to interact with the SyConn backend server.
+        ssv_id (int): The id of the ssv whose mesh is to be loaded.
+        tree_id (int): The id of the tree in the Knossos segmentation.
+        obj_type (str): The type of the object (e.g., 'mi', 'vc', 'syn_ssv').
+        color (tuple): The color to be used for the mesh in the Knossos viewer.
+    """
     gate_obj.syconn_gate.add_ssv_obj_mesh_to_down_queue(ssv_id, obj_type)
 
 
 def mesh_to_K(gate_obj, ssv_id, tree_id, obj_type, color):
+    """
+    Adds the mesh of a given ssv_id from the results store to the Knossos tree.
+    
+    Args:
+        gate_obj (object): The gate object used to interact with the SyConn backend server.
+        ssv_id (int): The id of the ssv whose mesh is to be added.
+        tree_id (int): The id of the tree in the Knossos segmentation.
+        obj_type (str): The type of the object (e.g., 'mi', 'vc', 'syn_ssv').
+        color (tuple): The color to be used for the mesh in the Knossos viewer.
+    """
     mesh = gate_obj.syconn_gate.get_ssv_obj_mesh_from_results_store(ssv_id, obj_type)
     if len(mesh[0]) > 0:
         KnossosModule.skeleton.add_tree_mesh(tree_id, mesh[1], mesh[2],
@@ -966,13 +1119,14 @@ def mesh_to_K(gate_obj, ssv_id, tree_id, obj_type, color):
 def int2str_label_converter(label, gt_type):
     """
     Converts integer label into semantic string.
-
+    
     Args:
-        label(int):
-        gt_type(str): e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
-
+        label (int): The integer label to be converted.
+        gt_type (str): The type of the ground truth (e.g., 'spgt' for spines, 
+                       'axgt' for cell compartments, 'ctgt' for cell type).
+    
     Returns:
-        str:
+        str: The semantic string corresponding to the integer label.
     """
     if type(label) is list:
         if len(label) != 1:

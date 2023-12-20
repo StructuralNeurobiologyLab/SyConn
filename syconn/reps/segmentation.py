@@ -30,28 +30,27 @@ class SegmentationObject(SegmentationBase):
     """
     Represents individual supervoxels. Used for cell shape ('sv'), cell organelles,
     e.g. mitochondria ('mi'), vesicle clouds ('vc') and synaptic junctions ('sj').
-
+    
     Examples:
             Can be used to initialized single :class:`~SegmentationObject` object of
             a specific type, is also returned by :func:`~SegmentationDataset.get_segmentation_object`::
-
+    
                 from syconn.reps.segmentation import SegmentationObject, SegmentationDataset
                 cell_sv = SegmentationObject(obj_id=.., obj_type='sv', working_dir='..')
                 cell_sv.load_attr_dict()  # populates `cell_sv.attr_dict`
-
+    
                 cell_sd = SegmentationDataset(obj_type='sv', working_dir='..')
                 cell_sv_from_sd = cell_sd.get_segmentation_object(obj_id=cell_sv.id)
                 cell_sv_from_sd.load_attr_dict()
-
+    
                 keys1 = set(cell_sv.attr_dict.keys())
                 keys2 = set(cell_sv_from_sd.attr_dict.keys())
                 print(keys1 == keys2)
-
+    
     Attributes:
         attr_dict: Attribute dictionary which serves as a general-purpose container. Accessed via
             the :class:`~syconn.backend.storage.AttributeDict` interface.
         enable_locking: If True, enables file locking.
-
     """
 
     def __init__(self, obj_id: int, obj_type: str = "sv",
@@ -63,38 +62,32 @@ class SegmentationObject(SegmentationBase):
                  n_folders_fs: int = None, enable_locking: bool = True,
                  skeleton_caching: bool = True, mesh: Optional[MeshType] = None):
         """
-        If `working_dir` is given and the directory contains a valid `config.yml`file,
-        all other optional kwargs will be defined by the :class:`~syconn.handler.config.DynConfig`
-        object available in :attr:`~syconn.global_params.config`.
-
+        Initializes a SegmentationObject with the given parameters. This object represents
+        a supervoxel, which can be a cell shape, organelle, vesicle cloud, or synaptic junction.
+        If `working_dir` is given and it contains a valid `config.yml` file, other optional
+        parameters will be defined by the DynConfig object from the global_params module.
+        
         Args:
-            obj_id: Unique supervoxel ID.
-            obj_type: Type of the supervoxel, keys used currently are:
-                * 'mi': Mitochondria
-                * 'vc': Vesicle clouds
-                * 'sj': Synaptic junction
-                * 'syn_ssv': Synapses between two
-                * 'syn': Synapse fragment between two
-                  :class:`~syconn.reps.segmentation.SegmentationObject`s.
-                  :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`s.
-                * 'cs': Contact site
-            version: Version string identifier. if 'tmp' is used, no data will
-                be saved to disk.
-            working_dir: Path to folder which contains SegmentationDataset of type 'obj_type'.
-            rep_coord: Representative coordinate.
-            size: Number of voxels.
-            scaling: Array defining the voxel size in nanometers (XYZ).
-            create: If True, the folder to its storage location :py:attr:`~segobj_dir` will be
-                created.
-            voxel_caching: Enables caching for voxel data.
-            mesh_caching: Enables caching for mesh data.
-            view_caching: Enables caching for view data.
-            skeleton_caching: Enables caching for skeleton data.
-            config: :class:`~syconn.handler.config.DynConfig` object.
-            n_folders_fs: Number of folders within the
-                :class:`~syconn.reps.segmentation.SegmentationDataset`'s folder structure.
-            enable_locking:  If True, enables file locking.
-            mesh: Mesh data as flat arrays: (indices, vertices, ) or (indices, vertices, normals)
+            obj_id: Unique identifier for the supervoxel.
+            obj_type: Type of the supervoxel, which can be 'mi' for Mitochondria, 'vc' for 
+                      Vesicle clouds, 'sj' for Synaptic junction, 'syn_ssv' or 'syn' for
+                      Synapses, or 'cs' for Contact site.
+            version: Optional version identifier for the dataset. If 'tmp' is used, no data
+                     will be saved to disk.
+            working_dir: Optional path to the working directory containing the SegmentationDataset.
+                         If provided, it must contain a valid `config.yml` file.
+            rep_coord: Optional representative coordinate for the supervoxel.
+            size: Optional number of voxels in the supervoxel.
+            scaling: Optional array defining the voxel size in nanometers (XYZ).
+            create: If True, creates the storage location for the supervoxel.
+            voxel_caching: If True, enables caching for voxel data.
+            mesh_caching: If True, enables caching for mesh data.
+            view_caching: If True, enables caching for view data.
+            skeleton_caching: If True, enables caching for skeleton data.
+            config: Optional DynConfig object containing dataset-specific parameters.
+            n_folders_fs: Optional number of folders within the SegmentationDataset's folder structure.
+            enable_locking: If True, enables file locking to prevent concurrent write access.
+            mesh: Optional mesh data provided as flat arrays (indices, vertices, normals).
         """
         self._id = int(obj_id)
         self._type = obj_type
@@ -136,17 +129,47 @@ class SegmentationObject(SegmentationBase):
 
     #                                                       IMMEDIATE PARAMETERS
     def __hash__(self):
+        """
+        Generates a hash value for a SegmentationObject.
+        
+        Returns:
+            An integer hash value.
+        """
         return hash((self.id, self.type.__hash__()))
 
     def __eq__(self, other):
+        """
+        Checks equality between this SegmentationObject and another object.
+        
+        Args:
+            other: The object to compare with.
+        
+        Returns:
+            True if `other` is a SegmentationObject with the same id and type, False otherwise.
+        """
         if not isinstance(other, self.__class__):
             return False
         return self.id == other.id and self.type == other.type
 
     def __ne__(self, other):
+        """
+        Checks inequality between this SegmentationObject and another object.
+        
+        Args:
+            other: The object to compare with.
+        
+        Returns:
+            True if `other` is not a SegmentationObject or has different id or type, False otherwise.
+        """
         return not self.__eq__(other)
 
     def __repr__(self):
+        """
+        Returns a string representation of the SegmentationObject.
+        
+        Returns:
+            A string that represents the SegmentationObject.
+        """
         return (f'{type(self).__name__}(obj_id={self.id}, obj_type="{self.type}", '
                 f'version="{self.version}", working_dir="{self.working_dir}")')
 
@@ -163,47 +186,44 @@ class SegmentationObject(SegmentationBase):
     @property
     def type(self) -> str:
         """
-        The `type` of the supervoxel.
-
-        Examples:
-            Keys which are currently used:
-                * 'mi': Mitochondria.
-                * 'vc': Vesicle clouds.
-                * 'sj': Synaptic junction.
-                * 'syn_ssv': Synapses between two
-                * 'syn': Synapse fragment between two :class:`~SegmentationObject` objects.
-                * 'cs': Contact site.
-
-            Can be used to initialized single :class:`~SegmentationObject` object of
-            a specific type or the corresponding dataset collection handled with the
-            :class:`~SegmentationDataset` class::
-
-                from syconn.reps.segmentation import SegmentationObject, SegmentationDataset
-                cell_sv = SegmentationObject(obj_id=.., obj_type='sv', working_dir='..')
-                cell_sv.load_attr_dict()  # populates `cell_sv.attr_dict`
-
-                cell_sd = SegmentationDataset(obj_type='sv', working_dir='..')
-                cell_sv_from_sd = cell_sd.get_segmentation_object(obj_id=cell_sv.id)
-                cell_sv_from_sd.load_attr_dict()
-
-                keys1 = set(cell_sv.attr_dict.keys())
-                keys2 = set(cell_sv_from_sd.attr_dict.keys())
-                print(keys1 == keys2)
-
+        Retrieves the type of the supervoxel. This can be used to initialize a single `SegmentationObject` of
+        a specific type or the corresponding dataset collection handled with the `SegmentationDataset` class.
+        
+        Keys used include:
+        * 'mi': Mitochondria.
+        * 'vc': Vesicle clouds.
+        * 'sj': Synaptic junction.
+        * 'syn_ssv': Synapses between two.
+        * 'syn': Synapse fragment between two `SegmentationObject` objects.
+        * 'cs': Contact site.
+        
+        Example usage:
+        
+        from syconn.reps.segmentation import SegmentationObject, SegmentationDataset
+        cell_sv = SegmentationObject(obj_id=.., obj_type='sv', working_dir='..')
+        cell_sv.load_attr_dict()  # populates `cell_sv.attr_dict`
+        
+        cell_sd = SegmentationDataset(obj_type='sv', working_dir='..')
+        cell_sv_from_sd = cell_sd.get_segmentation_object(obj_id=cell_sv.id)
+        cell_sv_from_sd.load_attr_dict()
+        
+        keys1 = set(cell_sv.attr_dict.keys())
+        keys2 = set(cell_sv_from_sd.attr_dict.keys())
+        print(keys1 == keys2)
+        
         Returns:
-            String identifier.
+            The type of the supervoxel as a string identifier.
         """
         return self._type
 
     @property
     def n_folders_fs(self) -> int:
         """
-        Number of folders used to store the data of :class:`~SegmentationObject`s. Defines
-        the hierarchy of the folder structure organized by
-        :class:`~SegmentationDataset`.
-
+        Retrieves the number of folders used to store the data of SegmentationObjects. This 
+        value defines the hierarchy of the folder structure organized by SegmentationDataset.
+        
         Returns:
-            The number of (leaf-) folders used for storing supervoxel data.
+            The number of leaf folders used for storing supervoxel data.
         """
         if self._n_folders_fs is None:
             ps = glob.glob(
@@ -229,6 +249,8 @@ class SegmentationObject(SegmentationBase):
     @property
     def id(self) -> int:
         """
+        Retrieves the globally unique identifier of the SegmentationObject.
+        
         Returns:
             Globally unique identifier of this object.
         """
@@ -237,9 +259,8 @@ class SegmentationObject(SegmentationBase):
     @property
     def version(self) -> str:
         """
-        Version of the :class:`~SegmentationDataset` this object
-        belongs to.
-
+        Retrieves the version of the SegmentationDataset this object belongs to.
+        
         Returns:
             String identifier of the object's version.
         """
@@ -247,29 +268,52 @@ class SegmentationObject(SegmentationBase):
 
     @property
     def voxel_caching(self) -> bool:
-        """If True, voxel data is cached after loading."""
+        """
+        Specifies whether the voxel data should be cached after loading. If True, voxel data is retained in cache post load process.
+        
+        Returns:
+            A boolean indicating whether voxel data is cached (True) or not (False) after loading.
+        """
         return self._voxel_caching
 
     @property
     def mesh_caching(self) -> bool:
-        """If True, mesh data is cached."""
+        """
+        Indicates if mesh data is cached. 
+        
+        Returns:
+            True if mesh data is cached, False otherwise.
+        """
         return self._mesh_caching
 
     @property
     def skeleton_caching(self):
-        """If True, skeleton data is cached."""
+        """
+        Indicates if skeleton data is cached.
+        
+        Returns:
+            True if skeleton data is cached, False otherwise.
+        """
         return self._skeleton_caching
 
     @property
     def view_caching(self):
-        """If True, view data is cached."""
+        """
+        Indicates if view data is cached. If True, view data is stored for future use. 
+        
+        Returns:
+            True if view data is cached, False otherwise.
+        """
         return self._view_caching
 
     @property
     def scaling(self):
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.yml` file and
-        accessible via `self.config`.
+        Retrieves the voxel size in nanometers (XYZ). Default value is taken from the 
+        `config.yml` file and accessible via `self.config`.
+        
+        Returns:
+            An array representing the voxel size in nanometers.
         """
         if self._scaling is None:
             try:
@@ -284,15 +328,21 @@ class SegmentationObject(SegmentationBase):
     @property
     def dataset(self) -> 'SegmentationDataset':
         """
-        Factory method for the `~syconn.reps.segmentation.SegmentationDataset` this object
-        belongs to.
+        Factory method to create a `~syconn.reps.segmentation.SegmentationDataset` 
+        instance to which this object belongs. 
+        
+        Returns: 
+            `~syconn.reps.segmentation.SegmentationDataset`: An instance of SegmentationDataset.
         """
         return SegmentationDataset(self.type, self.version, self._working_dir)
 
     @property
     def config(self) -> DynConfig:
         """
-        Config. object which contains all dataset-sepcific parameters.
+        Retrieves the configuration object containing all dataset-specific parameters.
+        
+        Returns:
+            The configuration object.
         """
         if self._config is None:
             self._config = global_params.config
@@ -303,40 +353,56 @@ class SegmentationObject(SegmentationBase):
     @property
     def working_dir(self) -> str:
         """
-        Working directory.
+        Retrieves the working directory of the SegmentationObject.
+        
+        Returns:
+            The working directory path as a string. This working directory 
+            corresponds to the SegmentationObject's operating environment.
         """
         return self._working_dir
 
     @property
     def identifier(self) -> str:
         """
-        Identifier used to create the folder name of the
+        Retrieves the identifier used to form the folder name of the 
         `~syconn.reps.segmentation.SegmentationDataset`.
+        
+        Returns:
+            The identifier as a string.
         """
         return "%s_%s" % (self.type, self.version.lstrip("_"))
 
     @property
     def segds_dir(self) -> str:
         """
-        Path to the `~syconn.reps.segmentation.SegmentationDataset` directory.
+        Retrieves the path to the `~syconn.reps.segmentation.SegmentationDataset` directory.
+        
+        Returns:
+            The path to the `~syconn.reps.segmentation.SegmentationDataset` directory.
         """
         return "%s/%s/" % (self.working_dir, self.identifier)
 
     @property
     def so_storage_path_base(self) -> str:
         """
-        Base folder name.
-
-        Todo:
+        Retrieves the base folder name for the SegmentationObject storage. 
+        
+        Todo: 
             * refactor.
+        
+        Returns: 
+            The base folder name as a string.
         """
         return "so_storage"
 
     @property
     def so_storage_path(self) -> str:
         """
-        Path to entry folder of the directory tree where all supervoxel data of
-        the corresponding `~syconn.reps.segmentation.SegmentationDataset` is located.
+        Retrieves the path to the entry folder of the directory tree containing all supervoxel data 
+        of the corresponding `~syconn.reps.segmentation.SegmentationDataset`.
+        
+        Returns:
+            The path to the supervoxel data storage.
         """
         if self._n_folders_fs is None and os.path.exists("%s/%s/" % (
                 self.segds_dir, self.so_storage_path_base)):
@@ -351,7 +417,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def segobj_dir(self) -> str:
         """
-        Path to the folder where the data of this supervoxel is stored.
+        Retrieves the path to the folder where the data of this supervoxel is stored.
+        
+        Returns:
+            str: The path to the supervoxel data folder.
         """
         base_path = f"{self.so_storage_path}/" \
                     f"{subfold_from_ix(self.id, self.n_folders_fs)}/"
@@ -365,27 +434,44 @@ class SegmentationObject(SegmentationBase):
     @property
     def mesh_path(self) -> str:
         """
-        Path to the mesh storage.
+        Retrieves the path to the mesh storage. 
+        
+        Returns: 
+            The path to where the mesh data is stored.
         """
         return self.segobj_dir + "mesh.pkl"
 
     @property
     def skeleton_path(self) -> str:
         """
-        Path to the skeleton storage.
+        Retrieves the path to the skeleton storage.
+        
+        Returns:
+            str: The path to the skeleton storage.
         """
         return self.segobj_dir + "skeletons.pkl"
 
     @property
     def attr_dict_path(self) -> str:
         """
-        Path to the attribute storage.
+        Retrieves the path to the attribute storage.
+        
+        Returns:
+            str: The path to the attribute storage.
         """
         return self.segobj_dir + "attr_dict.pkl"
 
     def view_path(self, woglia=True, index_views=False, view_key=None) -> str:
         """
-        Path to the view storage.
+        Retrieves the path to the view storage.
+        
+        Args:
+            woglia: If True, looks for views without glia, i.e., after astrocyte separation.
+            index_views: If True, refers to index views.
+            view_key: Identifier of the requested views.
+        
+        Returns:
+            Path to the view storage.
         """
         if view_key is not None and not (woglia and not index_views):
             raise ValueError('view_path with custom view key is only allowed for default settings.')
@@ -402,15 +488,17 @@ class SegmentationObject(SegmentationBase):
     @property
     def locations_path(self) -> str:
         """
-        Path to the rendering location storage.
+        Retrieves and returns the path to the rendering location storage.
         """
         return self.segobj_dir + "locations.pkl"
 
     @property
     def voxel_path(self) -> str:
         """
-        Path to the voxel storage. See :class:`~syconn.backend.storage.VoxelStorageDyn`
-        for details.
+        Retrieves the path to the voxel storage. See :class:`~syconn.backend.storage.VoxelStorageDyn` for more details.
+        
+        Returns:
+            The path to the voxel storage.
         """
         # file type is inferred by either VoxelStorageLazyLoading or VoxelStorageDyn
         return self.segobj_dir + "/voxel"
@@ -419,10 +507,11 @@ class SegmentationObject(SegmentationBase):
     @property
     def cs_partner(self) -> Optional[List[int]]:
         """
-        Contact site specific attribute.
+        Retrieves the IDs of the two supervoxels that are part of the contact site 
+        specific attribute. 
+        
         Returns:
-            None if object is not of type 'cs', else return the IDs to the two
-            supervoxels which are part of the contact site.
+            A list of two IDs if the object type is 'cs', otherwise None.
         """
         # TODO: use `cs_id_to_partner_ids_vec`  (single source of truth)
         if self.type in ['cs', 'syn']:
@@ -435,8 +524,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def size(self) -> int:
         """
+        Retrieves the number of voxels in the SegmentationObject.
+        
         Returns:
-            Number of voxels.
+            The number of voxels, represented as an integer, in the SegmentationObject.
         """
         if self._size is None and 'size' in self.attr_dict:
             self._size = self.attr_dict['size']
@@ -450,15 +541,21 @@ class SegmentationObject(SegmentationBase):
     @property
     def shape(self) -> np.ndarray:
         """
-        The XYZ extent of this SSV object in voxels.
-
+        Retrieves the XYZ extent of this SSV object in voxels.
+        
         Returns:
-            The shape/extent of thiss SSV object in voxels (XYZ).
+            An array representing the shape/extent of this SSV object in voxels (XYZ).
         """
         return self.bounding_box[1] - self.bounding_box[0]
 
     @property
     def bounding_box(self) -> np.ndarray:
+        """
+        Retrieves the bounding box of the SegmentationObject.
+        
+        Returns:
+            An array representing the bounding box (XYZ).
+        """
         if self._bounding_box is None and 'bounding_box' in self.attr_dict:
             self._bounding_box = self.attr_dict['bounding_box']
         elif self._bounding_box is None and self.attr_dict_exists:
@@ -471,11 +568,11 @@ class SegmentationObject(SegmentationBase):
     @property
     def rep_coord(self) -> np.ndarray:
         """
-        Representative coordinate of this SSV object. Will be the `rep_coord`
-        of the first supervoxel in :py:attr:`~svs`.
-
+        Retrieves the representative coordinate of this SegmentationObject, 
+        which will be the 'rep_coord' of the first supervoxel in 'svs'.
+        
         Returns:
-            1D array of the coordinate (XYZ).
+            A 1D array representing the representative coordinate (XYZ).
         """
         if self._rep_coord is None and 'rep_coord' in self.attr_dict:
             self._rep_coord = self.attr_dict['rep_coord']
@@ -489,10 +586,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def attr_dict_exists(self) -> bool:
         """
-        Checks if a attribute dictionary file exists at :py:attr:`~attr_dict_path`.
-
+        Checks if an attribute dictionary file exists at :py:attr:`~attr_dict_path` for the SegmentationObject.
+        
         Returns:
-            True if the attribute dictionary file exists.
+            True if the attribute dictionary file exists, False otherwise.
         """
         if self.version == 'tmp':
             return False
@@ -504,6 +601,12 @@ class SegmentationObject(SegmentationBase):
 
     @property
     def voxels_exist(self) -> bool:
+        """
+        Checks if voxel data exists for the SegmentationObject.
+        
+        Returns:
+            True if voxel data exists, False otherwise.
+        """
         if self.version == 'tmp':
             return False
         if self.type in ['syn', 'syn_ssv']:
@@ -519,10 +622,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def voxels(self) -> np.ndarray:
         """
-        Voxels associated with this SSV object.
-
+        Retrieves the voxels associated with the SSV object.
+        
         Returns:
-            3D binary array indicating voxel locations.
+            A 3D binary array indicating voxel locations.
         """
         if self._voxels is None:
             return self.load_voxels()
@@ -532,10 +635,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def voxel_list(self) -> np.ndarray:
         """
-        Voxels associated with this SSV object.
-
+        Retrieves the voxels associated with the SSV object.
+        
         Returns:
-            2D array with sparse voxel coordinates.
+            A 2D array with sparse voxel coordinates.
         """
         if self._voxel_list is None:
             voxel_list = load_voxel_list(self)
@@ -548,8 +651,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def mesh_exists(self) -> bool:
         """
+        Checks if mesh data exists for the SegmentationObject.
+        
         Returns:
-            True if mesh exists.
+            True if mesh data exists, False otherwise.
         """
         if self.version == 'tmp':
             return False
@@ -559,8 +664,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def skeleton_exists(self) -> bool:
         """
+        Checks if skeleton data exists for the SegmentationObject.
+        
         Returns:
-            True if skeleton exists.
+            True if skeleton exists, False otherwise.
         """
         if self.version == 'tmp':
             return False
@@ -570,9 +677,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def mesh(self) -> MeshType:
         """
-        Mesh of this object.
+        Retrieves the mesh data of this object.
+        
         Returns:
-            Three flat arrays: indices, vertices, normals.
+            A tuple of three flat arrays: indices, vertices, normals.
         """
         if self._mesh is None:
             if self.mesh_caching:
@@ -586,10 +694,11 @@ class SegmentationObject(SegmentationBase):
     @property
     def skeleton(self) -> dict:
         """
-        The skeleton representation of this supervoxel.
-
+        Retrieves the skeleton representation of this supervoxel.
+        
         Returns:
-            Dict of at least three numpy arrays: "nodes", estimated node "diameters" and "edges".
+            A dictionary containing at least three numpy arrays: "nodes", 
+            estimated node "diameters", and "edges".
         """
         if self._skeleton is None:
             if self.skeleton_caching:
@@ -603,9 +712,10 @@ class SegmentationObject(SegmentationBase):
     @property
     def mesh_bb(self) -> np.ndarray:
         """
-        Bounding box of the object meshes (in nanometers). Approximately
-        the same as scaled 'bounding_box'.
-         """
+        Retrieves the bounding box of the object meshes in nanometers. This is approximately 
+        the same as the scaled 'bounding_box'. Returns an array representing the bounding box 
+        of the meshes.
+        """
         if self._mesh_bb is None and 'mesh_bb' in self.attr_dict:
             self._mesh_bb = self.attr_dict['mesh_bb']
         elif self._mesh_bb is None:
@@ -619,18 +729,20 @@ class SegmentationObject(SegmentationBase):
     @property
     def mesh_size(self) -> float:
         """
-        Length of bounding box diagonal (BBD).
-
+        Retrieves the length of the bounding box diagonal (BBD) of the object meshes.
+        
         Returns:
-            Diagonal length of the mesh bounding box in nanometers.
+            The diagonal (BBD) length of the mesh bounding box in nanometers.
         """
         return np.linalg.norm(self.mesh_bb[1] - self.mesh_bb[0], ord=2)
 
     @property
     def mesh_area(self) -> float:
         """
+        Retrieves the mesh surface area of the supervoxel.
+        
         Returns:
-            Mesh surface area in um^2
+            float: Mesh surface area in um^2.
         """
         # TODO: decide if caching should be possible
         mesh_area = self.lookup_in_attribute_dict('mesh_area')
@@ -643,8 +755,11 @@ class SegmentationObject(SegmentationBase):
     @property
     def sample_locations_exist(self) -> bool:
         """
+        Checks if rendering locations have been stored.
+        
         Returns:
-            True if rendering locations have been stored at :py:attr:`~locations_path`.
+            bool: True if rendering locations have been stored at 
+            :py:attr:`~locations_path`.
         """
         if self.version == 'tmp':
             return False
@@ -655,12 +770,15 @@ class SegmentationObject(SegmentationBase):
     def views_exist(self, woglia: bool, index_views: bool = False,
                     view_key: Optional[str] = None) -> bool:
         """
-        True if rendering locations have been stored at :func:`~view_path`.
-
+        Determines if rendering locations have been stored at the specified view path.
+        
         Args:
-            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
-            index_views: If True, refers to index views.
+            woglia: If True, checks for views without glia, i.e. after astrocyte separation.
+            index_views: If True, checks for index views.
             view_key: Identifier of the requested views.
+        
+        Returns:
+            bool: True if rendering locations have been stored.
         """
         if self.version == 'tmp':
             return False
@@ -671,16 +789,16 @@ class SegmentationObject(SegmentationBase):
     def views(self, woglia: bool, index_views: bool = False,
               view_key: Optional[str] = None) -> Union[np.ndarray, int]:
         """
-        Getter method for the views of this supervoxel. Only valid for cell fragments, i.e.
+        Retrieves the views of this supervoxel. Valid only for cell fragments, i.e. 
         :py:attr:`~type` must be `sv`.
-
+        
         Args:
-            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
-            index_views: If True, refers to index views.
+            woglia: If True, retrieves views without glia, i.e., after astrocyte separation.
+            index_views: If True, retrieves index views.
             view_key: Identifier of the requested views.
-
+        
         Returns:
-            The requested view array or `-1` if it does not exist.
+            Union[np.ndarray, int]: The requested view array or `-1` if it does not exist.
         """
         assert self.type == "sv"
         if self._views is None:
@@ -699,17 +817,17 @@ class SegmentationObject(SegmentationBase):
 
     def sample_locations(self, force=False, save=True, ds_factor=None):
         """
-        Getter method for the rendering locations of this supervoxel. Only valid for cell
-        fragments, i.e. :py:attr:`~type` must be `sv`.
-
+        Retrieves the rendering locations of this supervoxel. This is only valid for cell 
+        fragments, i.e., `type` must be `sv`.
+        
         Args:
-            force: Overwrite existing data.
-            save: If True, saves the result at :py:attr:`~locations_path`. Uses
-            :class:`~syconn.backend.storage.CompressedStorage`.
+            force: If True, overwrites existing data.
+            save: If True, saves the result at `locations_path`. Utilizes 
+            `CompressedStorage`.
             ds_factor: Down sampling factor used to generate the rendering locations.
-
+        
         Returns:
-            Array of rendering locations (XYZ) with shape (N, 3) in nanometers!
+            np.ndarray: Array of rendering locations (XYZ) with shape (N, 3) in nanometers.
         """
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
@@ -733,13 +851,13 @@ class SegmentationObject(SegmentationBase):
 
     def load_voxels(self, voxel_dc: Optional[Union[VoxelStorageDyn, VoxelStorage]] = None) -> np.ndarray:
         """
-        Loader method of :py:attr:`~voxels`.
-
+        Loads the voxels associated with this supervoxel.
+        
         Args:
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
-
+        
         Returns:
-            3D array of the all voxels which belong to this supervoxel.
+            np.ndarray: 3D array of all voxels which belong to this supervoxel.
         """
         # syn_ssv do not have a segmentation KD; voxels are cached in their VoxelStorage
         if self.type in ['syn', 'syn_ssv']:
@@ -755,58 +873,87 @@ class SegmentationObject(SegmentationBase):
         return voxels
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
+        """
+        Loads downsampled voxels.
+        
+        Args:
+            downsampling: Tuple specifying the downsampling factor for each axis.
+        
+        Returns:
+            np.ndarray: Downsampled voxel data.
+        """
         return load_voxels_downsampled(self, ds=downsampling)
 
     def load_voxel_list(self):
         """
-        Loader method of :py:attr:`~voxel_list`.
-
+        Loader method of :py:attr:`~voxel_list`. Loads a sparse, 2-dimensional array 
+        of voxel coordinates.
+        
         Returns:
-            Sparse, 2-dimensional array of voxel coordinates.
+            np.ndarray: Sparse, 2-dimensional array of voxel coordinates.
         """
         return load_voxel_list(self)
 
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
+        """
+        Loads a downsampled list of voxel coordinates.
+        
+        Args:
+            downsampling: Tuple specifying the downsampling factor for each axis.
+        
+        Returns:
+            np.ndarray: Downsampled list of voxel coordinates.
+        """
         return load_voxel_list_downsampled(self, downsampling=downsampling)
 
     def load_voxel_list_downsampled_adapt(self, downsampling=(2, 2, 1)):
+        """
+        Loads a downsampled list of voxel coordinates with adaptive scaling.
+        
+        Args:
+            downsampling: Tuple specifying the downsampling factor for each axis.
+        
+        Returns:
+            np.ndarray: Downsampled list of voxel coordinates with adaptive scaling.
+        """
         return load_voxel_list_downsampled_adapt(self, downsampling=downsampling)
 
     def load_skeleton(self, recompute: bool = False) -> dict:
         """
-        Loader method of :py:attr:`~skeleton`.
-
+        Loads the skeleton representation of this supervoxel.
+        
         Args:
             recompute: Recompute the skeleton. Currently not implemented.
-
+        
         Returns:
-            Dict of flat arrays of indices, vertices, diameters and attributes.
+            dict: Dictionary containing flat arrays of indices, vertices, diameters, 
+            and attributes.
         """
         return load_skeleton(self, recompute=recompute)
 
     def save_skeleton(self, overwrite: bool = False):
         """
-        Save method of :py:attr:`~skeleton`.
-
+        Saves the skeleton data of this supervoxel.
+        
         Args:
             overwrite: Overwrite existing skeleton entry.
-
+        
         Returns:
-            Flat arrays of indices, vertices, normals.
+            Tuple[np.ndarray, np.ndarray, np.ndarray]: Flat arrays of indices, vertices, and normals.
         """
         return save_skeleton(self, overwrite=overwrite)
 
     def glia_pred(self, thresh: float, pred_key_appendix: str = "") -> int:
         """
-        SV glia prediction (0: neuron, 1: glia). Only valid if :py:attr:`type` is `sv`.
-
+        Predicts if the supervoxel is a glia or neuron. Only valid if :py:attr:`type` is `sv`.
+        
         Args:
-            thresh: Classification threshold.
-            pred_key_appendix: Identifier for specific glia predictions. Only used
+            thresh: The classification threshold.
+            pred_key_appendix: An identifier for specific glia predictions. Only used
                 during development.
-
+        
         Returns:
-            The glia prediction of this supervoxel.
+            int: The glia prediction for this supervoxel (0: neuron, 1: glia).
         """
         assert self.type == "sv"
         if self.config.use_point_models:
@@ -815,43 +962,46 @@ class SegmentationObject(SegmentationBase):
 
     def glia_proba(self, pred_key_appendix: str = "") -> float:
         """
-        SV glia probability (0: neuron, 1: glia). Only valid if :py:attr:`type` is `sv`.
-
+        Retrieves the glia probability of this supervoxel. This is only valid if :py:attr:`type` is `sv`.
+        
         Args:
-            pred_key_appendix: Identifier for specific glia predictions. Only used
-                during development.
-
+            pred_key_appendix: Identifier for specific glia predictions. This is only used
+            during development.
+        
         Returns:
-            The glia prediction of this supervoxel.
+            float: The glia prediction of this supervoxel (0: neuron, 1: glia).
         """
         assert self.type == "sv"
         return glia_proba_so(self, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix: str = "") -> np.ndarray:
         """
-        Axon prediction (0: dendrite, 1: axon, 2: soma) based on `img2scalar` CMN.
-
+        Predicts the axoness of this supervoxel at every sample location based on `img2scalar` CMN.
+        
         Args:
-            pred_key_appendix: Identifier for specific axon predictions. Only used
+            pred_key_appendix: Identifier for specific axon predictions. Used only
                 during development.
-
+        
         Returns:
-            The axon prediction of this supervoxel at every :py:attr:`~sample_locations`.
+            np.ndarray: The axon prediction of this supervoxel at each sample location
+                (0: dendrite, 1: axon, 2: soma).
         """
         pred = np.argmax(self.axoness_probas(pred_key_appendix), axis=1)
         return pred
 
     def axoness_probas(self, pred_key_appendix: str = "") -> np.ndarray:
         """
-        Axon probability (0: dendrite, 1: axon, 2: soma) based on `img2scalar` CMN.
-        Probability underlying the attribute :py:attr:`axoness_preds`. Only valid if
-        :py:attr:`type` is `sv`.
-
+        Retrieves the axon probabilities (0: dendrite, 1: axon, 2: soma) based on `img2scalar` 
+        CMN of this supervoxel at every sample location. The probabilities underlie the attribute 
+        :py:attr:`axoness_preds` and are only valid if :py:attr:`type` is `sv`.
+        
         Args:
-            pred_key_appendix: Identifier for specific axon predictions. Only used during development.
-
+            pred_key_appendix: Identifier for specific axon predictions. Only used during 
+            development.
+        
         Returns:
-            The axon probabilities of this supervoxel at every :py:attr:`~sample_locations`.
+            np.ndarray: The axon probabilities of this supervoxel at every 
+            :py:attr:`~sample_locations`.
         """
         assert self.type == "sv"
         pred_key = "axoness_probas" + pred_key_appendix
@@ -866,10 +1016,10 @@ class SegmentationObject(SegmentationBase):
     #                                                                  FUNCTIONS
     def total_edge_length(self) -> Union[np.ndarray, float]:
         """
-        Total edge length of the supervoxel :py:attr:`~skeleton` in nanometers.
-
+        Calculates the total edge length of the supervoxel :py:attr:`~skeleton` in nanometers.
+        
         Returns:
-            Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
+            float: Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
         """
         if self.skeleton is None:
             self.load_skeleton()
@@ -880,14 +1030,14 @@ class SegmentationObject(SegmentationBase):
     def mesh_from_scratch(self, ds: Optional[Tuple[int, int, int]] = None,
                           **kwargs: dict) -> List[np.ndarray]:
         """
-        Calculate the mesh based on :func:`~syconn.proc.meshes.get_object_mesh`.
-
+        Calculates the mesh based on :func:`~syconn.proc.meshes.get_object_mesh`.
+        
         Args:
             ds: Downsampling of the object's voxel data.
-            **kwargs: Key word arguments passed to :func:`~syconn.proc.meshes.triangulation`.
-
+            **kwargs: Additional keyword arguments passed to :func:`~syconn.proc.meshes.triangulation`.
+        
         Returns:
-
+            List[np.ndarray]: Mesh data including indices, vertices, and normals.
         """
         _supported_types = ['syn_ssv', 'syn', 'cs_ssv', 'cs']
         if self.type not in _supported_types:
@@ -900,14 +1050,13 @@ class SegmentationObject(SegmentationBase):
     def _save_mesh(self, ind: np.ndarray, vert: np.ndarray,
                    normals: np.ndarray):
         """
-        Save given mesh at :py:attr:`~mesh_path`. Uses
-        the :class:`~syconn.backend.storage.MeshStorage` interface.
-
+        Saves the given mesh data at :py:attr:`~mesh_path`. Uses the 
+        :class:`~syconn.backend.storage.MeshStorage` interface.
+        
         Args:
-            ind: Flat index array.
-            vert: Flat vertex array.
-            normals: Flat normal array.
-
+            ind: Flat array of mesh indices.
+            vert: Flat array of mesh vertices.
+            normals: Flat array of mesh normals.
         """
         mesh_dc = MeshStorage(self.mesh_path, read_only=False,
                               disable_locking=not self.enable_locking)
@@ -918,14 +1067,12 @@ class SegmentationObject(SegmentationBase):
         Tuple[int, int, int, int], List, np.ndarray]] = None,
                   ply_name: str = ""):
         """
-        Write :py:attr:`~mesh` to k.zip.
-
+        Writes the :py:attr:`~mesh` to a k.zip file.
+        
         Args:
             dest_path: Path to the k.zip file which contains the :py:attr:`~mesh`.
-            ext_color: If set to 0 no color will be written out. Use to adapt
-                color inKnossos.
-            ply_name: Name of the ply file in the k.zip, must not
-                end with `.ply`.
+            ext_color: Optional RGBA color tuple. If set to 0, no color will be written out, use to adapt color in Knossos.
+            ply_name: Name of the ply file within the k.zip archive, must not end with `.ply`.
         """
         mesh = self.mesh
         if self.type == "sv":
@@ -963,7 +1110,7 @@ class SegmentationObject(SegmentationBase):
         Writes the supervoxel agglomeration to a KNOSSOS compatible format.
         
         Args:
-            dest_path: Path to k.zip file.
+            dest_path: Path to the k.zip file.
         """
         self.load_attr_dict()
         kml = knossos_ml_from_svixs([self.id], coords=[self.rep_coord])
@@ -973,17 +1120,17 @@ class SegmentationObject(SegmentationBase):
                    ignore_missing: bool = False, index_views: bool = False,
                    view_key: Optional[str] = None):
         """
-        Loader method of :py:attr:`~views`.
-
+        Loads views with specified properties.
+        
         Args:
             woglia: If True, looks for views without glia, i.e. after astrocyte separation.
-            index_views: If True, refers to index views.
-            view_key: Identifier of the requested views.
             raw_only: If True, ignores cell organelles projections.
             ignore_missing: If True, will not throw ValueError if views do not exist.
-
+            index_views: If True, refers to index views.
+            view_key: Identifier of the requested views.
+        
         Returns:
-            Views with requested properties.
+            np.ndarray: Views with the requested properties.
         """
         view_p = self.view_path(woglia=woglia, index_views=index_views,
                                 view_key=view_key)
@@ -1005,20 +1152,18 @@ class SegmentationObject(SegmentationBase):
                    view_key: Optional[str] = None,
                    enable_locking: Optional[bool] = None):
         """
-        Saves views according to its properties. If view_key is given it has
-        to be a special type of view, e.g. spine predictions. If in this case
-        any other kwarg is not set to default it will raise an error.
-
-        Todo:
-            * remove `cellobjects_only`.
-
+        Saves views according to its properties. If a particular `view_key` is provided, it must correspond to a specific type of view, like spine predictions, and all other kwargs should be set to their default values to avoid errors. 
+        
         Args:
-            woglia: If True, looks for views without glia, i.e. after astrocyte separation.
-            index_views: If True, refers to index views.
-            view_key: Identifier of the requested views.
-            views: View array.
-            cellobjects_only: Only render cell organelles (deprecated).
-            enable_locking: Enable file locking.
+            views: Array of views to be saved.
+            woglia: If True, saves views that do not contain glia, i.e., after astrocyte separation.
+            cellobjects_only: If True, only cell organelle views are saved (deprecated).
+            index_views: If True, saves index views.
+            view_key: Identifier for the specific views to be saved.
+            enable_locking: If True, activates file locking during the save operation.
+        
+        Todo:
+            * Remove `cellobjects_only`.
         """
         if not (woglia and not cellobjects_only and not index_views) and view_key is not None:
             raise ValueError('If views are saved to custom key, all other settings have to be defaults!')
@@ -1037,10 +1182,10 @@ class SegmentationObject(SegmentationBase):
 
     def load_attr_dict(self) -> int:
         """
-        Loader method of :py:attr:`~attr_dict`.
-
+        Loads the :py:attr:`~attr_dict`.
+        
         Returns:
-            0 if successful, -1 if attribute dictionary storage does not exist.
+            int: 0 if successful, -1 if attribute dictionary storage does not exist.
         """
         try:
             glob_attr_dc = AttributeDict(self.attr_dict_path,
@@ -1053,8 +1198,7 @@ class SegmentationObject(SegmentationBase):
 
     def save_attr_dict(self):
         """
-        Saves :py:attr:`~attr_dict` to attr:`~attr_dict_path`. Already existing
-        dictionary will be updated.
+        Saves the attribute dictionary to the attribute dictionary path. Any existing dictionary will be updated.
         """
         glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False,
                                      disable_locking=not self.enable_locking)
@@ -1071,7 +1215,7 @@ class SegmentationObject(SegmentationBase):
         Writes attributes to attribute storage. Ignores :py:attr:`~attr_dict`.
         Values have to be serializable and will be written via the
         :class:`~syconn.backend.storage.AttributeDict` interface.
-
+        
         Args:
             attr_keys: List of attribute keys which will be written to
                 :py:attr:`~attr_dict_path`.
@@ -1093,16 +1237,13 @@ class SegmentationObject(SegmentationBase):
 
     def load_attributes(self, attr_keys: List[str]) -> List[Any]:
         """
-        Reads attributes from attribute storage. It will ignore self.attr_dict and
-        will always pull it from the storage. Does not throw KeyError, but returns
-        None for missing keys.
-
+        Reads attributes from attribute storage, ignoring self.attr_dict and always pulling them from storage. It does not throw KeyError but returns None for missing keys.
+        
         Args:
-            attr_keys: List of attribute keys which will be loaded from
-            :py:attr:`~attr_dict_path`.
-
+            attr_keys: List of attribute keys to be loaded from attribute storage.
+        
         Returns:
-            Attribute values corresponding to `attr_keys`
+            List[Any]: Attribute values corresponding to `attr_keys`, returns None for missing keys.
         """
         glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=True,
                                      disable_locking=not self.enable_locking)
@@ -1113,12 +1254,12 @@ class SegmentationObject(SegmentationBase):
         """
         Checks if `attr_key` exists in either :py:attr:`~attr_dict` or at
         :py:attr:`~attr_dict_path`.
-
+        
         Args:
-            attr_key: Attribute key to look for.
-
+            attr_key: The attribute key to check.
+        
         Returns:
-            True if attribute exists, False otherwise.
+            bool: True if the attribute exists, False otherwise.
         """
         if len(self.attr_dict) == 0:
             self.load_attr_dict()
@@ -1130,14 +1271,14 @@ class SegmentationObject(SegmentationBase):
 
     def lookup_in_attribute_dict(self, attr_key: str) -> Any:
         """
-        Returns
-
+        Looks up a value in the attribute dictionary.
+        
         Args:
             attr_key: Attribute key to look for.
-
+        
         Returns:
-            Value of `attr_key` in :py:attr:`~attr_dict` or None if it does not
-            exist. If key does not exist in :py:attr:`~attr_dict`, tries to
+            Any: The value of `attr_key` in :py:attr:`~attr_dict` or None if it does
+            not exist. If key does not exist in :py:attr:`~attr_dict`, tries to
             load from :py:attr:`~attr_dict_path`.
         """
         if len(self.attr_dict) == 0:
@@ -1149,8 +1290,8 @@ class SegmentationObject(SegmentationBase):
 
     def calculate_rep_coord(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
-        Calculate/loads supervoxel representative coordinate.
-
+        Calculates or loads the supervoxel representative coordinate.
+        
         Args:
             voxel_dc: Pre-loaded dictionary which contains the voxel data of
                 this object.
@@ -1178,8 +1319,8 @@ class SegmentationObject(SegmentationBase):
 
     def calculate_bounding_box(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
-        Calculate supervoxel :py:attr:`~bounding_box`.
-
+        Calculates the supervoxel :py:attr:`~bounding_box`.
+        
         Args:
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
         """
@@ -1198,8 +1339,8 @@ class SegmentationObject(SegmentationBase):
 
     def calculate_size(self, voxel_dc: Optional[Union[VoxelStorageDyn, VoxelStorage]] = None):
         """
-        Calculate supervoxel object :py:attr:`~size`.
-
+        Calculates the size of the supervoxel object :py:attr:`~size`.
+        
         Args:
             voxel_dc: Pre-loaded dictionary which contains the voxel data of this object.
         """
@@ -1219,15 +1360,17 @@ class SegmentationObject(SegmentationBase):
                   kd: Optional[knossosdataset.KnossosDataset] = None,
                   write_id: Optional[int] = None):
         """
-        Write supervoxel segmentation to k.zip.
-
-        Todo:
-            * Broken, segmentation not rendered in K.
-
+        Writes the supervoxel segmentation to a k.zip file.
+        
         Args:
-            path:
-            kd:
-            write_id: Supervoxel ID.
+            path (str): The file path where the k.zip file will be saved.
+            kd (Optional[knossosdataset.KnossosDataset], optional): The KnossosDataset
+                object. If None, it will be loaded from the configuration. Defaults to None.
+            write_id (Optional[int], optional): The supervoxel ID. If None, the ID of the
+                current supervoxel object will be used. Defaults to None.
+        
+        Todo:
+            * Broken, segmentation not rendered in Knossos.
         """
         if write_id is None:
             write_id = self.id
@@ -1243,11 +1386,12 @@ class SegmentationObject(SegmentationBase):
 
     def clear_cache(self):
         """
-        Clears the following, cached data:
-            * :py:attr:`~voxels`
-            * :py:attr:`~voxel_list`
-            * :py:attr:`~views`
-            * :py:attr:`~skeleton`
+        Clears the cached data for the following:
+            * voxels
+            * voxel lists
+            * views
+            * skeletons
+        Note: It doesn't clear cached data for meshes as indicated in the previous version.
         """
         self._voxels = None
         self._voxel_list = None
@@ -1259,24 +1403,27 @@ class SegmentationObject(SegmentationBase):
     @property
     def skeleton_dict_path(self) -> str:
         """
+        Retrieves the path to the skeleton storage.
+        
         Returns:
-            Path to skeleton storage.
+            str: The file path to the skeleton storage.
         """
         return self.segobj_dir + "/skeletons.pkl"
 
     def copy2dir(self, dest_dir, safe=True):
         """
-        Examples:
-            To copy the content of this SV object (``sv_orig``) to the
-            destination of another (e.g. yet not existing) SV (``sv_target``),
-            call ``sv_orig.copy2dir(sv_target.segobj_dir)``. All files contained
-            in the directory py:attr:`~segobj_dir` of ``sv_orig`` will be copied to
-            ``sv_target.segobj_dir``.
-
+        Copies all files from the supervoxel object's directory to a specified destination directory.
+        
         Args:
-            dest_dir: Destination directory where all files contained in
+            dest_dir (str): Destination directory where all files contained in
                 py:attr:`~segobj_dir` will be copied to.
-            safe: If ``True``, will not overwrite existing data.
+            safe (bool): If True, existing files at the destination will not be 
+                overwritten. Defaults to True.
+        
+        Examples:
+            To copy the content of this supervoxel object (`sv_orig`) to the 
+            destination of another (e.g., not yet existing) supervoxel object 
+            (`sv_target`), use: `sv_orig.copy2dir(sv_target.segobj_dir)`.
         """
         # get all files in home directory
         fps = get_filepaths_from_dir(self.segobj_dir, ending="")
@@ -1304,16 +1451,15 @@ class SegmentationObject(SegmentationBase):
 
     def split_component(self, dist, new_sd, new_id):
         """
-        Todo:
-            * refactor -> VoxelStorageDyn
-
+        Splits the supervoxel into components based on a distance threshold and assigns them new IDs.
+        
         Args:
-            dist:
-            new_sd:
-            new_id:
-
-        Returns:
-
+            dist (float): The distance threshold for splitting the supervoxel.
+            new_sd ('SegmentationDataset'): The SegmentationDataset to which the new components will belong.
+            new_id (int): The starting ID for the new components.
+        
+        Todo:
+            * Refactor to use VoxelStorageDyn.
         """
         raise NotImplementedError('WORK IN PROGRESS')
         kdtree = spatial.cKDTree(self.voxel_list)
@@ -1354,74 +1500,29 @@ class SegmentationObject(SegmentationBase):
 
 class SegmentationDataset(SegmentationBase):
     """
-    This class represents a set of supervoxels.
-
+    Represents a set of supervoxel objects within connectomics data. Each supervoxel corresponds to a distinct anatomical or functional region. This class provides utilities for managing and accessing these objects, their properties, and their relationships.
+    
+    Attributes:
+        _type (str): Defines the type of supervoxel objects in the dataset.
+        _n_folders_fs (int): Number of folders in the dataset directory tree.
+        _sizes (np.ndarray): Array of all supervoxel sizes in the dataset.
+        _ids (np.ndarray): Array of unique identifiers for all supervoxels.
+        _rep_coords (np.ndarray): Array of representative coordinates for all supervoxels.
+        _config (DynConfig): Configuration object with dataset-specific parameters.
+        _soid2ix (dict): Maps supervoxel IDs to their index in the dataset.
+        _property_cache (dict): Cache for quick access to supervoxel properties.
+        _version (str): Version identifier for the dataset.
+        _scaling (np.ndarray): Voxel size in nanometers (XYZ).
+        _working_dir (str): Path to the dataset working directory.
+    
     Examples:
-        To initialize the :class:`~syconn.reps.segmentation.SegmentationDataset` for
-        cell supervoxels you need to call ``sd_cell = SegmentationDataset('sv')``.
-        This requires an initialized working directory, for this please refer to
-        :class:`~syconn.handler.config.DynConfig` or see::
-
-            $ python SyConn/scripts/example_runs/start.py
-
-        After successfully executing
-        :class:`~syconn.exec.exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
-        can be loaded from numpy arrays via the following keys:
-            * 'id': ID array, identical to :py:attr:`~ids`.
-            * 'bounding_box': Bounding box of every SV.
-            * 'size': Number voxels of each SV.
-            * 'rep_coord': Representative coordinates for each SV.
-            * 'mesh_area': Surface area as computed from the object mesh triangles.
-            * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective SVs.
-            * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
-            * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SVs.
-            * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
-            * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SVs.
-            * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
-
-        If astrocyte separation is performed, the following attributes will be stored as numpy array as well:
-            * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
-              locations, 2: 0-index=neuron, 1-index=glia).
-
-        The 'mapping' attributes are only computed for cell supervoxels and not for cellular
-        organelles (e.g. 'mi', 'vc', etc.; see
-        :py:attr:`~syconn.global_params.config['process_cell_organelles']`).
-
-        For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
-        (which represent the actual synapses between two cell reconstructions), the following
-        properties are stored as numpy arrays:
-            * 'id': ID array, identical to
-              :py:attr:`~ids`.
-            * 'bounding_box': Bounding box of every SV.
-            * 'size': Number voxels of each SV.
-            * 'rep_coord': Representative coordinates of each SV.
-            * 'mesh_area': Surface area as computed from the object mesh triangles.
-            * 'mesh_bb': Bounding box of the object meshes (in nanometers). Approximately
-              the same as scaled 'bounding_box'.
-            * 'latent_morph': Latent morphology vector at each rendering location; predicted by
-              the tCMN.
-            * 'neuron_partners': IDs of the two
-              :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
-              forming the synapse. The ordering of the subsequent 'partner' attributes is
-              identical to 'neuron_partners', e.g. 'neuron_partners'=[3, 49] and
-              'partner_celltypes'=[0, 1] means that SSV with ID 3 is an excitatory axon
-              targeting the MSN SSV with ID 49.
-            * 'partner_celltypes': Celltypes of the two SSVs.
-            * 'partner_spiness': Spine predictions (0: neck, 1: head, 2: shaft, 3: other) of the
-              two sites.
-            * 'partner_axoness': Compartment predictions (0: dendrite, 1: axon, 2: soma,
-              3: en-passant bouton, 4: terminal bouton) of the two sites.
-            * 'syn_prob': Synapse probability as inferred by the RFC (see corresponding
-              section the documentation).
-            * 'asym_prop': Mean probability of the 'syn_ssv' object voxels for the asymmetric
-              type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
-            * 'sym_prop': Mean probability of the 'syn_ssv' object voxels for the symmetric
-              type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
-            * 'syn_type_sym_ratio': ``sym_prop / float(asym_prop + sym_prop)``.
-              See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
-            * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
-              :py:attr:`~syconn.global_params.config['cell_objects']['sym_thresh']` .
-            * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
+        To initialize the SegmentationDataset for cell supervoxels:
+            sd_cell = SegmentationDataset('sv')
+    
+        After running dataset analysis, load properties from numpy arrays:
+            sd_cell.load_numpy_data('size')
+    
+    Note: More detailed information about supervoxel properties and additional functionality can be found in the original docstring.
     """
 
     def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None, working_dir: Optional[str] = None,
@@ -1430,18 +1531,19 @@ class SegmentationDataset(SegmentationBase):
                  config: Optional[Union[str, DynConfig]] = None,
                  n_folders_fs: Optional[int] = None, cache_properties: Optional[List[str]] = None):
         """
+        Initializes a SegmentationDataset with the specified parameters.
+        
         Args:
-            obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`, e.g.: 'vc', 'sj', 'mi', 'cs', 'sv'.
-            version: Version of dataset to distinguish it from others of the same type.
-            working_dir: Path to the working directory.
-            scaling: Scaling of the raw data to nanometer
-            version_dict: Dictionary which contains the versions of other dataset types which share
-                the same working directory.
-            create: Whether or not to create this dataset's directory.
-            config: Config. object, see :class:`~syconn.handler.config.DynConfig`. Will be copied and then fixed by
-                setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
-            n_folders_fs: Number of folders within the dataset's folder structure.
-            cache_properties: Use numpy arrays to populate the specified object properties when initializing
+            obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`, such as 'vc', 'sj', 'mi', 'cs', 'sv'.
+            version: Version identifier used to distinguish this dataset from others of the same type.
+            working_dir: Path to the working directory where the dataset is located or will be created.
+            scaling: Scaling factors used to convert voxel dimensions to nanometers.
+            version_dict: Dictionary mapping other dataset types to their versions, sharing the same working directory.
+            create: If True, creates this dataset's directory if it does not exist.
+            config: Config. object or path to a config. file, see :class:`~syconn.handler.config.DynConfig`. Will
+                be copied and then fixed by setting :py:attr:`~syconn.handler.config.DynConfig.fix_config` to True.
+            n_folders_fs: Number of folders within the dataset's folder structure for organizing data.
+            cache_properties: List of supervoxel properties to cache for faster access when initializing
                 :py:class:`~syconn.reps.segmentation.SegmentationObject` via :py:func:`~get_segmentation_object`.
         """
 
@@ -1524,9 +1626,9 @@ class SegmentationDataset(SegmentationBase):
     @property
     def type(self) -> str:
         """
-        The type of :class:`~syconn.reps.segmentation.SegmentationObject`s
+        Retrieves the type of :class:`~syconn.reps.segmentation.SegmentationObject`s
         contained in this :class:`~syconn.reps.segmentation.SegmentationDataset`.
-
+        
         Returns:
             String identifier of the object type.
         """
@@ -1535,9 +1637,10 @@ class SegmentationDataset(SegmentationBase):
     @property
     def n_folders_fs(self) -> int:
         """
+        Retrieves the number of folders in the :class:`~syconn.reps.segmentation.SegmentationDataset` directory tree.
+        
         Returns:
-            The number of folders in this :class:`~syconn.reps.segmentation.SegmentationDataset`
-            directory tree.
+            The number of folders in this directory tree as an integer.
         """
         if self._n_folders_fs is None:
             ps = glob.glob("%s/%s*/" % (self.path, self.so_storage_path_base))
@@ -1562,14 +1665,18 @@ class SegmentationDataset(SegmentationBase):
     @property
     def working_dir(self) -> str:
         """
+        Retrieves the working directory of the SegmentationDataset instance.
+        
         Returns:
-            The working directory of this :class:`~syconn.reps.segmentation.SegmentationDataset`.
+            The working directory of this :class:`~syconn.reps.segmentation.SegmentationDataset` as a string.
         """
         return self._working_dir
 
     @property
     def version(self) -> str:
         """
+        Retrieves the version identifier of the dataset.
+        
         Returns:
             String identifier of the version.
         """
@@ -1578,76 +1685,90 @@ class SegmentationDataset(SegmentationBase):
     @property
     def path(self) -> str:
         """
+        Retrieves the full path to the :class:`~syconn.reps.segmentation.SegmentationDataset`.
+        
         Returns:
-            The path to this :class:`~syconn.reps.segmentation.SegmentationDataset`.
+            The path to this SegmentationDataset as a string.
         """
         return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
 
     @property
     def exists(self) -> bool:
         """
-        Checks whether :py:attr:`~path` exists.
+        Verifies if the dataset directory, referenced by :py:attr:`~path`, exists.
+        
+        Returns:
+            True if the dataset directory exists, False otherwise.
         """
         return os.path.isdir(self.path)
 
     @property
     def path_sizes(self) -> str:
         """
-        Path to the cache array of the object voxel sizes.
-
+        Retrieves the path to the cached array of the object voxel sizes.
+        
         Returns:
-            Path to the numpy file.
+            The path to the sizes.npy file as a string.
         """
         return self.path + "/sizes.npy"
 
     @property
     def path_rep_coords(self) -> str:
         """
-        Path to the cache array of the object representative coordinates.
-
+        Retrieves the path to the cached array of the object representative coordinates.
+        
         Returns:
-            Path to the numpy file.
+            The path to the rep_coords.npy file as a string.
         """
         return self.path + "/rep_coords.npy"
 
     @property
     def path_ids(self) -> str:
         """
-        Path to the cache array of the object IDs.
-
+        Retrieves the path to the cached array of the object IDs.
+        
         Returns:
-            Path to the numpy file.
+            The path to the ids.npy file as a string.
         """
         return self.path + "/ids.npy"
 
     @property
     def version_dict_path(self) -> str:
         """
-        Path to the version dictionary pickle file.
-
+        Retrieves the path to the version dictionary pickle file.
+        
         Returns:
-            Path to the pickle file.
+            The path to the version_dict.pkl file as a string.
         """
         return self.path + "/version_dict.pkl"
 
     @property
     def version_dict_exists(self) -> bool:
         """
-        Checks whether :py:attr:`~version_dict_path` exists.
+        Checks whether the version dictionary file exists, referred to by :py:attr:`~version_dict_path`.
+        
+        Returns:
+            True if the version_dict.pkl file exists, False otherwise.
         """
         return os.path.exists(self.version_dict_path)
 
     @property
     def so_storage_path_base(self) -> str:
         """
-        Name of the base of the root folder (``'so_storage'``).
+        Retrieves the base name ('so_storage') of the root folder for supervoxel storage.
+        
+        Returns:
+            The base name of the root folder as a string.
         """
         return "so_storage"
 
     @property
     def so_storage_path(self) -> str:
         """
-        Path to the root folder.
+        Provides the path to the root folder for supervoxel storage.
+        
+        Returns:
+            str: The path to the root directory.
         """
         if self._n_folders_fs is None and os.path.exists("%s/so_storage/" % self.path):
             return "%s/so_storage/" % self.path
@@ -1660,8 +1781,10 @@ class SegmentationDataset(SegmentationBase):
     @property
     def so_dir_paths(self) -> List[str]:
         """
-        Sorted paths to all supervoxel object directories in the directory tree
-        :py:attr:`~so_storage_path`.
+        Retrieves a sorted list of paths to all supervoxel object directories in the directory tree from the :py:attr:`~so_storage_path`.
+        
+        Returns:
+            A sorted list of paths to supervoxel object directories.
         """
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
@@ -1669,14 +1792,10 @@ class SegmentationDataset(SegmentationBase):
 
     def iter_so_dir_paths(self) -> Iterator[str]:
         """
-        Iterator over all possible `SegmentationObject` storage base directories.
-
-        Notes:
-            In contrast to :attr:`~so_dir_paths` this iterator may return paths to storages that
-            do not exist, in the case that no object fell into its ID bucket.
-
+        Iterates over all possible `SegmentationObject` storage base directories. This iterator may return paths to storages that do not exist if no object fell into its ID bucket. 
+        
         Returns:
-            Path to ID storage base folder.
+            An iterator yielding paths to ID storage base folders.
         """
         storage_location_ids = get_unique_subfold_ixs(self.n_folders_fs)
         for ix in storage_location_ids:
@@ -1685,9 +1804,9 @@ class SegmentationDataset(SegmentationBase):
     @property
     def config(self) -> DynConfig:
         """
-        The configuration object which contain all dataset-specific parameters.
+        Retrieves the configuration object which contains all dataset-specific parameters. 
         See :class:`~syconn.handler.config.DynConfig`.
-
+        
         Returns:
             The configuration object.
         """
@@ -1698,6 +1817,8 @@ class SegmentationDataset(SegmentationBase):
     @property
     def sizes(self) -> np.ndarray:
         """
+        Retrieves the array of sizes for all supervoxels in the dataset.
+        
         Returns:
             A size array of all supervoxel which are part of this dataset.
             The ordering of the returned array will correspond to :py:attr:`~ids`.
@@ -1714,9 +1835,11 @@ class SegmentationDataset(SegmentationBase):
     @property
     def rep_coords(self) -> np.ndarray:
         """
+        Retrieves the array of representative coordinates for all supervoxels part of
+        this dataset. The ordering corresponds to :py:attr:`~ids`.
+        
         Returns:
-            Representative coordinates of all supervoxel which are part of this dataset.
-            The ordering of the returned array will correspond to :py:attr:`~ids`.
+            An array of representative coordinates of all supervoxel.
         """
         if self._rep_coords is None:
             if os.path.exists(self.path_rep_coords):
@@ -1730,8 +1853,10 @@ class SegmentationDataset(SegmentationBase):
     @property
     def ids(self) -> np.ndarray:
         """
+        Retrieves the array of IDs for all supervoxels that are part of this dataset.
+        
         Returns:
-            All supervoxel IDs which are part of this dataset.
+            An array of all supervoxel IDs which are part of this dataset.
         """
         if self._ids is None:
             acquire_obj_ids(self)
@@ -1740,6 +1865,8 @@ class SegmentationDataset(SegmentationBase):
     @property
     def scaling(self) -> np.ndarray:
         """
+        Retrieves the voxel size in nanometers (XYZ).
+        
         Returns:
             Voxel size in nanometers (XYZ).
         """
@@ -1750,9 +1877,8 @@ class SegmentationDataset(SegmentationBase):
     @property
     def sos(self) -> Generator[SegmentationObject, None, None]:
         """
-        Generator for all :class:`~syconn.reps.segmentation.SegmentationObject` objects
-        associated with this dataset.
-
+        Generator that yields all SegmentationObject instances associated with this dataset.
+        
         Yields:
             :class:`~syconn.reps.segmentation.SegmentationObject`
         """
@@ -1764,19 +1890,20 @@ class SegmentationDataset(SegmentationBase):
 
     def load_numpy_data(self, prop_name, allow_nonexisting: bool = True) -> np.ndarray:
         """
-        Load cached array. The ordering of the returned array will correspond
-        to :py:attr:`~ids`.
-
+        Loads a cached array of supervoxel properties. The ordering of the returned 
+        array will correspond to :py:attr:`~ids`. 
+        
         Todo:
-            * remove 's' appendix in file names.
-            * remove 'celltype' replacement for 'celltype_cnn_e3' as soon as 'celltype_cnn_e3' was renamed package-wide
-
+            * Remove 's' appendix in file names.
+            * Remove 'celltype' replacement for 'celltype_cnn_e3' as soon as 
+              'celltype_cnn_e3' was renamed package-wide
+        
         Args:
             prop_name: Identifier of the requested cache array.
-            allow_nonexisting: If False, will fail for missing numpy files.
-
+            allow_nonexisting: If False, raises an error for missing numpy files.
+        
         Returns:
-            numpy array of property `prop_name`.
+            A numpy array of the requested property `prop_name`.
         """
         if prop_name == 'celltype':
             prop_name = 'celltype_cnn_e3'
@@ -1791,13 +1918,13 @@ class SegmentationDataset(SegmentationBase):
 
     def get_segmentationdataset(self, obj_type: str) -> 'SegmentationDataset':
         """
-        Factory method for :class:`~syconn.reps.segmentation.SegmentationDataset` which are part of this dataset.
-
+        Factory method to retrieve a SegmentationDataset of a specified supervoxel type.
+        
         Args:
             obj_type: Dataset of supervoxels with type `obj_type`.
-
+        
         Returns:
-            The requested :class:`~syconn.reps.segmentation.SegmentationDataset` object.
+            The requested SegmentationDataset object containing the specified supervoxel type.
         """
         if obj_type not in self.version_dict:
             raise ValueError('Requested object type {} not part of version_dict '
@@ -1807,15 +1934,16 @@ class SegmentationDataset(SegmentationBase):
     def get_segmentation_object(self, obj_id: Union[int, List[int]],
                                 create: bool = False, **kwargs) -> Union[SegmentationObject, List[SegmentationObject]]:
         """
-        Factory method for :class:`~syconn.reps.segmentation.SegmentationObject` which are
-        part of this dataset.
-
+        Factory method for retrieving :class:`~syconn.reps.segmentation.SegmentationObject` instances
+        which are part of this dataset.
+        
         Args:
-            obj_id: Supervoxel ID.
-            create: If True, creates the folder hierarchy down to the requested supervoxel.
-
+            obj_id: A single ID or a list of IDs for the supervoxel(s) to retrieve.
+            create: If True, creates the folder hierarchy for the requested supervoxel(s).
+        
         Returns:
-            The requested :class:`~syconn.reps.segmentation.SegmentationObject` object.
+            The requested :class:`~syconn.reps.segmentation.SegmentationObject` object or a list of 
+            SegmentationObject instances.
         """
         if np.isscalar(obj_id):
             return self._get_segmentation_object(obj_id, create, **kwargs)
@@ -1828,12 +1956,12 @@ class SegmentationDataset(SegmentationBase):
 
     def _get_segmentation_object(self, obj_id: int, create: bool, **kwargs) -> SegmentationObject:
         """
-        Initialize :py:class:`~SegmentationObject`.
-
+        Initializes a SegmentationObject with the specified ID.
+        
         Args:
             obj_id: Object ID.
-            create: Create folder structure. Default: False.
-
+            create: If True, creates the folder structure for the supervoxel object. Default: False.
+        
         Returns:
             Supervoxel object.
         """
@@ -1848,13 +1976,13 @@ class SegmentationDataset(SegmentationBase):
 
     def save_version_dict(self):
         """
-        Save the version dictionary to the `.pkl` file.
+        Saves the version dictionary to a `.pkl` pickle file.
         """
         write_obj2pkl(self.version_dict_path, self.version_dict)
 
     def load_version_dict(self):
         """
-        Load the version dictionary from the `.pkl` file.
+        Loads the version dictionary from a `.pkl` file.
         """
         try:
             self.version_dict = load_pkl2obj(self.version_dict_path)
@@ -1863,14 +1991,20 @@ class SegmentationDataset(SegmentationBase):
 
     @property
     def soid2ix(self):
+        """
+        Retrieves or creates a mapping from supervoxel IDs to their index in the dataset.
+        
+        Returns:
+            A dictionary mapping supervoxel IDs to indices.
+        """
         if self._soid2ix is None:
             self._soid2ix = {k: ix for ix, k in enumerate(self.ids)}
         return self._soid2ix
 
     def enable_property_cache(self, property_keys: Iterable[str]):
         """
-        Add properties to cache.
-
+        Adds properties to the cache for faster access.
+        
         Args:
             property_keys: Property keys. Numpy cache arrays must exist.
         """
@@ -1887,14 +2021,16 @@ class SegmentationDataset(SegmentationBase):
 
     def get_volume(self, source: str = 'total') -> float:
         """
-        Calculate the RAG volume.
-
+        Calculates the total volume of the region adjacency graph (RAG).
+        
         Args:
-            source: Allowed sources: 'total' (all SVs contained in SegmentationDataset('sv')),
-                'neuron' (use glia-free RAG), 'glia' (use glia RAG).
-
+            source: Allowed sources: 'total' (all SVs contained in 
+            SegmentationDataset('sv')), 'neuron' (use glia-free RAG), 
+            'glia' (use glia RAG). Specifies which supervoxels to include 
+            in the volume calculation.
+        
         Returns:
-            Volume in mm^3.
+            The volume of the RAG in cubic millimeters.
         """
         self.enable_property_cache(['size'])
         if source == 'neuron':

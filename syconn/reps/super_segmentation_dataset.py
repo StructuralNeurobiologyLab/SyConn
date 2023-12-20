@@ -38,69 +38,78 @@ except ImportError:
 
 class SuperSegmentationDataset(SegmentationBase):
     """
-    This class represents a set of agglomerated supervoxels, which themselves are
-    represented by :class:`~syconn.reps.segmentation.SegmentationObject`.
-
+    Represents a set of agglomerated supervoxels, which are represented by
+    `SegmentationObject` instances, and provides methods for accessing and
+    manipulating their data.
+    
     Examples:
-        After successfully executing :py:func:`syconn.exec.exec_init.run_create_neuron_ssd`,
-        and subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) it is
-        possible to load SSV properties via :func:`~load_cached_data` with the following keys
-        (the ordering of the arrays corresponds to :py:attr:`~ssv_ids`):
-            * 'id': ID array, identical to :py:attr:`~ssv_ids`. All other properties have the same
-              ordering as this array, i.e. if SSV with ID 1234 has index 42 in the 'id'-array you
-              will find its properties at index 42 in all other cache-arrays.
+        After initializing with `run_create_neuron_ssd` and subsequent analysis,
+        SSV properties can be loaded via `load_cached_data` with keys corresponding
+        to `ssv_ids`:
+            * 'id': ID array, identical to `ssv_ids`.
             * 'bounding_box': Bounding box of every SSV.
-            * 'size': Number voxels of each SSV.
+            * 'size': Number of voxels of each SSV.
             * 'rep_coord': Representative coordinates for each SSV.
             * 'sv': Supervoxel IDs for every SSV.
-            * 'sample_locations': Lists of rendering locations for each SSV. Each entry is a
-              list (length corresponds to the number of supervoxels) of coordinate arrays for
-              the corresponding SSV.
-            * 'celltype_cnn_e3': Celltype classifications based on the elektronn3 CMN.
-            * 'celltype_cnn_e3_probas': Celltype logits for the different types as an array of
-              shape (M, C; M: Number of predicted random multi-view sets, C: Number of
-              classes). In the example run there are currently 9 predicted classes:
-              STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
+            * 'sample_locations': Rendering locations for each SSV.
+            * 'celltype_cnn_e3': Celltype classifications based on elektronn3 CMN.
+            * 'celltype_cnn_e3_probas': Celltype logits as an array (M, C).
             * 'syn_ssv': Synapse IDs assigned to each SSV.
-            * 'syn_sign_ratio': Area-weighted atio of symmetric synapses, see
-              :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ratio`.
-            * 'sj': Synaptic junction object IDs which were mapped to each SSV. These are used
-              for view rendering and also to generate the 'syn_ssv' objects in combination
-              with contact sites (see corresponding section in the documentation).
-            * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
-              SSVs.
-            * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
+            * 'syn_sign_ratio': Area-weighted ratio of symmetric synapses.
+            * 'sj': Synaptic junction object IDs mapped to each SSV.
+            * 'mapping_sj_ids': Synaptic junction objects overlapping with SSVs.
+            * 'mapping_sj_ratios': Overlap ratio of synaptic junctions.
             * 'vc': Vesicle clouds mapped to each SSV.
-            * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
-            * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
+            * 'mapping_vc_ids': Vesicle cloud objects overlapping with SSVs.
+            * 'mapping_vc_ratios': Overlap ratio of vesicle clouds.
             * 'mi': Mitochondria mapped to each SSV.
-            * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SSVs.
-            * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
-
-        The following lines initialize the
-        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` of the
-        example run and explore some of the existing attributes::
-
+            * 'mapping_mi_ids': Mitochondria objects overlapping with SSVs.
+            * 'mapping_mi_ratios': Overlap ratio of mitochondria.
+    
+        Initialize `SuperSegmentationDataset` and explore attributes:
             import numpy as np
             from syconn.reps.super_segmentation import *
             ssd = SuperSegmentationDataset(working_dir='~/SyConn/example_cube1/')
             n_synapses = [len(ssv.syn_ssv) for ssv in ssd.ssvs]
-            path_length = [ssv.total_edge_length() for ssv in ssd.ssvs]  # in nanometers
+            path_length = [ssv.total_edge_length() for ssv in ssd.ssvs]
             syn_densities = np.array(n_synapses) / np.array(path_length)
             print(np.mean(syn_densities), np.std(syn_densities))
-
-        We can make use of the cached arrays to obtain the total number of synapses per
-        cell type as follows::
-
+    
+        Obtain total number of synapses per cell type:
             celltypes = ssd.load_numpy_data('celltype_cnn_e3')
             n_synapses = np.array([len(el) for el in ssd.load_numpy_data('syn_ssv')])
-            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct]) for ct in range(np.max(celltypes)}
+            n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct])
+                                  for ct in range(np.max(celltypes))}
             print(n_synapes_per_type)
-
+    
     Attributes:
-        sso_caching: WIP, enables caching mechanisms in SuperSegmentationObjects returned via
-            `get_super_segmentation_object`
-        sso_locking: If True, locking is enabled for SSV files.
+        sso_caching (bool): Enables caching mechanisms in SuperSegmentationObjects
+            returned via `get_super_segmentation_object`.
+        sso_locking (bool): If True, locking is enabled for SSV files.
+    
+    Args:
+        working_dir (Optional[str]): Path to the working directory.
+        version (Optional[str]): Indicates the version of the dataset, e.g. '0',
+            'groundtruth' etc.
+        ssd_type (str): Changes the directory prefix the dataset is stored in.
+        version_dict (Optional[Dict[str, str]]): Dictionary with versions of other
+            dataset types sharing the same working directory.
+        sv_mapping (Optional[Union[Dict[int, int], str]]): Dictionary mapping
+            supervoxel IDs to their super-supervoxel ID.
+        scaling (Optional[Union[List, Tuple, np.ndarray]]): Array defining the
+            voxel size in XYZ. Default is from `config.yml`.
+        config (DynConfig): Config object, see `~syconn.handler.config.DynConfig`.
+            Will be copied and fixed by setting `~syconn.handler.config.DynConfig.fix_config`
+            to True.
+        create (bool): Create folder if True.
+        sd_lookup (Optional[Dict[str, SegmentationDataset]]): Lookup dict for
+            `SegmentationDataset`, enabling usage of property cache arrays for all
+            attributes specified in `property_cache` during init. of
+            `SegmentationDataset`.
+        cache_properties (Optional[List[str]]): Use numpy cache arrays to populate
+            specified object properties when initializing
+            `SuperSegmentationObject` via `get_super_segmentation_object`.
+        overwrite (bool): Overwrite existing data if True.
     """
 
     def __init__(self, working_dir: Optional[str] = None, version: Optional[str] = None, ssd_type: str = 'ssv',
@@ -209,36 +218,63 @@ class SuperSegmentationDataset(SegmentationBase):
         self.enable_property_cache(cache_properties)
 
     def __repr__(self):
+        """
+        Represents the SuperSegmentationDataset as a string.
+        
+        Returns:
+            str: String representation of the SuperSegmentationDataset.
+        """
         return (f'{type(self).__name__}(ssd_type="{self.type}", '
                 f'version="{self.version}", working_dir="{self.working_dir}")')
 
     @property
     def type(self) -> str:
         """
-        The type of the underlying supervoxel objects. See
-        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`.
+        Retrieves the type of the underlying supervoxel objects.
+        
+        This method returns the class type of the supervoxel objects
+        used in the `SuperSegmentationObject`.
+        
+        Returns:
+            str: The type of the supervoxel objects as represented in the
+            `SuperSegmentationObject`.
+        
+        See Also:
+            :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`.
         """
         return str(self._type)
 
     @property
     def scaling(self) -> np.ndarray:
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.yml`
-        file and accessible via :py:attr:`~config`.
+        Retrieves the voxel size in nanometers (XYZ).
+        
+        The default values are obtained from the `config.yml` file and can be accessed
+        through the :py:attr:`~config`.
+        
+        Returns:
+            np.ndarray: Voxel size in nanometers as a numpy array.
         """
         return self._scaling
 
     @property
     def working_dir(self) -> str:
         """
-        Working directory.
+        Retrieves the working directory.
+
+        Returns:
+            str: Working directory path.
         """
         return self._working_dir
 
     @property
     def config(self) -> DynConfig:
         """
-        Config. object which contains all dataset-sepcific parameters.
+        Retrieves the configuration object containing dataset-specific parameters,
+        ensuring all relevant details from the previous documentation are retained.
+        
+        Returns:
+            DynConfig: An object with all dataset-specific parameters.
         """
         if self._config is None:
             self._config = global_params.config
@@ -247,43 +283,64 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def path(self) -> str:
         """
-        Full path to dataset directory.
+        Retrieves the full path to the dataset directory.
+        
+        Returns:
+            str: Full path to the dataset directory ensuring to include all relevant
+                 information and resolve any conflicts with the old docstring.
         """
         return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
 
     @property
     def version(self) -> str:
         """
-        Indicates the version of the dataset. The version is part of the
-        dataset's folder name.
+        Retrieves the version of the dataset, included in the dataset's folder
+        name.
+        
+        Returns:
+            str: Dataset version, as part of the folder naming convention.
         """
         return str(self._version)
 
     @property
     def version_dict_path(self) -> str:
         """
-        Path to version dictionary file.
+        Retrieves the path to the version dictionary file.
+        
+        Returns:
+            str: Path to the version dictionary file.
         """
         return self.path + "/version_dict.pkl"
 
     @property
     def mapping_dict_exists(self) -> bool:
         """
-        Checks if the mapping dictionary exists (uper-supervoxel ID to sueprvoxel IDs).
+        Checks if the mapping dictionary exists (upper-supervoxel ID to supervoxel IDs).
+        
+        Returns:
+            bool: True if the mapping dictionary exists, False otherwise.
         """
         return os.path.exists(self.mapping_dict_path)
 
     @property
     def mapping_dict_path(self) -> str:
         """
-        Path to the mapping dictionary pkl file.
+        Retrieves the path to the mapping dictionary file.
+        
+        Returns:
+            str: Path to the mapping dictionary .pkl file.
         """
         return self.path + "/mapping_dict.pkl"
 
     @property
     def mapping_lookup_reverse_path(self) -> str:
         """
-        Path to data structure that stores the lookup from supervoxel ID to cell ID.
+        Retrieves the path to the data structure storing the lookup from supervoxel
+        ID to cell ID.
+        
+        Returns:
+            str: Path to the data structure that stores the lookup from supervoxel ID
+                 to cell ID.
         """
         return self.path + "/mapping_lookup_reverse.h5"
 
@@ -291,13 +348,21 @@ class SuperSegmentationDataset(SegmentationBase):
     def version_dict_exists(self) -> bool:
         """
         Checks whether the version dictionary exists at :py:attr:`~version_dict_path`.
+        
+        Returns:
+            bool: True if the version dictionary exists at the specified path,
+            False otherwise.
         """
         return os.path.exists(self.version_dict_path)
 
     @property
     def mapping_dict(self) -> Dict[int, np.ndarray]:
         """
-        Dictionary which contains the supervoxel IDs for every super-supervoxel.
+        Retrieves the dictionary containing the supervoxel IDs for each super-supervoxel.
+        
+        Returns:
+            Dict[int, np.ndarray]: A dictionary where each key is the super-supervoxel
+            identifier and the corresponding value is an array of supervoxel IDs.
         """
         if self._mapping_dict is None:
             if self.mapping_dict_exists:
@@ -308,15 +373,15 @@ class SuperSegmentationDataset(SegmentationBase):
 
     def sv2ssv_ids(self, ids: np.ndarray, nb_cpus=1) -> Dict[int, int]:
         """
-        Use :attr:`~mapping_lookup_reverse` to query the cell ID for a given array of supervoxel IDs.
-        IDs that are not in :attr:`~sv_ids` will not be added to the output dict.
-
+        Queries the cell ID for a given array of supervoxel IDs using the `mapping_lookup_reverse`.
+        
         Args:
-            ids: Unique IDs to find the corresponding cell ID.
-            nb_cpus:
-
+            ids (np.ndarray): Array of unique IDs to find the corresponding cell IDs.
+            nb_cpus (int): Number of CPUs to use for the query. IDs that are not in
+            `sv_ids` will not be added to the output dictionary.
+        
         Returns:
-            Dictionary with supervoxel ID as key and cell ID as value.
+            Dict[int, int]: Dictionary with supervoxel ID as key and cell ID as value.
         """
         assert np.ndim(ids) == 1
         # explicitly cast to uint64 because if `ids` is a list of python int intersect auto-casts to float
@@ -333,12 +398,19 @@ class SuperSegmentationDataset(SegmentationBase):
     
     @property
     def mapping_lookup_reverse(self) -> BinarySearchStore:
+        """
+        Retrieves the BinarySearchStore for efficient look-ups from supervoxel ID to cell ID.
+        
+        Returns:
+            BinarySearchStore: Lookup store object.
+        """
         if self._mapping_lookup_reverse is None:
             self._mapping_lookup_reverse = BinarySearchStore(self.mapping_lookup_reverse_path)
         return self._mapping_lookup_reverse
 
     def create_mapping_lookup_reverse(self):
-        """Create data structure for efficient look-ups from supervoxel ID to cell ID,
+        """
+        Creates a data structure for efficient look-ups from supervoxel ID to cell ID,
         see :py:class:`syconn.backend.storage.BinarySearchStore`.
         """
         ids, ssv_ids = [], []
@@ -354,8 +426,12 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def ssv_ids(self) -> np.ndarray:
         """
-        Super-supervoxel IDs which are part of this
-        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+        Retrieves the super-supervoxel IDs that are part of this 
+        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
+        object.
+        
+        Returns:
+            np.ndarray: Array of super-supervoxel IDs.
         """
         if self._ssv_ids is None:
             # do not change the order of the if statements as it is crucial
@@ -378,11 +454,13 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def ssvs(self) -> Generator[SuperSegmentationObject, None, None]:
         """
-        Generator of :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` objects which are part
-        of this  :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
-
+        Generator of :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` 
+        objects which are part of this :class:`~syconn.reps.super_segmentation_dataset.
+        SuperSegmentationDataset` object.
+        
         Yields:
-            :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+            :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`:
+            SuperSegmentationObject instances.
         """
         ix = 0
         tot_nb_ssvs = len(self.ssv_ids)
@@ -393,24 +471,33 @@ class SuperSegmentationDataset(SegmentationBase):
     @property
     def sv_ids(self) -> np.ndarray:
         """
-        Flat array of supervoxel IDs which are part of the cells (:attr:`~.ssv_ids`) in this
-        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+        Retrieves a flat array of supervoxel IDs that are part of the cells (:attr:`~.ssv_ids`)
+        in this :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+        
+        Returns:
+            np.ndarray: Array of supervoxel IDs.
         """
         return self.mapping_lookup_reverse.id_array
 
     def load_numpy_data(self, prop_name: str, allow_nonexisting: bool = True, suppress_warning: bool = False) -> \
             Optional[np.ndarray]:
         """
+        Loads a numpy array of a cached property.
+        
         Todo:
             * remove 's' appendix in file names.
-
+        
         Args:
-            prop_name: Identifier for requested cache array. Ordering of the
-                array is the same as :py:attr:`~ssv_ids`.
-            allow_nonexisting: If False, will fail for missing numpy files.
-            suppress_warning: Do not print a warning if property does not exist.
+            prop_name (str): Identifier for the requested cache array. Ordering of
+                             the array is the same as :py:attr:`~ssv_ids`.
+            allow_nonexisting (bool): If False, will raise an error for missing numpy
+                                      files.
+            suppress_warning (bool): If True, suppresses the warning if the property
+                                     does not exist.
+        
         Returns:
-            Numpy array of cached property.
+            Optional[np.ndarray]: Numpy array of the cached property, or None if not
+                                  found.
         """
         if os.path.exists(self.path + prop_name + ".npy"):
             return np.load(self.path + prop_name + ".npy", allow_pickle=True)
@@ -427,16 +514,24 @@ class SuperSegmentationDataset(SegmentationBase):
                 log_reps.warning(msg)
 
     def get_segmentationdataset(self, obj_type: str) -> SegmentationDataset:
+        """
+        Retrieves the SegmentationDataset for a given object type.
+        
+        Args:
+            obj_type (str): Object type identifier.
+        
+        Returns:
+            SegmentationDataset: Corresponding SegmentationDataset.
+        """
         assert obj_type in self.version_dict
         return SegmentationDataset(obj_type, version=self.version_dict[obj_type], working_dir=self.working_dir)
 
     def apply_mergelist(self, sv_mapping: Union[Dict[int, int], str]):
         """
-        See :func:`~syconn.reps.super_segmentation_helper.assemble_from_mergelist`.
-
+        Applies a supervoxel agglomeration to the dataset.
+        
         Args:
-            sv_mapping: Supervoxel agglomeration.
-
+            sv_mapping (Union[Dict[int, int], str]): Agglomeration mapping or path to the mapping file.
         """
         os.makedirs(self.path, exist_ok=True)
         assemble_from_mergelist(self, sv_mapping)
@@ -445,27 +540,25 @@ class SuperSegmentationDataset(SegmentationBase):
                                       caching: Optional[bool] = None, create: bool = False) \
             -> Union[SuperSegmentationObject, List[SuperSegmentationObject]]:
         """
-        Factory method for
-        :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`s.
-        `bj_id` might be a single ID or list of IDs.
-
+        Factory method for creating SuperSegmentationObject instances.
+        
         Args:
-            obj_id: ID of the super-supervoxel which should be instantiated. Can also be an
-                iterable.
-            new_mapping: If True, the returned
-                :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` object will
-                be built on the supervoxel agglomeration stored in
-                :py:attr:`~mapping_dict`.
-            caching: Enable caching of various attributes.
-            create: If True, creates the directory of the super-supervoxel inside the folder
-                structure of this dataset.
-
+            obj_id (Union[int, Iterable[int]]): ID(s) of the super-supervoxel(s) to
+                instantiate. Can also be an iterable.
+            new_mapping (bool): If True, uses the latest supervoxel agglomeration. Returns
+                :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+                based on :py:attr:`~mapping_dict`.
+            caching (Optional[bool], default False): Enables caching of various attributes.
+            create (bool): If True, creates the directory structure for the super-supervoxel
+                in the dataset folder structure.
+        
         Notes:
-            * Set the default value of `caching` to False, PS 20Feb2019
-
+            * `caching` parameter's default value updated to False, as per PS 20Feb2019.
+        
         Returns:
-            SuperSegmentationObject(s) corresponding to the given `obj_id`
-            (int or Iterable[int]).
+            Union[SuperSegmentationObject, List[SuperSegmentationObject]]: The requested
+            SuperSegmentationObject instance(s) corresponding to the given `obj_id` (int or
+            Iterable[int]).
         """
         kwargs_def = dict(ssd_type=self.type, create=create, scaling=self.scaling, object_caching=caching,
                           voxel_caching=caching, mesh_caching=caching, view_caching=caching, enable_locking_so=False,
@@ -491,13 +584,17 @@ class SuperSegmentationDataset(SegmentationBase):
         return sso
 
     def store_total_edge_lengths(self, ax_pred_key: Optional[str] = "axoness_avg10000", overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
-        """Stores total edge lengths of all the cells in this dataset 
-        in nanometers. Same ordering as :attr:`~.ssv_ids`.
-
+        """
+        Stores total edge lengths of all the cells in this dataset in nanometers. 
+        Same ordering as :attr:`~.ssv_ids`.
+        
         Args:
-            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`
-            overwrite: Overwrite the `total_edge_lengths.npy` file. Defaults to False.
-            nb_cpus: CPUs per worker. Defaults to None.
+            ax_pred_key (Optional[str]): Key of compartment prediction stored in 
+                                         the skeleton attribute.
+            overwrite (Optional[bool]): If True, overwrites the existing 
+                                        `total_edge_lengths.npy` file. Defaults to False.
+            nb_cpus (Optional[int]): Number of CPUs to use for the computation. 
+                                     Defaults to None.
         """
         if os.path.exists(self.path + "total_edge_lengths.npy") and not overwrite:
             log_reps.warning(f"Total edge lengths already exist in {self.path}. To overwrite, set overwrite=True.")
@@ -514,15 +611,18 @@ class SuperSegmentationDataset(SegmentationBase):
         np.save(self.path + "total_edge_lengths.npy", total_edge_lengths)
 
     def store_path_densities_seg_objs(self, obj_type: str, compartments_of_interest: Optional[list] = None, ax_pred_key: Optional[str] = 'axoness_avg10000', overwrite: Optional[bool] = False, nb_cpus: Optional[int] = None):
-        """Stores path densities of all the cells in this dataset.
-        Same ordering as :attr:`~.ssv_ids`.
-
+        """
+        Stores path densities of all cells in the dataset for a given sub-cellular structure.
+        The order corresponds to :attr:`~.ssv_ids`.
+        
         Args:
-            obj_type: Key to any available sub-cellular structure.
-            compartments_of_interest: Which compartments to take into account for calculation. axon: 1, dendrite: 0, soma: 2
-            ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`, only used if `compartments_of_interest` was set. Defaults to 'axoness_avg10000'.
-            overwrite: Overwrite the `<obj_type>_path_densities.npy` file. Defaults to False.
-            nb_cpus: CPUs per worker. Defaults to None.
+            obj_type (str): Key to any available sub-cellular structure.
+            compartments_of_interest (Optional[list]): Compartments to include in the calculation.
+                Specify axon: 1, dendrite: 0, soma: 2 for filtering.
+            ax_pred_key (Optional[str]): Key of compartment prediction stored in the skeleton.
+                Defaults to 'axoness_avg10000' if `compartments_of_interest` is set.
+            overwrite (Optional[bool]): If True, overwrites the existing file. Defaults to False.
+            nb_cpus (Optional[int]): Number of CPUs to use for the computation. Defaults to None.
         """
         if os.path.exists(self.path + obj_type + "_path_densities.npy") and not overwrite:
             log_reps.warning(f"Path densities for {obj_type} already exist in {self.path}. To overwrite, set overwrite=True.")
@@ -541,9 +641,10 @@ class SuperSegmentationDataset(SegmentationBase):
     def save_dataset_shallow(self, overwrite: bool = False):
         """
         Saves :py:attr:`~version_dict`, :py:attr:`~mapping_dict`.
-
+        
         Args:
-            overwrite: Do not replace existing files.
+            overwrite (bool): If True, allows overwriting existing files. Do not replace
+            existing files.
         """
         if not self.version_dict_exists or overwrite:
             self.save_version_dict()
@@ -555,36 +656,36 @@ class SuperSegmentationDataset(SegmentationBase):
         """
         Saves attributes of all SSVs within the given SSD and computes properties
         like size and representative coordinate. The order of :py:attr:`~ssv_ids`
-        may change each run. Populates the ``sv_ids`` attribute of all SSVs.
-        See :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
-
+        may change each run. Populates the ``sv_ids`` attribute of all SSVs. The
+        behavior and order of operations might differ from run to run. See
+        :func:`~syconn.reps.super_segmentation_dataset.save_dataset_deep`.
+        
         Args:
-            extract_only: Only cache attributes `attr_keys` from attribute dict.
-                This will add suffix '_sel' to the numpy cache array file names (->
-                updates will not apply to the :func:`~load_cached_data` method).
-            attr_keys: Attributes to cache, only used if ``extract_only=True``.
-            n_jobs: Currently requires any string to enable batch job system,
-                will be replaced by a global flag soon.
-            nb_cpus: CPUs per worker.
-            use_batchjob: Use batchjob processing instead of local multiprocessing.
-            new_mapping: Whether to apply new mapping (see :func:`~mapping_dict`).
-
-        Returns:
-
+            extract_only (bool): Only cache attributes `attr_keys` from attribute dict.
+                If True, adds suffix '_sel' to the cache array file names, updates will
+                not apply to the :func:`~load_cached_data` method.
+            attr_keys (Iterable[str]): Attributes to cache, only used if
+                `extract_only` is True.
+            n_jobs (Optional[int]): Enables batch job system if set. Requires any string
+                to enable batch job system, will be replaced by a global flag soon.
+            nb_cpus (Optional[int]): Number of CPUs per worker.
+            use_batchjob (bool): If True, uses batchjob processing instead of local
+                multiprocessing.
+            new_mapping (bool): If True, applies new supervoxel agglomeration.
         """
         save_dataset_deep(self, extract_only=extract_only, attr_keys=attr_keys, n_jobs=n_jobs, nb_cpus=nb_cpus,
                           new_mapping=new_mapping, overwrite=self.overwrite, use_batchjob=use_batchjob)
 
     def save_version_dict(self):
         """
-        Save the version dictionary to a `.pkl` file.
+        Saves the version dictionary to a `.pkl` file.
         """
         if len(self.version_dict) > 0:
             write_obj2pkl(self.version_dict_path, self.version_dict)
 
     def load_version_dict(self):
         """
-        Load the version dictionary from the `.pkl` file.
+        Loads the version dictionary from the specified `.pkl` file.
         """
         assert self.version_dict_exists
         self.version_dict = load_pkl2obj(self.version_dict_path)
@@ -600,17 +701,18 @@ class SuperSegmentationDataset(SegmentationBase):
 
     def load_mapping_dict(self):
         """
-        Load the mapping dictionary from the `.pkl` file.
+        Loads the mapping dictionary from the specified `.pkl` file.
         """
         assert self.mapping_dict_exists
         self._mapping_dict = load_pkl2obj(self.mapping_dict_path)
 
     def enable_property_cache(self, property_keys: List[str]):
         """
-        Add properties to cache.
-
+        Enables caching for specified properties.
+        
         Args:
-            property_keys: Property keys. Numpy cache arrays must exist.
+            property_keys (List[str]): List of property keys to cache. Numpy cache arrays
+                                      must exist.
         """
         # look-up for so IDs to index in cache arrays
         if len(property_keys) == 0:
@@ -626,28 +728,31 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
                       n_jobs: Optional[int] = None, nb_cpus: Optional[int] = None, use_batchjob=True,
                       new_mapping: bool = True, overwrite=False):
     """
-    Saves attributes of all SSVs within the given SSD and computes properties like size and representative
-    coordinate. `id.npy` order may change after repeated runs.
-
+    Saves attributes of all SSVs within the given SSD and computes properties like size and 
+    representative coordinate. The order of `id.npy` may change after repeated runs.
+    
     Todo:
-        * extract_only requires refactoring as it stores cache arrays under a
-          different filename.
-        * allow partial updates of a subset of attributes (e.g. use already
-          existing `id.npy` in case of updating, aka `extract_only=True`).
+        * Extract_only requires refactoring as it stores cache arrays under a different filename.
+        * Allow partial updates of a subset of attributes (e.g. use already existing `id.npy`
+          in case of updating, aka `extract_only=True`).
         * Check consistency of ordering for different runs.
-
+    
     Args:
-        ssd: SuperSegmentationDataset
-        extract_only: Only cache attributes (see`attr_keys` from attribute dict. This will add a suffix `_sel` to
-            the numpy cache array file names (-> updates will not apply to the `load_cached_data` method).
-        attr_keys: Attributes to cache, only used if `extract_only=True`
-        n_jobs: Currently requires any string to enable batch job system, will be replaced by a global flag soon.
-        nb_cpus: CPUs per worker.
-        use_batchjob: Use batchjob processing instead of local multiprocessing.
-        new_mapping: Whether to apply new mapping (see `ssd.mapping_dict`).If True, Will use ``ssd.load_mapping_dict``
-            to populate ``sv_ids`` attribute of all :py:class:`~SuperSegmentationObject`.
-
-        overwrite: Remove existing SSD folder, if False and a folder already exists it raises FileExistsError.
+        ssd: SuperSegmentationDataset to operate on, representing a collection of super-segmented
+             volume data.
+        extract_only: If True, caches only the specified attributes in `attr_keys`. Adds a suffix
+                      `_sel` to the numpy cache array file names, excluding them from the 
+                      `load_cached_data` method.
+        attr_keys: Iterable of the attribute keys to cache, utilized when `extract_only` is True.
+        n_jobs: The number of jobs to use for batch processing. Defaults to 'Any String' but will be
+                updated with a global flag for easier configuration.
+        nb_cpus: Number of CPUs allocated per worker in the batch job system.
+        use_batchjob: If True, enables batch job processing. If False, uses local multiprocessing,
+                      overriding the `n_jobs` setting.
+        new_mapping: If set, applies the mapping from `ssd.mapping_dict` using `ssd.load_mapping_dict`
+                     to update the `sv_ids` attribute for all SSVs.
+        overwrite: If True, deletes the existing SSD folder before saving. If False and the folder 
+                   already exists, triggers a FileExistsError to prevent data loss.
     """
 
     # This is to only remove files for overwriting that are actually generated here; e.g. mapping_lookup_reverse
@@ -734,6 +839,12 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
 
 def _write_super_segmentation_dataset_thread(args):
+    """
+    Writes attributes of SuperSegmentationObjects to the dataset in a thread-safe manner.
+    
+    Args:
+        args: A tuple containing parameters for the thread function.
+    """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -809,6 +920,17 @@ def _write_super_segmentation_dataset_thread(args):
 
 
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
+    """
+    Loads downsampled voxels for a given SuperSegmentationObject.
+    
+    Args:
+        sso: The SuperSegmentationObject to load voxels for.
+        downsampling: The downsampling factor as a tuple (x, y, z).
+        nb_threads: The number of threads to use for loading.
+    
+    Returns:
+        A numpy array of downsampled voxels.
+    """
     def _load_sv_voxels_thread(args):
         sv_id = args[0]
         sv = SegmentationObject(sv_id, obj_type="sv", version=sso.version_dict["sv"],
@@ -868,22 +990,20 @@ def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
                              n_jobs: int = 1, safe: bool = True):
     """
     Creates a new SSD specified with `new_version` and a copy of the given SSVs.
-    Usually used for generating distinct GT SSDs. Based on the common
-    super-supervoxel dataset (as specified in the `config.yml` file, default:
-     ``version=ssv_0``).
-
+    Usually used for generating distinct GT SSDs. Super-supervoxel dataset
+    is specified in the `config.yml` file, default: `version=ssv_0`.
+    
     Args:
-        ssvs: Source SuperSegmentationObjects taken from default SSD in
-            working directory.
-        new_version: Version of the new SSV SuperSegmentationDataset where
-            SSVs will be copied to.
-        target_wd: Path to working directory. If None, the one set in
-            :py:attr:`~syconn.gloabal_params` is used.
-        n_jobs: Number of jobs used.
-        safe: If True, will not overwrite existing data.
-
+        ssvs: Source SuperSegmentationObjects from default SSD in working
+            directory or a list of SSOs if specified.
+        new_version: Version of the new SSD where SSVs will be copied to.
+        target_wd: Optional target working directory. If None, uses the
+            default from :py:attr:`~syconn.global_params`.
+        n_jobs: Number of jobs to use for the copying process.
+        safe: If set to True, existing data will not be overwritten.
+    
     Returns:
-
+        None
     """
     # update existing SSV IDs  # TODO: currently this requires a new mapping dict Unclear what to
     #  do in order to enable updates on existing SSD (e.g. after adding new SSVs)
@@ -906,15 +1026,16 @@ def copy_ssvs2new_SSD_simple(ssvs: List[SuperSegmentationObject],
 
 def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
     """
-    Helper function to infer local morphology embeddings of a cell
-    reconstruction. See :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-    .predict_views_embedding` for details.
-
+    Infers local morphology embeddings of a cell reconstruction.
+    
     Args:
-        *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
-            initialize the :class:`~syconn.reps.super_segmentation_dataset
-            .SuperSegmentationDataset`, `pred_key_appendix`: addition to the default
-            key for storing the embeddings.
+        args (tuple/list): A collection of parameters where `args[0]` contains the
+            cell reconstruction IDs (`ssv_obj_ids`), `args[1:4]` are used to initialize
+            the :class:`~syconn.reps.super_segmentation_dataset
+            .SuperSegmentationDataset`, and `args[4]` (`pred_key_appendix`) is an optional 
+            addition to the default key for storing the embeddings. See
+            :func:`~syconn.reps.super_segmentation_object
+            .SuperSegmentationObject.predict_views_embedding` for more details.
     """
     ssv_obj_ids = args[0]
     nb_cpus = args[1]
@@ -937,16 +1058,18 @@ def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
 
 
 def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list], ax_pred_key: str) -> np.ndarray:
-    """Retrieves the total edge lengths of the super-supervoxels' :py:attr:`~skeleton` in nanometers. The compartments used
-    to compute the edge lengths are axon: 1, axon terminals: 3, 4,
-    dendrite: 0, soma: 2.  
-
+    """
+    Retrieves the total edge lengths of the super-supervoxels' :py:attr:`~skeleton` in
+    nanometers. The compartments used to compute the edge lengths are as follows: axon: 1,
+    axon terminals: 3, 4, dendrite: 0, soma: 2.
+    
     Args:
-        ssv ids: 
-        ax_pred_key: Key of compartment prediction stored in :attr:`~skeleton`
-
+        ssv_ids: Array or list of super-supervoxel IDs for which the edge lengths are
+                 calculated.
+        ax_pred_key: Key for compartment prediction stored in the :py:attr:`~skeleton`.
+    
     Returns:
-        Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
+        An array of the total edge lengths (L2 norm) for the specified super-supervoxels.
     """
     total_edge_lengths = []
     ssd = SuperSegmentationDataset()
@@ -963,19 +1086,21 @@ def get_total_edge_lengths(ssv_ids: Union[np.ndarray, list], ax_pred_key: str) -
 
 
 def get_path_density_seg_obj(args: Union[tuple, list]) -> np.ndarray:
-    """Retrieves the path density of sub-cellular structures of ssvs. 
-
+    """
+    Retrieves the path density of sub-cellular structures for a set of super-supervoxels.
+    
     Args:
-        *args: `obj_type`: Key to any available sub-cellular structure,\
-            args[0], `ssv_ids`: Cell reconstructin ids, args[1],\
-            `compartments_of_interest`: Which compartments to take\
-                into account for calculation, args[2]. axon: 1, \
-            dendrite: 0, soma: 2, en-passant bouton: 3, terminal bouton: 4, `ax_pred_key`: Key of compartment prediction stored in :attr:`~skeleton`, only used if
-                `compartments_of_interest` was set. .
-
+        *args: A sequence containing three elements: `obj_type`: Key to any available sub-cellular
+               structure, args[0], `ssv_ids`: Cell reconstruction ids, args[1], `compartments_of_interest`:
+               Compartment labels to calculate path densities for, args[2]. Valid compartment labels are
+               axon (1), dendrite (0), soma (2), en-passant bouton (3), terminal bouton (4). Optionally, 
+               `ax_pred_key`: Key of compartment prediction stored in :attr:`~skeleton` attribute, used if
+               `compartments_of_interest` is provided.
+           
     Returns:
-        Average volume per path length (um^3 / um) for the ssvs
-    """    
+        An array of average volume per path length (um^3/um) for the specified super-supervoxels, indicating
+        the path density of various sub-cellular structures.
+    """
     obj_type = args[0]
     ssv_ids = args[1]
     compartments_of_interest = args[2]
@@ -994,14 +1119,15 @@ def get_path_density_seg_obj(args: Union[tuple, list]) -> np.ndarray:
 
 def filter_ssd_by_total_pathlength(ssd: SuperSegmentationDataset, min_edge_length: float) -> np.ndarray:
     """
-    Filter cells concurrently.
-
+    Filters cells concurrently based on a minimum skeleton edge length.
+    
     Args:
-        ssd: Cell reconstruction dataset.
-        min_edge_length: Minim skeleton edge length in µm.
-
+        ssd: The SuperSegmentationDataset to filter.
+        min_edge_length: The minimum total path length of the skeleton in µm.
+    
     Returns:
-        Array of :class:`~SuperSegmentationObject` that have a total skeleton edge length > `min_edge_length`.
+        An array of :class:`~SuperSegmentationObject` IDs where the total
+        skeleton edge length exceeds the `min_edge_length` criterion.
     """
     # TODO: @hashirah adapt numpy cache key
     total_path_lengths = ssd.load_numpy_data('total_edge_length')
@@ -1015,6 +1141,15 @@ def filter_ssd_by_total_pathlength(ssd: SuperSegmentationDataset, min_edge_lengt
 
 
 def _filter_ssvs_by_total_pathlength(args: tuple) -> list:
+    """
+    Filters a subset of super-supervoxels based on a minimum total path length of their skeletons.
+    
+    Args:
+        args: A tuple containing super-supervoxel IDs and the minimum edge length in micrometers.
+    
+    Returns:
+        A list of super-supervoxel IDs that meet the minimum path length criterion.
+    """
     ssv_ids, min_edge_length = args
     ssv_ids_of_interest = []
     ssd = SuperSegmentationDataset()

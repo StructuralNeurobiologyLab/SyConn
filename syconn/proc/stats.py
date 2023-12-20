@@ -37,6 +37,20 @@ except ImportError:
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
                       fscore_beta=1, target_names=None, add_text=''):
+    """
+    Evaluates the performance of a model and generates a precision-recall plot. The function also logs
+    the classification report and accuracy score.
+    
+    Args:
+        proba (np.array): Model probabilities.
+        labels (np.array): True labels.
+        model_dir (str, optional): Directory to save the precision-recall plot and performance metrics.
+        prefix (str, optional): Prefix for the saved files.
+        n_labels (int, optional): Number of labels in the data. Defaults to 3.
+        fscore_beta (int, optional): Beta parameter for F-score calculation. Defaults to 1.
+        target_names (list, optional): Names of the target classes. Defaults to None.
+        add_text (str, optional): Additional text to add to the saved performance metrics file. Defaults to ''.
+    """
     header = "-------------------------------\n\t\t%s\n" % prefix
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
@@ -61,6 +75,18 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
 
 def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
                                target_names=None, labels=None):
+    """
+    Evaluates the performance of a model using only predictions and true labels. The function logs
+    the classification report and accuracy score.
+    
+    Args:
+        y_pred (np.array): Model predictions.
+        y_true (np.array): True labels.
+        model_dir (str, optional): Directory to save the performance metrics.
+        prefix (str, optional): Prefix for the saved files.
+        target_names (list, optional): Names of the target classes. Defaults to None.
+        labels (np.array, optional): Array of unique labels. Defaults to None.
+    """
     y_pred = np.array(y_pred, dtype=np.int32)
     y_true = np.array(y_true, dtype=np.int32)
     header = "----------------------------------------------------\n\t\t" \
@@ -84,6 +110,21 @@ def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
 
 def hist(vals, labels=None, dest_path=None, axis_labels=None, x_lim=None,
          y_lim=None, y_log_scale=False, ls=22, color=None, **kwargs):
+    """
+    Plots a histogram of the given values.
+    
+    Args:
+        vals (list): Values to plot.
+        labels (list, optional): Labels for the values. Defaults to None.
+        dest_path (str, optional): Path to save the plot. Defaults to None.
+        axis_labels (list, optional): Labels for the x and y axes. Defaults to None.
+        x_lim (tuple, optional): Limits for the x-axis. Defaults to None.
+        y_lim (tuple, optional): Limits for the y-axis. Defaults to None.
+        y_log_scale (bool, optional): If True, uses a log scale for the y-axis. Defaults to False.
+        ls (int, optional): Label size. Defaults to 22.
+        color (str, optional): Color for the histogram. Defaults to None.
+        **kwargs: Additional keyword arguments for seaborn's distplot function.
+    """
     sns.set_style("white")
     fig, ax = plt.subplots()
     fig.patch.set_facecolor('white')
@@ -143,8 +184,9 @@ def hist(vals, labels=None, dest_path=None, axis_labels=None, x_lim=None,
 
 
 def fscore(rec, prec, beta=1.):
-    """Calculates f-score with beta value
-
+    """
+    Calculates f-score with beta value
+    
     Args:
         rec(np.array):
             recall
@@ -152,7 +194,7 @@ def fscore(rec, prec, beta=1.):
             precision
         beta(float):
             weighting of precision
-
+    
     Returns:
         np.array:
             f-score
@@ -164,6 +206,13 @@ def fscore(rec, prec, beta=1.):
 
 
 def array2xls(dest_p, arr):
+    """
+    Writes a 2D array to an Excel file.
+    
+    Args:
+        dest_p (str): Path to the output Excel file.
+        arr (list): 2D list or array to write to the Excel file.
+    """
     import xlsxwriter
     workbook = xlsxwriter.Workbook(dest_p)
     worksheet = workbook.add_worksheet()
@@ -177,6 +226,26 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
             save_path=None, nbins=5, colorVals=None,
             xlabel='Recall', ylabel='Precision', l_pos="lower left",
             legend=True, r_x=[0.67, 1.01], ls=22, xtick_labels=()):
+    """
+    Plots the precision-recall curve.
+    
+    Args:
+        precision (list): Precision values.
+        recall (list): Recall values.
+        title (str, optional): Title for the plot. Defaults to ''.
+        r (list, optional): Range for the y-axis. Defaults to [0.67, 1.01].
+        legend_labels (list, optional): Labels for the legend. Defaults to None.
+        save_path (str, optional): Path to save the plot. Defaults to None.
+        nbins (int, optional): Number of bins for the histogram. Defaults to 5.
+        colorVals (list, optional): Colors for the plot lines. Defaults to None.
+        xlabel (str, optional): Label for the x-axis. Defaults to 'Recall'.
+        ylabel (str, optional): Label for the y-axis. Defaults to 'Precision'.
+        l_pos (str, optional): Position of the legend. Defaults to 'lower left'.
+        legend (bool, optional): If True, includes a legend. Defaults to True.
+        r_x (list, optional): Range for the x-axis. Defaults to [0.67, 1.01].
+        ls (int, optional): Label size. Defaults to 22.
+        xtick_labels (tuple, optional): Labels for the x-axis ticks. Defaults to ().
+    """
     fig, ax = plt.subplots()
     fig.patch.set_facecolor('white')
     ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
@@ -246,15 +315,23 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
 def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=None,
                     return_valid_pred=False):
     """
-    Create clustering summary and save results to folder.
-
+    This function creates a clustering summary and saves the results to a specified folder. The 
+    function performs classification using kNN and RFC on the PCA latent space. It also generates 
+    precision-recall curves and density plots in the PCA latent space.
+    
     Args:
-        train_d :
-        train_l :
-        valid_d :
-        valid_l :
-        fold(str):
-            destination folder
+        train_d (np.array): Training data in feature space.
+        train_l (np.array): Sparse labels for the training data.
+        valid_d (np.array): Validation data in feature space.
+        valid_l (np.array): Sparse labels for the validation data.
+        fold (str): Destination folder where the results will be saved.
+        prefix (str, optional): Prefix for the data. Default is an empty string.
+        pca (PCA, optional): Pre-fitted PCA object to use to project data of train_d. Default is None.
+        return_valid_pred (bool, optional): If True, returns the predictions for the validation data. 
+                                            Default is False.
+    
+    Returns:
+        np.array: Predictions for the validation data if return_valid_pred is True. Otherwise, None.
     """
     if prefix == "celltype":
         target_names = ["EA", "MSN", "GP", "INT"]
@@ -370,16 +447,18 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
 def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
                    target_names=None):
     """
-
+    This function performs PCA on the given dataset and generates a density plot of the first two 
+    principal components. If do_3d is True, it also generates density plots of the first and third, 
+    and second and third principal components.
+    
     Args:
-        ds_d(np.array):
-            data in feature space, e.g. (#data, #feature)
-        ds_l:
-            sparse labels, i.e. (#data, 1)
-        dest_path(str):
-            file name of plot
-        pca: PCA
-            prefitted PCA object to use to prject data of ds_d
+        ds_d (np.array): Data in feature space, e.g. (#data, #feature).
+        ds_l (np.array): Sparse labels, i.e. (#data, 1).
+        dest_path (str): File name of the plot.
+        pca (PCA, optional): Pre-fitted PCA object to use to project data of ds_d. Default is None.
+        colors (list, optional): List of colors to use for the plot. Default is None.
+        do_3d (bool, optional): If True, generates 3D plots. Default is True.
+        target_names (list, optional): List of target names. Default is None.
     """
     log_proc.info("Starting pca visualisation.")
     # pca vis
@@ -474,16 +553,25 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
 def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
                     do_3d=False, cmap_ident="prism", **tsne_kwargs):
     """
-
+    Performs t-SNE visualization on the given data and saves the resulting plot to the specified path.
+    It supports both 2D and 3D visualization. The function also handles memory errors by downsampling 
+    the data.
+    
     Args:
-        ds_d(np.array):
-            data in feature space, e.g. (#data, #feature)
-        ds_l:
-            sparse labels, i.e. (#data, 1)
-        dest_path(str):
-            file name of plot
-        pca: PCA
-            prefitted PCA object to use to prject data of ds_d
+        ds_d (np.array): Data in feature space, shape (#data, #feature).
+        ds_l (np.array): Sparse labels, shape (#data, 1).
+        dest_path (str): File path where the plot will be saved.
+        pca (PCA): Prefitted PCA object to use to project data of ds_d.
+        colors (list, optional): List of colors to use for different labels. If not provided, colors 
+        are generated.
+        target_names (list, optional): List of target names corresponding to labels. If not provided, 
+        labels are used.
+        do_3d (bool, optional): If True, performs 3D visualization. Default is False.
+        cmap_ident (str, optional): Identifier for the colormap to use. Default is 'prism'.
+        **tsne_kwargs: Arbitrary keyword arguments for the t-SNE model.
+    
+    Returns:
+        tsne (TSNE_sc): Fitted t-SNE model.
     """
     # tsne vis
     log_proc.info("Starting tSNE visualisation.")
@@ -581,20 +669,25 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
 
 class FileTimer:
     """
-    ContextDecorator for timing. Stores the results as dict in a pkl file.
-
+    This class is a context decorator for timing. It stores the results as a dictionary in a pickle file.
+    The class is used to track the execution time of several major steps of the analysis in the SyConn toolkit.
+    The results are written as a dictionary to the file '.timing.pkl' in the working directory. The timing data
+    can be accessed after the run by initializing `FileTimer` with the output file.
+    
     Examples:
-        The script SyConn/examples/start.py uses `FileTimer` to track the execution time of several
-        major steps of the analysis. The results are written as ``dict`` to the file '.timing.pkl'
-        in the working directory. The timing data can be accessed after the run to by initializing
-        `FileTimer` with the output file:
-
-            ft = FileTimer(path_to_timings_pkl)
-            # this is a dict with the step names as keys and the timings in seconds as values
-            print(ft.timings)
-
+        ft = FileTimer(path_to_timings_pkl)
+        # this is a dict with the step names as keys and the timings in seconds as values
+        print(ft.timings)
+    
+    Args:
+        working_dir (str): The working directory where the timing file is stored.
+        overwrite (bool): If True, overwrites the existing timing file. Default is False.
+        add_detail_vols (bool): If True, adds detailed volume information. Default is False.
     """
     def __init__(self, working_dir: str, overwrite: bool = False, add_detail_vols: bool = False):
+        """
+        Generated docstring
+        """
         if working_dir.endswith('.pkl'):
             fname = working_dir
             working_dir = os.path.abspath(os.path.split(working_dir)[0])
@@ -618,9 +711,11 @@ class FileTimer:
     @property
     def dataset_shape(self) -> float:
         """
-
+        Returns the shape of the dataset in giga voxels. If the dataset shape is not already 
+        calculated, it calls the `prepare_vol_info` method to calculate it.
+        
         Returns:
-            Data set size in giga voxels.
+            float: The shape of the dataset in giga voxels, equivalent to the data set size.
         """
         if self._dataset_shape is None:
             self.prepare_vol_info()
@@ -629,9 +724,11 @@ class FileTimer:
     @property
     def dataset_nvoxels(self) -> float:
         """
-
+        Returns the size of the dataset in giga voxels. If the dataset size is not 
+        already calculated, it calls the `prepare_vol_info` method to calculate it.
+        
         Returns:
-            Data set size in giga voxels.
+            float: The size of the dataset in giga voxels.
         """
         if self._dataset_nvoxels is None:
             self.prepare_vol_info()
@@ -642,9 +739,12 @@ class FileTimer:
     @property
     def dataset_mm3(self) -> float:
         """
-
+        Returns the size of the dataset in cubic millimeters. If the dataset size 
+        is not already calculated, it calls the `prepare_vol_info` method to 
+        calculate it.
+        
         Returns:
-            Data set size in cubic mm.
+            float: The size of the dataset in cubic millimeters.
         """
         if self._dataset_mm3 is None:
             self.prepare_vol_info()
@@ -653,6 +753,10 @@ class FileTimer:
         return self._dataset_mm3
 
     def _load_prev(self):
+        """
+        Loads the previous timing data from the pickle file if it exists. If the `overwrite` attribute is True,
+        it removes the existing file.
+        """
         if os.path.isfile(self.fname):
             if self.overwrite:
                 os.remove(self.fname)
@@ -663,12 +767,22 @@ class FileTimer:
                 self.timings = prev
 
     def start(self, step_name: str):
+        """
+        Starts the timer for a specific step in the analysis.
+        
+        Args:
+            step_name (str): The name of the step for which the timer is started.
+        """
         if self.step_name is not None:
             raise ValueError(f'Previous timing was not stopped.')
         self.t0 = time.perf_counter()
         self.step_name = step_name
 
     def stop(self):
+        """
+        Stops the timer for the current step in the analysis, calculates the time interval, and saves the timing
+        data to the pickle file.
+        """
         self.t1 = time.perf_counter()
         self.interval = self.t1 - self.t0
         if self.step_name is None:
@@ -680,18 +794,34 @@ class FileTimer:
         self.step_name = None
 
     def __enter__(self):
+        """
+        Defines the behavior of the class when used as a context manager. Returns the instance of the class.
+        """
         # do not start counting here to enable manual (with start and stop methods) interface and
         # context decorators. Timing difference between __enter__ and __call__ is not relevant for
         # our applications
         return self
 
     def __call__(self, step_name: str):
+        """
+        Allows the instance of the class to be called as a function. Starts the timer for a specific step.
+        
+        Args:
+            step_name (str): The name of the step for which the timer is started.
+        """
         self.start(step_name)
 
     def __exit__(self, *args):
+        """
+        Defines the behavior of the class when exiting the context. Stops the timer for the current step.
+        """
         self.stop()
 
     def prepare_vol_info(self):
+        """
+        Prepares the volume information of the dataset. It calculates the shape, number of voxels, and size in
+        cubic millimeters of the dataset.
+        """
         # get data set properties
         if self._dataset_mm3 is not None:
             return
@@ -716,6 +846,13 @@ class FileTimer:
                 self._dataset_nvoxels[k] = vol_mm3 * 1e9 / np.prod(self.kd.scale)  # in GVx -> 1e18 / 1e9 = 1e9
 
     def prepare_report(self) -> str:
+        """
+        Prepares a report of the timing data. It calculates the total time taken for the analysis and the time
+        taken for each step. The report is returned as a string.
+        
+        Returns:
+            str: The report of the timing data.
+        """
         self.prepare_vol_info()
         experiment_str = f'{self.kd.experiment_name} ({self.dataset_mm3}' \
                          f' mm^3; {self.dataset_nvoxels} GVx)'
@@ -735,6 +872,15 @@ class FileTimer:
 
     @staticmethod
     def _s2str(seconds: float) -> tuple:
+        """
+        Converts a time duration in seconds to a tuple of days, hours, minutes, and seconds.
+        
+        Args:
+            seconds (float): The time duration in seconds.
+        
+        Returns:
+            tuple: The time duration as a tuple of days, hours, minutes, and seconds.
+        """
         d, h = divmod(seconds, 3600 * 24)
         h, min = divmod(h, 3600)
         min, s = divmod(min, 60)

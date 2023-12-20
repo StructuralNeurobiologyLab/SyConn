@@ -57,22 +57,33 @@ if elektronn3_avail:
 
     class CellCloudData(Dataset):
         """
-        Loader for cell vertices.
+        This class is a loader for cell vertices. It is used to initialize the SuperSegmentationDataset which 
+        contains the ground truth. It also samples random points (with features) from the cell vertices. The 
+        features are set to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending on the vertex type. The subset of 
+        vertices is drawn randomly (uniformly).
         """
         def __init__(self, ssd_kwargs=None, npoints=20000, transform: Callable = Identity(),
                      train=True, cv_val=0, cellshape_only=False, ctx_size=20000, use_syntype=True,
                      onehot=True, batch_size=1, map_myelin: bool = False):
             """
-
+            Initializes the CellCloudData object with the given parameters.
+            
             Args:
-                ssd_kwargs : Kwargs to init the SuperSegmentationDataset which contains
-                    the GT
-                train :  True, or False (-> validation data will be used with key 'valid')
-                transform : transformations which are applied in `__getitem__`.
-                cv_val : Cross validation value.
-                ctx_size:
-                use_syntype: If True, uses different features for symmetric and asymmetric
-                    synapses,
+                ssd_kwargs (dict): Kwargs to init the SuperSegmentationDataset which 
+                    contains the ground truth.
+                npoints (int): Number of points to be sampled.
+                transform (Callable): Transformations which are applied in 
+                    `__getitem__`.
+                train (bool): If True, training data will be used with key 'train'. 
+                    If False, validation data will be used with key 'valid'.
+                cv_val (int): Cross validation value.
+                cellshape_only (bool): If True, only cell shape will be considered.
+                ctx_size (int): Context size.
+                use_syntype (bool): If True, uses different features for symmetric 
+                    and asymmetric synapses.
+                onehot (bool): If True, one-hot encoding will be used.
+                batch_size (int): Size of the batch.
+                map_myelin (bool): If True, myelin will be mapped.
             """
             if not onehot:
                 raise NotImplementedError
@@ -137,16 +148,16 @@ if elektronn3_avail:
 
         def __getitem__(self, item):
             """
-            Samples random points (with features) from the cell vertices.
-            Features are set to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending
-            on the vertex type. The subset of vertices is drawn randomly (uniformly).
-
+            Samples random points (with features) from the cell vertices. Features are set 
+            to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending on the vertex type. The 
+            subset of vertices is drawn randomly (uniformly).
+            
             Args:
-                item : If ``self.train=True``, `item` will be overwritten by
+                item (int): If ``self.train=True``, `item` will be overwritten by
                     ``np.random.randint(0, len(self.fnames))``.
-
+            
             Returns:
-                Point array (N, 3), feature array (N, ), cell label (scalar). N
+                dict: Point array (N, 3), feature array (N, ), cell label (scalar). N
                 is the number of points set during initialization.
             """
             item = np.random.randint(0, len(self.sso_ids))
@@ -159,6 +170,12 @@ if elektronn3_avail:
             return {'pts': pts, 'features': feats, 'target': lbs}
 
         def __len__(self):
+            """
+            Returns the length of the dataset.
+            
+            Returns:
+                int: Length of the dataset.
+            """
             if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
@@ -168,22 +185,24 @@ if elektronn3_avail:
 
         def load_ssv_sample(self, item: int, draw_local: bool = False, draw_local_dist: float = 1000):
             """
+            Loads a sample from the SuperSegmentationDataset.
+            
             Args:
-                item: Cell ID.
-                draw_local: Sample two similar samples from the same location.
-                draw_local_dist: Maximum distance to the location used for generation the "similar" sample.
-                    Note that the location is drawn randomly from all skeleton nodes within the traversed
-                    path (within `draw_local_dist`).
-
+                item (int): Cell ID.
+                draw_local (bool): If True, two similar samples from the same location will 
+                be sampled.
+                draw_local_dist (float): Maximum distance to the location used for generating 
+                the "similar" sample. Note that the location is drawn randomly from all 
+                skeleton nodes within the traversed path (within `draw_local_dist`).
+            
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
-
+            
             Returns:
-                if draw_local:
-                    Two tuples of points and features: [(pts0, feat0), (pts1, feat1)]
-                else:
-                    point and feature array; if batch size is 1, the first axis is removed.
+                tuple: If draw_local is True, two tuples of points and features: 
+                [(pts0, feat0), (pts1, feat1)]. Else, point and feature array; if batch size 
+                is 1, the first axis is removed.
             """
             if draw_local:
                 sso_id, (sample_feats, sample_pts) = [*pts_loader_scalar(
@@ -207,16 +226,20 @@ if elektronn3_avail:
 
     class CellCloudDataTriplet(CellCloudData):
         """
-        Loader for triplets of cell vertices
+        This class is a loader for triplets of cell vertices. It is used to load 
+        triplets of cell vertices for training purposes.
         """
 
         def __init__(self, draw_local: bool = True, draw_local_dist: float = 1000, **kwargs):
             """
-
+            Initializes the CellCloudDataTriplet object with the given parameters.
+            
             Args:
-                draw_local: Sample two similar samples from the same location. False will learn
-                    similarities of cells, not local morphology.
-                **kwargs:
+                draw_local (bool): If True, two similar samples from the same location will be 
+                    sampled. False will learn similarities of cells, not local morphology.
+                draw_local_dist (float): Maximum distance to the location used for generating 
+                    the "similar" sample.
+                **kwargs: Additional keyword arguments.
             """
             super().__init__(**kwargs)
             if self.sso_ids is None:
@@ -229,6 +252,15 @@ if elektronn3_avail:
             self.draw_local_dist = draw_local_dist
 
         def __getitem__(self, item):
+            """
+            Returns a triplet of cell vertices.
+            
+            Args:
+                item (int): Index of the item to be fetched.
+            
+            Returns:
+                tuple: A triplet of cell vertices.
+            """
             while True:
                 try:
                     item = np.random.randint(0, len(self.sso_ids))
@@ -267,14 +299,27 @@ if elektronn3_avail:
             return x0, x1, x2
 
         def __len__(self):
+            """
+            Returns the length of the dataset.
+            
+            Returns:
+                int: Length of the dataset.
+            """
             return 20000
 
 
     class CellCloudDataJ0251(CellCloudData):
         """
-        Uses the same data for train and valid set.
+        This class is a loader for cell vertices. It uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
+            """
+            Initializes the CellCloudDataJ0251 object with the given parameters.
+            
+            Args:
+                cv_val (int): Cross validation value.
+                **kwargs: Additional keyword arguments.
+            """
             ssd_kwargs = dict(working_dir='/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/')
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
@@ -306,6 +351,12 @@ if elektronn3_avail:
                 log_cnn.debug(f'{len(self.sso_ids)} SSV IDs in training set: {self.sso_ids}')
 
         def __len__(self):
+            """
+            Returns the length of the dataset.
+            
+            Returns:
+                int: Length of the dataset.
+            """
             if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
@@ -316,16 +367,23 @@ if elektronn3_avail:
 
     class CellCloudGlia(Dataset):
         """
-        Loader for cell vertices.
+        This class is a loader for cell vertices. It is used to load and prepare data for training 
+        and validation. It inherits from the Dataset class. Loader for cell vertices.
         """
 
         def __init__(self, npoints=20000, transform: Callable = Identity(),
                      train=True, batch_size=1, use_subcell=False, ctx_size=15000):
             """
-
+            Initializes the CellCloudGlia class with the given parameters.
+            
             Args:
-                train :  True, or False (-> validation data will be used with key 'valid')
-                transform : transformations which are applied in `__getitem__`.
+                npoints (int): The number of points to be sampled from the cell vertices.
+                transform (Callable): The transformations to be applied in `__getitem__`.
+                train (bool): If True, training data will be used. If False, validation data 
+                              will be used with key 'valid'.
+                batch_size (int): The size of the batch to be used for training or validation.
+                use_subcell (bool): If True, subcellular structures will be used.
+                ctx_size (int): The size of the context to be used for training or validation.
             """
             if 'wb' not in socket.gethostname():
                 wd_path = os.path.expanduser('~/mnt/wb//wholebrain/songbird/j0126/areaxfs_v6/')
@@ -376,17 +434,19 @@ if elektronn3_avail:
 
         def __getitem__(self, item):
             """
-            Samples random points (with features) from the cell vertices.
-            Features are set to ``dict(sv=0, mi=1, vc=2, syn_ssv=3)`` depending
-            on the vertex type. The subset of vertices is drawn randomly (uniformly).
-
+            Samples random points (with features) from the cell vertices. The subset 
+            of vertices is drawn randomly. Features are set to ``dict(sv=0, mi=1, 
+            vc=2, syn_ssv=3)`` depending on the vertex type.
+            
             Args:
-                item : If ``self.train=True``, `item` will be overwritten by
-                    ``np.random.randint(0, len(self.fnames))``.
-
+                item (int): If `self.train=True`, `item` will be overwritten by a 
+                random integer.
+            
             Returns:
-                Point array (N, 3), feature array (N, ), cell label (scalar). N
-                is the number of points set during initialization.
+                dict: A dictionary containing the point array, feature array, cell 
+                label, and output points. Point array (N, 3), feature array (N, ), 
+                cell label (scalar). N is the number of points set during 
+                initialization.
             """
             if np.random.randint(3) == 1:
                 # reduce context and merge glia and neuron samples
@@ -415,6 +475,13 @@ if elektronn3_avail:
             return {'pts': pts, 'features': feats, 'out_pts': out_pts, 'target': out_l}
 
         def __len__(self):
+            """
+            Returns the length of the dataset. If `self.train=True`, the length is the number of super segmentation
+            objects times 15. Otherwise, it's the maximum of the number of super segmentation objects divided by 10 and 1.
+            
+            Returns:
+                int: The length of the dataset.
+            """
             if self.train:
                 # make use of the underlying LRU cache with high epoch size,
                 # worker instances of the pytorch loader will reset after each epoch
@@ -424,15 +491,18 @@ if elektronn3_avail:
 
         def load_ssv_sample(self, item: int):
             """
+            Loads a sample from the super segmentation object.
+            
             Args:
-                item: Cell ID.
-
+                item (int): The ID of the cell.
+            
             Internal parameters:
                 * `feat_dc`: Labels for the different point types:
                   ``dict(sv=0, mi=1, vc=2, syn_ssv=3, syn_ssv_sym=3, syn_ssv_asym=4)``
-
+            
             Returns:
-                point and feature array; if batch size is 1, the first axis is removed.
+                tuple: A tuple containing the point array, feature array, output points, 
+                and output labels. If batch size is 1, the first axis is removed.
             """
             self._curr_ssv_params = self.sso_params[item]
             self._curr_ssv_label = self.label_dc[self.sso_params[item]['ssv_id']]
@@ -448,22 +518,28 @@ if elektronn3_avail:
 
 
     class CloudDataSemseg(Dataset):
+        """
+        This class is used to load and prepare data for semantic segmentation. It inherits from the Dataset class.
+        """
         def __init__(self, source_dir=None, npoints=12000, transform: Callable = Identity(),
                      train=True, batch_size=2, use_subcell=True, ctx_size=8000, mask_borders_with_id=None,
                      remap_dict: Optional[dict] = None):
             """
+            Initializes the CloudDataSemseg class with the given parameters.
+            
             Args:
-                source_dir:
-                npoints:
-                transform:
-                train:
-                batch_size:
-                use_subcell:
-                ctx_size:
-                mask_borders_with_id: Used as label for context borders (currently disabled) and more importantly
+                source_dir (str): The directory where the data is stored.
+                npoints (int): The number of points to be sampled from the cell vertices.
+                transform (Callable): The transformations to be applied in `__getitem__`.
+                train (bool): If True, training data will be used. If False, validation data will be used.
+                batch_size (int): The size of the batch to be used for training or validation.
+                use_subcell (bool): If True, subcellular structures will be used.
+                ctx_size (int): The size of the context to be used for training or validation.
+                mask_borders_with_id (int): Used as label for context borders and more importantly
                     for the ultrastructure points. Ultrastructure points will be relabeled from -1 to
                     `mask_borders_with_id` after remapping cell surface points according to `remap_dict`.
-                remap_dict: Remap cell surface points labels from key to value according to `remap_dict`.
+                remap_dict (dict): Remap cell surface points labels from key to value according to 
+                    `remap_dict`.
             """
             if source_dir is None:
                 raise ValueError('"source_dir" must be given.')
@@ -486,6 +562,15 @@ if elektronn3_avail:
             self.remap_dict = remap_dict
 
         def __getitem__(self, item):
+            """
+            Loads a sample from the dataset.
+            
+            Args:
+                item (int): The index of the sample to be loaded.
+            
+            Returns:
+                dict: A dictionary containing the point array, feature array, and target labels.
+            """
             item = np.random.randint(0, len(self.fnames))
             sample_pts, sample_feats, out_labels = self.load_sample(item)
             if self.remap_dict is not None:
@@ -500,6 +585,13 @@ if elektronn3_avail:
                     'extra': os.path.split(self.fnames[item])[1][:-4]}
 
         def __len__(self):
+            """
+            Returns the length of the dataset. If `self.train=True`, the length is the number of files times 100.
+            Otherwise, it's the number of files times 10.
+            
+            Returns:
+                int: The length of the dataset.
+            """
             if self.train:
                 return len(self.fnames) * 100
             else:
@@ -507,13 +599,14 @@ if elektronn3_avail:
 
         def load_sample(self, item):
             """
-            Deterministic data loader.
-
+            Loads a deterministic data sample.
+            
             Args:
-                item: Index in `py:attr:~fnames`.
-
+                item (int): The index of the sample in `py:attr:~fnames`.
+            
             Returns:
-                Numpy arrays of points, point features, target points and target labels.
+                tuple: A tuple containing the point array, feature array, target 
+                points and target labels.
             """
             p = self.fnames[item]
             sample_feats, sample_pts, out_labels = \
@@ -526,6 +619,9 @@ if elektronn3_avail:
 
     class MultiviewDataCached(Dataset):
         """
+        This class is used to load multiview data. It reads data from h5 files and 
+        stores them in memory for faster access. It also supports parallel reading 
+        of data to further speed up the data loading process. Previously known as 
         Multiview data loader.
         """
         def __init__(self,
@@ -536,6 +632,17 @@ if elektronn3_avail:
                     transform: Callable = Identity(),
                     num_read_limit=5 # num_times each sample point should be used before corresponding h5py file is released
                     ):
+            """
+            Initializes the MultiviewDataCached object.
+            
+            Args:
+                base_dir (str): The base directory where the data files are located.
+                train (bool): If True, the object is set to training mode. If False, it is set to validation mode.
+                inp_key (str): The key used to access the input data in the h5 files.
+                target_key (str): The key used to access the target data in the h5 files.
+                transform (Callable): A function or transform to apply to the data.
+                num_read_limit (int): The number of times each sample point should be used before the corresponding h5py file is released.
+            """
             super().__init__()
             #IMPORTANT while creating dataloader from this class, num_workers must be <=1
             cube_id = "train" if train else "valid"
@@ -569,6 +676,15 @@ if elektronn3_avail:
             self.thread_launched = False
 
         def __getitem__(self, index):
+            """
+            Returns the input and target data for a given index.
+            
+            Args:
+                index (int): The index of the data to return.
+            
+            Returns:
+                tuple: A tuple containing the input and target data.
+            """
             # index = index - self.num_samples_in_already_read_files
             index = np.random.randint(0, len(self.index_array), 1)[0]
             if self.current_count > int(0.1*len(self.index_array)) and self.thread_launched == \
@@ -606,6 +722,12 @@ if elektronn3_avail:
                 self.primary_t[self.index_array[index]], axis=0))
 
         def read(self, file_pointer):
+            """
+            Reads data from the h5 files and stores them in memory.
+            
+            Args:
+                file_pointer (int): The index of the file to read.
+            """
             self.file_inp = h5py.File(os.path.expanduser(self.fnames_inp[file_pointer]), 'r')
             self.file_target = h5py.File(os.path.expanduser(self.fnames_target[file_pointer]), 'r')
             self.secondary = self.file_inp[self.inp_key][()]/255
@@ -615,16 +737,25 @@ if elektronn3_avail:
             print(f"read h5 file {self.fnames_inp[file_pointer]} contains {self.secondary.shape[0]} samples") #, {self.secondary_t.shape[0]} labels")
 
         def __len__(self):
+            """
+            Returns the number of data points.
+            
+            Returns:
+                int: The number of data points.
+            """
             return 10000 if self.train else 1000
 
         def close_files(self):
+            """
+            Closes the currently open h5 files.
+            """
             self.file_inp.close()
             self.file_target.close()
 
 
     class MultiviewData(Dataset):
         """
-        Multiview spine data loader.
+        This class is used to load multiview spine data. It reads data from h5 files and stores them in memory.
         """
         def __init__(
                 self,
@@ -633,6 +764,16 @@ if elektronn3_avail:
                 inp_key='raw', target_key='label',
                 transform: Callable = Identity()
         ):
+            """
+            Initializes the MultiviewData object.
+            
+            Args:
+                base_dir (str): The base directory where the data files are located.
+                train (bool): If True, the object is set to training mode. If False, it is set to validation mode.
+                inp_key (str): The key used to access the input data in the h5 files.
+                target_key (str): The key used to access the target data in the h5 files.
+                transform (Callable): A function or transform to apply to the data.
+            """
             super().__init__()
             if not os.path.isdir(base_dir):
                 raise RuntimeError('Could not find specified base directory "{}".'.format(base_dir))
@@ -662,23 +803,41 @@ if elektronn3_avail:
                                                 np.unique(self.target, return_counts=True)))
 
         def __getitem__(self, index):
+            """
+            Returns the input and target data for a given index.
+            
+            Args:
+                index (int): The index of the data to return.
+            
+            Returns:
+                tuple: A tuple containing the input and target data.
+            """
             inp = self.inp[index]
             target = self.target[index]
             inp, target = self.transform(inp, target)
             return inp, target
 
         def __len__(self):
+            """
+            Returns the number of data points.
+            
+            Returns:
+                int: The number of data points.
+            """
             if not self.train:
                 return np.min([500, self.target.shape[0]])
             return np.min([2500, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
 
         def close_files(self):
+            """
+            Closes the currently open h5 files.
+            """
             self.inp_file.close()
             self.target_file.close()
 
     class AxonsViewsE3(Dataset):
         """
-        Wrapper method for AxonsViews data loader.
+        This class is a wrapper for the AxonsViews data loader, providing an interface for data loading.
         """
         def __init__(
                 self,
@@ -686,12 +845,29 @@ if elektronn3_avail:
                 transform: Callable = Identity(),
                 **kwargs
         ):
+            """
+            Initializes the AxonsViewsE3 object.
+            
+            Args:
+                train (bool): If True, the object is set to training mode. If False, it is set to validation mode.
+                transform (Callable): A function or transform to apply to the data.
+                **kwargs: Additional keyword arguments.
+            """
             super().__init__()
             self.train = train
             self.transform = transform  # TODO: add gt paths to config
             self.av = AxonViews(None, None, naive_norm=False, working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
+            """
+            Returns the input and target data for a given index.
+            
+            Args:
+                index (int): The index of the data to return.
+            
+            Returns:
+                tuple: A tuple containing the input and target data.
+            """
             inp, target = self.av.getbatch(1, source='train' if self.train else 'valid')
             inp = naive_view_normalization_new(inp)
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
@@ -699,7 +875,12 @@ if elektronn3_avail:
             return inp[0], target.squeeze().astype(np.int32)  # target should just be a scalar
 
         def __len__(self):
-            """Determines epoch size(s)"""
+            """
+            Returns the number of data points, also referred to as epoch size(s).
+            
+            Returns:
+                int: The number of data points, indicating the epoch size(s).
+            """
             if not self.train:
                 return 1000
             return 5000
@@ -707,9 +888,9 @@ if elektronn3_avail:
 
     class CelltypeViewsE3(Dataset):
         """
-        Wrapper method for CelltypeViews data loader.
-        Views need to be available. If `view_key` is specified, make sure they exist by running the appropriate
-        rendering for every SSV in the GT, e.g. ``ssv._render_rawviews(4)`` for 4 views per location.
+        This class is a wrapper for the CelltypeViews data loader. It loads views that need to be
+        available. If `view_key` is specified, ensure they exist by running the appropriate rendering
+        for every SSV in the GT, e.g. ``ssv._render_rawviews(4)`` for 4 views per location.
         """
         def __init__(
                 self,
@@ -719,6 +900,16 @@ if elektronn3_avail:
                 is_j0251=False,
                 **kwargs
         ):
+            """
+            Initializes the CelltypeViewsE3 object.
+            
+            Args:
+                train (bool): If True, the object is set to training mode. If False, it is set to validation mode.
+                transform (Callable): A function or transform to apply to the data.
+                use_syntype_scal (bool): If True, uses the synapse type scaler.
+                is_j0251 (bool): If True, uses the J0251 version of the data loader.
+                **kwargs: Additional keyword arguments.
+            """
             super().__init__()
             self.train = train
             self.use_syntype_scal = use_syntype_scal
@@ -731,6 +922,15 @@ if elektronn3_avail:
                 self.ctv = CelltypeViewsJ0251(None, None, **kwargs)
 
         def __getitem__(self, index):
+            """
+            Returns the input and target data for a given index.
+            
+            Args:
+                index (int): The index of the data to return.
+            
+            Returns:
+                dict: A dictionary containing the input and target data.
+            """
             if self.use_syntype_scal:
                 inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
                 inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
@@ -742,7 +942,12 @@ if elektronn3_avail:
                 return {'inp': inp[0], 'target': target.squeeze().astype(np.int32)}
 
         def __len__(self):
-            """Determines epoch size(s)"""
+            """
+            Returns the number of data points, also referred to as epoch size(s).
+            
+            Returns:
+                int: The number of data points, or epoch size(s).
+            """
             if not self.train:
                 if len(self.ctv.valid_d) == 0:
                     return 0
@@ -752,7 +957,7 @@ if elektronn3_avail:
     
     class GliaViewsE3(Dataset):
         """
-        Wrapper method for GliaViews data loader.
+        This class is a wrapper for the GliaViews data loader.
         """
         def __init__(
                 self,
@@ -760,6 +965,14 @@ if elektronn3_avail:
                 transform: Callable = Identity(),
                 **kwargs
         ):
+            """
+            Initializes the GliaViewsE3 object.
+            
+            Args:
+                train (bool): If True, the object is set to training mode. If False, it is set to validation mode.
+                transform (Callable): A function or transform to apply to the data.
+                **kwargs: Additional keyword arguments.
+            """
             super().__init__()
             self.train = train
             self.transform = transform  # TODO: add gt paths to config
@@ -767,6 +980,15 @@ if elektronn3_avail:
                                 av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
+            """
+            Returns the input and target data for a given index.
+            
+            Args:
+                index (int): The index of the data to return.
+            
+            Returns:
+                tuple: A tuple containing the input and target data.
+            """
             inp, target = self.gv.getbatch(1, source='train' if self.train else 'valid')
             inp = naive_view_normalization_new(inp)
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
@@ -774,7 +996,12 @@ if elektronn3_avail:
             return inp[0], target.squeeze().astype(np.int32)  # target should just be a scalar
 
         def __len__(self):
-            """Determines epoch size(s)"""
+            """
+            Returns the number of data points, effectively determining the epoch size(s).
+            
+            Returns:
+                int: The number of data points, which corresponds to the epoch size(s).
+            """
             if not self.train:
                 return 1000
             return 5000
@@ -782,7 +1009,9 @@ if elektronn3_avail:
 
     class MultiviewData_TNet_online(Dataset):
         """
-        Multiview triplet net data loader.
+        This class is a data loader for the Multiview Triplet Network. It loads the data, applies 
+        transformations, and prepares it for training or validation. It also handles caching to 
+        improve performance.
         """
 
         def __init__(
@@ -791,6 +1020,18 @@ if elektronn3_avail:
                 transform: Callable = Identity(), allow_axonview_gt=True,
                 ctv_kwargs=None,
         ):
+            """
+            Initializes the MultiviewData_TNet_online object.
+            
+            Args:
+                working_dir (str): The directory where the data is stored.
+                train (bool): If True, the data loader is in training mode. If False, it's in validation mode.
+                epoch_size (int): The number of samples per epoch.
+                allow_close_neigh (int): The number of close neighbors allowed.
+                transform (Callable): The transformation function to apply to the data.
+                allow_axonview_gt (bool): If True, allows the use of AxonView ground truth data.
+                ctv_kwargs (dict): Additional keyword arguments for the CelltypeViews object.
+            """
             if ctv_kwargs is None:
                 ctv_kwargs = {}
             super().__init__()
@@ -855,6 +1096,15 @@ if elektronn3_avail:
             self._cached_ssv_ix = None
 
         def __getitem__(self, index):
+            """
+            Retrieves a sample from the dataset at the specified index.
+            
+            Args:
+                index (int): The index of the sample to retrieve.
+            
+            Returns:
+                np.array: The sample data.
+            """
             start = time.time()
             summary = ""
             if self._cache is None or self._cache_use > self._max_cache_usages:
@@ -930,22 +1180,38 @@ if elektronn3_avail:
             return naive_view_normalization_new(np.concatenate([views_sim, view_dist]))
 
         def __len__(self):
+            """
+            Returns the length of the dataset.
+            
+            Returns:
+                int: The length of the dataset.
+            """
             if self.train:
                 return 5000
             else:
                 return 20
 
         def close_files(self):
+            """
+            Closes all open files associated with this dataset.
+            """
             return
 
 
 # -------------------------------------- ELEKTRONN2 ----------------------------
 class Data(object):
     """
-    TODO: refactor and remove dependency on this class
-    Copied from ELEKTRONN2 due ti import issues. Load and prepare data, Base-Obj
+    This class is a base object for loading and preparing data. It is copied 
+    from ELEKTRONN2 due to import issues. Note: Refactoring and removal of 
+    dependency on this class is pending.
     """
     def __init__(self, n_lab=None):
+        """
+        Initializes the Data object.
+        
+        Args:
+            n_lab (int, optional): The number of labels in the dataset.
+        """
         self._pos           = 0
         # self.train_d = None
         # self.train_l = None
@@ -978,7 +1244,9 @@ class Data(object):
         self._perm = self.rng.permutation(self._training_count)
 
     def _reseed(self):
-        """Reseeds the rng if the process ID has changed!"""
+        """
+        Reseeds the random number generator if the process ID has changed.
+        """
         current_pid = os.getpid()
         if current_pid!=self.pid:
             self.pid = current_pid
@@ -986,10 +1254,26 @@ class Data(object):
             log_cnn.debug("Reseeding RNG in Process with PID: {}".format(self.pid))
 
     def __repr__(self):
+        """
+        Returns a string representation of the Data object.
+        
+        Returns:
+            str: A string representation of the Data object.
+        """
         return "%i-class Data Set: #training examples: %i and #validation: %i" \
         %(self.n_lab, self._training_count, len(self.valid_d))
 
     def getbatch(self, batch_size, source='train'):
+        """
+        Retrieves a batch of samples from the specified source.
+        
+        Args:
+            batch_size (int): The number of samples in the batch.
+            source (str): The source of the data ('train', 'valid', or 'test').
+        
+        Returns:
+            tuple: A tuple containing the data and labels for the batch.
+        """
         if source=='train':
             if (self._pos+batch_size) < self._training_count:
                 self._pos += batch_size
@@ -1018,6 +1302,17 @@ class Data(object):
             return (data, label)
 
     def createCVSplit(self, data, label, n_folds=3, use_fold=2, shuffle=False, random_state=None):
+        """
+        Creates a cross-validation split of the data.
+        
+        Args:
+            data (np.array): The data to split.
+            label (np.array): The labels for the data.
+            n_folds (int): The number of folds for the cross-validation split.
+            use_fold (int): The fold to use for validation.
+            shuffle (bool): If True, shuffles the data before splitting.
+            random_state (int): The seed for the random number generator.
+        """
         try:  # sklearn >=0.18 API
             # (see http://scikit-learn.org/dev/whats_new.html#model-selection-enhancements-and-api-changes)
             import sklearn.model_selection
@@ -1043,6 +1338,22 @@ class MultiViewData(Data):
                  label_dict=None, view_kwargs=None, naive_norm=True,
                  load_data=True, train_fraction=None, random_seed=0,
                  splitting_dict=None):
+        """
+        Initializes the MultiViewData class which is a subclass of Data. It is used to handle
+        multi-view data for training, validation and testing.
+        
+        Args:
+            working_dir (str): The directory where the data is stored.
+            gt_type (str): The type of ground truth data.
+            nb_cpus (int, optional): The number of CPUs to use. Default is 20.
+            label_dict (dict, optional): A dictionary mapping labels to their respective data.
+            view_kwargs (dict, optional): A dictionary of arguments for the view.
+            naive_norm (bool, optional): If True, applies naive normalization to the data. Default is True.
+            load_data (bool, optional): If True, loads the data. Default is True.
+            train_fraction (float, optional): The fraction of data to be used for training.
+            random_seed (int, optional): The seed for the random number generator. Default is 0.
+            splitting_dict (dict, optional): A dictionary defining the data splitting.
+        """
         self.splitting_dict = splitting_dict
         if view_kwargs is None:
             view_kwargs = dict(raw_only=False,
@@ -1155,6 +1466,25 @@ class AxonViews(MultiViewData):
                  nb_views=2, reduce_context=0, channels_to_load=(0, 1, 2, 3),
                  reduce_context_fact=1, binary_views=False, raw_only=False,
                  nb_cpus=20, naive_norm=True, **kwargs):
+        """
+        Initializes the AxonViews class which is a subclass of MultiViewData. It is used to handle
+        axon view data for training, validation and testing.
+        
+        Args:
+            inp_node (str): The input node for the data.
+            out_node (str): The output node for the data.
+            gt_type (str, optional): The type of ground truth data. Default is "axgt".
+            working_dir (str, optional): The directory where the data is stored.
+            nb_views (int, optional): The number of views. Default is 2.
+            reduce_context (int, optional): The context to be reduced. Default is 0.
+            channels_to_load (tuple, optional): The channels to load. Default is (0, 1, 2, 3).
+            reduce_context_fact (int, optional): The factor by which to reduce the context. Default is 1.
+            binary_views (bool, optional): If True, converts the views to binary. Default is False.
+            raw_only (bool, optional): If True, only raw data is used. Default is False.
+            nb_cpus (int, optional): The number of CPUs to use. Default is 20.
+            naive_norm (bool, optional): If True, applies naive normalization to the data. Default is True.
+            kwargs (dict): Additional keyword arguments.
+        """
         if working_dir is None:
             working_dir = global_params.config.working_dir
         super(AxonViews, self).__init__(working_dir, gt_type,
@@ -1174,6 +1504,16 @@ class AxonViews(MultiViewData):
         self.example_shape = self.train_d[0].shape
 
     def getbatch(self, batch_size, source='train'):
+        """
+        Retrieves a batch of data.
+        
+        Args:
+            batch_size (int): The size of the batch to retrieve.
+            source (str, optional): The source of the data. Can be 'train', 'valid' or 'test'. Default is 'train'.
+        
+        Returns:
+            tuple: A tuple containing the data and labels for the batch.
+        """
         # TODO: keep in mind that super().get_batch does not shuffle for validation data -> btach_size for validation should be sufficiently big
         # if source == 'valid':
         #     nb = len(self.valid_l)
@@ -1196,27 +1536,42 @@ class AxonViews(MultiViewData):
 
 
 class CelltypeViews(MultiViewData):
+    """
+    This class is a subclass of MultiViewData and is used to handle data related to cell types. It 
+    includes methods for initializing the class and getting batches of data. It uses naive view 
+    normalization (i.e., `/ 255. - 0.5`).
+    """
     def __init__(self, inp_node, out_node, raw_only=False, nb_views=20, nb_views_renderinglocations=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1, n_classes=4,
                  class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1, ctgt_key="ctgt",
                  train_fraction=None, random_seed=0, view_key=None, splitting_dict=None):
         """
-        USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
-
+        Initializes the CelltypeViews class with the given parameters. It sets up the working 
+        directory, checks for the existence of the directory, sets the view key, number of views, 
+        number of CPUs, raw_only flag, reduce_context value, maximum number of cache uses, current 
+        cache uses, number of classes, class weights, view cache, label cache, syn_sign cache, 
+        sample weights, reduce_context_fact, binary_views, and example shape. It also initializes 
+        the superclass with the working directory, ctgt_key, train_fraction, naive_norm, and 
+        load_data parameters.
+        
         Args:
-            inp_node :
-            out_node :
-            raw_only :
-            nb_views (int) : 
-                Number of sampled views used for prediction of cell type
-            nb_views_renderinglocations(int) : 
-                Number of views per rendering location
-            reduce_context :
-            binary_views :
-            reduce_context_fact :
-            load_data :
-            nb_cpus :
-            view_key (str):
+            inp_node : Input node for the data.
+            out_node : Output node for the data.
+            raw_only (bool) : If True, only raw data is used.
+            nb_views (int) : Number of sampled views used for prediction of cell type.
+            nb_views_renderinglocations (int) : Number of views per rendering location.
+            reduce_context (int) : Context to be reduced.
+            binary_views (bool) : If True, views are binary.
+            reduce_context_fact (int) : Factor by which context is reduced.
+            n_classes (int) : Number of classes in the data.
+            class_weights (tuple) : Weights for each class.
+            load_data (bool) : If True, data is loaded.
+            nb_cpus (int) : Number of CPUs to be used.
+            ctgt_key (str) : Key for the ctgt data.
+            train_fraction : Fraction of data to be used for training.
+            random_seed (int) : Seed for random number generation.
+            view_key (str) : Key for the view data.
+            splitting_dict : Dictionary for splitting the data.
         """
         global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
         assert "areaxfs_v6" in global_params.config.working_dir
@@ -1276,16 +1631,16 @@ class CelltypeViews(MultiViewData):
 
     def getbatch_alternative(self, batch_size, source='train'):
         """
-        Preliminary tests showed inferior performance of models trained with sampling
-        batches with this method compared to "getbatch" below. Might be due to less
-        stochasticity (bigger cache).
-
+        This method is used to get a batch of data. Preliminary tests showed inferior performance 
+        of models trained with sampling batches with this method compared to "getbatch" below. 
+        This might be due to less stochasticity (bigger cache).
+        
         Args:
-            batch_size :
-            source :
-
+            batch_size (int) : Size of the batch to be fetched.
+            source (str) : Source of the data ('train', 'valid', or 'test').
+        
         Returns:
-
+            tuple: A tuple containing the data, labels, and syn_signs.
         """
         self._reseed()
         if source == 'valid':
@@ -1366,16 +1721,16 @@ class CelltypeViews(MultiViewData):
 
     def getbatch_alternative_noscal(self, batch_size, source='train'):
         """
-        Preliminary tests showed inferior performance of models trained with sampling
-        batches with this method compared to "getbatch" below. Might be due to less
-        stochasticity (bigger cache).
-
+        This method is used to get a batch of data without scaling. Preliminary tests showed 
+        inferior performance of models trained with sampling batches with this method compared 
+        to "getbatch" below. This might be due to less stochasticity (bigger cache).
+        
         Args:
-            batch_size :
-            source :
-
+            batch_size (int) : Size of the batch to be fetched.
+            source (str) : Source of the data ('train', 'valid', or 'test').
+        
         Returns:
-
+            tuple: A tuple containing the data and labels.
         """
         self._reseed()
         if source == 'valid':
@@ -1525,22 +1880,27 @@ class CelltypeViewsJ0251(CelltypeViews):
                  class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1,
                  random_seed=0, view_key=None, cv_val=None):
         """
-        USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
-
+        Initializes the CelltypeViewsJ0251 object. This class is a subclass of CelltypeViews and is used for handling
+        cell type views for the J0251 dataset. It sets up the working directory, view key, number of views, number of
+        CPUs, raw only flag, reduce context, max number of cache uses, number of classes, class weights, view cache,
+        label cache, syn sign cache, sample weights, reduce context factor, binary views, example shape, and cv value.
+        
         Args:
-        inp_node :
-        out_node :
-        raw_only :
-        nb_views(int): 
-            Number of sampled views used for prediction of cell type
-        nb_views_renderinglocations(int) : 
-            Number of views per rendering location
-        reduce_context :
-        binary_views :
-        reduce_context_fact :
-        load_data :
-        nb_cpus :
-        view_key(str) :
+            inp_node : Input node for the neural network.
+            out_node : Output node for the neural network.
+            raw_only (bool): If True, only raw data is used. Default is False.
+            nb_views (int): Number of sampled views used for prediction of cell type. Default is 20.
+            nb_views_renderinglocations (int): Number of views per rendering location. Default is 2.
+            reduce_context (int): The amount of context to reduce. Default is 0.
+            binary_views (bool): If True, binary views are used. Default is False.
+            reduce_context_fact (int): The factor by which to reduce context. Default is 1.
+            n_classes (int): The number of classes. Default is 4.
+            class_weights (tuple): The weights for each class. Default is (2, 2, 1, 1).
+            load_data (bool): If True, data is loaded. Default is False.
+            nb_cpus (int): The number of CPUs to use. Default is 1.
+            random_seed (int): The seed for the random number generator. Default is 0.
+            view_key (str): The key for the view. Default is None.
+            cv_val : The cross-validation value. Default is None.
         """
 
         global_params.wd = "/ssdscratch/pschuber/songbird/j0251/rag_flat_Jan2019_v3/"
@@ -1624,6 +1984,22 @@ class GliaViews(Data):
     def __init__(self, inp_node, out_node, raw_only=True, nb_views=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1,
                  naive_norm=True, av_working_dir=None):
+        """
+        Initializes the GliaViews object. This class is a subclass of Data and is used for handling glia views. It sets
+        up the number of views, raw only flag, reduce context, reduce context factor, binary views, and initializes the
+        MultiViewData and AxonViews objects.
+        
+        Args:
+            inp_node : Input node for the neural network.
+            out_node : Output node for the neural network.
+            raw_only (bool): If True, only raw data is used. Default is True.
+            nb_views (int): Number of views. Default is 2.
+            reduce_context (int): The amount of context to reduce. Default is 0.
+            binary_views (bool): If True, binary views are used. Default is False.
+            reduce_context_fact (int): The factor by which to reduce context. Default is 1.
+            naive_norm (bool): If True, naive normalization is used. Default is True.
+            av_working_dir (str): The working directory for the AxonViews object. Default is None.
+        """
         self.nb_views = nb_views
         self.raw_only = raw_only
         self.reduce_context = reduce_context
@@ -1657,6 +2033,17 @@ class GliaViews(Data):
         super(GliaViews, self).__init__()
 
     def getbatch(self, batch_size, source='train'):
+        """
+        Generates a batch of data for training, validation or testing. The function applies various transformations to
+        the data such as reducing context, binary views, and raw only. It also flips the data along the x and y axes.
+        
+        Args:
+            batch_size (int): The size of the batch to be generated.
+            source (str): The source of the data, can be 'train', 'valid', or 'test'. Default is 'train'.
+        
+        Returns:
+            tuple: A tuple containing the data and labels for the batch.
+        """
         # TODO: keep in mind that super().get_batch does not shuffle validation data ->
         #  batch_size for validation should be sufficiently big
         # if source == 'valid':
@@ -1688,6 +2075,20 @@ class GliaViews(Data):
 
 def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
                                   norm_func=None):
+    """
+    Transforms cell type data views. The function normalizes the views, reshapes the views, and fills up missing
+    samples with a random set of those.
+    
+    Args:
+        sso_views : The views of the super segmentation object.
+        labels : The labels for the data.
+        batch_size (int): The size of the batch to be generated.
+        nb_views (int): Number of views.
+        norm_func : The normalization function to be used. Default is None.
+    
+    Returns:
+        tuple: A tuple containing the transformed views and labels.
+    """
     if norm_func is None:
         norm_func = naive_view_normalization
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
@@ -1731,6 +2132,20 @@ def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
 
 
 def transform_celltype_data_views_alternative(sso_views, labels, syn_signs, batch_size, nb_views):
+    """
+    Transforms the cell type data views by sampling views from the given sso_views and labels. 
+    The function also handles cases where the number of views in a batch is zero or less than the batch size.
+    
+    Args:
+        sso_views (np.array): Array of views from super supervoxel objects.
+        labels (np.array): Array of labels corresponding to the sso_views.
+        syn_signs (np.array): Array of synaptic signs corresponding to the sso_views.
+        batch_size (int): The size of the batch to be returned.
+        nb_views (int): The number of views to be sampled for each batch.
+    
+    Returns:
+        tuple: A tuple containing the original views, new labels, and new synaptic signs.
+    """
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
     new_labels = np.zeros((batch_size, 1), dtype=np.int16)
     new_synsigns = np.zeros((batch_size, 2), dtype=np.float32)
@@ -1772,6 +2187,19 @@ def transform_celltype_data_views_alternative(sso_views, labels, syn_signs, batc
 
 def transform_celltype_data_views_alternative_noscal(sso_views, labels, batch_size,
                                                  nb_views):
+    """
+    Transforms the cell type data views without scaling. The function samples views from the given sso_views and labels. 
+    It also handles cases where the number of views in a batch is zero or less than the batch size.
+    
+    Args:
+        sso_views (np.array): Array of views from super supervoxel objects.
+        labels (np.array): Array of labels corresponding to the sso_views.
+        batch_size (int): The size of the batch to be returned.
+        nb_views (int): The number of views to be sampled for each batch.
+    
+    Returns:
+        tuple: A tuple containing the original views and new labels.
+    """
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
     new_labels = np.zeros((batch_size, 1), dtype=np.int16)
     cnt = 0
@@ -1810,6 +2238,22 @@ def transform_celltype_data_views_alternative_noscal(sso_views, labels, batch_si
 
 def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1,
                             view_key=None, norm_func=None):
+    """
+    Transforms the cell type data by sampling views from the given ssos and labels. 
+    The function also handles cases where the number of views in a batch is zero or less than the batch size.
+    
+    Args:
+        ssos (list): List of super supervoxel objects.
+        labels (np.array): Array of labels corresponding to the ssos.
+        batch_size (int): The size of the batch to be returned.
+        nb_views (int): The number of views to be sampled for each batch.
+        nb_cpus (int): The number of CPUs to be used for multiprocessing.
+        view_key (str): The key to be used to load views from the ssos.
+        norm_func (function): The function to be used for normalizing the views.
+    
+    Returns:
+        tuple: A tuple containing the original views and new labels.
+    """
     if norm_func is None:
         norm_func = naive_view_normalization
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
@@ -1855,8 +2299,18 @@ def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1,
 
 
 class TripletData_N(Data):
-    """Using neighboring location for small distance sample"""
+    """
+    A class representing a dataset for training a neural network. It
+    utilizes neighboring location for small distance sample.
+    """
     def __init__(self, input_node, target_node):
+        """
+        Initializes the TripletData_N object.
+        
+        Args:
+            input_node (str): The name of the input node in the neural network.
+            target_node (str): The name of the target node in the neural network.
+        """
         self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs3/",
                                        version=0)
         ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
@@ -1897,6 +2351,16 @@ class TripletData_N(Data):
         print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
+        """
+        Returns a batch of data for training or testing.
+        
+        Args:
+            batch_size (int): The size of the batch to be returned.
+            source (str): The source of the data ('train', 'valid', or 'test').
+        
+        Returns:
+            tuple: A tuple containing the data and the labels for the batch.
+        """
         if source != "train":
             print("Does not have valid and test datasets, returning batch " \
                   "from training pool.")
@@ -1920,10 +2384,23 @@ class TripletData_N(Data):
 
 
 class TripletData_SSV(Data):
-    """Uses orthogonal views of SSVs to generate set of three views:
-    one as reference, one as similar and one as different view."""
+    """
+    A class that represents a dataset for training a neural network. It uses orthogonal 
+    views of SSVs to generate a set of three views: one as reference, one as similar, 
+    and one as different view.
+    """
     def __init__(self, input_node, target_node, nb_cpus=1,
                  raw_only=False, downsample=1):
+        """
+        Initializes the TripletData_SSV object.
+        
+        Args:
+            input_node (str): The name of the input node in the neural network.
+            target_node (str): The name of the target node in the neural network.
+            nb_cpus (int): The number of CPUs to be used for multiprocessing.
+            raw_only (bool): If True, only raw data will be returned.
+            downsample (int): The factor by which to downsample the data.
+        """
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs3/")
@@ -1960,6 +2437,16 @@ class TripletData_SSV(Data):
         print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
+        """
+        Returns a batch of data for training or testing.
+        
+        Args:
+            batch_size (int): The size of the batch to be returned.
+            source (str): The source of the data ('train', 'valid', or 'test').
+        
+        Returns:
+            tuple: A tuple containing the data and the labels for the batch.
+        """
         while True:
             try:
                 self._reseed()
@@ -2022,9 +2509,26 @@ class TripletData_SSV(Data):
 
 
 class TripletData_SSV_nviews(Data):
-    """Uses 'nb_views', randomly sampled views as SSV representation"""
+    """
+    This class, a child of the Data class, represents Super Supervoxel (SSV) data using a 
+    specified number of 'nb_views', randomly sampled views. It loads, prepares the data for 
+    training, validation, and testing, and handles the generation of training batches.
+    """
     def __init__(self, input_node, target_node, nb_views=20, nb_cpus=1,
                  raw_only=False):
+        """
+        Initializes the TripletData_SSV_nviews object. It loads the SSV splits and ground truth 
+        dictionary, sets the number of views, CPUs, and raw_only flag. It also initializes the 
+        SegmentationDataset and SuperSegmentationDataset, sets the example shape, and prepares 
+        the data for training, validation, and testing.
+        
+        Args:
+            input_node: The input node for the data.
+            target_node: The target node for the data.
+            nb_views (int, optional): The number of views to be used. Default is 20.
+            nb_cpus (int, optional): The number of CPUs to be used. Default is 1.
+            raw_only (bool, optional): If True, only raw data is used. Default is False.
+        """
         ssv_splits = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt_splitted_ids_cleaned.pkl")
         ssv_gt_dict = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt.pkl")
         self.nb_views = nb_views
@@ -2068,6 +2572,19 @@ class TripletData_SSV_nviews(Data):
         print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
+        """
+        Generates a batch of data for training. It reseeds the random number generator, selects 
+        indices based on weights, loads the corresponding SSVs, and transforms the data into the 
+        required format. If only raw data is required, it returns the raw data only. Otherwise, 
+        it returns both the raw and the transformed data.
+        
+        Args:
+            batch_size (int): The size of the batch to be generated.
+            source (str, optional): The source of the data ('train', 'valid', or 'test'). Default is 'train'.
+        
+        Returns:
+            np.array: The batch of data.
+        """
         while True:
             try:
                 self._reseed()
@@ -2104,14 +2621,20 @@ class TripletData_SSV_nviews(Data):
 
 def transform_tripletN_data_SSV(orig_views):
     """
+    Transforms the original views into a new format. The new format has the same shape as the 
+    original views, but with 50% more views. If the number of views was initially 6, then it is 
+    assumed that 3 and 3 views are used for the similar pair and 3 random views will be added 
+    from a random different sample in this batch.
+    
     Args:
-        orig_views(np.array) : 
-        shape: (batch size, nb channels, nb views, x, y)
+        orig_views (np.array): The original views. The shape is (batch size, nb channels, 
+        nb views, x, y).
+    
     Returns:
-        np.array: 
-            same shape as orig_views, but with with 50% more views, i.e. if nb views
-            was initially 6, then it is assumend that 3 and 3 views are used for the similar pair
-            and 3 random views will be added from a random different sample in this batch
+        np.array: The transformed views with the same shape as orig_views, but with 50% more 
+        views. If the number of views was initially 6, it is assumed that 3 and 3 views are 
+        used for the similar pair and 3 random views will be added from a random different 
+        sample in this batch.
     """
     # split into view to be compared to similar view and very likely view from different SV/SSV
     bigger_dist_d = np.array(orig_views, dtype=np.float32)  # copy
@@ -2132,6 +2655,17 @@ def transform_tripletN_data_SSV(orig_views):
 
 
 def transform_tripletN_data_so(sos):
+    """
+    Transforms the given Super Objects (SOs) into a new format. The new format has three views: 
+    one original view, one similar view, and one likely different view. The views are then 
+    concatenated along the channel axis.
+    
+    Args:
+        sos (list): The list of Super Objects (SOs) to be transformed.
+    
+    Returns:
+        np.array: The transformed SOs.
+    """
     # split into view to be compared to similar view and probably different view
     orig_views = np.zeros((len(sos), 4, 2, 128, 256))
     shift_val = np.min([int(len(sos) / 3), 10])
@@ -2165,6 +2699,19 @@ def transform_tripletN_data_so(sos):
 
 
 def transform_tripletN_data(d, channels_to_load, view_striding):
+    """
+    Transforms the given data into a new format. The new format has three views: one original 
+    view, one similar view, and one likely different view. The views are then concatenated along 
+    the channel axis. The number of views and the channels to load can be specified.
+    
+    Args:
+        d (np.array): The data to be transformed.
+        channels_to_load (list): The list of channels to load.
+        view_striding (int): The stride for the views.
+    
+    Returns:
+        np.array: The transformed data.
+    """
     # split into view to be compared to similar view and probably different view
     comp_d = np.concatenate([v[0].load()[None,] for v in d])
     small_dist_d = np.concatenate([v[1].load()[None,] for v in d])
@@ -2201,6 +2748,20 @@ def transform_tripletN_data(d, channels_to_load, view_striding):
 
 
 def transform_tripletN_data_predonly(d, channels_to_load, view_striding):
+    """
+    Transforms the given data into a new format for prediction only. The new format has three 
+    views: one original view, one similar view, and one likely different view. The views are 
+    then concatenated along the channel axis. The number of views and the channels to load can 
+    be specified.
+    
+    Args:
+        d (np.array): The data to be transformed.
+        channels_to_load (list): The list of channels to load.
+        view_striding (int): The stride for the views.
+    
+    Returns:
+        np.array: The transformed data.
+    """
     # split into view to be compared to similar view and probably different view
     comp_d = np.concatenate([v[0].load()[None,] for v in d])
     small_dist_d = np.zeros(comp_d.shape, dtype=np.float32)
@@ -2237,17 +2798,14 @@ def transform_tripletN_data_predonly(d, channels_to_load, view_striding):
 
 def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     """
-    # TODO: unused.
-
+    Adds a ground truth sample to the specified set. This function is currently unused.
+    
     Args:
-        ssv_id(int) : Supersupervoxel ID
-        label(int):
-
-        gt_type(str): e.g. 'axgt'
-        set_type(str) : either one of: 'train', 'valid', 'test'
-
-    Returns:
-
+        ssv_id (int): The ID of the Super Supervoxel (SSV) to be added.
+        label (int): The label of the SSV.
+        gt_type (str): The type of ground truth (e.g., 'axgt').
+        set_type (str, optional): The type of set to which the SSV should be 
+        added ('train', 'valid', or 'test'). Default is 'train'.
     """
     # retrieve SSV from original SSD (which is used in Knossos-Plugin) and
     # copy its data to the yet empty SSV in the axgt SSD.
@@ -2272,29 +2830,33 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
                                n_closings: int = 0, n_dilations: int = 0)\
         -> Tuple[np.ndarray, np.ndarray]:
     """
-    Retrieve the type segmentation data (0: background, 1: asymmetric, 2: symmetric)
-     of a single 'syn_ssv' object.
-    Used for sparse acquisition of synapse type ground truth.
-
+    Retrieves the type segmentation data (0: background, 1: asymmetric, 2: symmetric)
+    of a single 'syn_ssv' object. This function is used for sparse acquisition of 
+    synapse type ground truth.
+    
     Args:
-        syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
-        syntype_label: If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
-            and transforms the object segmentation into the respective label
-            (1: symmetric, 2: asymmetric).
-        raw_offset: Offset used for fetching the raw data. Raw cube shape will be
-            the segmentation cube shape + 2*raw_offset
-        pad_offset: Number of voxels padded with 0-value around the synapse
-            segmentation. If `n_closings` is given, `pad_offset` will be set
-             to ``max([pad_offset, n_closings])``.
-        pad_value: Value used for padding.
-        ignore_offset: Number of voxels padded with `ignore_value` around the
-            padded synapse segmentation.
-        ignore_value: Value used for ignore-padding.
-        n_closings: Number of closings performed on the segmentation.
-        n_dilations: Number of dilations performed before closing.
-
+        syn_ssv (SegmentationObject): The synapse supervoxel object used to fetch 
+            the segmentation data.
+        syntype_label (Optional[int], optional): If None, uses ``syn_sign`` stored 
+            in ``syn_ssv.attr_dict`` and transforms the object segmentation into 
+            the respective label (1: symmetric, 2: asymmetric). Defaults to None.
+        raw_offset (Tuple[int, int, int], optional): Offset used for fetching the 
+            raw data. Raw cube shape will be the segmentation cube shape + 
+            2*raw_offset. Defaults to (50, 50, 25).
+        pad_offset (int, optional): Number of voxels padded with 0-value around 
+            the synapse segmentation. If `n_closings` is given, `pad_offset` will 
+            be set to ``max([pad_offset, n_closings])``. Defaults to 0.
+        pad_value (int, optional): Value used for padding. Defaults to 0.
+        ignore_offset (int, optional): Number of voxels padded with `ignore_value` 
+            around the padded synapse segmentation. Defaults to 0.
+        ignore_value (int, optional): Value used for ignore-padding. Defaults to -1.
+        n_closings (int, optional): Number of closings performed on the 
+            segmentation. Defaults to 0.
+        n_dilations (int, optional): Number of dilations performed before closing. 
+            Defaults to 0.
+    
     Returns:
-        Volumetric raw and segmentation data.
+        Tuple[np.ndarray, np.ndarray]: Volumetric raw and segmentation data.
     """
     pad_offset = max([pad_offset, n_closings])
     raw_offset = np.array(raw_offset) + pad_offset + ignore_offset
@@ -2331,32 +2893,31 @@ def fetch_single_synssv_typseg_enhanced(
         n_closings: int = 0, n_dilations: int = 0)\
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Retrieve the type segmentation data (0: background, 1: asymmetric, 2: symmetric)
-     of a single 'syn_ssv' object.
-    Used for sparse acquisition of synapse type ground truth.
-
+    Retrieves the type segmentation data (0: background, 1: asymmetric, 2: symmetric) of a single 
+    'syn_ssv' object. This function is used for sparse acquisition of synapse type ground truth.
+    
     Args:
-        syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
-        pre_synapse: ID of the presynaptic SSV object.
-        syntype_label: If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
-            and transforms the object segmentation into the respective label
-            (1: symmetric, 2: asymmetric).
-        raw_offset: Offset used for fetching the raw data. Raw cube shape will be
-            the segmentation cube shape + 2*raw_offset
-        pad_offset: Number of voxels padded with 0-value around the synapse
-            segmentation. If `n_closings` is given, `pad_offset` will be set
-             to ``max([pad_offset, n_closings])``.
-        pad_value: Value used for padding.
-        ignore_offset: Number of voxels padded with `ignore_value` around the
-            padded synapse segmentation.
-        ignore_value: Value used for ignore-padding.
-        n_closings: Number of closings performed on the segmentation.
-        n_dilations: Number of dilations performed before closing.
-
+        syn_ssv (SegmentationObject): The synapse supervoxel object used to fetch the segmentation data.
+        pre_synapse (int): ID of the presynaptic SSV object.
+        syntype_label (Optional[int], optional): If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
+            and transforms the object segmentation into the respective label (1: symmetric, 2: asymmetric).
+            Defaults to None.
+        raw_offset (Tuple[int, int, int], optional): Offset used for fetching the raw data. Raw cube shape 
+            will be the segmentation cube shape + 2*raw_offset. Defaults to (50, 50, 25).
+        pad_offset (int, optional): Number of voxels padded with 0-value around the synapse segmentation. 
+            If `n_closings` is given, `pad_offset` will be set to ``max([pad_offset, n_closings])``. 
+            Defaults to 0.
+        pad_value (int, optional): Value used for padding. Defaults to 0.
+        ignore_offset (int, optional): Number of voxels padded with `ignore_value` around the padded 
+            synapse segmentation. Defaults to 0.
+        ignore_value (int, optional): Value used for ignore-padding. Defaults to -1.
+        n_closings (int, optional): Number of closings performed on the segmentation. Defaults to 0.
+        n_dilations (int, optional): Number of dilations performed before closing. Defaults to 0.
+    
     Returns:
-        Volumetric raw and vector field pointing to the nearest boundary pixels
-        of the pre-synaptic cell and the mask of the entire synapse. The vector
-        field is set to 0 where no synapse is present
+        Tuple[np.ndarray, np.ndarray, np.ndarray]: Volumetric raw and vector field pointing to the nearest 
+        boundary pixels of the pre-synaptic cell and the mask of the entire synapse. The vector field is 
+        set to 0 where no synapse is present.
     """
     pad_offset = max([pad_offset, n_closings])
     raw_offset = np.array(raw_offset) + pad_offset + ignore_offset
@@ -2426,14 +2987,19 @@ def fetch_single_synssv_typseg_enhanced(
 def parse_gt_usable_synssv(mask_celltypes: bool = True,
                            synprob_thresh: float = 0.9):
     """
+    Parses ground truth usable synapse supervoxels.
+    
     Args:
-        mask_celltypes: Filter inh. and exc. cells based on celltype predictions.
-            If False, returned synapse types are -1.
-        synprob_thresh: Minimum probability of synapse objects to be not filtered.
-
+        mask_celltypes (bool, optional): If True, filters inh. and exc. cells based 
+            on celltype predictions. If False, returned synapse types are -1. 
+            Defaults to True.
+        synprob_thresh (float, optional): Minimum probability of synapse objects to 
+            be not filtered. Defaults to 0.9.
+    
     Returns:
-        Two lists. One contains the 'syn_ssv' used to fetch the raw and
-        segmentation data and the other the synapse type (1: asymmetric, 2: symmetric).
+        Tuple[List, List]: Two lists. One contains the 'syn_ssv' used to fetch the 
+        raw and segmentation data and the other the synapse type (1: asymmetric, 
+        2: symmetric).
     """
     syn_objs_total, syn_type_total = [], []
     sd_syn_ssv = SegmentationDataset('syn_ssv', working_dir=global_params.config.working_dir)
@@ -2485,4 +3051,3 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     log_cnn.info('Gathered the following synapses: {}'.format(
         np.unique(syn_type_total, return_counts=True)))
     return syn_objs_total, syn_type_total
-

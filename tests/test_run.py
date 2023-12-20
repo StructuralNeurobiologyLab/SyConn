@@ -12,8 +12,13 @@ import subprocess
 
 def example_run():
     """
-    Full test run. Executes examples/start.py. Subprocess call is required to prevent the threaded ('forked') parts
-    in the pipeline from freezing.
+    This function performs a full test run by executing the 'start.py' script from the examples 
+    directory. It uses a subprocess call to prevent the threaded ('forked') parts in the pipeline 
+    from freezing. The function creates a working directory, runs the script, and then removes 
+    the directory. It also handles the environment variable 'syconn_wd' if it exists. 
+    
+    Returns:
+        int: The return code of the subprocess if it is 0, else it returns the error.
     """
     example_cube_id = 1
     working_dir = f"~/SyConn/tests/example_cube{example_cube_id}_{os.getpid()}/"
@@ -37,6 +42,13 @@ def example_run():
 
 
 def test_example_run():
+    """
+    This function tests the 'example_run' function. It calls the 'example_run' function and raises a 
+    RuntimeError if the return value is not 0.
+    
+    Raises:
+        RuntimeError: If the return value of 'example_run' is not 0.
+    """
     ret = example_run()
     if ret != 0:
         raise RuntimeError(ret)

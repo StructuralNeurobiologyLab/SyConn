@@ -21,24 +21,19 @@ from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
     """
-    Smooth vertex labels by applying a majority vote on a
-    BFS subset of nodes for every node in the graph
-    Parameters
-
+    This function smooths vertex labels by applying a majority vote on a
+    BFS subset of nodes for every node in the graph.
+    
     Args:
-        vertices: np.array
-            N, 3
-        vertex_labels: np.array
-            N, 1
-        max_edge_length: float
-            maximum distance between vertices to consider them connected in the
-            graph
-        n_voting: int
-            Number of collected nodes during BFS used for majority vote
-
-    Returns: np.array
-        smoothed vertex labels
-
+        vertices (np.array): An array of shape N, 3 representing the vertices.
+        vertex_labels (np.array): An array of shape N, 1 representing the vertex labels.
+        max_edge_length (float): The maximum distance between vertices to consider them
+            connected in the graph. Default is 120.
+        n_voting (int): The number of collected nodes during BFS used for majority vote.
+            Default is 40.
+    
+    Returns:
+        np.array: An array representing the smoothed vertex labels.
     """
     G = create_graph_from_coords(vertices, max_dist=max_edge_length, mst=False,
                                  force_single_cc=False)
@@ -55,18 +50,19 @@ def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
-    Creates subgraph for each node consisting of nodes until maximum number of
-    nodes is reached.
-
+    This function creates a subgraph for each node consisting of nodes until the 
+    maximum number of nodes is reached.
+    
     Args:
-        g: Graph
-        max_nb: int
-        verbose: bool
-        start_nodes: iterable
-            node ID's
-
-    Returns: dict
-
+        g (Graph): The input graph.
+        max_nb (int): The maximum number of nodes.
+        verbose (bool): If True, the function will display a progress bar. 
+                        Default is False.
+        start_nodes (iterable): An iterable containing node IDs. Default is None.
+    
+    Returns:
+        dict: A dictionary where the keys are the nodes and the values are the 
+              subgraphs.
     """
     subnodes = {}
     if verbose:
@@ -93,26 +89,37 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
 
 
 def chunkify_contiguous(l, n):
-    """Yield successive n-sized chunks from l.
-     https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks"""
+    """
+    This function yields successive n-sized chunks from a list.
+    
+    Args:
+        l (list): The input list.
+        n (int): The size of the chunks.
+    
+    Yields:
+        list: The next n-sized chunk from the list.
+    
+    Reference:
+        https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks
+    """
     for i in range(0, len(l), n):
         yield l[i:i + n]
 
 
 def split_subcc_join(g: nx.Graph, subgraph_size: int, lo_first_n: int = 1) -> List[List[Any]]:
     """
-    Creates a subgraph for each node consisting of nodes until maximum number of
+    This function creates a subgraph for each node consisting of nodes until the maximum number of
     nodes is reached.
-
+    
     Args:
-        g: Supervoxel graph
-        subgraph_size: Size of subgraphs. The difference between `subgraph_size` and `lo_first_n` defines the
+        g (nx.Graph): The supervoxel graph.
+        subgraph_size (int): The size of subgraphs. The difference between `subgraph_size` and `lo_first_n` defines the
             supervoxel overlap.
-        lo_first_n: Leave out first n nodes: will collect `subgraph_size` nodes starting from center node and then
-            omit the first lo_first_n nodes, i.e. not use them as new starting nodes.
-
+        lo_first_n (int): Leave out first n nodes. Will collect `subgraph_size` nodes starting from the center node and then
+            omit the first lo_first_n nodes, i.e. not use them as new starting nodes. Default is 1.
+    
     Returns:
-
+        list: A list of lists, where each inner list represents a subgraph with context.
     """
     start_node = list(g.nodes())[0]
     for n, d in dict(g.degree).items():
@@ -153,7 +160,13 @@ def split_subcc_join(g: nx.Graph, subgraph_size: int, lo_first_n: int = 1) -> Li
 
 
 def merge_nodes(G, nodes, new_node):
-    """ FOR UNWEIGHTED, UNDIRECTED GRAPHS ONLY
+    """
+    This function merges nodes in an unweighted, undirected graph.
+    
+    Args:
+        G (Graph): The input graph.
+        nodes (list): The nodes to be merged.
+        new_node (any): The new node that will replace the merged nodes.
     """
     if G.is_directed():
         raise ValueError('Method "merge_nodes" is only valid for undirected graphs.')
@@ -172,19 +185,21 @@ def merge_nodes(G, nodes, new_node):
 
 def split_glia_graph(nx_g, thresh, clahe=False, nb_cpus=1, pred_key_appendix=""):
     """
-    Split graph into glia and non-glua CC's.
-
+    This function splits a graph into glia and non-glia connected components.
+    
     Args:
-        nx_g: nx.Graph
-        thresh: float
-        clahe: bool
-        nb_cpus: int
-        pred_key_appendix: str
-        verbose: bool
-
-    Returns: list, list
-        Neuron, glia connected components.
-
+        nx_g (nx.Graph): The input graph.
+        thresh (float): The threshold for splitting.
+        clahe (bool): If True, the function will use CLAHE (Contrast Limited 
+            Adaptive Histogram Equalization). Default is False.
+        nb_cpus (int): The number of CPUs to use. Default is 1.
+        pred_key_appendix (str): The appendix for the prediction key. Default 
+            is an empty string.
+        verbose (bool): No description provided in the new docstring.
+    
+    Returns:
+        list, list: Two lists representing the neuron and glia connected 
+            components, respectively.
     """
     glia_key = "glia_probas"
     if clahe:
@@ -197,19 +212,18 @@ def split_glia_graph(nx_g, thresh, clahe=False, nb_cpus=1, pred_key_appendix="")
 
 def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
     """
-    Split SuperSegmentationObject into glia and non glia
-    SegmentationObjects.
-
+    This function splits a SuperSegmentationObject into glia and non-glia SegmentationObjects.
+    
     Args:
-        sso: SuperSegmentationObject
-        thresh: float
-        clahe: bool
-        pred_key_appendix: str
-            Defines type of glia predictions
-
-    Returns: list, list (of SegmentationObject)
-        Neuron, glia nodes
-
+        sso (SuperSegmentationObject): The SuperSegmentationObject to be split.
+        thresh (float): The threshold for splitting.
+        clahe (bool): If True, the function will use CLAHE (Contrast Limited Adaptive 
+        Histogram Equalization). Default is False.
+        pred_key_appendix (str): The appendix for the prediction key. Default is an 
+        empty string.
+    
+    Returns:
+        list, list: Two lists representing the neuron and glia nodes, respectively.
     """
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
@@ -219,16 +233,19 @@ def split_glia(sso, thresh, clahe=False, pred_key_appendix=""):
 
 def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = False) -> dict:
     """
-    Calculate bounding box size of connected components.
-
+    This function calculates the bounding box size of connected components.
+    
     Args:
-        g: Supervoxel graph.
-        bbs: Bounding boxes (physical units).
-        is_connected_components: If graph `g` already is connected components. If False,
-            ``nx.connected_components`` is applied.
-
+        g (nx.Graph): The supervoxel graph.
+        bbs (dict): A dictionary representing the bounding boxes in physical 
+        units.
+        is_connected_components (bool): If True, the graph `g` is already 
+        connected components. If False, ``nx.connected_components`` is 
+        applied. Default is False.
+    
     Returns:
-        Look-up which stores the connected component bounding box for every single node in the input Graph `g`.
+        dict: A look-up dictionary which stores the connected component 
+        bounding box for every single node in the input Graph `g`.
     """
     if not is_connected_components:
         ccs = nx.connected_components(g)
@@ -251,6 +268,22 @@ def create_ccsize_dict(g: nx.Graph, bbs: dict, is_connected_components: bool = F
 
 def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
                       use_sv_volume=False, verbose=False):
+    """
+    Generates a dictionary of glia predictions and sizes for a list of SegmentationObjects.
+    
+    Args:
+        seg_objs (list): List of SegmentationObjects.
+        thresh (float): Threshold for glia prediction.
+        glia_key (str): Key to access glia predictions in the attribute dictionary of SegmentationObjects.
+        nb_cpus (int, optional): Number of CPUs to use for multiprocessing. Defaults to 1.
+        use_sv_volume (bool, optional): If True, use the volume of the supervoxel for size. 
+            Otherwise, use the bounding box. Defaults to False.
+        verbose (bool, optional): If True, print progress information. Defaults to False.
+    
+    Returns:
+        tuple: Two dictionaries, the first mapping SegmentationObjects to their glia predictions, 
+            and the second mapping SegmentationObjects to their sizes.
+    """
     glianess = {}
     sizes = {}
     params = [[so, glia_key, thresh, use_sv_volume] for so in seg_objs]
@@ -264,6 +297,16 @@ def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
 
 
 def glia_loader_helper(args):
+    """
+    Helper function for loading glia predictions and sizes for a single SegmentationObject.
+    
+    Args:
+        args (tuple): A tuple containing a SegmentationObject, a glia key, a threshold, 
+            and a boolean indicating whether to use supervoxel volume for size.
+    
+    Returns:
+        tuple: A tuple containing the glia prediction and size for the SegmentationObject.
+    """
     so, glia_key, thresh, use_sv_volume = args
     if glia_key not in so.attr_dict.keys():
         so.load_attr_dict()
@@ -277,18 +320,18 @@ def glia_loader_helper(args):
 
 def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
     """
-    Calculate distance weights for shortest path analysis or similar, based on
-    glia and size vertex properties and removes unsupporting glia nodes.
-
+    Removes glia nodes from a graph based on glia and size vertex properties, and calculates 
+    distance weights for shortest path analysis or similar. 
+    
     Args:
-        g: Graph
-        size_dict:
-        glia_dict:
-        return_removed_nodes: bool
-
-    Returns: list of list of nodes
-        Remaining connected components of type neuron
-
+        g (nx.Graph): Input graph.
+        size_dict (dict): Dictionary mapping nodes to their sizes.
+        glia_dict (dict): Dictionary mapping nodes to their glia predictions.
+        return_removed_nodes (bool, optional): If True, return the removed nodes. Defaults to False.
+    
+    Returns:
+        list: List of connected components of type neuron. If return_removed_nodes is True, 
+            also returns a list of removed nodes.
     """
     # set up node weights based on glia prediction and size
     # weights = {}
@@ -362,23 +405,19 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False):
 
 def glia_path_length(glia_path, glia_dict, write_paths=None):
     """
-    Get the path length of glia SV within glia_path. Assumes single connected
-    glia component within this path. Uses the mesh property of each
-    SegmentationObject to build a graph from all vertices to find shortest path
-    through (or more precise: along the surface of) glia. Edges between non-glia
-    vertices have negligible distance (0.0001) to ensure shortest path
+    Calculates the shortest path length through a glia path. This function assumes a single connected
+    glia component within the path. It uses the mesh property of each SegmentationObject to build a
+    graph from all vertices to find the shortest path through (or more precise: along the surface of)
+    glia. Edges between non-glia vertices have negligible distance (0.0001) to ensure shortest path
     along non-glia surfaces.
-
+    
     Args:
-        glia_path: list of SegmentationObjects
-        glia_dict: dict
-            Dictionary which keys the SegmentationObjects in glia_path and returns
-            their glia prediction
-        write_paths: bool
-
-    Returns: float
-        Shortest path between neuron type nodes in nm
-
+        glia_path (list): List of SegmentationObjects forming a path.
+        glia_dict (dict): Dictionary mapping SegmentationObjects to their glia predictions.
+        write_paths (bool, optional): If True, write the shortest path to a skeleton file. Defaults to None.
+    
+    Returns:
+        float: Shortest path length in nanometers.
     """
     g = nx.Graph()
     col = {}
@@ -439,25 +478,34 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
 
 
 def eucl_dist(a, b):
+    """
+    Calculates the Euclidean distance between two points.
+    
+    Args:
+        a (np.array): First point.
+        b (np.array): Second point.
+    
+    Returns:
+        float: Euclidean distance between the two points.
+    """
     return np.linalg.norm(a - b)
 
 
 def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
                    node2ccsize_dict_glia, min_cc_size_glia):
     """
-    Currently not in use, Refactoring needed
-    Find paths between neuron type SV grpah nodes which contain glia nodes.
-
+    Finds paths between neuron type nodes in a graph that contain glia nodes.
+    
     Args:
-        g: nx.Graph
-        glia_dict:
-        node2ccsize_dict:
-        min_cc_size_neuron:
-        node2ccsize_dict_glia:
-        min_cc_size_glia:
-
+        g (nx.Graph): Input graph.
+        glia_dict (dict): Dictionary mapping nodes to their glia predictions.
+        node2ccsize_dict (dict): Dictionary mapping neuron nodes to their sizes.
+        min_cc_size_neuron (int): Minimum size for a neuron connected component.
+        node2ccsize_dict_glia (dict): Dictionary mapping glia nodes to their sizes.
+        min_cc_size_glia (int): Minimum size for a glia connected component.
+    
     Returns:
-
+        list: List of paths that contain glia nodes.
     """
     end_nodes = []
     paths = nx.all_pairs_dijkstra_path(g, weight="weights")
@@ -490,17 +538,18 @@ def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
 
 def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
     """
-    Writes very simple skeleton, each node represents the center of mass of a
-    SV, and edges are created in list order.
-
+    Writes a simple skeleton to a file where each node represents the center of mass of a
+    SegmentationObject (SV), and edges are created in the order of the list.
+    
     Args:
-        so_path: list of SegmentationObject
-        dest_path: str
-        scaling: np.ndarray or tuple
-        comment: str
-
+        so_path (list): List of SegmentationObjects.
+        dest_path (str): Path to the destination file.
+        scaling (np.ndarray or tuple, optional): Scaling factor for the skeleton. If not provided, 
+            the default scaling from the global configuration is used.
+        comment (str, optional): Comment to be added to the skeleton.
+    
     Returns:
-
+        None
     """
     if scaling is None:
         scaling = np.array(global_params.config['scaling'])
@@ -527,15 +576,16 @@ def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
 
 def coordpath2anno(coords: np.ndarray, scaling: Optional[np.ndarray] = None) -> SkeletonAnnotation:
     """
-    Creates skeleton from scaled coordinates, assume coords are in order for
+    Creates a skeleton from scaled coordinates. Assumes coordinates are in order for
     edge creation.
-
+    
     Args:
-        coords: np.array
-        scaling: np.ndarray
-
-    Returns: SkeletonAnnotation
-
+        coords (np.array): Array of coordinates.
+        scaling (np.ndarray, optional): Scaling factor for the skeleton. If not 
+            provided, the default scaling from the global configuration is used.
+    
+    Returns:
+        SkeletonAnnotation: Skeleton annotation created from the coordinates.
     """
     if scaling is None:
         scaling = global_params.config['scaling']
@@ -555,19 +605,21 @@ def coordpath2anno(coords: np.ndarray, scaling: Optional[np.ndarray] = None) -> 
 def create_graph_from_coords(coords: np.ndarray, max_dist: float = 6000, force_single_cc: bool = True,
                              mst: bool = False) -> nx.Graph:
     """
-    Generate skeleton from sample locations by adding edges between points with a maximum distance and then pruning
-    the skeleton using MST. Nodes will have a 'position' attribute.
-
+    Generates a skeleton from sample locations by adding edges between points within a maximum distance 
+    and then pruning the skeleton using a minimum spanning tree (MST). Nodes will have a 'position' 
+    attribute.
+    
     Args:
-        coords: Coordinates.
-        max_dist: Add edges between two nodes that are within this distance.
-        force_single_cc: Force that the tree generated from coords is a single connected component.
-        mst: Compute the minimum spanning tree.
-
+        coords (np.ndarray): Array of coordinates.
+        max_dist (float, optional): Maximum distance between two nodes to consider them connected. 
+            Defaults to 6000.
+        force_single_cc (bool, optional): If True, forces the tree generated from coordinates to be a 
+            single connected component. Defaults to True.
+        mst (bool, optional): If True, computes the minimum spanning tree. Defaults to False.
+    
     Returns:
-        Networkx graph. Edge between nodes (coord indices) using the ordering of coords, i.e. the
-        edge (1, 2) connects coordinate coord[1] and coord[2].
-
+        nx.Graph: Networkx graph with edges between nodes (coordinate indices) using the ordering of 
+            coordinates. For example, the edge (1, 2) connects coordinate coord[1] and coord[2].
     """
     g = nx.Graph()
     if len(coords) == 1:
@@ -589,25 +641,26 @@ def create_graph_from_coords(coords: np.ndarray, max_dist: float = 6000, force_s
 def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, seed=0,
                     glia_key="glia_probas", node_size_cap=np.inf, mcmp=None, pos=None):
     """
-    Draw graph with nodes colored in red (glia) and blue) depending on their
-    class. Writes drawing to dest_path.
-
+    Draws a graph with nodes colored in red (glia) and blue depending on their class. 
+    Writes the drawing to the destination path.
+    
     Args:
-        G: nx.Graph
-        dest_path: str
-        min_sv_size: int
-        ext_glia: dict
-            keys: node in G, values: number indicating class
-        iterations:
-        seed: int
-            Default: 0; random seed for layout generation
-        glia_key: str
-        node_size_cap: int
-        mcmp: color palette
-        pos:
-
+        G (nx.Graph): Graph to be drawn.
+        dest_path (str): Path to the destination file.
+        min_sv_size (int, optional): Minimum size of the supervoxel. Defaults to 0.
+        ext_glia (dict, optional): Dictionary with node in G as keys and class number as 
+            values.
+        iterations (int, optional): Number of iterations for layout generation. Defaults to 
+            150.
+        seed (int, optional): Random seed for layout generation. Defaults to 0.
+        glia_key (str, optional): Key to access glia probabilities. Defaults to "glia_probas".
+        node_size_cap (int, optional): Maximum node size. Defaults to infinity.
+        mcmp (color palette, optional): Color palette for the graph. If not provided, a 
+            default palette is used.
+        pos (dict, optional): Positions of nodes. If not provided, a spring layout is used.
+    
     Returns:
-
+        None
     """
     import matplotlib.pyplot as plt
     import seaborn as sns
@@ -643,6 +696,18 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
 
 
 def nxGraph2kzip(g, coords, kzip_path):
+    """
+    Writes a networkx graph to a kzip file. The representative coordinate of a node is used as the 
+    corresponding node location.
+    
+    Args:
+        g (nx.Graph): Networkx graph to be written.
+        coords (np.ndarray): Array of coordinates.
+        kzip_path (str): Path to the destination kzip file.
+    
+    Returns:
+        None
+    """
     import tqdm
     scaling = global_params.config['scaling']
     coords = coords / scaling
@@ -667,13 +732,15 @@ def nxGraph2kzip(g, coords, kzip_path):
 
 def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
     """
-    Writes the SV graph stored in `ssv.edgelist_path` to a kzip file.
-    The representative coordinate of a SV is used as the corresponding node
-    location.
-
+    Writes the supervoxel (SV) graph stored in the SuperSegmentationObject to a kzip file.
+    The representative coordinate of a SV is used as the corresponding node location.
+    
     Args:
-        ssv: Cell reconstruction object.
-        kzip_path: Path to the output kzip file.
+        ssv (SuperSegmentationObject): Cell reconstruction object.
+        kzip_path (str): Path to the output kzip file.
+    
+    Returns:
+        None
     """
     sv_graph = nx.read_edgelist(ssv.edgelist_path, nodetype=int)
     coords = {ix: ssv.get_seg_obj('sv', ix).rep_coord for ix in sv_graph.nodes}
@@ -700,14 +767,15 @@ def svgraph2kzip(ssv: 'SuperSegmentationObject', kzip_path: str):
 
 def stitch_skel_nx(skel_nx: nx.Graph, n_jobs: int = 1) -> nx.Graph:
     """
-    Stitch connected components within a graph by recursively adding edges between the closest components.
-
+    Stitches connected components within a graph by recursively adding edges between the 
+    closest components.
+    
     Args:
-        skel_nx: Networkx graph. Nodes require 'position' attribute.
-        n_jobs: Number of jobs used for query of cKDTree.
-
+        skel_nx (nx.Graph): Networkx graph. Nodes require a 'position' attribute.
+        n_jobs (int, optional): Number of jobs used for query of cKDTree. Defaults to 1.
+    
     Returns:
-        Single connected component graph.
+        nx.Graph: Single connected component graph.
     """
     if skel_nx.number_of_nodes() == 0:
         return skel_nx

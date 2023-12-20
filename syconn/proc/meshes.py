@@ -69,6 +69,17 @@ __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'calc_contact_syn_me
 class MeshObject(object):
     def __init__(self, object_type, indices, vertices, normals=None,
                  color=None, bounding_box=None):
+        """
+        Initializes the MeshObject class.
+        
+        Args:
+            object_type (str): The type of the object.
+            indices (np.ndarray): The indices of the vertices.
+            vertices (np.ndarray): The vertices of the object.
+            normals (np.ndarray, optional): The normals of the vertices. Defaults to None.
+            color (np.ndarray, optional): The color of the object. Defaults to None.
+            bounding_box (tuple, optional): The bounding box of the object. Defaults to None.
+        """
         self.object_type = object_type
         if vertices.ndim == 2 and vertices.shape[1] == 3:
             self.vertices = vertices.flatten()
@@ -107,6 +118,12 @@ class MeshObject(object):
 
     @property
     def colors(self):
+        """
+        Returns the colors of the vertices. If no external color is provided, it returns an array of 0.5.
+        
+        Returns:
+            np.ndarray: The colors of the vertices.
+        """
         if self._ext_color is None:
             self._colors = np.ones(len(self.vertices) // 3 * 4) * 0.5
         elif np.isscalar(self._ext_color):
@@ -128,11 +145,23 @@ class MeshObject(object):
 
     @property
     def vert_resh(self):
+        """
+        Reshapes the vertices into a 2D array.
+        
+        Returns:
+            np.ndarray: The reshaped vertices.
+        """
         vert_resh = np.array(self.vertices).reshape(-1, 3)
         return vert_resh
 
     @property
     def normals(self):
+        """
+        Returns the normals of the vertices. If no normals are provided, it calculates the normals.
+        
+        Returns:
+            np.ndarray: The normals of the vertices.
+        """
         if self._normals is None or len(self._normals) != len(self.vertices):
             log_proc.warning("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
@@ -145,17 +174,24 @@ class MeshObject(object):
 
     @property
     def normals_resh(self):
+        """
+        Reshapes the normals into a 2D array.
+        
+        Returns:
+            np.ndarray: The reshaped normals.
+        """
         return self.normals.reshape(-1, 3)
 
     def transform_external_coords(self, coords):
         """
-
+        Transforms the given coordinates according to the center and maximum 
+        distance of the object.
+        
         Args:
-            coords: np.array
-
-        Returns: np.array
-            transformed coordinates
-
+            coords (np.ndarray): The coordinates to be transformed.
+        
+        Returns:
+            np.ndarray: The transformed coordinates.
         """
         if len(coords) == 0:
             return coords
@@ -165,6 +201,15 @@ class MeshObject(object):
         return coords
 
     def retransform_external_coords(self, coords):
+        """
+        Retransforms the given coordinates according to the center and maximum distance of the object.
+        
+        Args:
+            coords (np.ndarray): The coordinates to be retransformed.
+        
+        Returns:
+            np.ndarray: The retransformed coordinates.
+        """
         coords = np.array(coords, dtype=np.float32)
         coords *= self.max_dist
         coords += self.center
@@ -172,11 +217,17 @@ class MeshObject(object):
 
     @property
     def bounding_box(self):
+        """
+        Returns the bounding box of the object.
+        
+        Returns:
+            list: The center and maximum distance of the object.
+        """
         return [self.center, self.max_dist]
 
     def perform_pca_rotation(self):
         """
-        Rotates vertices into principal component coordinate system.
+        Rotates the vertices into the principal component coordinate system.
         """
         if self.pca is None:
             self.pca = PCA(n_components=3, whiten=False, random_state=0)
@@ -186,16 +237,12 @@ class MeshObject(object):
 
     def renormalize_vertices(self, bounding_box=None):
         """
-        Renomralize, i.e. substract mean and divide by max. extent, vertices
-        using either center and max. distance from self.vertices or given from
-        keyword argument bounding_box.
-
+        Renormalizes the vertices using either the center and maximum distance 
+        from self.vertices or given from the bounding_box.
+        
         Args:
-            bounding_box: tuple
-                center, scale (applied as follows: self.vert_resh / scale)
-
-        Returns:
-
+            bounding_box (tuple, optional): The center and scale, applied as 
+            follows: self.vert_resh / scale. Defaults to None.
         """
         if bounding_box is None:
             bounding_box = get_bounding_box(self.vertices)
@@ -209,20 +256,25 @@ class MeshObject(object):
 
     @property
     def vertices_scaled(self):
+        """
+        Returns the scaled vertices.
+        
+        Returns:
+            np.ndarray: The scaled vertices.
+        """
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
 def normalize_vertices(vertices: np.ndarray) -> np.ndarray:
     """
-    Rotate, center and normalize vertices.
-
+    Rotates, centers, and normalizes the given vertices.
+    
     Args:
-        vertices: np.array
-            [N, 1]
-
-    Returns: array
-        transformed vertices
-
+        vertices (np.ndarray): The vertices to be normalized. It should be 
+        in the shape of [N, 1].
+    
+    Returns:
+        np.ndarray: The transformed and normalized vertices.
     """
     vert_resh = vertices.reshape(len(vertices) // 3, 3)
     vert_resh = apply_pca(vert_resh)
@@ -236,19 +288,18 @@ def normalize_vertices(vertices: np.ndarray) -> np.ndarray:
 def calc_rot_matrices(coords: np.ndarray, vertices: np.ndarray, edge_length: Union[float, int],
                       nb_cpus: int = 1) -> np.ndarray:
     """
-    # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
-
-    Fits a PCA to local sub-volumes in order to rotate them according to
-    its main process (e.g. x-axis will be parallel to the long axis of a tube)
-
+    Fits a PCA to local sub-volumes in order to rotate them according to its main process 
+    (e.g. x-axis will be parallel to the long axis of a tube).
+    
     Args:
-        coords: Center coordinates [M x 3]
-        vertices: Vertices [N x 3]
-        edge_length: Spatial extent of box used to querying vertices for the PCA fit (used for the view alignment).
-        nb_cpus: Number of CPUs.
-
-    Returns: Flattened OpenGL rotation matrix (Fortran ordering).
-
+        coords (np.ndarray): Center coordinates [M x 3].
+        vertices (np.ndarray): Vertices [N x 3].
+        edge_length (Union[float, int]): Spatial extent of box used for querying vertices 
+        for the PCA fit (used for the view alignment).
+        nb_cpus (int, optional): Number of CPUs to use. Defaults to 1.
+    
+    Returns:
+        np.ndarray: Flattened OpenGL rotation matrix (Fortran ordering).
     """
     if not np.isscalar(edge_length):
         log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
@@ -268,16 +319,17 @@ def calc_rot_matrices(coords: np.ndarray, vertices: np.ndarray, edge_length: Uni
 
 def calc_rot_matrices_helper(args):
     """
-    Fits a PCA to local sub-volumes in order to rotate them according to
+    This function fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
-
+    
     Args:
-        args: np.array [M x 3], np.array [N x 3], float/int
-            coords, vertices, edge_length = spatial extent of box for querying vertices for pca fit
-
-    Returns: np.array [M x 16]
-        Fortran flattened OpenGL rotation matrix
-
+        args (np.array): A tuple containing three elements: 
+            - coords (np.array): A numpy array of shape [M x 3] representing the coordinates.
+            - vertices (np.array): A numpy array of shape [N x 3] representing the vertices.
+            - edge_length (float/int): The spatial extent of the box used for querying vertices for pca fit.
+    
+    Returns: 
+        np.array: A numpy array of shape [M x 16] representing the Fortran flattened OpenGL rotation matrix.
     """
     coords, vertices, edge_length = args
     rot_matrices = np.zeros((len(coords), 16))
@@ -292,14 +344,14 @@ def calc_rot_matrices_helper(args):
 
 def get_rotmatrix_from_points(points: np.ndarray) -> np.ndarray:
     """
-    Fits pca to input points and returns corresponding rotation matrix, usable
-    in PyOpenGL.
-
+    This function fits a PCA to the input points and returns the corresponding rotation matrix, 
+    which is usable in PyOpenGL.
+    
     Args:
-        points: Vertices/points used in PCA.
-
+        points (np.ndarray): A numpy array representing the vertices/points used in PCA.
+    
     Returns:
-        Flat (Fortrain ordering) rotation matrix as returned by PCA with 3 components [4, 4].
+        np.ndarray: A flat (Fortrain ordering) rotation matrix as returned by PCA with 3 components [4, 4].
     """
     if len(points) <= 2:
         return np.zeros(16)
@@ -314,13 +366,13 @@ def get_rotmatrix_from_points(points: np.ndarray) -> np.ndarray:
 
 def _calc_pca_components(pts: np.ndarray) -> np.ndarray:
     """
-    Retrieve Eigenvalue sorted Eigenvectors from input array.
-
+    This function retrieves Eigenvalue sorted Eigenvectors from the input array.
+    
     Args:
-        pts: Input points.
-
+        pts (np.ndarray): A numpy array representing the input points.
+    
     Returns:
-        Eigenvalue sorted Eigenvectors.
+        np.ndarray: A numpy array representing the Eigenvalue sorted Eigenvectors.
     """
     cov = np.cov(pts, rowvar=False)
     evals, evecs = np.linalg.eig(cov)
@@ -332,16 +384,19 @@ def _calc_pca_components(pts: np.ndarray) -> np.ndarray:
 def flag_empty_spaces(coords: np.ndarray, vertices: np.ndarray,
                       edge_length: Union[float, int, np.ndarray]) -> np.ndarray:
     """
-    Flag empty locations.
-
+    This function flags empty locations.
+    
     Args:
-        coords: [M x 3]
-        vertices: [N x 3]
-        edge_length: Spatial extent of bounding box to look for vertex support.
-
+        coords (np.ndarray): A numpy array of shape [M x 3] representing the 
+        coordinates.
+        vertices (np.ndarray): A numpy array of shape [N x 3] representing 
+        the vertices.
+        edge_length (Union[float, int, np.ndarray]): The spatial extent of 
+        the bounding box to look for vertex support.
+    
     Returns:
-        Bool array [M x 1]
-
+        np.ndarray: A boolean numpy array of shape [M x 1] representing the 
+        empty spaces.
     """
     if not np.isscalar(edge_length):
         log_proc.warning('"flag_empty_spaces" now takes only scalar edgelengths'
@@ -362,15 +417,16 @@ def flag_empty_spaces(coords: np.ndarray, vertices: np.ndarray,
 
 def get_bounding_box(coordinates: np.ndarray) -> Tuple[np.ndarray, float]:
     """
-    Calculates center of coordinates and its maximum distance in any spatial
+    This function calculates the center of coordinates and its maximum distance in any spatial
     dimension to the most distant point.
-
+    
     Args:
-        coordinates: Coordinates.
-
+        coordinates (np.ndarray): A numpy array representing the coordinates.
+    
     Returns:
-        Centers, maximum distance.
-
+        Tuple[np.ndarray, float]: A tuple containing two elements:
+            - Centers (np.ndarray): A numpy array representing the centers.
+            - maximum distance (float): The maximum distance in any spatial dimension to the most distant point.
     """
     if coordinates.ndim == 2 and coordinates.shape[1] == 3:
         coord_resh = coordinates
@@ -383,6 +439,17 @@ def get_bounding_box(coordinates: np.ndarray) -> Tuple[np.ndarray, float]:
 
 @jit
 def get_avg_normal(normals, indices, nbvert):
+    """
+    This function calculates the average normal for each vertex.
+    
+    Args:
+        normals (np.ndarray): A numpy array representing the normals.
+        indices (np.ndarray): A numpy array representing the indices.
+        nbvert (int): The number of vertices.
+    
+    Returns:
+        np.ndarray: A numpy array representing the average normals.
+    """
     normals_avg = np.zeros((nbvert, 3), np.float32)
     for n in range(len(indices)):
         ix = indices[n]
@@ -392,18 +459,18 @@ def get_avg_normal(normals, indices, nbvert):
 
 def unit_normal(vertices: np.ndarray, indices: np.ndarray) -> np.ndarray:
     """
-    Calculates normals per face (averaging corresponding vertex normals) and
-    expands it to (averaged) normals per vertex.
-
+    This function calculates normals per face (averaging corresponding vertex 
+    normals) and expands it to (averaged) normals per vertex.
+    
     Args:
-        vertices:
-            Flattend vertices [N x 1].
-        indices:
-            Flattend indices [M x 1].
-
+        vertices (np.ndarray): A numpy array representing the flattened vertices 
+        [N x 1].
+        indices (np.ndarray): A numpy array representing the flattened indices 
+        [M x 1].
+    
     Returns:
-        Unit face normals per vertex [N x 1].
-
+        np.ndarray: A numpy array representing the unit face normals per vertex 
+        [N x 1].
     """
     vertices = np.array(vertices, dtype=np.float32)
     nbvert = len(vertices) // 3
@@ -427,19 +494,17 @@ def unit_normal(vertices: np.ndarray, indices: np.ndarray) -> np.ndarray:
 
 def get_random_centered_coords(pts, nb, r):
     """
-
+    This function returns the coordinates of randomly located center of masses in pts.
+    
     Args:
-        pts: np.array
-            coordinates
-        nb: int
-            number of center of masses to be returned
-        r: int
-            radius of query_ball_point in order to get list of points for
-            center of mass
-
-    Returns: np.array
-        coordinates of randomly located center of masses in pts
-
+        pts (np.array): A numpy array representing the coordinates.
+        nb (int): The number of center of masses to be returned.
+        r (int): The radius of query_ball_point in order to get the list of 
+        points for the center of mass.
+    
+    Returns: 
+        np.array: A numpy array representing the coordinates of randomly 
+        located center of masses in pts.
     """
     tree = spatial.cKDTree(pts)
     rand_ixs = np.random.randint(0, len(pts), nb)
@@ -452,16 +517,17 @@ def get_random_centered_coords(pts, nb, r):
 
 def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     """
-    Combine several meshes into a single one.
-
+    This function combines several meshes into a single one. It takes in a list of indices, a list of vertices, 
+    and the number of simplices. It returns a numpy array of indices and vertices. 
+    
     Args:
-        ind_lst: list of np.array [N, 1]
-        vert_lst: list of np.array [N, 1]
-        nb_simplices: int
-            Number of simplices, e.g. for triangles nb_simplices=3
-
-    Returns: np.array, np.array
-
+        ind_lst (list): A list of numpy arrays, each of shape [N, 1], representing the indices of the meshes.
+        vert_lst (list): A list of numpy arrays, each of shape [N, 1], representing the vertices of the meshes.
+        nb_simplices (int): The number of simplices. For example, for triangles, nb_simplices=3.
+    
+    Returns:
+        tuple: A tuple containing two numpy arrays. The first array contains the indices of the merged mesh, 
+        and the second array contains the vertices of the merged mesh.
     """
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
@@ -482,20 +548,20 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
 
 def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     """
-    Combine several meshes into a single one.
-
+    This function combines several meshes, including their normals, into a single one. It takes in a list of 
+    indices, a list of vertices, a list of normals, and the number of simplices. It returns a list of numpy arrays 
+    of indices, vertices, and normals.
+    
     Args:
-        ind_lst: List[np.ndarray]
-            array shapes [M, 1]
-        vert_lst: List[np.ndarray]
-            array shapes [N, 1]
-        norm_lst: List[np.ndarray]
-            array shapes [N, 1]
-        nb_simplices: int
-            Number of simplices, e.g. for triangles nb_simplices=3
-
-    Returns: [np.array, np.array, np.array]
-
+        ind_lst (list): A list of numpy arrays, each of shape [M, 1], representing the indices of the meshes.
+        vert_lst (list): A list of numpy arrays, each of shape [N, 1], representing the vertices of the meshes.
+        norm_lst (list): A list of numpy arrays, each of shape [N, 1], representing the normals of the meshes.
+        nb_simplices (int): The number of simplices. For example, for triangles, nb_simplices=3.
+    
+    Returns:
+        list: A list containing three numpy arrays. The first array contains the indices of the merged mesh, 
+        the second array contains the vertices of the merged mesh, and the third array contains the normals of 
+        the merged mesh.
     """
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
@@ -520,6 +586,15 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
 
 
 def _mesh_loader(so):
+    """
+    This function is a helper function that loads the mesh of a given SegmentationObject.
+    
+    Args:
+        so (SegmentationObject): The SegmentationObject whose mesh is to be loaded.
+    
+    Returns:
+        Mesh: The mesh of the given SegmentationObject.
+    """
     return so.mesh
 
 
@@ -527,20 +602,25 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
                    nb_cpus: int = 1, color_vals: Optional[Iterable[float]] = None,
                    cmap: Optional[Iterable[tuple]] = None, alpha: float = 1.0, use_new_subfold: bool = True):
     """
-    Merge meshes of SegmentationObjects. This will cache :py:class:`~syconn.reps.segmentation.SegmentationObject`.
-
+    This function merges the meshes of a list of SegmentationObjects. It also caches the SegmentationObjects. 
+    It takes in a list of SegmentationObjects, the number of simplices, the number of CPUs, color values for 
+    every mesh, a matplotlib colormap, an alpha value, and a boolean indicating whether to use a new subfolder. 
+    It returns a numpy array of indices, vertices, and optionally colors.
+    
     Args:
-        sos: SegmentationObjects are used to get .mesh, N x 1
-        nb_simplices: Number of simplices, e.g. for triangles nb_simplices=3
-        nb_cpus: int
-        color_vals: Color values for every mesh, N x 4 (rgba). No normalization!
-        cmap: matplotlib colormap
-        alpha: float
-        use_new_subfold:
-
-    Returns: np.array, np.array [, np.array]
-        indices, vertices (scaled) [, colors]
-
+        sos (Iterable[SegmentationObject]): A list of SegmentationObjects whose meshes are to be merged.
+        nb_simplices (int): The number of simplices. For example, for triangles, nb_simplices=3.
+        nb_cpus (int): The number of CPUs to use for the operation.
+        color_vals (Optional[Iterable[float]]): Color values for every mesh, in the form of a list of floats 
+            representing RGBA values. No normalization is performed.
+        cmap (Optional[Iterable[tuple]]): A matplotlib colormap to use for the operation.
+        alpha (float): An alpha value to use for the operation.
+        use_new_subfold (bool): A boolean indicating whether to use a new subfolder.
+    
+    Returns:
+        tuple: A tuple containing two or three numpy arrays. The first array contains the indices of the merged 
+        mesh, the second array contains the vertices of the merged mesh, and the third array (if present) contains 
+        the colors of the merged mesh.
     """
     all_ind = np.zeros((0,), dtype=np.uint64)
     all_norm = np.zeros((0,))
@@ -596,21 +676,18 @@ def merge_someshes(sos: Iterable['segmentation.SegmentationObject'], nb_simplice
 def make_ply_string(dest_path, indices, vertices, rgba_color,
                     invert_vertex_order=False):
     """
-    Creates a ply str that can be included into a .k.zip for rendering
-    in KNOSSOS.
-    # TODO: write out normals
-
+    Creates a ply string that can be included into a .k.zip for rendering in KNOSSOS.
+    
     Args:
-        dest_path:
-        indices: np.array
-        vertices: np.array
-        rgba_color: Tuple[uint8] or np.array
-        invert_vertex_order: bool
-            Invert the vertex order.
-
-
-    Returns: str
-
+        dest_path (str): The destination path where the ply string will be saved.
+        indices (np.array): The indices of the vertices.
+        vertices (np.array): The vertices of the mesh.
+        rgba_color (Tuple[uint8] or np.array): The color of the vertices in RGBA format.
+        invert_vertex_order (bool, optional): If True, the order of the vertices is 
+        inverted. Defaults to False.
+    
+    Returns:
+        str: The ply string.
     """
     # create header
     vertices = vertices.astype(np.float32)
@@ -663,21 +740,18 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
 def make_ply_string_wocolor(dest_path, indices, vertices,
                             invert_vertex_order=False):
     """
-    Creates a ply str that can be included into a .k.zip for rendering
-    in KNOSSOS.
-    # TODO: write out normals
-
+    Creates a ply string without color that can be included into a .k.zip 
+    for rendering in KNOSSOS.
+    
     Args:
-        dest_path:
-        indices: int
-            iterable of indices
-        vertices: int
-            iterable of vertices
-        invert_vertex_order: bool
-            Invert the vertex order
-
-    Returns: str
-
+        dest_path (str): The destination path where the ply string will be saved.
+        indices (int): An iterable of indices of the vertices.
+        vertices (int): An iterable of vertices of the mesh.
+        invert_vertex_order (bool, optional): If True, the order of the 
+        vertices is inverted. Defaults to False.
+    
+    Returns:
+        str: The ply string.
     """
     # create header
     vertices = vertices.astype(np.float32)
@@ -699,23 +773,20 @@ def make_ply_string_wocolor(dest_path, indices, vertices,
 def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
                     force_overwrite=False, invert_vertex_order=False):
     """
-    Writes mesh as .ply's to k.zip file.
-
+    Writes a mesh as .ply's to a k.zip file.
+    
     Args:
-        k_path: str
-            path to zip
-        ind: np.array
-        vert: np.array
-        norm: np.array
-        color: tuple or np.array
-            rgba between 0 and 255
-        ply_fname: str
-        force_overwrite: bool
-        invert_vertex_order: bool
-            Invert the vertex order.
-
-    Returns:
-
+        k_path (str): The path to the zip file.
+        ind (np.array): The indices of the vertices.
+        vert (np.array): The vertices of the mesh.
+        norm (np.array): The normals of the vertices.
+        color (tuple or np.array): The color of the vertices in RGBA format,
+            values between 0 and 255.
+        ply_fname (str): The filename of the ply file.
+        force_overwrite (bool, optional): If True, the existing file will be
+            overwritten. Defaults to False.
+        invert_vertex_order (bool, optional): If True, the order of the vertices
+            is inverted. Defaults to False.
     """
     if not k_path.endswith('.k.zip'):
         k_path += '.k.zip'
@@ -738,24 +809,22 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
                       force_overwrite=True, verbose=True,
                       invert_vertex_order=False):
     """
-    Writes meshes as .ply's to k.zip file.
-
+    Writes multiple meshes as .ply's to a k.zip file.
+    
     Args:
-        k_path: str
-            path to zip
-        inds: list of np.array
-        verts: list of np.array
-        norms: list of np.array
-        colors: list of tuple or np.array
-            rgba between 0 and 255
-        ply_fnames: list of str
-        force_overwrite: bool
-        verbose: bool
-        invert_vertex_order: bool
-            Invert the vertex order.
-
-    Returns:
-
+        k_path (str): The path to the zip file.
+        inds (list of np.array): The list of indices of the vertices for each mesh.
+        verts (list of np.array): The list of vertices for each mesh.
+        norms (list of np.array): The list of normals for each mesh.
+        colors (list of tuple or np.array): The list of colors for each mesh in RGBA 
+            format, between 0 and 255.
+        ply_fnames (list of str): The list of filenames for the ply files.
+        force_overwrite (bool, optional): If True, the existing files will be overwritten. 
+            Defaults to True.
+        verbose (bool, optional): If True, progress information will be printed. Defaults 
+            to True.
+        invert_vertex_order (bool, optional): If True, the order of the vertices is 
+            inverted. Defaults to False.
     """
     if not k_path.endswith('.k.zip'):
         k_path += '.k.zip'
@@ -791,11 +860,31 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
 
 
 def get_bb_size(coords):
+    """
+    Calculates the size of the bounding box for a given set of coordinates.
+    
+    Args:
+        coords (np.array): The coordinates of the vertices.
+    
+    Returns:
+        float: The size of the bounding box.
+    """
     bb_min, bb_max = np.min(coords, axis=0), np.max(coords, axis=0)
     return np.linalg.norm(bb_max - bb_min, ord=2)
 
 
 def color_factory(c_values, mcmap, alpha=1.0):
+    """
+    Generates colors for a given set of values using a colormap. The alpha value for the colors can be specified.
+    
+    Args:
+        c_values (list): A list of values for which colors are to be generated.
+        mcmap (matplotlib colormap): A colormap used to generate colors.
+        alpha (float, optional): The alpha value for the colors. Defaults to 1.0.
+    
+    Returns:
+        np.array: An array of colors corresponding to the input values.
+    """
     colors = []
     for c_val in c_values:
         curr_color = list(mcmap(c_val))
@@ -806,19 +895,18 @@ def color_factory(c_values, mcmap, alpha=1.0):
 
 def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
     """
-    Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
-    on axoness prediction of SV's contained in SuperSuperVoxel ssv.
-
+    Splits a SuperSegmentationObject mesh into axon, dendrite and soma based on axoness 
+    prediction of SV's contained in SuperSuperVoxel ssv.
+    
     Args:
-        ssv: SuperSegmentationObject
-        pred_key_appendix: str
-            Specific version of axoness prediction
-
-    Returns: np.array
-        Majority label of each face / triangle in mesh indices;
-        Triangle faces are assumed. If majority class has n=1, majority label is
-        set to -1.
-
+        ssv (SuperSegmentationObject): The SuperSegmentationObject to be split.
+        pred_key_appendix (str, optional): Specific version of axoness prediction. 
+        Defaults to "".
+    
+    Returns:
+        np.array: Majority label of each face / triangle in mesh indices; Triangle faces 
+        are assumed. If majority class has n=1, majority label is set to -1. A dictionary 
+        containing the compartmentalized meshes with keys as 'axon', 'dendrite' and 'soma'.
     """
     # TODO: requires update to include the bouton labels as axon
     preds = np.array(start_multiprocess_obj("axoness_preds",
@@ -864,19 +952,16 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
 
 def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
     """
-    Based on compartmentalize_mesh but uses skeleton coordinates and axoness prediction. Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
-    on axoness prediction of SV's contained in SuperSuperVoxel ssv. Skeleton of cell needs to be loaded.
-
+    Splits a SuperSegmentationObject mesh into axon, dendrite and soma based on axoness prediction of SV's 
+    contained in SuperSuperVoxel ssv using skeleton coordinates. The skeleton of the cell needs to be loaded.
+    
     Args:
-        ssv: SuperSegmentationObject
-        pred_key_appendix: str
-            Specific version of axoness prediction
-
-    Returns: np.array
-        Majority label of each face / triangle in mesh indices;
-        triangulation is assumed. If majority class has n=1, majority label is
-        set to -1.
-
+        ssv (SuperSegmentationObject): The SuperSegmentationObject to be split.
+        pred_key_appendix (str, optional): Specific version of axoness prediction. Defaults to "".
+    
+    Returns:
+        dict: A dictionary containing the compartmentalized meshes with keys as 'axon', 'dendrite' and 'soma'.
+        If the majority class has n=1, the majority label is set to -1.
     """
     preds = ssv.skeleton["axoness_avg10000"]
     preds[preds == 3] = 1
@@ -919,13 +1004,14 @@ def mesh_creator_sso(ssv: 'super_segmentation_object.SuperSegmentationObject',
                      segobjs: Iterable[str] = ('sv', 'mi', 'sj', 'vc')):
     """
     Cache meshes of specified SegmentationObjects.
-
+    
     Args:
-        ssv: SuperSegmentationObject.
-        segobjs: Types of SegmentationObjects.
-
+        ssv (SuperSegmentationObject): The SuperSegmentationObject whose meshes are to be cached.
+        segobjs (Iterable[str], optional): Types of SegmentationObjects. Defaults to 
+        ('sv', 'mi', 'sj', 'vc').
+    
     Returns:
-
+        None
     """
     ssv.enable_locking = False
     ssv.load_attr_dict()
@@ -939,19 +1025,22 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
                 scaling: Optional[Union[tuple, list, np.ndarray]] = None,
                 meshing_props: Optional[dict] = None) -> Dict[int, List[np.ndarray]]:
     """
-    Find meshes within a segmented cube. The offset is given in voxels. Mesh vertices are scaled according to
-    ``global_params.config['scaling']``.
-
+    Find meshes within a segmented cube. The offset is given in voxels. Mesh vertices are scaled 
+    according to global_params.config['scaling'].
+    
     Args:
-        chunk: Cube which is processed.
-        offset: Offset of the cube in voxels.
-        pad: Pad chunk array with mode 'edge'.
-        ds: Downsampling array in xyz. Default: No downsampling.
-        scaling: Voxel size.
-        meshing_props: Keyword arguments used in ``zmesh.Mesher.get_mesh``.
-
+        chunk (np.ndarray): Cube which is processed.
+        offset (np.ndarray): Offset of the cube in voxels.
+        pad (int, optional): Pad chunk array with mode 'edge'. Defaults to 0.
+        ds (Optional[Union[list, tuple, np.ndarray]], optional): Downsampling array in xyz. 
+            Defaults to None.
+        scaling (Optional[Union[tuple, list, np.ndarray]], optional): Voxel size. Defaults to None.
+        meshing_props (Optional[dict], optional): Keyword arguments used in zmesh.Mesher.get_mesh. 
+            Defaults to None.
+    
     Returns:
-        The mesh of each segmentation ID in the input `chunk`. Vertices are in nm!
+        Dict[int, List[np.ndarray]]: The mesh of each segmentation ID in the input chunk. Vertices 
+        are in nm.
     """
     if scaling is None:
         scaling = np.array(global_params.config['scaling'], copy=True)
@@ -995,6 +1084,17 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray, pad: int = 0,
 
 
 def mesh_chunk(args):
+    """
+    This function generates a mesh for a given object type within a chunk of data. The mesh is created using 
+    the marching cubes algorithm and stored in a MeshStorage object. The function skips objects that are smaller 
+    than a predefined minimum size.
+    
+    Args:
+        args (tuple): A tuple containing the directory of the attribute dictionary and the object type.
+    
+    Returns:
+        None
+    """
     attr_dir, obj_type = args
     scaling = global_params.config['scaling']
     meshing_props = global_params.config['meshes']['meshing_props']
@@ -1029,20 +1129,20 @@ def mesh_chunk(args):
 def get_object_mesh(obj: 'segmentation.SegmentationObject', ds: Union[tuple, list, np.ndarray],
                     mesher_kwargs: Optional[dict] = None):
     """
-    Get object mesh from object voxels using marching cubes. Boundary artifacts
-    are minimized by using a single 3D mask array of the object.
-
+    This function generates a mesh for a given SegmentationObject using the marching cubes algorithm. 
+    Boundary artifacts are minimized by using a single 3D mask array of the object. The function returns 
+    an empty mesh if the object is smaller than a predefined minimum size. 
+    
     Notes:
         This method is not suited for large objects as it creates a single 3D binary mask of the object.
-
+    
     Args:
-        obj: SegmentationObject.
-        ds: Magnitude of downsampling for each axis.
-        mesher_kwargs: Keyword arguments parsed to 'find_meshes' method.
-
+        obj (SegmentationObject): The object for which the mesh is to be generated.
+        ds (Union[tuple, list, np.ndarray]): The magnitude of downsampling for each axis.
+        mesher_kwargs (Optional[dict]): Additional keyword arguments for the 'find_meshes' method.
+    
     Returns:
-        vertices [N, 1], indices [M, 1], normals [M, 1]
-
+        list: A list containing the indices, vertices, and normals of the generated mesh.
     """
     if mesher_kwargs is None:
         mesher_kwargs = {}
@@ -1069,17 +1169,20 @@ def mesh2obj_file(dest_path: str, mesh: List[np.ndarray],
                   center: Optional[np.ndarray] = None,
                   scale: Optional[float] = None):
     """
-    Writes mesh to .obj file.
-
+    This function writes a given mesh to a .obj file. The function allows for optional transformations 
+    such as centering and scaling of the mesh.
+    
     Args:
-        dest_path: Path to file.
-        mesh: Flat arrays of indices (triangle faces), vertices and normals.
-        color: Color as int or numpy array (rgba).
-        center: Subtracts center from original vertex locations.
-        scale: Multiplies vertex locations after centering.
-
+        dest_path (str): The path to the destination file.
+        mesh (List[np.ndarray]): A list containing the indices, vertices, and normals of the mesh.
+        color (Optional[Union[int, np.ndarray]]): The color of the mesh as an int or numpy array (rgba).
+        center (Optional[np.ndarray]): The center of the mesh. If provided, the center is subtracted 
+        from the original vertex locations.
+        scale (Optional[float]): The scale of the mesh. If provided, the vertex locations are multiplied 
+        after centering.
+    
     Returns:
-
+        None
     """
     mesh_obj = openmesh.TriMesh()
     ind, vert, norm = mesh
@@ -1112,13 +1215,13 @@ def mesh2obj_file(dest_path: str, mesh: List[np.ndarray],
 
 def mesh_area_calc(mesh):
     """
-
+    This function calculates the surface area of a given mesh.
+    
     Args:
-        mesh: meshobject
-
-    Returns: float
-        Mesh area in um^2
-
+        mesh: The mesh for which the surface area is to be calculated.
+    
+    Returns:
+        float: The surface area of the mesh in um^2.
     """
     return mesh_surface_area(mesh[1].reshape(-1, 3),
                              mesh[0].reshape(-1, 3)) / 1e6
@@ -1132,33 +1235,38 @@ def gen_mesh_voxelmask(voxel_iter: Iterator[Tuple[np.ndarray, np.ndarray]], scal
                        nb_neighbors: int = 20, std_ratio: float = 2.0) \
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
+    Generates a mesh from a voxel mask. The voxel mask is provided as an iterator over 3D cubes and their offsets.
+    The mesh is simplified and optionally split into connected components. The function also allows for statistical
+    outlier removal based on the distance between points.
+    
     Args:
-        voxel_iter: Iterator of binary voxel mask (3D cube) and cube offset (in voxels).
-        scale: Size of voxels in `mask_list` in nm (x, y, z).
-        vertex_size: In nm. Resolution used to simplify mesh.
-        boundary_struct: Connectivity of kernel used to determine boundary
-        depth: http://www.open3d.org/docs/latest/tutorial/Advanced/surface_reconstruction.html#Poi
-            sson-surface-reconstruction :
-            "An important parameter of the function is depth that defines the depth of the octree
-            used for the surface reconstruction and hence implies the resolution of the resulting
-            triangle mesh. A higher depth value means a mesh with more details."
-        compute_connected_components: Compute connected components of mesh. Return list of meshes.
-        voxel_size_simplify: Voxel size in nm when applying `simplify_vertex_clustering`. Defaults to `vertex_size`.
-        min_vert_num: Minimum number of vertices of the connected component meshes (only applied if
-            `compute_connected_components=True`).
-        overlap: Overlap between adjacent masks in `mask_list`.
-        verbose: Extra stdout output.
-        nb_neighbors: Number of neighbors used to calculate distance mean and standard deviation. See
-            http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
-        std_ratio: Standard deviation of distance between points used as threshold for filtering. See
-            http://www.open3d.org/docs/latest/tutorial/Advanced/pointcloud_outlier_removal.html#Statistical-outlier-removal
-
+        voxel_iter (Iterator[Tuple[np.ndarray, np.ndarray]]): Iterator of binary voxel mask (3D cube) and cube offset 
+            (in voxels).
+        scale (np.ndarray): Size of voxels in `mask_list` in nm (x, y, z).
+        vertex_size (float, optional): In nm. Resolution used to simplify mesh. Defaults to 10 nm.
+        boundary_struct (np.ndarray, optional): Connectivity of kernel used to determine boundary. Defaults to None.
+        depth (int, optional): Depth of the octree used for the surface reconstruction. An important parameter that 
+            defines the resolution of the resulting triangle mesh. A higher depth value means a mesh with more details. 
+            Defaults to 10.
+        compute_connected_components (bool, optional): Compute connected components of mesh. Return list of meshes. 
+            Defaults to True.
+        voxel_size_simplify (float, optional): Voxel size in nm when applying `simplify_vertex_clustering`. Defaults to 
+            `vertex_size`.
+        min_vert_num (int, optional): Minimum number of vertices of the connected component meshes (only applied if
+            `compute_connected_components=True`). Defaults to 200.
+        overlap (int, optional): Overlap between adjacent masks in `mask_list`. Defaults to 1.
+        verbose (bool, optional): Extra stdout output. Defaults to False.
+        nb_neighbors (int, optional): Number of neighbors used to calculate distance mean and standard deviation. 
+            Defaults to 20.
+        std_ratio (float, optional): Standard deviation of distance between points used as threshold for filtering. 
+            Defaults to 2.0.
+    
     Notes: Use `voxel_iter` with cubes that have 1-voxel-overlap to guarantee that segmentation instance boundaries
-        that align with the 3D  array border are identified correctly.
-
+        that align with the 3D array border are identified correctly.
+    
     Returns:
-        Flat Index/triangle, vertex and normals array of the mesh. List[ind, vert, norm] if
-        ``compute_connected_components=True``.
+        Union[List[np.ndarray], List[List[np.ndarray]]]: Flat Index/triangle, vertex and normals array of the mesh. 
+            List[ind, vert, norm] if ``compute_connected_components=True``.
     """
     if voxel_size_simplify is None:
         voxel_size_simplify = vertex_size
@@ -1244,14 +1352,16 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
                           voxel_dc: Optional[Union[VoxelStorageLazyLoading, VoxelStorageDyn]] = None,
                           **gen_kwgs) -> Union[List[np.ndarray], List[List[np.ndarray]]]:
     """
-
+    Calculates the mesh of a contact synapse segmentation object. 
+    
     Args:
-        segobj:
-        voxel_dc:
-        **gen_kwgs:
-
+        segobj ('segmentation.SegmentationObject'): The segmentation object to calculate the mesh for.
+        voxel_dc (Optional[Union[VoxelStorageLazyLoading, VoxelStorageDyn]], optional): The voxel data container. 
+            Defaults to None.
+        **gen_kwgs: Additional keyword arguments for the `gen_mesh_voxelmask` function.
+    
     Returns:
-
+        Union[List[np.ndarray], List[List[np.ndarray]]]: The mesh of the segmentation object.
     """
     assert segobj.type in ['cs', 'syn', 'syn_ssv'], 'Object type not supported'
     if segobj._voxel_list is None:
@@ -1275,6 +1385,16 @@ def calc_contact_syn_mesh(segobj: 'segmentation.SegmentationObject',
 
 def calc_cell_mesh_from_points(segobj: 'segmentation.SegmentationObject', **gen_kwgs) \
         -> Union[List[np.ndarray], List[List[np.ndarray]]]:
+    """
+    Calculates the mesh of a cell segmentation object from its points.
+    
+    Args:
+        segobj ('segmentation.SegmentationObject'): The segmentation object to calculate the mesh for.
+        **gen_kwgs: Additional keyword arguments for the `gen_mesh_voxelmask` function.
+    
+    Returns:
+        Union[List[np.ndarray], List[List[np.ndarray]]]: The mesh of the segmentation object.
+    """
     voxel_dc = VoxelStorage(segobj.voxel_path, read_only=True, disable_locking=True)
     voxel_iter = voxel_dc.iter_voxelmask_offset(segobj.id, overlap=1)
     return gen_mesh_voxelmask(voxel_iter, segobj.scaling, overlap=1, compute_connected_components=False, **gen_kwgs)

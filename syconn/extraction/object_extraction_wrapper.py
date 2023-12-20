@@ -22,21 +22,18 @@ from ..handler import basics
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
     """
-    Calculates the chunk ids that are (partly) contained it the defined volume
-
+    This function calculates the chunk ids that are (partly) contained in the defined volume.
+    It takes in a ChunkDataset, an offset of the volume to the origin, and the size of the volume.
+    It returns a list of chunk ids and a dictionary with reverse mapping.
+    
     Args:
-        cset : ChunkDataset
-        offset(np.array):
-            offset of the volume to the origin
-        size(np.array):
-            size of the volume
-
+        cset (ChunkDataset): The ChunkDataset to calculate chunk ids for.
+        offset (np.array): The offset of the volume to the origin.
+        size (np.array): The size of the volume.
+    
     Returns:
-        chunk_list(list):
-            chunk ids
-        dictionary(dict):
-            with reverse mapping
-
+        chunk_list (list): The list of chunk ids.
+        dictionary (dict): A dictionary with reverse mapping.
     """
 
     for dim in range(3):
@@ -63,31 +60,37 @@ def generate_subcell_kd_from_proba(
         cube_shape: Optional[Tuple[int]] = None,
         log: Logger = None, overwrite=False, **kwargs):
     """
-    Generates a connected components segmentation for the given the sub-cellular
-    structures (e.g. ['mi', 'sj', 'vc]) as KnossosDatasets.
-    The data format of the source data is KnossosDataset which path(s) is defined
-    in ``global_params.config['paths']`` (e.g. key ``kd_mi_path`` for mitochondria).
-    The resulting KDs will be stored at (for each ``co in subcell_names``)
-    ``"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)``.
-    See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` for details of
-    the conversion process from the initial probability map to the SV segmentation. Default:
-    thresholding and connected components, thresholds are set via the `config.yml` file, check
-    ``syconn.global_params.config['cell_objects']["probathresholds"]`` of an initialized
-    :class:`~syconn.handler.config.DynConfig` object.
-
+    This function generates a connected components segmentation for the given 
+    sub-cellular structures (e.g. ['mi', 'sj', 'vc]) as KnossosDatasets. The data 
+    format of the source data is KnossosDataset which path(s) is defined in 
+    ``global_params.config['paths']`` (e.g. key ``kd_mi_path`` for mitochondria). 
+    The resulting KDs will be stored at (for each ``co in subcell_names``) 
+    ``"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)``. 
+    See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` 
+    for details of the conversion process from the initial probability map to the 
+    SV segmentation. Default: thresholding and connected components, thresholds 
+    are set via the `config.yml` file, check 
+    ``syconn.global_params.config['cell_objects']["probathresholds"]`` of an 
+    initialized :class:`~syconn.handler.config.DynConfig` object.
+    
     Args:
-        subcell_names:
-        chunk_size:
-        transf_func_kd_overlay:
-        load_cellorganelles_from_kd_overlaycubes:
-        cube_of_interest_bb:
-        cube_shape:
-        log:
-        overwrite:
-        **kwargs:
-
+        subcell_names (List[str]): List of subcellular structures to generate 
+            segmentation for.
+        chunk_size (Optional[Union[list, tuple]]): Size of the chunks to be 
+            processed.
+        transf_func_kd_overlay (Optional[Dict[str, Callable]]): Transformation 
+            function for overlay.
+        load_cellorganelles_from_kd_overlaycubes (bool): Flag to load cell 
+            organelles from overlay cubes.
+        cube_of_interest_bb (Optional[Tuple[np.ndarray]]): Bounding box of the 
+            cube of interest.
+        cube_shape (Optional[Tuple[int]]): Shape of the cube.
+        log (Logger): Logger for logging the process.
+        overwrite (bool): Flag to overwrite existing data.
+        **kwargs: Additional keyword arguments.
+    
     Returns:
-
+        None
     """
     if chunk_size is None:
         chunk_size = [512, 512, 512]
@@ -167,71 +170,41 @@ def from_probabilities_to_kd(
         membrane_kd_path: str = None, hdf5_name_membrane: str = None,
         n_chunk_jobs: int = None):
     """
-    Method for the conversion of classified (hard labels, e.g. 0, 1, 2; see
-    `load_from_kd_overlaycubes` and `transf_func_kd_overlay` parameters)
-    or predicted (probability maps, e.g. 0 .. 1 or 0 .. 255, see `thresholds`
-    parameter).
-    Original data can be provided as ChunkDataset `cset` or via KnossosDataset(s)
-    `prob_kd_path_dict`. The ChunkDataset will be used in any case for storing
-    the intermediate extraction results (per-cube segmentation, stitched results,
-    globally unique segmentation).
-
-    Notes:
-        * KnossosDatasets given by `target_kd_paths` need to be initialized
-          prior to this function call.
-
+    Converts classified or predicted data into a ChunkDataset or KnossosDataset(s). The ChunkDataset
+    is used to store intermediate extraction results such as per-cube segmentation, stitched results,
+    and globally unique segmentation. The function requires pre-initialized KnossosDatasets given by 
+    `target_kd_paths`.
+    
     Args:
-        target_kd_paths: Paths to (already initialized) output KnossosDatasets.
-          See ``KnossosDataset.initialize_without_conf``.
-        cset: ChunkDataset which is used for the object extraction process and
-          which may additionally contain the source data. The latter can be
-          provided as KnossosDataset(s) (see `prob_kd_path_dict`).
-        filename: The base name used to store the extracted in `cset`.
-        hdf5names: Keys used to store the intermediate extraction results.
-        prob_kd_path_dict: Paths to source KnossosDatasets
-        load_from_kd_overlaycubes: Load prob/seg data from overlaycubes instead
-          of raw cubes.
-        transf_func_kd_overlay: Method which is to applied to cube data if
-          `load_from_kd_overlaycubes` is True.
-        log: TODO: pass log to all methods called
-        overlap: Defines the overlap with neighbouring chunks that is left for
-          later processing steps; if 'auto' the overlap is calculated from the
-          sigma and the stitch_overlap (here: [1., 1., 1.]).
-        sigmas: Defines the sigmas of the Gaussian filters applied to the
-          probability maps. Has to be the same length as hdf5names. If None,
-          no Gaussian filter is applied.
-        thresholds: Threshold for cutting the probability map. Has to be the
-          same length as hdf5names. If None, zeros are used instead (not recommended!)
-        debug: If True, multiprocessing steps only operate on one core using 'map'
-          which allows for better error messages.
-        swapdata: If true an x-z swap is applied to the data prior to processing.
-        offset: Offset of the processed volume.
-        size: Size of the processed volume of the dataset starting at `offset`.
-        suffix: Suffix used for the intermediate processing steps.
-        transform_func: [WIP] Segmentation method which is applied, currently
-          only func:`~syconn.extraction.object_extraction_steps.
-          _object_segmentation_thread`
-          is supported for batch jobs.
-        func_kwargs: keyword arguments for `transform_func`.
-        n_chunk_jobs: Number of jobs.
-        n_cores: Number of cores used for each job in
-          :func:`syconn.extraction.object_extraction_steps.object_segmentation`
-          if batch jobs is enabled.
-        overlap_thresh: Overlap fraction of object in different chunks to be
-          considered stitched. If zero this behavior is disabled.
-        stitch_overlap: Volume evaluated during stitching procedure.
-        membrane_filename: Experimental. One way to allow access to a membrane
-          segmentation when processing vesicle clouds. Filename of the
-          prediction in the chunkdataset. The threshold is currently set at 0.4.
-        membrane_kd_path: Experimental. One way to allow access to a membrane
-          segmentation when processing vesicle clouds. Path to the
-          knossosdataset containing a membrane segmentation. The threshold
-          is currently set at 0.4.
-        hdf5_name_membrane: Experimental. When `membrane_filename` is set this
-          key has to be given to access the data in the saved chunk.
-
+        target_kd_paths (Optional[Dict[str, str]]): Paths to pre-initialized output KnossosDatasets.
+        cset (chunky.ChunkDataset): ChunkDataset used for object extraction and may contain source data.
+        filename (str): Base name used to store the extracted in `cset`.
+        hdf5names (List[str]): Keys used to store intermediate extraction results.
+        prob_kd_path_dict (Optional[Dict[str, str]]): Paths to source KnossosDatasets.
+        load_from_kd_overlaycubes (bool): If True, load prob/seg data from overlaycubes instead of raw cubes.
+        transf_func_kd_overlay (Optional[Dict[str, Callable]]): Method applied to cube data if
+            `load_from_kd_overlaycubes` is True.
+        log (Optional[Logger]): Logger for logging events.
+        overlap (str): Defines overlap with neighbouring chunks left for later processing steps.
+        sigmas (Optional[list]): Defines sigmas of Gaussian filters applied to probability maps.
+        thresholds (Optional[list]): Threshold for cutting probability map.
+        debug (bool): If True, multiprocessing steps only operate on one core using 'map'.
+        swapdata (bool): If True, an x-z swap is applied to data prior to processing.
+        offset (Optional[np.ndarray]): Offset of processed volume.
+        size (Optional[np.ndarray]): Size of processed volume of dataset starting at `offset`.
+        suffix (str): Suffix used for intermediate processing steps.
+        transform_func (Optional[Callable]): Segmentation method applied.
+        func_kwargs (Optional[dict]): Keyword arguments for `transform_func`.
+        n_cores (Optional[int]): Number of cores used for each job.
+        overlap_thresh (Optional[int]): Overlap fraction of object in different chunks to be considered stitched.
+        stitch_overlap (Optional[int]): Volume evaluated during stitching procedure.
+        membrane_filename (str): Filename of prediction in chunkdataset for accessing membrane segmentation.
+        membrane_kd_path (str): Path to knossosdataset containing a membrane segmentation.
+        hdf5_name_membrane (str): Key to access data in saved chunk when `membrane_filename` is set.
+        n_chunk_jobs (int): Number of jobs.
+    
     Returns:
-
+        None
     """
     if log is None:
         log = log_extraction

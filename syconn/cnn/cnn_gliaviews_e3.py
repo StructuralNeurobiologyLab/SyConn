@@ -25,6 +25,12 @@ from elektronn3.training.metrics import channel_metric
 
 
 def get_model():
+    """
+    This function creates and returns a StackedConv2Scalar model with 1 input channel and 2 output channels.
+    
+    Returns:
+        model (StackedConv2Scalar): The StackedConv2Scalar model with 1 input channel and 2 output channels.
+    """
     model = StackedConv2Scalar(1, 2)
     return model
 

@@ -25,20 +25,18 @@ from scipy import spatial
 def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.SuperSegmentationObject',
                                    gt_type: str, n_voting: int = 40) -> np.ndarray:
     """
-
+    Parses skeleton node labels to a mesh by loading a skeleton from a given path and
+    transferring the labels to the mesh vertices using a KD tree and majority voting.
+    
     Args:
-        kzip_path: str
-            path to skeleton file with annotated skeleton nodes.
-        sso: SuperSegmentationObject
-            object which corresponds to skeleton in kzip.
-        gt_type: str
-        n_voting: int
-            Number of nodes collected during BFS for majority voting
-            (smoothing of vertex labels).
-
-
+        kzip_path: Path to the skeleton file with annotated skeleton nodes.
+        sso: The SuperSegmentationObject corresponding to the skeleton in the kzip file.
+        gt_type: The type of ground truth data being used.
+        n_voting: The number of nodes collected during BFS for majority voting
+                  (smoothing of vertex labels).
+    
     Returns:
-        Vertex label array.
+        A numpy array representing the vertex label array after label transfer and smoothing.
     """
     # # Load mesh
     indices, vertices, normals = sso.mesh
@@ -68,16 +66,19 @@ def parse_skelnodes_labels_to_mesh(kzip_path: str, sso: 'super_segmentation.Supe
 
 def generate_palette(nr_classes: int, return_rgba: bool = True) -> np.ndarray:
     """
-    Creates a RGB(A) palette for N classes. Background label will be highest class label + 1.
-
+    Generates a color palette for a specified number of classes, including an 
+    optional alpha channel. Background label will be highest class label + 1.
+    
     Args:
         nr_classes: int
+            The number of distinct classes to generate colors for.
         return_rgba: bool
-            If True returned array has shape (N, 4) instead of (N, 3)
-
-    Returns: np.array
-        Unique color array for N input classes
-
+            If True, the returned array includes an alpha channel (shape: N, 4);
+            otherwise, it's just RGB (shape: N, 3).
+    
+    Returns:
+        np.array
+            A numpy array containing unique colors for the specified number of classes.
     """
     classes_ids = np.arange(nr_classes)  # reserve additional class id for background
     classes_rgb = id2rgb_array_contiguous(classes_ids)  # convention: do not use 1, 1, 1; will be background value
@@ -90,14 +91,16 @@ def generate_palette(nr_classes: int, return_rgba: bool = True) -> np.ndarray:
 @jit
 def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) -> np.ndarray:
     """
-
+    Remaps RGB views to per-pixel labels based on a given color palette.
+    
     Args:
-        rgb_view: RGB views [-1, 3].
-        palette: RGB color palette. Index of rgb value is used as
-            resulting ID/label.
-
+        rgb_view: An array of RGB views with shape [-1, 3].
+        palette: An RGB color palette where the index of the RGB value is used as 
+                 the label.
+    
     Returns:
-        Views with per-pixel labels according to their RGB value.
+        An array with per-pixel labels according to their RGB value from the
+        palette. Index of rgb value is used as resulting ID/label.
     """
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
     background_label = len(palette)
@@ -118,12 +121,13 @@ def remap_rgb_labelviews(rgb_view: np.ndarray, palette: np.ndarray) -> np.ndarra
 
 def img_rand_coloring(img: np.ndarray) -> np.ndarray:
     """
-
+    Applies random coloring to an image, assigning a random color to each unique value in the image.
+    
     Args:
-        img:
-
+        img: A 2D numpy array representing the grayscale image to color.
+    
     Returns:
-
+        A colored image with random colors assigned to each unique value in the input image.
     """
     if img.ndim == 3 and img.shape[2] > 1:
         raise ValueError("Input image must not contain rgb values")
@@ -145,15 +149,14 @@ def img_rand_coloring(img: np.ndarray) -> np.ndarray:
 
 def id2rgb(vertex_id):
     """
-    Transforms ID value of single sso vertex into the unique RGD colour.
-
+    Converts a single vertex ID to a unique RGB color.
+    
     Args:
-        vertex_id: int
-            Vertex ID.
-
-    Returns: np.array
-        RGB values [1, 3].
-
+        vertex_id (int): The vertex ID to convert.
+    
+    Returns:
+        np.array: A numpy array containing the RGB values [1, 3] corresponding to
+        the vertex ID.
     """
     red = vertex_id % 256
     green = (vertex_id / 256) % 256
@@ -164,16 +167,17 @@ def id2rgb(vertex_id):
 
 def id2rgb_array(id_arr: np.ndarray):
     """
-    Transforms ID values into the array of RGBs labels based on :func:`~id2rgb`.
-    Note: Linear retrieval time. For small N preferable.
-
+    Converts an array of vertex IDs to an array of unique RGB colors.
+    
     Args:
-        id_arr:  np.array
-            ID values [N, 1].
-
-    Returns: np.array
-        Unique RGB value for every ID [N, 3].
-
+        id_arr: np.array
+            ID values [N, 1], an array of vertex IDs.
+    
+    Returns:
+        np.array
+            Unique RGB value for every ID [N, 3], corresponding to the input
+            vertex IDs. Based on :func:`~id2rgb`. Note: Linear retrieval time. For
+            small N preferable.
     """
     if np.max(id_arr) > 256 ** 3:
         raise ValueError("Overflow in vertex ID array.")
@@ -189,18 +193,17 @@ def id2rgb_array(id_arr: np.ndarray):
 
 def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     """
-    Transforms ID values into the array of RGBs labels based on the assumption
-    that `id_arr` is contiguous index array from ``0..len(id_arr)``.
+    Converts a contiguous array of vertex IDs to an array of unique RGB colors
+    based on the assumption that `id_arr` is contiguous index array from ``0..len(id_arr)``.
     Same mapping as :func:`~id2rgb_array`.
     Note: Constant retrieval time. For large N preferable.
-
+    
     Args:
         id_arr: np.array
-            ID values [N, 1].
-
-    Returns: np.array
-        Unique RGB value for every ID [N, 3].
-
+            A contiguous numpy array of vertex IDs [N, 1].
+    
+    Returns:
+        A numpy array of RGB colors corresponding to the input vertex IDs [N, 3].
     """
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
@@ -218,18 +221,17 @@ def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
 
 def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     """
-    Transforms ID values into the array of RGBs labels based on the assumption
-    that `id_arr` is contiguous index array from ``0..len(id_arr)``.
+    Transforms ID values into the array of RGBA labels based on the assumption
+    that `id_arr` is a contiguous index array from ``0..len(id_arr)``.
     Same mapping as :func:`~id2rgb_array`.
     Note: Constant retrieval time. For large N preferable.
-
+    
     Args:
         id_arr: np.array
-            ID values [N, 1].
-
+            Contiguous array of vertex ID values [N, 1].
+    
     Returns: np.array
-        Unique RGBA value for every ID [N, 4].
-
+        An array of unique RGBA color values for every ID [N, 4].
     """
     if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
@@ -252,15 +254,15 @@ def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
 
 def rgb2id(rgb: np.ndarray) -> np.ndarray:
     """
-    Transforms unique RGB values into soo vertex ID.
-
+    Converts a unique RGB color to a vertex ID.
+    
     Args:
         rgb: np.array
-            RGB values [1, 3].
-
+            A numpy array containing the RGB values [1, 3].
+    
     Returns: np.array
-        ID value [1, 1].
-
+        A numpy array containing the vertex ID corresponding to the RGB color [1,
+        1].
     """
     red = rgb[0]
     green = rgb[1]
@@ -272,15 +274,14 @@ def rgb2id(rgb: np.ndarray) -> np.ndarray:
 @jit
 def rgb2id_array(rgb_arr: np.ndarray) -> np.ndarray:
     """
-    Transforms RGB values into IDs.
-
+    Converts an array of RGB colors to an array of vertex IDs.
+    
     Args:
         rgb_arr: np.array
-            RGB values [N, 3].
-
+            A numpy array of RGB colors [N, 3].
+    
     Returns: np.array
-        ID values [N, ].
-
+        ID values [N, ] corresponding to the input RGB colors.
     """
     if rgb_arr.ndim > 1:
         assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
@@ -305,15 +306,15 @@ def rgb2id_array(rgb_arr: np.ndarray) -> np.ndarray:
 @jit
 def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
     """
-    Transforms RGBA values into IDs.
-
+    Converts an array of RGBA colors to an array of vertex IDs.
+    
     Args:
         rgb_arr: np.array
-            RGB values [N, 3].
-
-    Returns: np.array
+            RGB values [N, 3]. A numpy array of RGBA colors.
+    
+    Returns:
+        A numpy array of vertex IDs corresponding to the input RGBA colors,
         ID values [N, ].
-
     """
     if rgb_arr.ndim > 1:
         assert rgb_arr.shape[-1] == 4, "ValueError: unsupported shape"
@@ -338,16 +339,16 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
 
 def generate_rendering_locs(verts: np.ndarray, ds_factor: float) -> np.ndarray:
     """
-    Generate rendering locations by downsampling the input points. Locations will be a subset of the input
-    locations.
-
+    Generates rendering locations by downsampling the input vertices.
+    
     Args:
-        verts: Vertices [N, 3].
-        ds_factor: Volume (ds_factor^3) for which a rendering location is returned.
-
+        verts: A numpy array of vertices with shape [N, 3]. The vertices represent input 
+               points from which rendering locations will be determined as a subset.
+        ds_factor: The downsampling factor, determining the volume (ds_factor^3) for 
+                   which a rendering location is returned.
+    
     Returns:
-        Rendering locations.
-
+        A numpy array of rendering locations after downsampling.
     """
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(verts)

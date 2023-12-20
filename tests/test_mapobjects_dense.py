@@ -12,6 +12,12 @@ from syconn.extraction.find_object_properties import find_object_properties, \
 
 
 def test_map_subcell_extract_props():
+    """
+    This function tests the 'map_subcell_extract_props' function from the 
+    'find_object_properties' module in the 'extraction' package of the SyConn toolkit.
+    It generates a 3D numpy array with random integers and passes it to the function.
+    Currently, it does not perform any actual value tests.
+    """
     # TODO: actual value tests
     edge_s = 50
     toy = np.random.randint(low=0, size=edge_s**3, high=1000).reshape((
@@ -20,6 +26,12 @@ def test_map_subcell_extract_props():
 
 
 def test_find_object_properties():
+    """
+    This function tests the 'find_object_properties' function from the 
+    'find_object_properties' module in the 'extraction' package of the SyConn toolkit.
+    It generates a 3D numpy array with random integers and passes it to the function.
+    Currently, it does not perform any actual value tests.
+    """
     # TODO: actual value tests
     edge_s = 50
     toy = np.random.randint(low=0, size=edge_s ** 3, high=1000).reshape((

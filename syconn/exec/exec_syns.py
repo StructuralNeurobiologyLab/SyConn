@@ -23,10 +23,10 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 def run_matrix_export():
     """
-    Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
-    of the currently active working directory.
-    Also collects the following synapse properties from prior analysis steps:
-
+    This function exports the connectivity matrix as a .csv file to the 
+    'connectivity_matrix' folder in the current working directory. It also 
+    collects various synapse properties from previous analysis steps, including:
+    
         * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
           en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
         * 'partner_spiness': Spine compartment predictions (0: dendritic shaft,
@@ -35,7 +35,7 @@ def run_matrix_export():
         * 'partner_celltypes': Celltype of the both neurons.
         * 'latent_morph': Local morphology embeddings of the pre- and post-
           synaptic partners.
-
+    
     Examples:
         See :class:`~syconn.reps.segmentation.SegmentationDataset` for examples.
     """
@@ -65,28 +65,28 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
                        cube_of_interest_bb: Union[Optional[np.ndarray], tuple] = None,
                        overwrite: bool = False, transf_func_sj_seg: Optional[Callable] = None):
     """
-    Run the synapse generation. Will create
-    :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
-    the following versions:
-
+    This function runs the synapse generation process. It creates 
+    SegmentationDataset objects with the following versions:
+    
         * 'cs': Contact site objects between supervoxels.
         * 'syn': Objects representing the overlap between 'cs' and the initial
-          synaptic junction predictions. Note: These objects effectively represent
+          synaptic junction predictions. These objects effectively represent
           synapse fragments between supervoxels.
         * 'syn_ssv': Final synapse objects. Agglomerated 'syn' objects based on the supervoxel graph.
         * 'cs_ssv': Final contact site objects. Agglomerated 'cs' objects based on the supervoxel graph.
             Only processed if ``['cell_contacts']['generate_cs_ssv']`` is set to True in the config.
-
+    
     Args:
         chunk_size: The size of processed cubes.
         n_folders_fs: Number of folders used to create the folder structure in
-            each :class:`~syconn.reps.segmentation.SegmentationDataset`.
+            each SegmentationDataset.
         max_n_jobs: Number of parallel jobs.
         cube_of_interest_bb: Defines the bounding box of the cube to process.
             By default this is set to (np.zoers(3); kd.boundary).
         overwrite:
         transf_func_sj_seg: Method that converts the cell organelle segmentation into a binary mask of background vs.
             sj foreground.
+
     """
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
@@ -150,12 +150,14 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
 
 def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
     """
-    Create agglomerated contact site objects between cells. For this, 'cs' objects need to be extracted.
-
+    This function creates agglomerated contact site objects between cells. For this, 'cs' objects need to be 
+    extracted. It takes two parameters: n_folders_fs and overwrite.
+    
     Args:
         n_folders_fs: Number of folders used to create the folder structure in
             each :class:`~syconn.reps.segmentation.SegmentationDataset`.
         overwrite:
+    Alex gpt: overwrite description still missing
     """
     # create SD of type 'cs_ssv' -> cell-cell contact sites
     log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
@@ -176,15 +178,14 @@ def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
 
 def run_spinehead_volume_calc():
     """
-    Calculate spine head volumes based on a watershed segmentation which is run on 3D spine label masks propagated
-    from cell surface predictions.
-    Spine head volumes are stored in  the SSV attribute dictionary with the key ``partner_spineheadvol`` in µm^3.
-
+    This function calculates spine head volumes based on a watershed segmentation which is run on 3D spine label 
+    masks propagated from cell surface predictions. Spine head volumes are stored in the SSV attribute dictionary 
+    with the key 'partner_spineheadvol' in µm^3. 
+    
     Subsequent call to :func:`~syconn.extraction.cs_processing_steps.collect_properties_from_ssv_partners` will
     add this property to the attribute dict of all `syn_ssv`. Calling :func:`syconn.proc.sd_proc.dataset_analysis`
     accordingly collects all `syn_ssv` properties and makes them available as numpy arrays. These two steps are
     performed in :func:`~run_matrix_export`.
-
     """
     log = initialize_logging('compartment_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)

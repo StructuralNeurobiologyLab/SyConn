@@ -27,6 +27,22 @@ import numpy as np
 
 
 def load_rendering_func(func_name: str) -> Callable:
+    """
+    Loads the rendering function based on the specified function name and the 
+    platform specified in the global parameters. The platform can be either 'egl' 
+    or 'osmesa'. If the platform is 'egl' but the requirements could not be 
+    imported, it switches to 'osmesa' platform.
+    
+    Args:
+        func_name (str): Name of the rendering function to be loaded.
+    
+    Returns:
+        Callable: The specified rendering function.
+    
+    Raises:
+        NotImplementedError: If the platform specified in the global parameters 
+        is not 'egl' or 'osmesa'.
+    """
     # can't load more than one platform simultaneously
     os.environ['PYOPENGL_PLATFORM'] = global_params.config['pyopengl_platform']
     if global_params.config['pyopengl_platform'] == 'egl':
@@ -73,16 +89,16 @@ def load_rendering_func(func_name: str) -> Callable:
 
 def render_mesh(mo: MeshObject, **kwargs) -> np.ndarray:
     """
-    Render super voxel raw views located at randomly chosen center of masses in
-    vertex cloud.
-
+    Renders super voxel raw views located at randomly chosen center of masses in
+    the vertex cloud. The rendering is done by calling the 'multi_view_mesh' 
+    function.
+    
     Args:
-        mo: Mesh.
-        **kwargs: Keyword arguments pass to :py:func:`~multi_view_mesh` call.
-
+        mo (MeshObject): The mesh object to be rendered.
+        **kwargs: Keyword arguments passed to the 'multi_view_mesh' function.
+    
     Returns:
-        View array.
-
+        np.ndarray: The rendered view array.
     """
     multi_view_mesh = load_rendering_func('multi_view_mesh')
     if "physical_scale" in kwargs.keys():
@@ -95,18 +111,18 @@ def render_mesh(mo: MeshObject, **kwargs) -> np.ndarray:
 def render_mesh_coords(coords: np.ndarray, ind: np.ndarray, vert: np.ndarray,
                        **kwargs) -> np.ndarray:
     """
-    Render raw views located at given coordinates in mesh
-    Returns ViewContainer list if dest_dir is None, else writes
-    views to dest_path.
-
+    Renders raw views located at given coordinates in the mesh. If 'dest_dir' is 
+    None, it returns a list of ViewContainer, otherwise, it writes the views to 
+    'dest_path'.
+    
     Args:
-        coords: Rendering locations.
-        ind: Mesh indices/faces [N, 1]
-        vert: Mesh vertices [M, 1]
-        **kwargs: Keyword arguments passed to :py:func:`_render_mesh_coords`.
-
-    Returns: Views at each coordinate.
-
+        coords (np.ndarray): The rendering locations.
+        ind (np.ndarray): The mesh indices/faces [N, 1].
+        vert (np.ndarray): The mesh vertices [M, 1].
+        **kwargs: Keyword arguments passed to the '_render_mesh_coords' function.
+    
+    Returns:
+        np.ndarray: The rendered views at each coordinate.
     """
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
     mesh = MeshObject("views", ind, vert)
@@ -122,27 +138,34 @@ def render_sampled_sso(sso: 'SuperSegmentationObject', ws: Optional[Tuple[int, i
                        return_views: bool = False, cellobjects_only: bool = False, rot_mat: Optional[np.ndarray] = None,
                        view_key: Optional[str] = None) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray], None]:
     """
-    Renders for each SV views at sampled locations (number is dependent on
-    SV mesh size with scaling fact) from combined mesh of all SV.
-
+    Renders views at sampled locations for each supervoxel (SV) from the combined 
+    mesh of all SVs. The number of sampled locations is dependent on the SV mesh 
+    size with scaling factor.
+    
     Args:
-        sso: SuperSegmentationObject
-        ws: Window size in pixels (y, x). Default: See config.yml or custom configs in the working directory.
-        verbose: Log additional information.
-        woglia: Store views with "without glia" identifier, i.e. flag the views as being created after the glia
-            separation.
-        return_rot_mat: Return rotation matrices.
-        add_cellobjects: Default: ('sj', 'vc', 'mi')
-        overwrite: If True, do not skip existing views.
-        index_views: Also render index views.
-        return_views: Return view arrays.
-        cellobjects_only: Only render cell objects.
-        rot_mat: Rotation matrix array for every rendering location [N, 4, 4].
-        view_key: String identifier for storing view arrays. Only needed if ``return_views=False``.
-
+        sso ('SuperSegmentationObject'): The SuperSegmentationObject to be rendered.
+        ws (Optional[Tuple[int, int]]): Window size in pixels (y, x). Default is 
+            specified in the config.yml or custom configs in the working directory.
+        verbose (bool): If True, logs additional information.
+        woglia (bool): If True, stores views with "without glia" identifier, i.e. 
+            flags the views as being created after the glia separation.
+        return_rot_mat (bool): If True, returns rotation matrices.
+        add_cellobjects (Optional[Union[bool, Iterable[str]]]): Default is 
+            ('sj', 'vc', 'mi'). This ordering determines the channel order of the 
+            view array.
+        overwrite (bool): If True, does not skip existing views.
+        index_views (bool): If True, also renders index views.
+        return_views (bool): If True, returns view arrays.
+        cellobjects_only (bool): If True, only renders cell objects.
+        rot_mat (Optional[np.ndarray]): Rotation matrix array for every rendering 
+            location [N, 4, 4].
+        view_key (Optional[str]): String identifier for storing view arrays. Only 
+            needed if 'return_views' is False.
+    
     Returns:
-        Depending on `return_views` and `return_rot_mat`: None; View array;
-        View array and rotation matrices; rotation matrices.
+        Union[np.ndarray, Tuple[np.ndarray, np.ndarray], None]: Depending on 
+        'return_views' and 'return_rot_mat', it returns None, the view array, 
+        the view array and rotation matrices, or the rotation matrices.
     """
     view_cfg = global_params.config['views']
     view_props_default = view_cfg['view_properties']
@@ -208,28 +231,37 @@ def render_sso_coords(sso: 'SuperSegmentationObject', coords: np.ndarray,
                       comp_window: Optional[float] = None, rot_mat: Optional[np.ndarray] = None,
                       return_rot_mat: bool = False) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Render views of SuperSegmentationObject at given coordinates.
-
+    This function renders views of a SuperSegmentationObject at given coordinates. It can be used to visualize the 
+    3D structure of the object and its subcellular components. The function supports various rendering options 
+    including the use of contrast limited adaptive histogram equalization (CLAHE), wireframe rendering, and the 
+    option to only render cell objects. The function also supports the return of rotation matrices which can be 
+    useful for further processing or analysis.
+    
     Args:
-        sso: SuperSegmentationObject
-        coords: Rendering locations [N, 3].
-        add_cellobjects: Default: ('sj', 'vc', 'mi'). This ordering determines the channel order of the view array.
-        verbose: Log additional information.
-        clahe: Use clahe to enahnce view contrast.
-        ws: Window size in pixels (y, x). Default: See config.yml or custom configs in the working directory.
-        cellobjects_only: Only render cell objects.
-        wire_frame: Render the mesh as a wire frame.
-        nb_views: Number of views. Default: See config.yml or custom configs in the working directory.
-        comp_window: Window size in nm. the clipping box during rendering will have an extent
-            of [comp_window, comp_window / 2, comp_window]. Default: 8 um.
-        rot_mat: Rotation matrix array for every rendering location [N, 4, 4].
-        return_rot_mat: Return rotation matrices, e.g. if not provided via `rot_mat`, this output can be provided
-            for other rendering calls.
-
+        sso (SuperSegmentationObject): The SuperSegmentationObject to be rendered.
+        coords (np.ndarray): An array specifying the 3D coordinates at which to render views of the object.
+        add_cellobjects (Optional[Union[bool, Iterable[str]]]): Specifies the subcellular structures to be included 
+            in the rendering. Default is None, which includes all structures.
+        verbose (bool): If True, additional log information will be printed. Default is False.
+        clahe (bool): If True, contrast limited adaptive histogram equalization (CLAHE) will be used to enhance 
+            the contrast of the rendered views. Default is False.
+        ws (Optional[Tuple[int]]): Specifies the window size in pixels for the rendered views. Default is None, 
+            which uses the window size specified in the global configuration.
+        cellobjects_only (bool): If True, only cell objects will be rendered. Default is False.
+        wire_frame (bool): If True, the object will be rendered as a wireframe. Default is False.
+        nb_views (Optional[int]): Specifies the number of views to render. Default is None, which uses the number 
+            of views specified in the global configuration.
+        comp_window (Optional[float]): Specifies the size of the window for the rendered views in nanometers. 
+            Default is None, which uses the window size specified in the global configuration.
+        rot_mat (Optional[np.ndarray]): An array specifying the rotation matrices for the rendered views. 
+            Default is None, which calculates the rotation matrices based on the object and coordinates.
+        return_rot_mat (bool): If True, the function will return the rotation matrices used for the rendered views. 
+            Default is False.
+    
     Returns:
-        Resulting views rendered at each location. Output shape: [len(coords),
-        4 (default: cell outline + number of cell objects), nb_views, y, x].
-
+        np.ndarray or Tuple[np.ndarray, np.ndarray]: If return_rot_mat is False, the function returns an array 
+            containing the rendered views. If return_rot_mat is True, the function returns a tuple containing the 
+            rendered views and the rotation matrices used.
     """
     view_cfg = global_params.config['views']
     view_props_default = view_cfg['view_properties']
@@ -303,28 +335,34 @@ def render_sso_coords_index_views(sso: 'SuperSegmentationObject', coords: np.nda
                                   return_rot_matrices: bool = False
                                   ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Uses per-face color via flattened vertices (i.e. vert[ind] -> slow!). This was added to be able
-    to calculate the surface coverage captured by the views.
-
+    This function renders index views of a SuperSegmentationObject at given coordinates. Index views are 
+    color-coded views where each color corresponds to a different face of the object. This is useful for 
+    calculating the surface coverage captured by the views. The function supports various rendering options 
+    including the return of rotation matrices which can be useful for further processing or analysis.
+    
+    Args:
+        sso (SuperSegmentationObject): The SuperSegmentationObject to be rendered.
+        coords (np.ndarray): An array specifying the 3D coordinates at which to render index views of the object.
+        verbose (bool): If True, additional log information will be printed. Default is False.
+        ws (Optional[Tuple[int, int]]): Specifies the window size in pixels for the rendered views. Default is None, 
+            which uses the window size specified in the global configuration.
+        rot_mat (Optional[np.ndarray]): An array specifying the rotation matrices for the rendered views. 
+            Default is None, which calculates the rotation matrices based on the object and coordinates.
+        nb_views (Optional[int]): Specifies the number of views to render. Default is None, which uses the number 
+            of views specified in the global configuration.
+        comp_window (Optional[float]): Specifies the size of the window for the rendered views in nanometers. 
+            Default is None, which uses the window size specified in the global configuration.
+        return_rot_matrices (bool): If True, the function will return the rotation matrices used for the rendered views. 
+            Default is False.
+    
     Todo:
         * Add fast GL_POINT rendering to omit slow per-face coloring (redundant vertices) and
           expensive remapping from face IDs to vertex IDs.
-
-    Args:
-        sso: SuperSegmentationObject
-        coords: Rendering locations [N, 3].
-        verbose: Log additional information.
-        ws: Window size in pixels (y, x). Default: See config.yml or custom configs in the working directory.
-        rot_mat: np.array
-        nb_views: Number of views. Default: See config.yml or custom configs in the working directory.
-        comp_window: Window size in nm. the clipping box during rendering will have an extent
-            of [comp_window, comp_window / 2, comp_window]. Default: 8 um.
-        return_rot_matrices: Return rotation matrices, e.g. if not provided via `rot_mat`, this output can be provided
-            for other rendering calls.
-
+    
     Returns:
-        Resulting index views rendered at each location. Output shape: [len(coords), 1, nb_views, y, x].
-
+        np.ndarray or Tuple[np.ndarray, np.ndarray]: If return_rot_matrices is False, the function returns an array 
+            containing the rendered index views. If return_rot_matrices is True, the function returns a tuple 
+            containing the rendered index views and the rotation matrices used.
     """
     view_props_default = global_params.config['views']['view_properties']
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
@@ -402,25 +440,32 @@ def render_sso_coords_label_views(sso: 'SuperSegmentationObject', vertex_labels:
                                   comp_window: Optional[float] = None, return_rot_matrices: bool = False
                                   ) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Render views with vertex colors corresponding to vertex labels.
-
+    This function renders label views of a SuperSegmentationObject at given coordinates. Label views are 
+    color-coded views where each color corresponds to a different label assigned to the vertices of the object. 
+    This is useful for visualizing different labeled regions of the object. The function supports various 
+    rendering options including the return of rotation matrices which can be useful for further processing or analysis.
+    
     Args:
-        sso:
-        vertex_labels: np.array
-            vertex labels [N, 1]. Ordering and length have to be the same as
-            vertex array of SuperSegmentationObject (len(sso.mesh[1]) // 3).
-        coords: Rendering locations [N, 3].
-        verbose: Log additional information.
-        ws: Window size in pixels (y, x). Default: See config.yml or custom configs in the working directory.
-        rot_mat: np.array
-        nb_views: Number of views. Default: See config.yml or custom configs in the working directory.
-        comp_window: Window size in nm. the clipping box during rendering will have an extent
-            of [comp_window, comp_window / 2, comp_window]. Default: 8 um.
-        return_rot_matrices: Return rotation matrices, e.g. if not provided via `rot_mat`, this output can be provided
-            for other rendering calls.
-
+        sso (SuperSegmentationObject): The SuperSegmentationObject to be rendered.
+        vertex_labels (np.ndarray): An array specifying the labels assigned to the vertices of the object. 
+            The length and ordering of this array must match the vertex array of the object.
+        coords (np.ndarray): An array specifying the 3D coordinates at which to render label views of the object.
+        verbose (bool): If True, additional log information will be printed. Default is False.
+        ws (Optional[Tuple[int, int]]): Specifies the window size in pixels for the rendered views. Default is None, 
+            which uses the window size specified in the global configuration.
+        rot_mat (Optional[np.ndarray]): An array specifying the rotation matrices for the rendered views. 
+            Default is None, which calculates the rotation matrices based on the object and coordinates.
+        nb_views (Optional[int]): Specifies the number of views to render. Default is None, which uses the number 
+            of views specified in the global configuration.
+        comp_window (Optional[float]): Specifies the size of the window for the rendered views in nanometers. 
+            Default is None, which uses the window size specified in the global configuration.
+        return_rot_matrices (bool): If True, the function will return the rotation matrices used for the rendered views. 
+            Default is False.
+    
     Returns:
-        Resulting label views rendered at each location. Output shape: [len(coords), 1, nb_views, y, x].
+        np.ndarray or Tuple[np.ndarray, np.ndarray]: If return_rot_matrices is False, the function returns an array 
+            containing the rendered label views. If return_rot_matrices is True, the function returns a tuple 
+            containing the rendered label views and the rotation matrices used.
     """
     view_props_default = global_params.config['views']['view_properties']
     _render_mesh_coords = load_rendering_func('_render_mesh_coords')
@@ -449,16 +494,17 @@ def render_sso_coords_label_views(sso: 'SuperSegmentationObject', vertex_labels:
 
 def get_sso_view_dc(sso: 'SuperSegmentationObject', verbose: bool = False) -> dict:
     """
-    Extracts views from sampled positions in SSO for each SV.
-
+    Extracts views from sampled positions in a SuperSegmentationObject (SSO) for each 
+    SegmentationObject (SV).
+    
     Args:
-        sso: SuperSegmentationObject
-        verbose: bool
-
+        sso (SuperSegmentationObject): The SSO from which to extract views.
+        verbose (bool, optional): If True, additional information is logged during 
+        execution. Defaults to False.
+    
     Returns:
-        Dictionary with `sso` id as key and lz4 compressed view array
-        (see `:py:func:~syconn.handler.compression.arrtolz4string`).
-
+        dict: A dictionary where the key is the SSO id and the value is a lz4 
+        compressed view array.
     """
     views = render_sampled_sso(sso, verbose=verbose, return_views=True)
     view_dc = {sso.id: arrtolz4string(views)}
@@ -471,24 +517,25 @@ def render_sso_coords_multiprocessing(ssv: 'SuperSegmentationObject', n_jobs: in
                                       view_key: Optional[str] = None, render_indexviews: bool = True,
                                       return_views: bool = True) -> Union[None, np.ndarray]:
     """
-
+    Renders views of a SuperSegmentationObject (SSO) at specified coordinates using multiple processes.
+    
     Args:
-        ssv: SuperSegmentationObject
-        n_jobs: int
-            number of parallel jobs running on same node of cluster
-        rendering_locations: array of locations to be rendered
-            if not given, rendering locations are retrieved from the SSV's SVs.
-            Results will be stored at SV locations.
-        verbose: bool
-            flag to show the progress of rendering.
-        render_kwargs: dict
-        view_key: str
-        render_indexviews: bool
-        return_views: If False and rendering_locations is None, views will be saved on supervoxel level.
-
+        ssv (SuperSegmentationObject): The SSO to render.
+        n_jobs (int): The number of parallel jobs to run on the same node of the cluster.
+        rendering_locations (np.ndarray, optional): The locations to render. If not provided, 
+            locations are retrieved from the SSO's SVs and results are stored at SV locations.
+        verbose (bool, optional): If True, additional information is logged during execution. 
+            Defaults to False.
+        render_kwargs (dict, optional): Additional keyword arguments for the rendering function.
+        view_key (str, optional): The key to use when storing the view arrays. Only needed if 
+            return_views is False.
+        render_indexviews (bool, optional): If True, index views are also rendered. Defaults to True.
+        return_views (bool, optional): If False and rendering_locations is None, views are saved 
+            at the supervoxel level. Defaults to True.
+    
     Returns:
-        Array of views after rendering of locations or None.
-
+        Union[None, np.ndarray]: If return_views is True, returns an array of views after rendering. 
+            Otherwise, returns None.
     """
     if rendering_locations is not None and return_views is False:
         raise ValueError('"render_sso_coords_multiprocessing" received invalid '
@@ -549,6 +596,16 @@ def render_sso_coords_multiprocessing(ssv: 'SuperSegmentationObject', n_jobs: in
 
 
 def _render_views_multiproc(args: tuple) -> np.ndarray:
+    """
+    Helper function for rendering views in multiple processes.
+    
+    Args:
+        args (tuple): A tuple containing the coordinates to render, the SuperSegmentationObject to render, and a
+            dictionary of additional keyword arguments for the rendering function.
+    
+    Returns:
+        np.ndarray: An array of rendered views.
+    """
     coords, sso, kwargs = args
 
     render_indexviews = kwargs['render_indexviews']
@@ -581,17 +638,17 @@ def _render_views_multiproc(args: tuple) -> np.ndarray:
 def write_sv_views_chunked(svs: List['SegmentationObject'], views: np.ndarray, part_views: np.ndarray,
                            view_kwargs: dict, disable_locking: bool = False):
     """
-
+    Writes the views of a list of SegmentationObjects (SVs) in chunks.
+    
     Args:
-        svs: SegmentationObjects
-        views: View array.
-        part_views: Cumulated number of views -> indices of start and end of SV views in `views` array.
-        view_kwargs:
-        disable_locking: Usually required as SVs are stored in chunks and rendered distributed on many
-            processes.
-
-    Returns:
-
+        svs (List[SegmentationObject]): The list of SVs for which to write views.
+        views (np.ndarray): The array of views to write.
+        part_views (np.ndarray): The cumulative number of views, used to determine
+            the start and end indices of SV views in the `views` array.
+        view_kwargs (dict): Additional keyword arguments for the view writing function.
+        disable_locking (bool, optional): If True, disables locking. This is usually
+            required as SVs are stored in chunks and rendered distributed on many
+            processes. Defaults to False.
     """
     view_dc = {}
     for sv_ix, sv in enumerate(svs):

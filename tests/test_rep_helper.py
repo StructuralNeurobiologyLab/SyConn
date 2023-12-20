@@ -10,6 +10,10 @@ lst_n_folder_fs = [10 ** i for i in range(1, 4)]
 
 
 def test_subfold_from_ix():
+    """
+    This function tests the subfold_from_ix_new function by creating a dictionary where the keys are 
+    storage identifiers and the values are lists of object IDs. It then checks if all stored IDs are unique.
+    """
     obj_ids = np.arange(1e5)
     for n_folder_fs in lst_n_folder_fs:
         dest_dc = defaultdict(list)
@@ -22,6 +26,12 @@ def test_subfold_from_ix():
 
 
 def test_subfold2ix_inverse():
+    """
+    This function tests the inverse relationship between subfold_from_ix_new and ix_from_subfold_new 
+    functions. It creates a temporary directory, sets it as the working directory, and enables the use of 
+    new subfolder. It then checks if the representative ID is equal to the index obtained from the new 
+    subfolder for each representative ID in the unique subfolder indexes.
+    """
     with tempfile.TemporaryDirectory() as working_dir:
         global_params.wd = working_dir
         global_params.config['paths']['use_new_subfold'] = True

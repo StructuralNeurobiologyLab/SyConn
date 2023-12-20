@@ -25,14 +25,17 @@ from logging import Logger
 def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset, obj_types: List[str],
                                            n_jobs: Optional[int] = None, nb_cpus: Optional[int] = None):
     """
-    Populates SSV attributes ``mapping_{obj_type}_ids`` and ``mapping_{obj_type}_ratios`` for each element in
-    `obj_types`; every element must exist in ``ssd.version_dict``.
-
+    Populates the attributes of SuperSegmentationDataset (SSD) objects with mapping information for each object type
+    specified in `obj_types`. Each object type must exist in the version dictionary of the SSD. This function is
+    essential for mapping cellular structures to cells in the SyConn toolkit.
+    
     Args:
-        ssd: SuperSegmentationDataset
-        obj_types: List of object identifiers which are mapped to the cells, e.g. ['mi', 'sj', 'vc'].
-        n_jobs: Number of jobs.
-        nb_cpus: Cores per job when using BatchJob or the total number of jobs used if single node multiprocessing.
+        ssd (SuperSegmentationDataset): The SSD whose attributes are to be populated.
+        obj_types (List[str]): List of object identifiers to be mapped to the cells. For example, ['mi', 'sj', 'vc'].
+        n_jobs (Optional[int]): Number of jobs to be run in parallel. If not provided, it defaults to twice the total
+            number of cores available.
+        nb_cpus (Optional[int]): Number of cores to be used per job when using BatchJob. If single node multiprocessing
+            is used, this represents the total number of jobs.
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -53,6 +56,17 @@ def aggregate_segmentation_object_mappings(ssd: SuperSegmentationDataset, obj_ty
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
+    """
+    Thread function for the aggregate_segmentation_object_mappings function. It performs the actual task of populating
+    the attributes of SuperSegmentationDataset (SSD) objects with mapping information for each object type. This
+    function is not intended to be called directly, but is used by the multiprocessing module to parallelize the
+    attribute population task.
+    
+    Args:
+        args: A tuple containing the parameters required for the attribute population task. This includes a block of
+            SuperSegmentationObject IDs, the version of the SSD, the version dictionary of the SSD, the working
+            directory of the SSD, the object types to be mapped, and the type of the SSD.
+    """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -95,18 +109,18 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
                             obj_types: List[str], n_jobs: Optional[int] = None,
                             nb_cpus: Optional[int] = None):
     """
-    Populates SSV attributes ``{obj_type}`` for each element in`obj_types`, every element must exist in
-    ``ssd.version_dict`` and in ``ssd.config['cell_objects']`` (see also config.yml in the working directory and/or
-    in syconn/handler/config.yml).
-
-    Requires prior execution of :py:func:`~aggregate_segmentation_object_mappings`.
-
+    Populates the attributes of SuperSegmentationDataset (SSD) objects with the specified object types. Each object
+    type must exist in the version dictionary of the SSD and in the cell objects configuration of the SSD. This
+    function is essential for applying mapping decisions to cells in the SyConn toolkit. It requires the prior
+    execution of the aggregate_segmentation_object_mappings function.
+    
     Args:
-        ssd: SuperSegmentationDataset.
-        obj_types: List of object identifiers which are mapped to the cells, e.g. ['mi', 'sj', 'vc'].
-        n_jobs:
-        nb_cpus: cpus per job when using BatchJob or the total number
-            of jobs used if single node multiprocessing.
+        ssd (SuperSegmentationDataset): The SSD whose attributes are to be populated.
+        obj_types (List[str]): List of object identifiers to be mapped to the cells. For example, ['mi', 'sj', 'vc'].
+        n_jobs (Optional[int]): Number of jobs to be run in parallel. If not provided, it defaults to twice the total
+            number of cores available.
+        nb_cpus (Optional[int]): Number of cores to be used per job when using BatchJob. If single node multiprocessing
+            is used, this represents the total number of jobs.
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
@@ -124,6 +138,23 @@ def apply_mapping_decisions(ssd: SuperSegmentationDataset,
 
 
 def _apply_mapping_decisions_thread(args):
+    """
+    This function applies mapping decisions to the SuperSegmentationObjects (SSOs) in a SuperSegmentationDataset (SSD).
+    It populates the SSOs with attributes for each object type in the SSD. The attributes include the object's size,
+    representative coordinate, bounding box, and mapping ratios and ids for each object type. If any of these attributes
+    are missing, the function attempts to generate them. If the mapping ratios or ids are missing, the function calls
+    '_aggregate_segmentation_object_mappings_thread' to generate them. This function is not intended to be called directly,
+    but is used by the multiprocessing module to parallelize the attribute population task.
+    
+    Args:
+        args (list): A list containing the following elements:
+            - ssv_obj_ids (list): List of SSO ids.
+            - version (str): Version of the SSD.
+            - version_dict (dict): Dictionary containing versions of the SSD.
+            - working_dir (str): Working directory of the SSD.
+            - obj_types (list): List of object types in the SSD.
+            - ssd_type (str): Type of the SSD.
+    """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -282,18 +313,21 @@ def _apply_mapping_decisions_thread(args):
 def map_synssv_objects(synssv_version: Optional[str] = None, log: Optional[Logger] = None,
                        nb_cpus=None, n_jobs=None, syn_threshold=None):
     """
-    Map syn_ssv objects and merge their meshes for all SSO objects contained in SSV SuperSegmentationDataset.
-
-    Notes:
-        * Stores meshes with keys: 'syn_ssv' and 'syn_ssv_sym', syn_ssv_asym (if synapse type is available). This may
-          take a while.
-
+    This function maps syn_ssv objects and merges their meshes for all 
+    SuperSegmentationObjects (SSOs) in a SuperSegmentationDataset (SSD). 
+    It stores the meshes with keys: 'syn_ssv', 'syn_ssv_sym', and 
+    'syn_ssv_asym' (if synapse type is available). This operation may take 
+    a while.
+    
     Args:
-        synssv_version: String identifier.
-        n_jobs: Number of jobs.
-        log: Logger.
-        nb_cpus: Number of cpus for local multi-processing.
-        syn_threshold: Probability threshold applied during the mapping of syn_ssv objects.
+        synssv_version (str, optional): String identifier for the syn_ssv 
+        objects. Defaults to None.
+        n_jobs (int, optional): Number of jobs. Defaults to None.
+        log (Logger, optional): Logger for logging information. Defaults to None.
+        nb_cpus (int, optional): Number of CPUs for local multi-processing. 
+        Defaults to None.
+        syn_threshold (float, optional): Probability threshold applied 
+        during the mapping of syn_ssv objects. Defaults to None.
     """
     if n_jobs is None:
         n_jobs = 4 * global_params.config.ncore_total
@@ -313,6 +347,20 @@ def map_synssv_objects(synssv_version: Optional[str] = None, log: Optional[Logge
 
 
 def map_synssv_objects_thread(args):
+    """
+    This function is a multi-threaded version of the 'map_synssv_objects' function. It maps syn_ssv objects and merges 
+    their meshes for a subset of SuperSegmentationObjects (SSOs) in a SuperSegmentationDataset (SSD).
+    
+    Args:
+        args (list): A list containing the following elements:
+            - ssv_obj_ids (list): List of SSO ids.
+            - version (str): Version of the SSD.
+            - version_dict (dict): Dictionary containing versions of the SSD.
+            - working_dir (str): Working directory of the SSD.
+            - ssd_type (str): Type of the SSD.
+            - synssv_version (str): Version of the syn_ssv objects.
+            - syn_threshold (float): Probability threshold applied during the mapping of syn_ssv objects.
+    """
     ssv_obj_ids, version, version_dict, working_dir, \
     ssd_type, synssv_version, syn_threshold = args
 
@@ -349,21 +397,18 @@ def map_synssv_objects_thread(args):
 def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,
                   ssd_type: str = 'ssv', nb_cpus: Optional[int] = None):
     """
-    Caches the SSV meshes locally with 20 cpus in parallel.
-
+    This function caches the meshes of SuperSegmentationObjects (SSOs) in a 
+    SuperSegmentationDataset (SSD) locally with a specified number of CPUs in 
+    parallel.
+    
     Args:
-        working_dir: str
-            Path to working directory.
-        version: str
-            version identifier, like 'spgt' for spine ground truth SSD. Defaults
-            to the SSD of the cellular SSVs.
-        ssd_type: str
-            Default is 'ssv'.
-        nb_cpus: int
-            Default is ``cpu_count()``.
-
-    Returns:
-
+        working_dir (str): Path to the working directory.
+        version (str, optional): Version identifier, like 'spgt' for spine 
+                                 ground truth SSD. Defaults to the SSD of the 
+                                 cellular SSVs. Defaults to None.
+        ssd_type (str): Type of the SSD. Default is 'ssv'.
+        nb_cpus (int, optional): Number of CPUs for local multi-processing. 
+                                 Default is the total number of CPUs.
     """
     ssds = super_segmentation.SuperSegmentationDataset(working_dir=working_dir,
                                                        version=version,
@@ -374,7 +419,22 @@ def mesh_proc_ssv(working_dir: str, version: Optional[str] = None,
 
 def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
         -> Tuple[SuperSegmentationObject, SuperSegmentationObject]:
-    """Splits an SuperSegmentationObject into two."""
+    """
+    Splits a SuperSegmentationObject into two separate SuperSegmentationObjects. The split is 
+    based on the provided supervoxel IDs. The function checks if the SuperSegmentationObject's 
+    dataset is defined and if the provided supervoxel IDs are part of the original 
+    SuperSegmentationObject. If these conditions are met, the function generates two new 
+    SuperSegmentationObjects with new IDs and returns them.
+    
+    Args:
+        ssv (SuperSegmentationObject): The SuperSegmentationObject to be split.
+        splitted_sv_ids (Iterable[int]): The supervoxel IDs used to split the 
+        SuperSegmentationObject.
+    
+    Returns:
+        Tuple[SuperSegmentationObject, SuperSegmentationObject]: The two new 
+        SuperSegmentationObjects resulting from the split.
+    """
 
     if ssv._ssd is None:
         raise ValueError('SSV dataset has to be defined. Use "get_superseg'
@@ -400,8 +460,21 @@ def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int]) \
 
 def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset) \
         -> SuperSegmentationObject:
-    """Initializes an SuperSegmentationObject and caches all relevant data.
-    Cell organelles and supervoxel SegmentationDatasets must be initialized."""
+    """
+    Initializes a SuperSegmentationObject and caches all relevant data. This function 
+    requires that the cell organelles and supervoxel SegmentationDatasets are already 
+    initialized. The function creates a new SuperSegmentationObject with the provided 
+    ID and supervoxel IDs, preprocesses it, and returns it.
+    
+    Args:
+        ssv_id (int): The ID for the new SuperSegmentationObject.
+        sv_ids (List[int]): The supervoxel IDs for the new SuperSegmentationObject.
+        ssd (SuperSegmentationDataset): The SuperSegmentationDataset that the new 
+        SuperSegmentationObject belongs to.
+    
+    Returns:
+        SuperSegmentationObject: The newly initialized SuperSegmentationObject.
+    """
     ssv = SuperSegmentationObject(ssv_id, sv_ids=sv_ids, version=ssd.version,
                                   create=True, working_dir=ssd.working_dir)
     ssv.preprocess()
@@ -409,6 +482,18 @@ def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset) \
 
 
 def get_available_ssv_ids(ssd, n=2):
+    """
+    Generates available SuperSegmentationObject IDs. The function iterates through the range of the maximum
+    SuperSegmentationObject ID plus the provided number 'n', and yields the IDs that are not already in use. The
+    function stops when 'n' IDs have been generated.
+    
+    Args:
+        ssd: The SuperSegmentationDataset to check for available IDs.
+        n (int, optional): The number of IDs to generate. Defaults to 2.
+    
+    Yields:
+        int: The next available SuperSegmentationObject ID.
+    """
     cnt = 0
     for ii in range(np.max(ssd.ssv_ids) + n):
         if cnt == n:

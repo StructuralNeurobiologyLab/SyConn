@@ -17,6 +17,10 @@ stencil = np.array(config['cell_objects']['cs_filtersize'], dtype=np.int32)
 
 
 def test_find_object_properties():
+    """
+    Tests the function `find_object_properties` by creating a sample array and checking
+    if the function correctly identifies the properties of each unique voxel id in the array.
+    """
     sample_array = np.array([
             [[0, 1],
              [1, 1]],
@@ -54,16 +58,15 @@ def test_find_object_properties():
 
 def _helpertest_detect_cs(distance_between_cube, stencil, cube_size, test_func=detect_cs):
     """
-    Assert statement fails if test_func method does not work properly (
-    func:`~syconn.extraction.cs_extraction_steps.detect_cs`).
-
+    Helper function to test the `detect_cs` function. It generates a sample segmentation
+    and checks if the function correctly identifies the cell ids of the higher and lower
+    value cells.
+    
     Args:
-        distance_between_cube: Distance between cubes of two different ids
-        stencil: Generic stencil size
-        cube_size: Generic cube size of two different ids
-
-    Returns:
-
+        distance_between_cube (np.array): Distance between cubes of two different ids.
+        stencil (np.array): Generic stencil size.
+        cube_size (int): Generic cube size of two different ids.
+        test_func (function): Function to be tested, default is `detect_cs`.
     """
     sample, expected_ids_low, expected_ids_high = _gen_sample_seg(distance_between_cube, stencil, cube_size)
     edge_id_output_sample = test_func(sample)
@@ -78,16 +81,18 @@ def _helpertest_detect_cs(distance_between_cube, stencil, cube_size, test_func=d
 
 def _helpertest_detect_cs_64bit(distance_between_cube, stencil, cube_size):
     """
-    Assert statement fails if test_func method does not work properly (
-    func:`~syconn.extraction.cs_extraction_steps.detect_cs`).
-
+    Helper function to test the `detect_cs_64bit` function. It generates a sample segmentation
+    and checks if the function correctly identifies the cell ids of the higher and lower
+    value cells.
+    
     Args:
-        distance_between_cube: Distance between cubes of two different ids
-        stencil: Generic stencil size
-        cube_size: Generic cube size of two different ids
-
-    Returns:
-
+        distance_between_cube (np.array): Distance between cubes of two different ids.
+        stencil (np.array): Generic stencil size.
+        cube_size (int): Generic cube size of two different ids.
+    
+    Note:
+        This function asserts if the test_func method does not work properly 
+        (func:`~syconn.extraction.cs_extraction_steps.detect_cs`).
     """
     sample, expected_ids_low, expected_ids_high = _gen_sample_seg(distance_between_cube, stencil, cube_size)
     cs = detect_cs_64bit(sample)
@@ -98,6 +103,17 @@ def _helpertest_detect_cs_64bit(distance_between_cube, stencil, cube_size):
 
 
 def _gen_sample_seg(distance_between_cube, stencil, cube_size):
+    """
+    Generates a sample segmentation with two cubes of different ids and a distance between them.
+    
+    Args:
+        distance_between_cube (np.array): Distance between cubes of two different ids.
+        stencil (np.array): Generic stencil size.
+        cube_size (int): Generic cube size of two different ids.
+        
+    Returns:
+        tuple: A tuple containing the sample segmentation and the expected ids of the lower and higher value cells.
+    """
     assert (np.amax(distance_between_cube) > cube_size), "Distance between cubes should be grater than cube size"
     offset = stencil // 2                                                                #output offset adjustment due to stencil size
     a = np.amax(offset + 1)                                                              #co-ordinate of topmost corner of first cube
@@ -124,18 +140,30 @@ def _gen_sample_seg(distance_between_cube, stencil, cube_size):
 
 
 def test_detect_cs():
+    """
+    Tests the `detect_cs` function by calling the helper function `_helpertest_detect_cs` with different distances
+    between the cubes.
+    """
     _helpertest_detect_cs(np.array([0, 6, 0]), stencil, cube_size)
     _helpertest_detect_cs(np.array([6, 0, 0]), stencil, cube_size)
     _helpertest_detect_cs(np.array([0, 0, 6]), stencil, cube_size)
 
 
 def test_detect_cs_64bit():
+    """
+    Tests the `detect_cs_64bit` function by calling the helper function `_helpertest_detect_cs_64bit` with different
+    distances between the cubes.
+    """
     _helpertest_detect_cs_64bit(np.array([0, 6, 0]), stencil, cube_size)
     _helpertest_detect_cs_64bit(np.array([6, 0, 0]), stencil, cube_size)
     _helpertest_detect_cs_64bit(np.array([0, 0, 6]), stencil, cube_size)
 
 
 def test_find_object_properties_cs_64bit():
+    """
+    Tests the `find_object_properties_cs_64bit` function by creating a sample array and checking if the function
+    correctly identifies the properties of each unique voxel id in the array.
+    """
     sample = np.zeros((20, 20, 20), dtype=np.uint64)
     sample[5, 5, 5] = cs_id_to_partner_inverse([100, 200])
     sample[19, 15, 5] = cs_id_to_partner_inverse([50, 200])
@@ -160,6 +188,10 @@ def test_find_object_properties_cs_64bit():
 
 
 def test_boundary_gen():
+    """
+    Tests the `detect_seg_boundaries` function by creating a sample array and checking if the function correctly
+    identifies the boundaries in the array.
+    """
     bdry = detect_seg_boundaries(np.arange(1000).reshape((10, 10, 10))).flatten()
     # background IDs (0) are not inspected
     assert bdry[0] == 0
@@ -170,6 +202,10 @@ def test_boundary_gen():
 
 
 def test_chunk_weighted():
+    """
+    Tests the `chunkify_weighted` function by creating a sample array and weights and checking if the function
+    correctly chunks the array based on the weights.
+    """
     sample_array = np.array([0, 1, 2, 3, 4, 5, 6, 7], np.uint64)
     weights = np.array([3, 1, 2, 7, 5, 8, 0, 8], np.uint64)
     n = 3                      # number_of_sublists
@@ -182,13 +218,13 @@ def test_chunk_weighted():
 
 def test_colorcode_vertices(grid_size=5, number_of_test_vertices=50):
     """
-    Test case fails if colourcode_vertices() is not working
+    Tests the `colorcode_vertices` function by creating a sample array of 
+    vertices and checking if the function correctly color codes the vertices.
+    
     Args:
-        grid_size: basis points for k-d tree
-        number_of_test_vertices: Number of vertices to be tested for colorcode_verices()
-
-    Returns:
-
+        grid_size (int): The size of the grid for the k-d tree. Default is 5.
+        number_of_test_vertices (int): The number of vertices to be tested. 
+        Default is 50.
     """
     n = number_of_test_vertices
     a = grid_size

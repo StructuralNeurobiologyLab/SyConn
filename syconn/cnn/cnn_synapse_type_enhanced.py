@@ -18,7 +18,22 @@ from torch import optim
 
 
 class HybridDiceLoss(torch.nn.Module):
+    """
+    This class is a subclass of the torch.nn.Module class. It is used to define a hybrid dice loss function 
+    for the neural network model. The hybrid dice loss function is a combination of the dice loss function 
+    for synapse type and the mean squared error loss function for the vector field. The class also includes 
+    a counter to keep track of the number of steps taken during training.
+    """
     def __init__(self, downscale_fact=1):
+        """
+        Initializes the HybridDiceLoss class with the given downscale factor. The downscale factor is used 
+        to prevent NaN losses during training. The class also initializes the dice loss function for synapse 
+        type and the mean squared error loss function for the vector field.
+        
+        Args:
+            downscale_fact (int, optional): The factor by which to downscale the target vectors to prevent 
+            NaN losses. Default is 1.
+        """
         super().__init__()
         self.dice_syntype = DiceLossFancy(
             apply_softmax=True, weights=torch.tensor([0.33, 0.33, 0.33, 0]).to(device),
@@ -34,16 +49,19 @@ class HybridDiceLoss(torch.nn.Module):
 
     def forward(self, output, target):
         """
-
+        Defines the forward pass for the HybridDiceLoss class. The forward pass calculates the loss for the 
+        vector field and the synapse type, and raises a ValueError if either loss is NaN. The function also 
+        updates the counter for the number of steps taken during training.
+        
         Args:
-            output: output shape: B, OUT_C, Z, Y, X with OUT_C: vec. field 0-2,
-                syntype 3-6, celltype 7-17 and 18-28.
-            target: target shape: B, C, Z, Y, X with C: vector field 0-2,
-                syntype label 3, cell type labels 4-5.
+            output (torch.Tensor): The output tensor from the model. The shape of the output tensor is 
+            B, OUT_C, Z, Y, X with OUT_C: vector field 0-2, synapse type 3-6, cell type 7-17 and 18-28.
+            target (torch.Tensor): The target tensor for the model. The shape of the target tensor is 
+            B, C, Z, Y, X with C: vector field 0-2, synapse type label 3, cell type labels 4-5.
             downscale_fact: Used to prevent NaN losses.
-
+        
         Returns:
-
+            torch.Tensor: The sum of the vector field loss and the synapse type loss.
         """
         # target shape: B, C, Z, Y, X
 

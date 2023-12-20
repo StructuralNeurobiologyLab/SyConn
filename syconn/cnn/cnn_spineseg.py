@@ -25,6 +25,14 @@ from elektronn3.training.loss import DiceLoss, LovaszLoss
 
 
 def get_model():
+    """
+    This function creates a Fully Convolutional Network (FCN) model for semantic segmentation
+    of spinal structures. The FCN is based on a VGG13 architecture and is designed to classify
+    each pixel into one of 5 classes.
+    
+    Returns:
+        model (torch.nn.Module): The constructed FCN model.
+    """
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
     model = FCNs(base_net=vgg_model, n_class=5)
     return model

@@ -36,10 +36,11 @@ import logging
 
 def batchjob_enabled() -> bool:
     """
-    Checks if active batch processing system is actually working.
-
+    Checks if the active batch processing system is operational. The function 
+    checks if either SLURM or QSUB is active.
+    
     Returns:
-        True if either SLURM or QSUB is active.
+        bool: Returns True if either SLURM or QSUB is active, else returns False.
     """
     batch_proc_system = global_params.config['batch_proc_system']
     if batch_proc_system is None or batch_proc_system == 'None':
@@ -83,40 +84,43 @@ def batchjob_script(params: list, name: str,
     Submits batch jobs to process a list of parameters `params` with a python
     script on the specified environment (either None, SLURM or QSUB; run
     ``global_params.config['batch_proc_system']`` to get the active system).
-
-    Notes:
-        * The memory available for each job is coupled to the number of cores
-          per job (`n_cores`).
-
-    Todo:
-        * Add sbatch array support -> faster submission
-        * Make script specification more generic
-
+    
+    The memory available for each job is coupled to the number of cores
+    per job (`n_cores`). This function also supports faster submission by adding
+    sbatch array support and making script specification more generic.
+    
     Args:
-        params: List of all parameter sets to be processed.
-        name: Name of batch job submitted via the batch processing system.
-        batchjob_folder: Directory which contains all submission relevant files,
-            e.g. bash scripts, logs, output files, .. Defaults to
+        params (list): List of all parameter sets to be processed.
+        name (str): Name of batch job submitted via the batch processing system.
+        batchjob_folder (str, optional): Directory which contains all submission 
+            relevant files, e.g. bash scripts, logs, output files. Defaults to
             ``"{}/{}_folder{}/".format(global_params.config.qsub_work_folder, name, suffix)``.
-        n_cores: Number of cores used for each job.
-        additional_flags: Used to set additional parameters for each job. To
-            allocate one GPU for each worker use: ``additional_flags=--gres=gpu:1``.
-        suffix: Suffix added to `batchjob_folder`.
-        job_name: Name of the jobs submitted via the batch processing system.
-            Defaults to a random string of 8 letters.
-        script_folder: Directory where to look for the script which is executed.
-            Looks for ``QSUB_{name}.py``.
-        max_iterations: Maximum number of retries of failed jobs.
-        python_path: Path to python binary.
-        disable_batchjob: Use single node multiprocessing.
-        use_dill: Use dill to enable pickling of lambda expressions.
-            remove_jobfolder: Remove `batchjob_folder` after successful termination.
-        remove_jobfolder:
-        log: Logger.
-        sleep_time: Sleep duration before checking batch job states again.
-        show_progress: Only used if ``disabled_batchjob=True``.
-        overwrite:
-        exclude_nodes: Nodes to exclude during job submission.
+        n_cores (int, optional): Number of cores used for each job. Defaults to 1.
+        additional_flags (str, optional): Used to set additional parameters for each job. 
+            To allocate one GPU for each worker use: ``additional_flags=--gres=gpu:1``. 
+            Defaults to ''.
+        suffix (str, optional): Suffix added to `batchjob_folder`. Defaults to "".
+        job_name (str, optional): Name of the jobs submitted via the batch processing 
+            system. Defaults to a random string of 8 letters.
+        script_folder (str, optional): Directory where to look for the script which is 
+            executed. Looks for ``QSUB_{name}.py``. Defaults to None.
+        max_iterations (int, optional): Maximum number of retries of failed jobs. 
+            Defaults to 10.
+        python_path (str, optional): Path to python binary. Defaults to None.
+        disable_batchjob (bool, optional): Use single node multiprocessing. 
+            Defaults to False.
+        use_dill (bool, optional): Use dill to enable pickling of lambda expressions.
+            Defaults to False.
+        remove_jobfolder (bool, optional): Remove `batchjob_folder` after successful 
+            termination. Defaults to False.
+        log (Logger, optional): Logger. Defaults to None.
+        sleep_time (int, optional): Sleep duration before checking batch job states 
+            again. Defaults to None.
+        show_progress (bool, optional): Only used if ``disabled_batchjob=True``. 
+            Defaults to True.
+        overwrite (bool, optional): Defaults to False.
+        exclude_nodes (list, optional): Nodes to exclude during job submission. 
+            Defaults to None.
     """
     starttime = datetime.datetime.today().strftime("%m.%d")
     # Parameter handling
@@ -362,6 +366,18 @@ def batchjob_script(params: list, name: str,
 
 
 def _delete_folder_daemon(dirname, log, job_name, timeout=60):
+    """
+    Starts a daemon thread to delete a directory after a given timeout.
+    
+    Args:
+        dirname (str): The directory to be deleted.
+        log (Logger): Logger to log the status of the deletion.
+        job_name (str): The name of the job associated with the directory.
+        timeout (int): The time in seconds to wait before deleting the directory. Defaults to 60.
+    
+    Returns:
+        None
+    """
 
     def _delete_folder(dn, lg, to=60):
         start = time.time()
@@ -390,27 +406,25 @@ def _delete_folder_daemon(dirname, log, job_name, timeout=60):
 def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, python_path=None, remove_jobfolder=False,
                       show_progress=True, log=None, overwrite=False, job_folder=None):
     """
-    # TODO: utilize log and error files ('path_to_err', path_to_log')
-    Fallback method in case no batchjob submission system is available.
-
+    Executes a batch job in a fallback mode if no batchjob submission system is available.
+    
     Args:
-        params list[Any]:
-        name (str):
-        n_cores (int):
-            CPUs per job.
-        suffix (str):
-        script_folder (str):
-        python_path (str):
-        remove_jobfolder (bool):
-        show_progress (bool):
-        log: Logger
-            Logger.
-        overwrite:
-        job_folder:
-
+        params (list): List of parameters for the batch job.
+        name (str): Name of the batch job.
+        n_cores (int): Number of cores to be used for the job. Defaults to 1.
+        suffix (str): Suffix to be added to the job folder. Defaults to "".
+        script_folder (str): Directory where the script to be executed is located.
+            Defaults to None.
+        python_path (str): Path to the python binary. Defaults to None.
+        remove_jobfolder (bool): Whether to remove the job folder after execution.
+            Defaults to False.
+        show_progress (bool): Whether to show progress during execution. Defaults to True.
+        log (Logger): Logger to log the status of the job. Defaults to None.
+        overwrite (bool): Whether to overwrite existing files. Defaults to False.
+        job_folder (str): Directory where the job files are located. Defaults to None.
+    
     Returns:
-        str:
-            Path to output.
+        str: Path to the output of the job.
     """
     if python_path is None:
         python_path = python_path_global
@@ -518,7 +532,14 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", script_folder=None, py
 
 def fallback_exec(cmd_exec):
     """
-    Helper function to execute commands via ``subprocess.Popen``.
+    Executes a command using subprocess.Popen and returns any warnings or errors.
+    
+    Args:
+        cmd_exec (str): The command to be executed.
+    
+    Returns:
+        str: Warnings or errors during the execution of the command. This function 
+        was previously a helper function for executing commands.
     """
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out, err = ps.communicate()
@@ -539,18 +560,18 @@ def fallback_exec(cmd_exec):
 def jobstates_slurm(job_name: str, start_time: str,
                     max_retry: int = 10) -> Dict[int, str]:
     """
-    Generates a dictionary which stores the state of every job belonging to
-    `job_name`.
-
+    Generates a dictionary which stores the state of every job belonging to `job_name`.
+    
     Args:
-        job_name:
-        start_time: The following formats are allowed: MMDD[YY] or MM/DD[/YY]
-            or MM.DD[.YY], e.g. ``datetime.datetime.today().strftime("%m.%d")``.
-        max_retry: Number of retries for ``sacct`` SLURM query if failing (5s
-            sleep in-between).
-
+        job_name (str): Name of the job.
+        start_time (str): Start time of the job. The following formats are 
+            allowed: MMDD[YY] or MM/DD[/YY] or MM.DD[.YY], e.g. 
+            ``datetime.datetime.today().strftime("%m.%d")``.
+        max_retry (int): Number of retries for ``sacct`` SLURM query if 
+            failing. Defaults to 10. Sleeps for 5s in-between retries.
+    
     Returns:
-        Dictionary with the job states. (key: job ID, value: state)
+        dict: Dictionary with the job states. (key: job ID, value: state)
     """
     cmd_stat = f"sacct -b --name {job_name} -u {username} -S {start_time}"
     job_states = dict()
@@ -580,14 +601,13 @@ def jobstates_slurm(job_name: str, start_time: str,
 
 def nodestates_slurm() -> Dict[int, dict]:
     """
-    Generates a dictionary which stores the state of every job belonging to
-    `job_name`.
-
+    Generates a dictionary which stores the state of every node.
+    
     Args:
-
-
+        None
+    
     Returns:
-        Dictionary with the node states. (key: job ID, value: state dict)
+        dict: Dictionary with the node states. (key: node ID, value: state dict)
     """
     cmd_stat = f'sinfo -N  -o "%20N %10t %10c %10m %10G"'
     # yields e.g.
@@ -629,15 +649,12 @@ def nodestates_slurm() -> Dict[int, dict]:
 def number_of_running_processes(job_name):
     """
     Calculates the number of running jobs using qstat/squeue
-
+    
     Args:
-        job_name (str):
-            job_name as shown in qstats
-
+        job_name (str): Name of the job as shown in qstats.
+    
     Returns:
-        nb_jobs (int):
-            number of running jobs
-
+        int: Number of running jobs.
     """
     if global_params.config['batch_proc_system'] == 'QSUB':
         cmd_stat = "qstat -u %s" % username
@@ -656,14 +673,16 @@ def number_of_running_processes(job_name):
 
 def delete_jobs_by_name(job_name):
     """
-    Deletes a group of jobs that have the same name
-
+    Deletes a group of jobs that have the same name from the batch processing system. The function 
+    checks the type of batch processing system (either QSUB or SLURM) and executes the appropriate 
+    command to delete the jobs. If the batch processing system is not recognized, a 
+    NotImplementedError is raised.
+    
     Args:
-        job_name (str):
-            job_name as shown in qstats
-
-    Returns:
-
+        job_name (str): The name of the jobs to be deleted as shown in qstats.
+    
+    Raises:
+        NotImplementedError: If the batch processing system is not recognized.
     """
     if global_params.config['batch_proc_system'] == 'QSUB':
         cmd_stat = "qstat -u %s" % username
@@ -697,10 +716,12 @@ def delete_jobs_by_name(job_name):
 
 def restart_nodes_daemon():
     """
-    Only support gce. [WIP]
-
-    Returns:
-
+    Restarts the nodes of a Google Cloud Engine (GCE) cluster. The function continuously checks the 
+    state of the nodes and restarts any that are down or drained. The function currently only supports 
+    GCE and is a work in progress.
+    
+    Raises:
+        ValueError: If the gcloud compute instances stop command cannot be run.
     """
     zone = 'us-east1-c'
     cluster_name = 'slurm-gluster-gpu-'

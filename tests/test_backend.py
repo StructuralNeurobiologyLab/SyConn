@@ -20,6 +20,15 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 
 
 def _setup_testfile(fname):
+    """
+    Sets up a test file for the unit tests. If the file already exists, it is removed.
+    
+    Args:
+        fname (str): Name of the file to be set up.
+    
+    Returns:
+        str: Path to the test file.
+    """
     test_p = f"{dir_path}/{fname}.pkl"
     if os.path.isfile(test_p):
         os.remove(test_p)
@@ -30,6 +39,11 @@ def _setup_testfile(fname):
 
 
 def test_VoxelStorageLazyLoading():
+    """
+    Tests the lazy loading functionality of the VoxelStorageLazyLoading class. It creates a numpy array,
+    stores it in the VoxelStorageLazyLoading object, and then retrieves it to check if the stored and
+    retrieved arrays are equal. It also checks if the length of the VoxelStorageLazyLoading object is as expected.
+    """
     test_p = f"{dir_path}/vx_dc_lazy.npz"
     if os.path.isfile(test_p):
         os.remove(test_p)
@@ -47,6 +61,11 @@ def test_VoxelStorageLazyLoading():
 
 
 def test_BinarySearchStore():
+    """
+    Tests the BinarySearchStore class. It creates a BinarySearchStore object with random data, and then
+    retrieves some of the data to check if the retrieved and original data are equal. It also checks if
+    the number of shards, length of the ID array, and maximum ID are as expected.
+    """
     np.random.seed(0)
     n_shards = 5
     n_elements = int(1e6)
@@ -71,17 +90,42 @@ def test_BinarySearchStore():
 
 
 def get_attr_newinstances(args):
+    """
+    Retrieves attributes from a BinarySearchStore object. This function is used for multiprocessing.
+    
+    Args:
+        args (tuple): A tuple containing the path to the BinarySearchStore file, the samples to retrieve,
+                      and the key of the attribute to retrieve.
+    
+    Returns:
+        np.ndarray: The retrieved attributes.
+    """
     tf, samples, key = args
     binstore = BinarySearchStore(tf)
     return binstore.get_attributes(samples, key)
 
 
 def get_attr(args):
+    """
+    Retrieves attributes from a BinarySearchStore object. This function is used for multiprocessing.
+    
+    Args:
+        args (tuple): A tuple containing the BinarySearchStore object, the samples to retrieve,
+                      and the key of the attribute to retrieve.
+    
+    Returns:
+        np.ndarray: The retrieved attributes.
+    """
     bss, samples, key = args
     return bss.get_attributes(samples, key)
 
 
 def test_BinarySearchStore_multiprocessed():
+    """
+    Tests the BinarySearchStore class with multiprocessing. It creates a BinarySearchStore object with
+    random data, and then retrieves some of the data in multiple processes to check if the retrieved and
+    original data are equal.
+    """
     np.random.seed(0)
     n_shards = 5
     n_elements = int(2e6)
@@ -126,16 +170,16 @@ def test_BinarySearchStore_multiprocessed():
 @pytest.mark.xfail(strict=False)
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
     """
-      Creates a file then blocks it for 3 seconds. In parallel it creates 3 files.
-      First one after 1s , 2nd after 2 seconds and the third one after 3s.
-      The first two creations are EXPECTED to fail. The last one is expected to be
-      successful.
-
-      Returns:
-          str:
-              An assertion error in case any of the test case fails.
-              Logged to: logs/unitests.log
-      """
+    Creates a file then blocks it for 3 seconds. In parallel it creates 3 files.
+    First one after 1s , 2nd after 2 seconds and the third one after 3s.
+    The first two creations are EXPECTED to fail. The last one is expected to be
+    successful.
+    
+    Returns:
+        str:
+            An assertion error in case any of the test case fails.
+            Logged to: logs/unitests.log
+    """
     test_p = _setup_testfile('test1')
 
     def create_LZ4Dict_wait_for_3s_then_close():
@@ -200,7 +244,6 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
     
     Returns:
         An Assertion Error in case an exception is thrown
-
     """
     test_p = _setup_testfile('test2')
 
@@ -240,6 +283,11 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 
 
 def test_compression_and_decompression_for_mesh_dict():
+    """
+    Tests the compression and decompression functionality of the MeshStorage class. It creates a MeshStorage
+    object with random data, compresses it, and then decompresses it to check if the decompressed and original
+    data are equal.
+    """
     test_p = _setup_testfile('test3')
 
     try:
@@ -297,6 +345,11 @@ def test_compression_and_decompression_for_mesh_dict():
 
 
 def test_compression_and_decompression_for_voxel_storage():
+    """
+    This function tests the compression and decompression functionality for voxel storage. It checks for least entropy
+    data, high entropy data and also tests the reading functionality. It raises an AssertionError if any of the tests
+    fail.
+    """
     test_p = _setup_testfile('test4')
 
     try:
@@ -380,6 +433,11 @@ def test_compression_and_decompression_for_voxel_storage():
 
 
 def test_compression_and_decompression_for_voxel_dictL():
+    """
+    This function tests the compression and decompression functionality for voxel dictionary. It checks for least entropy
+    data, high entropy data and also tests the reading functionality. It raises an AssertionError if any of the tests
+    fail.
+    """
     test_p = _setup_testfile('test5')
 
     # tests least entropy data
@@ -462,11 +520,13 @@ def test_compression_and_decompression_for_voxel_dictL():
 def test_basics_write_txt2kzip():
 
     """
-    Checks the write_txt2kzip function in syconnfs.handler.basics
-
+    Checks the write_txt2kzip function in syconnfs.handler.basics. It writes a 
+    test string to a .k.zip file and checks if the file is created successfully. 
+    If the test fails, it raises an AssertionError.
+    
     Returns:
-        An Assertion Error in case an exception is thrown
-
+        An AssertionError in case the test fails and the file is not created 
+        successfully.
     """
 
     try:
@@ -486,11 +546,9 @@ def test_basics_write_txt2kzip():
 def test_basics_write_data2kzip():
 
     """
-    Checks the write_data2kzipfunction in syconn.handler.basics
-
-    Returns:
-        An Assertion Error in case an exception is thrown
-
+    Checks the write_data2kzip function in syconn.handler.basics. It writes a test 
+    string to a .txt file and then compresses it into a .k.zip file. If the test 
+    fails, it raises an AssertionError.
     """
 
     try:
@@ -509,11 +567,9 @@ def test_basics_write_data2kzip():
 
 def test_read_txt_from_zip():
     """
-    Tests reading of a text file from zip.
-
-    Returns:
-        An Assertion Error in case an exception is thrown
-
+    Tests the functionality of reading a text file from a zip file. It writes a test 
+    string to a .txt file, compresses it into a .zip file, and then reads the text 
+    from the .zip file. If the test fails, it raises an AssertionError.
     """
     test_str = "testing_" + sys._getframe().f_code.co_name
     try:
@@ -534,11 +590,10 @@ def test_read_txt_from_zip():
 
 def test_remove_from_zip():
     """
-    Tests removing of a text file from zip.
-
-    Returns:
-        An Assertion Error in case an exception is thrown
-
+    Tests the functionality of removing a text file from a zip file. It writes a 
+    test string to a .txt file, compresses it into a .zip file, and then attempts 
+    to remove the .txt file from the .zip file. If the test fails, it raises an 
+    AssertionError.
     """
     try:
         with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode='w') as zf:
@@ -560,6 +615,10 @@ def test_remove_from_zip():
 
 
 def remove_files_after_test(file_name):
+    """
+    This function removes the specified file after the test is completed. It takes the file name as an argument and
+    removes the file if it exists.
+    """
     if os.path.isfile(str(dir_path) + '/' + file_name):
         os.remove(str(dir_path) + '/' + file_name)
 

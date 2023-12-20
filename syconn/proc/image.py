@@ -30,17 +30,21 @@ except ImportError:
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
     """
-    Computes contact sites between supver voxels and returns contact site voxel
-
+    This function computes the contact sites between two sets of supervoxels and 
+    returns the coordinates of the contact site voxels. It uses a k-dimensional 
+    tree for efficient nearest neighbor queries. The function iterates over a 
+    range of distances until it finds at least one neighbor.
+    
     Args:
-        coords_a : np.array
-        coords_b : np.array
-        max_hull_dist (int):
-            Maximum distance between voxels in coods_a and coords_b
-
+        coords_a (np.array): An array of coordinates representing the first set 
+        of supervoxels.
+        coords_b (np.array): An array of coordinates representing the second set 
+        of supervoxels.
+        max_hull_dist (int, optional): The maximum distance between voxels in 
+        coords_a and coords_b. Defaults to 1.
+    
     Returns:
-        np.array:
-            contact site coordinates
+        np.array: An array of coordinates representing the contact site voxels.
     """
     assert max_hull_dist >= 1
     if len(coords_a) == 0 or len(coords_b) == 0:
@@ -65,15 +69,18 @@ def find_contactsite(coords_a, coords_b, max_hull_dist=1):
 
 def fast_check_sing_comp(sv, max_dist=5):
     """
-    Fast check if super voxel is single connected component by subsampling
+    This function performs a fast check to determine if a supervoxel is a single 
+    connected component by subsampling. It uses a pairwise distance function to 
+    compute the Euclidean distance between all pairs of points in the supervoxel. 
+    If the number of connected components is one, the function returns True.
     
     Args:
-        sv : np.array
-        max_dist (int):
-
+        sv (np.array): An array of coordinates representing the supervoxel.
+        max_dist (int, optional): The maximum distance for two points to be 
+        considered connected. Defaults to 5.
+    
     Returns:
-        bool:
-            True if single connected component
+        bool: True if the supervoxel is a single connected component, False otherwise.
     """
     if len(sv) == 0:
         return True
@@ -85,6 +92,19 @@ def fast_check_sing_comp(sv, max_dist=5):
 
 
 def conn_comp(sv, max_dist):
+    """
+    This function computes the number of connected components and their labels in a supervoxel. It uses a pairwise 
+    distance function to compute the Euclidean distance between all pairs of points in the supervoxel. The function 
+    then creates a sparse matrix from the distance matrix and uses a connected components algorithm to find the 
+    connected components.
+    
+    Args:
+        sv (np.array): An array of coordinates representing the supervoxel.
+        max_dist (int): The maximum distance for two points to be considered connected.
+    
+    Returns:
+        tuple: A tuple containing the number of connected components and an array of labels.
+    """
     sv = np.array(sv, dtype=np.float32)
     pdists = spatial.distance.pdist(sv)
     pdists[pdists > max_dist] = 0
@@ -95,16 +115,20 @@ def conn_comp(sv, max_dist):
 
 def single_conn_comp(sv, max_dist=2, ref_coord=None, return_bool=False):
     """
-    Returns single connected component of coordinates.
+    This function returns the single connected component of a set of coordinates. It first checks if the supervoxel 
+    is a single connected component. If it is, the function returns the supervoxel. If not, the function computes the 
+    connected components and their labels. The function then returns the largest connected component or the component 
+    closest to a reference coordinate.
     
     Args:
-        sv : np.array
-        max_dist (int):
-        ref_coord : np.array
-        return_bool (bool):
-
+        sv (np.array): An array of coordinates representing the supervoxel.
+        max_dist (int, optional): The maximum distance for two points to be considered connected. Defaults to 2.
+        ref_coord (np.array, optional): A reference coordinate. Defaults to None.
+        return_bool (bool, optional): If True, return a boolean array where True values correspond to the connected 
+                                       component. Defaults to False.
+    
     Returns:
-        np.array
+        np.array: An array of coordinates representing the single connected component.
     """
     # if fast_check_sing_comp(sv):
     #     return sv
@@ -124,15 +148,17 @@ def single_conn_comp(sv, max_dist=2, ref_coord=None, return_bool=False):
 
 def single_conn_comp_img(img, background=1.0):
     """
-    Returns connected component in image which is located at the center.
-    TODO: add 'max component' option
-
+    This function returns the connected component in an image that is located at the center. It first labels the 
+    connected components in the image. The function then creates a new image with the same shape as the input image 
+    and sets the pixels corresponding to the center component to their original values. TODO: add 'max component' 
+    option
+    
     Args:
-        img : np.array
-        background (float):
-
+        img (np.array): An array representing the input image.
+        background (float, optional): The value representing the background in the image. Defaults to 1.0.
+    
     Returns:
-        np.array
+        np.array: An array representing the image with only the center connected component.
     """
     orig_shape = img.shape
     img = np.squeeze(img)
@@ -153,14 +179,16 @@ def rgb2gray(rgb):
 
 def apply_equalhist(arr):
     """
-    If cv2 is available applies histogram normalization on array.
-
+    This function applies histogram normalization on an array if the OpenCV 
+    library is available. It first checks if the array is two-dimensional and 
+    adds an extra dimension if necessary. The function then normalizes the 
+    array to have a maximum value of 255 and applies histogram equalization.
+    
     Args:
-        arr : np.array
-
-
+        arr (np.array): An array representing the input data.
+    
     Returns:
-
+        np.array: An array representing the data after histogram normalization.
     """
     if not __cv2__:
         try:
@@ -176,16 +204,18 @@ def apply_equalhist(arr):
 
 def apply_clahe(arr, clipLimit=4.0, tileGridSize=(8, 8), ret_normalized=True):
     """
-    If cv2 is available applies clahe filter on array.
-
+    This function applies the Contrast Limited Adaptive Histogram Equalization (CLAHE) filter on an array if the 
+    OpenCV library is available. It first checks if the array is two-dimensional and adds an extra dimension if 
+    necessary. The function then normalizes the array to have a maximum value of 255 and applies the CLAHE filter.
+    
     Args:
-        arr : np.array
-        clipLimit (float):
-        tileGridSize (tuple): tuple of int
-        ret_normalized (bool):
-
+        arr (np.array): An array representing the input data.
+        clipLimit (float, optional): The threshold for contrast limiting. Defaults to 4.0.
+        tileGridSize (tuple, optional): The size of the grid for the CLAHE algorithm. Defaults to (8, 8).
+        ret_normalized (bool, optional): If True, return the normalized array. Defaults to True.
+    
     Returns:
-        np.array
+        np.array: An array representing the data after applying the CLAHE filter.
     """
     if not __cv2__:
         try:
@@ -212,13 +242,16 @@ def apply_clahe_plain(arr, clipLimit, tileGridSize):
 
 def normalize_img(img, max_val=255):
     """
+    This function normalizes an image to have a maximum value specified by the user. It first converts the image to 
+    floating point values. The function then subtracts the minimum value of the image and divides by the maximum 
+    value. Finally, the function multiplies the image by the maximum value specified by the user.
+    
     Args:
-        img : np.array
-        max_val : int or float
-
+        img (np.array): An array representing the input image.
+        max_val (int or float, optional): The maximum value for the normalized image. Defaults to 255.
+    
     Returns:
-        np.array
-            Normalized image
+        np.array: An array representing the normalized image.
     """
     img = img.astype(np.float32)
     img -= img.min()
@@ -229,16 +262,18 @@ def normalize_img(img, max_val=255):
 
 def apply_pca(sv, pca=None):
     """
-    Apply principal component analysis and return rotated supervoxel
-
+    This function applies Principal Component Analysis (PCA) to a supervoxel and returns the 
+    supervoxel coordinates rotated in the principal component system. If a PCA object is 
+    provided, the function uses it to transform the supervoxel. If not, the function creates 
+    a new PCA object and fits it to the supervoxel.
+    
     Args:
-        sv : np.array [N x 3]
-            super voxel
-        pca : PCA
-            prefitted pca
-
+        sv (np.array): An array of coordinates representing the supervoxel.
+        pca (PCA, optional): A pre-fitted PCA object. Defaults to None.
+    
     Returns:
-        super voxel coordinates rotated in principle component system
+        np.array: An array of coordinates representing the supervoxel rotated in the principal 
+        component system.
     """
     if pca is None:
         pca = PCA(n_components=3, random_state=0)
@@ -250,14 +285,15 @@ def apply_pca(sv, pca=None):
 
 def remove_outlier(sv, edge_size):
     """
-    Removes outlier in array sv beyond [0, edge_sizes]
+    Removes outliers from a given array that are beyond the specified edge size. Outliers are defined as
+    elements that fall outside the range [0, edge_size).
 
     Args:
-        sv : np.array
-        edge_size (int) :
+        sv (np.array): The input array from which outliers will be removed.
+        edge_size (int): The upper limit for determining outliers in the array.
 
     Returns:
-        np.array
+        np.array: The input array with outliers removed.
     """
     inlier = (sv[:, 0] >= 0) & (sv[:, 0] < edge_size) & (sv[:, 1] >= 0) & \
              (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
@@ -277,17 +313,15 @@ def remove_outlier(sv, edge_size):
 
 def normalize_vol(sv, edge_size, center_coord):
     """
-    returns cube with given edge size and sv centered at center coordinate
+    Returns a cube with a given edge size and a supervoxel centered at the center coordinate.
 
     Args:
-        sv :  np.array [N x 3]
-            coordinates of voxels in supervoxel
-        edge_size : int
-            edge size of returned cube
-        center_coord : np.array
+        sv (np.array): A 3D array representing the coordinates of voxels in the supervoxel.
+        edge_size (int): The edge size of the returned cube.
+        center_coord (np.array): The center coordinate for the supervoxel.
 
     Returns:
-        np.array
+        np.array: A cube with the given edge size and the supervoxel centered at the center coordinate.
     """
     translation = np.ones(3) * edge_size / 2. - center_coord
     assert isinstance(edge_size, np.int32)
@@ -300,16 +334,18 @@ def normalize_vol(sv, edge_size, center_coord):
 def multi_dilation(overlay, n_dilations, use_find_objects=False,
                    background_only=True):
     """
-    Wrapper function for dilation
-
+    A wrapper function for dilation, which is a morphological operation that expands or thickens objects
+    in a binary image.
+    
     Args:
-        overlay
-        n_dilations
-        use_find_objects
-        background_only
-
+        overlay: The input image.
+        n_dilations: The number of times dilation is applied.
+        use_find_objects (bool, optional): If True, uses 'find_objects' from scipy.ndimage to reduce the
+            processed volume and apply the operation per object. Defaults to False.
+        background_only (bool, optional): If True, changes only apply to the background (0). Defaults to True.
+    
     Returns:
-
+        The dilated image.
     """
     return multi_mop(ndimage.binary_dilation, overlay, n_dilations,
                      use_find_objects, background_only)
@@ -318,23 +354,21 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False,
 def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
               mop_kwargs=None, verbose=False):
     """
-    Generic function for binary morphological image operations with multi-label
-    content.
-
-    Currently supported operations:
-        * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
-          ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
-
+    A generic function for binary morphological image operations with multi-label content. Currently supported
+    operations include binary dilation, binary erosion, binary closing, and binary fill holes.
+    
     Args:
-        mop_func
-        overlay
-        n_iters
-        use_find_objects
-        mop_kwargs
-        verbose
-
+        mop_func: The morphological operation function to be applied.
+        overlay: The input image.
+        n_iters: The number of times the morphological operation is applied.
+        use_find_objects (bool, optional): If True, uses 'find_objects' from scipy.ndimage to reduce the
+            processed volume and apply the operation per object. Defaults to False.
+        mop_kwargs (dict, optional): Additional keyword arguments passed to the morphological operation function.
+            Defaults to None.
+        verbose (bool, optional): If True, displays a progress bar. Defaults to False.
+    
     Returns:
-
+        The image after applying the morphological operation.
     """
     if mop_kwargs is None:
         mop_kwargs = {}
@@ -358,23 +392,20 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
 def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
                            mop_kwargs=None):
     """
-    Generic function for binary morphological image operations with multi-label content
-    using 'find_objects' from scipy.ndimage to reduce the processed volume and
-    to apply the operation per object, which enables to process multi-label
-    data.
-    Currently supported operations:
-        * ``scipy.ndimage.binary_dilation``, ``scipy.ndimage.binary_erosion``,
-          ``scipy.ndimage.binary_closing``, ``scipy.ndimage.binary_fill_holes``.
-
+    A generic function for binary morphological image operations with multi-label content using 'find_objects'
+    from scipy.ndimage to reduce the processed volume and apply the operation per object. Currently supported
+    operations include binary dilation, binary erosion, binary closing, and binary fill holes.
+    
     Args:
-        mop_func:
-        overlay:
-        n_iters:
-        verbose:
-        mop_kwargs:
-
+        mop_func: The morphological operation function to be applied.
+        overlay: The input image.
+        n_iters: The number of times the morphological operation is applied.
+        verbose (bool, optional): If True, displays a progress bar. Defaults to False.
+        mop_kwargs (dict, optional): Additional keyword arguments passed to the morphological operation function.
+            Defaults to None.
+    
     Returns:
-
+        The image after applying the morphological operation.
     """
     # TODO: use mask kwarg of morphology operations to ommit subvol copies
     if mop_kwargs is None:
@@ -440,17 +471,17 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, verbose=False,
 
 def multi_dilation_backgroundonly(overlay, n_dilations, mop_kwargs=None):
     """
-    Same as :func:`~multi_dilation`, but processes each object in `overlay` independently.
-    In addition, changes only apply to the background (0). E.g. objects will not
-    dilate into other objects.
-
+    Similar to the multi_dilation function, but processes each object in the overlay independently. Changes only
+    apply to the background (0), meaning objects will not dilate into other objects.
+    
     Args:
-        overlay: 3D volume of type uint.
-        n_dilations: Number of dilations.
-        mop_kwargs: Additional keyword arguments passed to `mop_func`.
-
+        overlay: The input 3D volume of type uint.
+        n_dilations: The number of times dilation is applied.
+        mop_kwargs (dict, optional): Additional keyword arguments passed to the morphological operation function.
+            Defaults to None.
+    
     Returns:
-        Dilated overlay.
+        The dilated image.
     """
     return multi_mop_backgroundonly(ndimage.binary_dilation, overlay,
                                     n_dilations, mop_kwargs=mop_kwargs)
@@ -458,25 +489,24 @@ def multi_dilation_backgroundonly(overlay, n_dilations, mop_kwargs=None):
 
 def multi_mop_backgroundonly(mop_func, overlay, iterations, mop_kwargs=None):
     """
-    Same as :func:`~multi_mop`, but processes each object in `overlay` independently.
-    In addition, changes only apply to the background (0). E.g. objects will not
-    dilate into other objects. The original regions/segmentation is only
-    affected in case of erosion.
-
+    Similar to the multi_mop function, but processes each object in the overlay independently. 
+    Changes only apply to the background (0), meaning objects will not dilate into other objects. 
+    The original regions/segmentation is only affected in case of erosion.
+    
     Notes:
         * For ``binary_closing`` it is advised to pass ``structure=np.ones((2, 2, 2))``
           in order to fill gaps at the array boundaries. See https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.ndimage.morphology.binary_closing.html for an example.
-
+    
     Args:
-        mop_func: One of ``binary_closing``, ``binary_dilation``,
-            ``binary_erosion``, ``binary_fill_holes``
-            (see ``scipy.ndimage``).
-        overlay: 3D volume of type uint.
-        iterations: Number of iterations.
-        mop_kwargs: Additional keyword arguments passed to `mop_func`.
-
+        mop_func: The morphological operation function to be applied. One of ``binary_closing``, 
+            ``binary_dilation``, ``binary_erosion``, ``binary_fill_holes`` (see ``scipy.ndimage``).
+        overlay: The input image. 3D volume of type uint.
+        iterations: The number of times the morphological operation is applied.
+        mop_kwargs (dict, optional): Additional keyword arguments passed to the morphological 
+            operation function. Defaults to None.
+    
     Returns:
-        Volume processed by the given morphological operation.
+        The image after applying the morphological operation.
     """
     return _multi_mop_findobjects(mop_func, overlay, iterations,
                                   mop_kwargs=mop_kwargs)
@@ -486,16 +516,16 @@ def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str],
                                    mop_kwargs: Optional[dict] = None) \
         -> np.ndarray:
     """
-    Applies morphological operations on the input volume. String identifier in
-    the `morph_ops` list must match scipy.ndimage functions.
-
+    Applies a series of morphological operations on the input volume. The operations are specified by a list of string 
+    identifiers that must match scipy.ndimage functions. The operations are applied in the order they appear in the list.
+    
     Args:
-        vol: Input array (3D).
-        morph_ops: List with string identifier.
-        mop_kwargs: Keyword arguments for the called morphological operation(s).
-
+        vol (np.ndarray): The input 3D array on which the morphological operations are to be applied.
+        morph_ops (List[str]): A list of string identifiers specifying the morphological operations to be applied.
+        mop_kwargs (Optional[dict]): A dictionary of keyword arguments to be passed to the morphological operations.
+    
     Returns:
-        Processed volume.
+        np.ndarray: The input volume after the specified morphological operations have been applied.
     """
     if len(morph_ops) == 0:
         return vol
@@ -508,6 +538,17 @@ def apply_morphological_operations(vol: np.ndarray, morph_ops: List[str],
 
 
 def _count_subsequent_mops(mops: List[str]) -> tuple:
+    """
+    Counts the number of times each morphological operation appears consecutively in the list. The function returns two 
+    lists: one with the unique morphological operations and one with the counts of consecutive appearances.
+    
+    Args:
+        mops (List[str]): A list of string identifiers specifying the morphological operations.
+    
+    Returns:
+        tuple: A tuple of two lists. The first list contains the unique morphological operations and the second list 
+        contains the counts of consecutive appearances of each operation in the original list.
+    """
     mops_new = [mops[0]]
     mops_cnt = [1]
     for m in mops[1:]:
@@ -521,13 +562,14 @@ def _count_subsequent_mops(mops: List[str]) -> tuple:
 
 def get_aniso_struct(scaling: Union[tuple, np.ndarray]):
     """
-    Get kernel for morphology operations; cross-like with aniso dilations in the xy plane.
-
+    Generates a kernel for morphological operations. The kernel is cross-like with anisotropic dilations in the xy plane. 
+    The size of the kernel is determined by the provided scaling factor.
+    
     Args:
-        scaling: Voxel size in nm.
-
+        scaling (Union[tuple, np.ndarray]): A tuple or array specifying the voxel size in nm.
+    
     Returns:
-        Kernel taking into account the voxel size.
+        Kernel: A kernel for morphological operations, taking into account the voxel size.
     """
     struct = np.zeros((5, 5))
     struct[2, 2] = 1

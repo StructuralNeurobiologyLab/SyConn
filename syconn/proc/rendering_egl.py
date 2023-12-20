@@ -51,21 +51,19 @@ record_len = 10 * float_size
 
 def init_object(indices, vertices, normals, colors, ws):
     """
-    Initialize objects for rendering from N triangles and M vertices
-
+    Initializes objects for rendering from N triangles and M vertices. This function is used in the 
+    rendering process of the SyConn toolkit, particularly in the visualization of segmented structures 
+    from volume electron microscopy data.
+    
     Args:
-        indices: array_like
-            [3N, 1]
-        vertices: array_like
-            [3M, 1]
-        normals: array_like
-            [3M, 1]
-        colors: array_like
-            [4M, 1]
-        ws: tuple
-
+        indices (np.ndarray): An array of shape [3N, 1] representing the indices of the vertices.
+        vertices (np.ndarray): An array of shape [3M, 1] representing the vertices of the objects.
+        normals (np.ndarray): An array of shape [3M, 1] representing the normals at each vertex.
+        colors (np.ndarray): An array of shape [4M, 1] representing the colors of the vertices.
+        ws (tuple): A tuple representing the window size for rendering.
+    
     Returns:
-
+        None
     """
     global ind_cnt, vertex_cnt
     indices = indices.astype(np.uint32)
@@ -113,7 +111,16 @@ def init_object(indices, vertices, normals, colors, ws):
 
 def draw_object(triangulation=True):
     """
-    Draw elements in current buffer.
+    Draws elements in the current buffer. This function is used in the rendering process of the 
+    SyConn toolkit, particularly in the visualization of segmented structures from volume electron 
+    microscopy data.
+    
+    Args:
+        triangulation (bool, optional): A flag indicating whether to draw the elements as triangles. 
+        Defaults to True.
+    
+    Returns:
+        None
     """
     glVertexPointer(3, GL_FLOAT, record_len, vertex_offset)
     glNormalPointer(GL_FLOAT, record_len, normal_offset)
@@ -130,18 +137,23 @@ def draw_object(triangulation=True):
 def screen_shot(ws, colored=False, depth_map=False, clahe=False,
                 triangulation=True, egl_args=None):
     """
-    Create screenshot of currently opened window and return as array.
-
+    Creates a screenshot of the currently opened window and returns it as an array. This function is 
+    used in the rendering process of the SyConn toolkit, particularly in the visualization of 
+    segmented structures from volume electron microscopy data.
+    
     Args:
-        ws: tuple
-        colored: bool
-        depth_map: bool
-        clahe: bool
-        triangulation: bool
-        egl_args: bool
-
-    Returns: np.array
-
+        ws (tuple): A tuple representing the window size for rendering.
+        colored (bool, optional): A flag indicating whether to return a colored screenshot. 
+        Defaults to False.
+        depth_map (bool, optional): A flag indicating whether to return a depth map. Defaults to False.
+        clahe (bool, optional): A flag indicating whether to apply Contrast Limited Adaptive Histogram 
+        Equalization (CLAHE) to the screenshot. Defaults to False.
+        triangulation (bool, optional): A flag indicating whether to draw the elements as triangles. 
+        Defaults to True.
+        egl_args (bool, optional): Optional arguments if EGL platform is used. Defaults to None.
+    
+    Returns:
+        np.array: An array representing the screenshot.
     """
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
     draw_object(triangulation)
@@ -176,13 +188,16 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
 
 def init_ctx(ws, depth_map):
     """
-    Initializes egl context
+    Initializes the EGL (Embedded-System Graphics Library) context. This function is used in the 
+    rendering process of the SyConn toolkit, particularly in the visualization of segmented structures 
+    from volume electron microscopy data.
+    
     Args:
-        ws:
-        depth_map:
-
+        ws (tuple): A tuple representing the window size for rendering.
+        depth_map (bool): A flag indicating whether to create a depth map.
+    
     Returns:
-
+        list: A list containing the display, context, and buffer of the EGL context.
     """
     major, minor = ctypes.c_long(), ctypes.c_long()
     num_configs = ctypes.c_long()
@@ -245,18 +260,16 @@ def init_ctx(ws, depth_map):
 def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False,
                 smooth_shade=True, wire_frame=False):
     """
-    Initialize OpenGL settings.
-
+    Initializes OpenGL settings. This function sets up the OpenGL environment for rendering
+    3D objects. It configures settings like lighting, shading, viewport, and clear color.
+    
     Args:
-        ws: tuple
-        enable_lightning: bool
-        clear_value: float
-        depth_map: bool
-        smooth_shade:
-        wire_frame:
-
-    Returns:
-
+        ws (tuple): Window size defined as (width, height).
+        enable_lightning (bool, optional): If True, enables lighting effects. Default is False.
+        clear_value (float, optional): RGB values for the clear color. Default is None.
+        depth_map (bool, optional): If True, enables depth mapping. Default is False.
+        smooth_shade (bool, optional): If True, enables smooth shading. Default is True.
+        wire_frame (bool, optional): If True, renders objects in wireframe mode. Default is False.
     """
     glEnable(GL_NORMALIZE)
     if enable_lightning:
@@ -294,27 +307,27 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
                     enable_lightning=False, depth_map=False,
                     nb_views=3, background=None):  # Mariana Sh added background function
     """
-    Render mesh from 3 (default) equidistant perspectives.
-
+    Renders a mesh from multiple perspectives. This function creates a 3D rendering of a mesh
+    from a specified number of equidistant perspectives.
+    
     Args:
-        indices:
-        vertices:
-        normals:
-        colors:
-        alpha:
-        ws:
-        physical_scale:
-        enable_lightning:
-        depth_map:
-        nb_views: int
-            two views parallel to main component, and N-2 views (evenly spaced in
-            angle space) perpendicular to it.
-        background: float
-            float value for background (clear value) between 0 and 1 (used as RGB
-            values)
-
-    Returns: np.array
-        shape: (nb_views, ws[0], ws[1]
+        indices (array_like): Indices of the vertices forming the triangles of the mesh.
+        vertices (array_like): Coordinates of the vertices of the mesh.
+        normals (array_like): Normal vectors at each vertex of the mesh.
+        colors (array_like, optional): Colors at each vertex of the mesh. Default is None.
+        alpha (float, optional): Alpha value for the colors. Default is None.
+        ws (tuple, optional): Window size for the rendering. Default is (2048, 2048).
+        physical_scale (float, optional): Physical scale of the mesh. Default is None.
+        enable_lightning (bool, optional): If True, enables lighting effects. Default is False.
+        depth_map (bool, optional): If True, enables depth mapping. Default is False.
+        nb_views (int, optional): Number of perspectives to render. Default is 3. Two views 
+            parallel to main component, and N-2 views (evenly spaced in angle space) 
+            perpendicular to it.
+        background (float, optional): RGB values for the background color. Default is None. 
+            Float value for background (clear value) between 0 and 1.
+    
+    Returns:
+        np.array: Array of rendered images. Shape is (nb_views, ws[0], ws[1]).
     """
     ctx = init_ctx(ws, depth_map=depth_map)
     init_opengl(ws, enable_lightning, depth_map=depth_map, clear_value=background)
@@ -368,31 +381,24 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
                    nb_views=3, background=1, rot_mat=None,
                    triangulation=True):
     """
-    Render mesh from nb_views (default: 3) perspectives rotated around the
-    first principle component (angle between adjacent views is 360°/nb_views)
-
+    Renders a SuperSegmentationObject from multiple perspectives. This function creates a 3D
+    rendering of a SuperSegmentationObject from a specified number of perspectives rotated around
+    the first principle component.
+    
     Args:
-        sso: SuperSegmentationObject
-        colors: dict
-        obj_to_render: tuple of str
-            cell objects to render (e.g. 'mi', 'sj', 'vc', ..)
-        ws: tuple
-            window size of output images (width, height)
-        physical_scale:
-        enable_lightning:
-        depth_map:
-        nb_views: int
-            two views parallel to main component, and N-2 views (evenly spaced in
-            angle space) perpendicular to it.
-        background: int
-            float value for background (clear value) between 0 and 1 (used as RGB
-            values)
-        rot_mat: np.array
-            4 x 4 rotation matrix
-        triangulation: bool
-
-    Returns:
-
+        sso (SuperSegmentationObject): The SuperSegmentationObject to render.
+        colors (dict, optional): Dictionary mapping object types to colors.
+        obj_to_render (tuple of str, optional): Types of objects to render. Default is ('sv',).
+        ws (tuple, optional): Window size for the rendering. Default is (2048, 2048).
+        physical_scale (float, optional): Physical scale of the mesh.
+        enable_lightning (bool, optional): If True, enables lighting effects.
+        depth_map (bool, optional): If True, enables depth mapping.
+        nb_views (int, optional): Number of perspectives to render from. Default is 3. Two views
+            parallel to main component, and N-2 views (evenly spaced in angle space) perpendicular
+            to it.
+        background (int, optional): RGB values for the background color. Default is 1.
+        rot_mat (np.array, optional): 4x4 rotation matrix.
+        triangulation (bool, optional): If True, enables triangulation.
     """
     if colors is not None:
         assert type(colors) == dict
@@ -463,37 +469,30 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            verbose=False, wire_frame=False, egl_args=None,
                            nb_views=None, triangulation=True):
     """
-    Same as multi_view_mesh_coords but without creating gl context.
-
+    Renders a mesh object from multiple perspectives without creating a gl context. 
+    
     Args:
-        mesh: MeshObject
-        coords: np.array
-            [N, 3], must correspond to rot_matrices
-        rot_matrices: np.array
-            Rotation matrices for each view in ViewContainer list vc_list
-        edge_lengths: np.array
-            Spatial extent for sub-volumes
-        alpha: float
-        ws: tuple of ints
-            Window size used for rendering (resolution of array being stored/saved)
-        views_key: str
-        nb_simplices: int
-            Number of simplices used for meshes
-        depth_map: bool
-            Render views as depth, else render without light effects (binary)
-        clahe: bool
-            apply clahe to screenshot
-        smooth_shade: bool
-        verbose: bool
-        wire_frame: bool
-        egl_args: Tuple
-            Optional arguments if EGL platform is used
-        nb_views: int
-        triangulation: bool
-
-    Returns: np.array
-        Returns array of views, else None
-
+        mesh (MeshObject): The mesh object to be rendered.
+        coords (np.array): An array of coordinates corresponding to the rotation matrices.
+        rot_matrices (np.array): Rotation matrices for each view in the ViewContainer list.
+        edge_lengths (np.array): Spatial extent for sub-volumes.
+        alpha (float, optional): Alpha value for the mesh object. Defaults to None.
+        ws (tuple, optional): Window size used for rendering (resolution of array being 
+            stored/saved). Defaults to None.
+        views_key (str, optional): Key to identify the views. Defaults to "raw".
+        nb_simplices (int, optional): Number of simplices used for meshes. Defaults to 3.
+        depth_map (bool, optional): If True, render views as depth, else render without light 
+            effects (binary). Defaults to True.
+        clahe (bool, optional): If True, apply clahe to screenshot. Defaults to False.
+        smooth_shade (bool, optional): If True, apply smooth shading. Defaults to True.
+        verbose (bool, optional): If True, print verbose messages. Defaults to False.
+        wire_frame (bool, optional): If True, render in wireframe mode. Defaults to False.
+        egl_args (tuple, optional): Optional arguments if EGL platform is used. Defaults to None.
+        nb_views (int, optional): Number of views to render. Defaults to None.
+        triangulation (bool, optional): If True, apply triangulation. Defaults to True.
+    
+    Returns:
+        np.array: Array of views if successful, else None.
     """
     view_props_default = global_params.config['views']['view_properties']
     if nb_views is None:
@@ -592,13 +591,13 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
 
 def draw_scale(size):
     """
-    Draws black bar of given length with fixed width.
-
+    Draws a black bar of a given length with a fixed width.
+    
     Args:
-        size: float
-
+        size (float): Length of the bar to be drawn.
+    
     Returns:
-
+        None
     """
     glLineWidth(5)
     glBegin(GL_LINES)
@@ -614,31 +613,28 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=None,
                         smooth_shade=True, wire_frame=False, nb_views=None,
                         triangulation=True, comp_window=8e3):
     """
-    Render raw views located at given coordinates in mesh
-    Returns ViewContainer list if dest_dir is None, else writes
-    views to dest_path.
-
+    Renders raw views located at given coordinates in a mesh. Returns a list of ViewContainer
+    if destination directory is None, else writes views to destination path.
+    
     Args:
-        coords: np.array
-        mesh: MeshObject
-        clahe: bool
-        verbose: bool
-        ws: tuple
-            Window size
-        rot_matrices: np.array
-        views_key: str
-        return_rot_matrices: bool
-        depth_map: bool
-        smooth_shade: bool
-        wire_frame: bool
-        nb_views:
-        triangulation: bool
-        comp_window: float
-            window length in NM along main p.c. for mesh view
-
-    Returns: numpy.array
-        views at each coordinate
-
+        coords (np.array): An array of coordinates where views are to be rendered.
+        mesh (MeshObject): The mesh object to be rendered.
+        clahe (bool, optional): If True, apply clahe to screenshot. Defaults to False.
+        verbose (bool, optional): If True, print verbose messages. Defaults to False.
+        ws (tuple, optional): Window size. Defaults to None.
+        rot_matrices (np.array, optional): Rotation matrices. Defaults to None.
+        views_key (str, optional): Key to identify the views. Defaults to "raw".
+        return_rot_matrices (bool, optional): If True, return rotation matrices. Defaults to False.
+        depth_map (bool, optional): If True, render views as depth. Defaults to True.
+        smooth_shade (bool, optional): If True, apply smooth shading. Defaults to True.
+        wire_frame (bool, optional): If True, render in wireframe mode. Defaults to False.
+        nb_views (int, optional): Number of views to render. Defaults to None.
+        triangulation (bool, optional): If True, apply triangulation. Defaults to True.
+        comp_window (float, optional): Window length in NM along main p.c. for mesh view. 
+            Defaults to 8e3.
+    
+    Returns:
+        np.array: Array of views at each coordinate.
     """
     view_props_default = global_params.config['views']['view_properties']
     if nb_views is None:

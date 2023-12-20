@@ -13,6 +13,12 @@ logging.basicConfig(filename=test_dir + '/test_config.log',
 
 
 def test_load_write_conf():
+    """
+    This function tests the loading and writing of configuration files. It first generates a default
+    configuration file, then checks if the file was created successfully. It also tests if the 
+    configuration objects match and if they mismatch when expected. Finally, it tests if the 
+    configuration objects match after re-loading a modified configuration file.
+    """
     generate_default_conf(test_dir, scaling=(1, 1, 1), force_overwrite=True)
     assert os.path.isfile(test_dir + '/config.yml'), "Error creating config file."
     with pytest.raises(ValueError):
@@ -33,6 +39,12 @@ def test_load_write_conf():
 
 
 def test_key_value_pairs():
+    """
+    This function tests the key-value pairs in the configuration file. It generates a default 
+    configuration file with specific key-value pairs, then checks if the values were modified and 
+    written correctly. It also tests if the default values were modified or removed. Finally, it 
+    checks the default values in the dynamic configuration.
+    """
     prior_astrocyte_removal = True
     key_val_pairs_conf = [
         ('glia', {'prior_astrocyte_removal': prior_astrocyte_removal}),
@@ -57,6 +69,11 @@ def test_key_value_pairs():
 
 
 def test_key_value_pairs_fail():
+    """
+    This function tests the failure case for key-value pairs in the configuration file. It tries 
+    to generate a default configuration file with a key-value pair that does not exist in the 
+    default configuration. If a KeyError is raised, it passes the test.
+    """
     key_val_pairs_conf = [
         ('asym_label', 10)
     ]

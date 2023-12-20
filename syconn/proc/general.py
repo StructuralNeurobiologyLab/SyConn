@@ -13,14 +13,16 @@ import numpy as np
 
 def dense_matrix(sv, edge_size):
     """
-    Get dense matrix representation of coordinates
+    Returns a dense matrix representation of coordinates. The function creates a 3D matrix of zeros
+    with dimensions equal to the cube of the edge size. It then sets the value of the matrix at the
+    indices specified by the input array to 1.
 
     Args:
-        sv(np.array):
-        edge_size(int):
+        sv (np.array): A 2D numpy array where each row represents the 3D coordinates of a point.
+        edge_size (int): The edge size of the 3D matrix to be created.
 
     Returns:
-        np.array
+        np.array: A 3D numpy array representing the dense matrix.
     """
     mat = np.zeros([edge_size] * 3, dtype=np.uint64)
     mat[sv[:, 0], sv[:, 1], sv[:, 2]] = 1
@@ -28,6 +30,16 @@ def dense_matrix(sv, edge_size):
 
 
 def timeit(func):
+    """
+    A decorator function that measures the execution time of the decorated function. It prints the
+    total execution time and the average time per sample.
+    
+    Args:
+        func (function): The function to be decorated.
+    
+    Returns:
+        function: The decorated function.
+    """
     def timeit_wrapper(*args, **kwargs):
         start = time.time()
         nb_samples = len(args[0])
@@ -44,16 +56,17 @@ def timeit(func):
 
 def cut_array_in_one_dim(array, start, end, dim):
     """
-    Cuts an array along a dimension
+    Cuts a numpy array along a specified dimension from a start index to an end index. The function
+    handles the case where only the last elements should be retrieved.
 
     Args:
-        array(np.array):
-        start(int):
-        end(int):
-        dim(int):
+        array (np.array): The input numpy array to be cut.
+        start (int): The start index for the cut.
+        end (int): The end index for the cut.
+        dim (int): The dimension along which the array is to be cut.
 
     Returns:
-        array: np.array
+        np.array: The cut array.
     """
     start = int(start)
     end = int(end)
@@ -81,16 +94,14 @@ def cut_array_in_one_dim(array, start, end, dim):
 
 def crop_bool_array(arr):
     """
-    Crops a bool array to its True region
+    Crops a 3D boolean array to its True region. The function finds the indices of the True region
+    and returns a cropped array along with the offset.
 
     Args:
-        arr: 3d bool array to crop
-        
+        arr (np.array): A 3D boolean array to be cropped.
+
     Returns:
-        - 3d bool array
-        - list
-        - cropped array
-        - offset
+        Tuple[np.array, List[int]]: A tuple containing the cropped array and the offset.
     """
     in_mask_indices = [np.flatnonzero(arr.sum(axis=(1, 2))),
                        np.flatnonzero(arr.sum(axis=(0, 2))),

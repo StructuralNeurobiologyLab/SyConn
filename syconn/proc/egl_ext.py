@@ -59,6 +59,20 @@ except TypeError:
 
 # Wrap raw _eglQueryDevicesEXT function into something more Pythonic.
 def eglQueryDevicesEXT(max_devices=10):  # pylint: disable=invalid-name
+  """
+  Wraps the raw _eglQueryDevicesEXT function into a more Pythonic function. This function
+  queries the available EGL devices.
+  
+  Args:
+      max_devices (int, optional): Maximum number of devices to query. Defaults to 10.
+  
+  Returns:
+      list: List of available devices if the query is successful.
+  
+  Raises:
+      error.GLError: If the query is unsuccessful, it raises a GLError with the error code,
+                     the base operation, and the result.
+  """
   devices = (EGLDeviceEXT * max_devices)()
   num_devices = EGL.EGLint()
   success = _eglQueryDevicesEXT(max_devices, devices, num_devices)

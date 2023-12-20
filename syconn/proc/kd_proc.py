@@ -15,17 +15,22 @@ from . import log_proc
 def convert_cube_size_kd(source_kd: str, target_kd_path: str, cube_size: np.ndarray,
                          do_raw: bool = False, nb_threads: int = 1, compresslevel: Optional[int] = None):
     """
-
+    Converts the cube size of a KnossosDataset (KD) and saves it to a new location. This function
+    can handle both raw and segmentation data. The conversion is performed in parallel using
+    multiprocessing.
+    
     Args:
-        source_kd:
-        target_kd_path:
-        cube_size:
-        do_raw:
-        nb_threads:
-        compresslevel: Compression level used for storing segmentation data (not applied if `do_raw` is true).
-
+        source_kd (str): Path to the source KD.
+        target_kd_path (str): Path where the converted KD will be saved.
+        cube_size (np.ndarray): Desired cube size for the new KD.
+        do_raw (bool, optional): If True, the function will handle raw data. If False, it will
+            handle segmentation data. Defaults to False.
+        nb_threads (int, optional): Number of threads to use for multiprocessing. Defaults to 1.
+        compresslevel (Optional[int], optional): Compression level used for storing segmentation
+            data. Not applied if `do_raw` is true. Defaults to None.
+    
     Returns:
-
+        None
     """
     kd = basics.kd_factory(source_kd)
     # init new KnossosDataset
@@ -49,6 +54,26 @@ def convert_cube_size_kd(source_kd: str, target_kd_path: str, cube_size: np.ndar
 
 
 def _convert_cube_size_kd_thread(args):
+    """
+    Helper function for convert_cube_size_kd. This function is designed to be used with
+    multiprocessing. It loads a chunk of data from the source KD, converts it, and saves it to the
+    target KD.
+    
+    Args:
+        args (tuple): A tuple containing the following parameters:
+            - kd_source (str): Path to the source KD.
+            - kd_target (str): Path to the target KD.
+            - coords (np.ndarray): Coordinates of the chunk to be processed.
+            - do_raw (bool): If True, the function will handle raw data. If False, it will handle
+                segmentation data.
+            - mag (int): Magnification level of the data.
+            - cube_size (np.ndarray): Desired cube size for the new KD.
+            - compresslevel (Optional[int]): Compression level used for storing segmentation data.
+                Not applied if `do_raw` is true.
+    
+    Returns:
+        None
+    """
     kd_source, kd_target, coords, do_raw, mag, cube_size, compresslevel = args
     kd_source = basics.kd_factory(kd_source)
     kd_target = basics.kd_factory(kd_target)
@@ -63,6 +88,23 @@ def _convert_cube_size_kd_thread(args):
 
 
 def check_complete(kd1_p, kd2_p, mags, do_raw=False):
+    """
+    Checks if two KnossosDatasets (KDs) are identical. This function can handle both raw and
+    segmentation data.
+    
+    Args:
+        kd1_p (str): Path to the first KD.
+        kd2_p (str): Path to the second KD.
+        mags (list): List of magnification levels to check.
+        do_raw (bool, optional): If True, the function will handle raw data. If False, it will
+            handle segmentation data. Defaults to False.
+    
+    Returns:
+        None
+    
+    Raises:
+        ValueError: If the data in the two KDs is not identical.
+    """
     kd1 = basics.kd_factory(kd1_p)
     kd2 = basics.kd_factory(kd2_p)
 

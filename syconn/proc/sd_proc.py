@@ -38,15 +38,18 @@ from typing import Optional, List, Union
 
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
-    """Analyze SegmentationDataset and extract and cache SegmentationObjects
-    attributes as numpy arrays. Will only recognize dict/storage entries of type int
-    for object attribute collection.
-
+    """
+    Analyzes a SegmentationDataset and extracts and caches SegmentationObjects attributes as numpy arrays. 
+    This function only recognizes dict/storage entries of type int for object attribute collection.
+    
     Args:
-        sd: SegmentationDataset of e.g. cell supervoxels ('sv').
-        recompute: Whether or not to (re-)compute key information of each object (rep_coord, bounding_box, size).
-        n_jobs: Number of jobs.
-        compute_meshprops: Compute mesh properties. Will also calculate meshes (sparsely) if not available.
+        sd (SegmentationDataset): The SegmentationDataset to analyze. This is typically a set of cell 
+            supervoxels ('sv').
+        recompute (bool, optional): A flag indicating whether to recompute key information of each object 
+            (representative coordinate, bounding box, size). Defaults to True.
+        n_jobs (int, optional): The number of jobs to run in parallel. Defaults to None.
+        compute_meshprops (bool, optional): A flag indicating whether to compute mesh properties. If set to True, 
+            it will also calculate meshes (sparsely) if not available. Defaults to False.
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total  # individual tasks are very fast
@@ -123,6 +126,13 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, compute_meshprops=False):
 
 
 def _dataset_analysis_check(out_file):
+    """
+    Checks the output file of the dataset analysis process. This function is typically used in a multiprocessing 
+    context to verify the results of the analysis.
+    
+    Args:
+        out_file (str): The path to the output file to check.
+    """
     res_keys = []
     with open(out_file, 'rb') as f:
         res_dc = pkl.load(f)
@@ -133,6 +143,14 @@ def _dataset_analysis_check(out_file):
 
 
 def _dataset_analysis_collect(args):
+    """
+    Collects the results of the dataset analysis process. This function is typically used in a multiprocessing 
+    context to gather the results of the analysis.
+    
+    Args:
+        args (tuple): A tuple containing the attribute to collect, the output files to collect from, 
+            the number of IDs, and the path to the SegmentationDataset.
+    """
     attribute, out_files, n_ids, sd_path = args
     # start_multiprocess_imap obeys parameter order and therefore the
     # collected attributes will share the same ordering.
@@ -151,6 +169,13 @@ def _dataset_analysis_collect(args):
 
 
 def _load_attr_helper(args):
+    """
+    Helper function to load attributes during the dataset analysis process. This function is typically used in a 
+    multiprocessing context to load attributes in parallel.
+    
+    Args:
+        args (tuple): A tuple containing the file name and the attribute to load.
+    """
     res = []
     attr = args[0][1]
     for arg in args:
@@ -176,7 +201,15 @@ def _load_attr_helper(args):
 
 
 def _dataset_analysis_thread(args):
-    """ Worker of dataset_analysis """
+    """
+    Worker function for the dataset analysis process. This function is typically used in a 
+    multiprocessing context to perform the analysis in parallel.
+    
+    Args:
+        args (tuple): A tuple containing the paths to process, the object type, the version, 
+        the working directory, a flag indicating whether to recompute, and a flag indicating 
+        whether to compute mesh properties.
+    """
     # TODO: use arrays to store properties already during collection
     paths = args[0]
     obj_type = args[1]
@@ -253,6 +286,22 @@ def _dataset_analysis_thread(args):
 
 
 def _cache_storage_paths(args):
+    """
+    Caches the storage paths for a given set of object IDs. This function is used to organize the storage
+    of segmentation objects in a hierarchical folder structure for efficient access and retrieval. The 
+    function supports both old and new subfolder structures as defined in the global parameters.
+    
+    Args:
+        args (tuple): A tuple containing the following:
+            - target_p (str): The target path where the storage paths will be cached.
+            - all_ids (list): A list of all object IDs for which the storage paths are to be cached.
+            - n_folders_fs (int): The number of folders per filesystem. This parameter is used to 
+                                  determine the depth of the folder hierarchy.
+    
+    Note:
+        The dtype of the object IDs is currently hardcoded as np.uint64 and may need to be made configurable
+        in future versions.
+    """
     target_p, all_ids, n_folders_fs = args
     # outputs target folder hierarchy for object storage
     if global_params.config.use_new_subfold:
@@ -277,27 +326,30 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
                               chunk_size: Optional[Union[tuple, np.ndarray]] = None,
                               log: Logger = None, overwrite=False):
     """
-    Extracts segmentation properties for each SV in cell and subcellular segmentation.
-    Requires KDs at `kd_seg_path` and `kd_organelle_paths`.
-
-    * Step 1: Extract properties (representative coordinate, bounding box, size) and overlap voxels
-      locally (orgenelles <-> cell segmentation).
-    * Step 2: Write out combined results for each SV object.
-
+    Extracts and caches segmentation properties for each Supervoxel (SV) in cell and subcellular 
+    segmentation. This function requires KNOSSOSDATASETs (KDs) at `kd_seg_path` and `kd_organelle_paths`.
+    
+    The process involves two main steps:
+    1. Extract properties (representative coordinate, bounding box, size) and overlap voxels
+       locally (organelles <-> cell segmentation).
+    2. Write out combined results for each SV object.
+    
     Args:
-        kd_seg_path:
-        kd_organelle_paths:
-        n_folders_fs:
-        n_folders_fs_sc:
-        n_chunk_jobs:
-        n_cores:
-        cube_of_interest_bb:
-        chunk_size:
-        log:
-        overwrite:
-
-    Returns:
-
+        kd_seg_path (str): Path to the KNOSSOSDATASET (KD) of the cell segmentation.
+        kd_organelle_paths (dict): Dictionary of paths to the KDs of the subcellular segmentations.
+        n_folders_fs (int, optional): Number of folders in the file system for the cell segmentation. 
+            Defaults to 1000.
+        n_folders_fs_sc (int, optional): Number of folders in the file system for the subcellular 
+            segmentation. Defaults to 1000.
+        n_chunk_jobs (Optional[int], optional): Number of chunks to be processed in parallel. 
+            Defaults to None.
+        n_cores (int, optional): Number of cores to be used for processing. Defaults to 1.
+        cube_of_interest_bb (Optional[tuple], optional): Bounding box of the cube of interest. 
+            Defaults to None.
+        chunk_size (Optional[Union[tuple, np.ndarray]], optional): Size of the chunks to be processed. 
+            Defaults to None.
+        log (Logger, optional): Logger for logging the process. Defaults to None.
+        overwrite (bool, optional): If True, overwrite existing results. Defaults to False.
     """
     kd = basics.kd_factory(kd_seg_path)
     assert sys.version_info >= (3, 6)  # below, dictionaries are unordered!
@@ -577,6 +629,25 @@ def map_subcell_extract_props(kd_seg_path: str, kd_organelle_paths: dict,
 
 
 def _map_subcell_extract_props_thread(args):
+    """
+    This function is a worker thread for the map_subcell_extract_props function. It extracts properties
+    and mapping information for each chunk of the dataset and stores them in property dictionaries for
+    cellular and subcellular structures. It also generates meshes for each chunk if specified.
+    
+    Args:
+        args (list): A list containing the following elements:
+            - chunks (list): List of tuples, where each tuple contains the offset and chunk id.
+            - chunk_size (tuple): Size of the chunk.
+            - kd_cell_p (str): Path to the KnossosDataset for the cell.
+            - kd_subcell_ps (dict): Dictionary with organelle names as keys and paths to their 
+              respective KnossosDatasets as values.
+            - worker_nr (int): Worker number.
+            - generate_sv_mesh (bool): Flag to indicate whether to generate meshes for the chunk.
+    
+    Returns:
+        tuple: A tuple containing the worker number and a dictionary with references to partial results
+        of each object.
+    """
     chunks = args[0]
     chunk_size = args[1]
     kd_cell_p = args[2]
@@ -786,7 +857,21 @@ def _map_subcell_extract_props_thread(args):
 
 
 def _write_props_to_sc_thread(args):
-    """"""
+    """
+    This function writes the properties of subcellular structures to the corresponding thread. It 
+    iterates over the subcellular structures, gets cached mapping and property dictionaries of the 
+    current subcellular structure, loads target storage folders for all objects in this chunk, and 
+    loads properties and mapping info. It also trims mesh info to objects of interest and fetches 
+    all required mesh data. Finally, it writes the properties to the attribute dictionary for this 
+    batch of object IDs.
+    
+    Args:
+        args (list): A list containing the object ID chunks, the number of folders in the file 
+        system, and a dictionary of kd paths for the subcellular structures.
+    
+    Returns:
+        None
+    """
     obj_id_chs = args[0]
     n_folders_fs = args[1]
     kd_subcell_ps = args[2]  # Dict of kd paths
@@ -983,12 +1068,19 @@ def _write_props_to_sc_thread(args):
 
 def _write_props_to_sv_thread(args):
     """
-
+    This function is a worker thread that writes properties to the supervoxel (SV) thread. 
+    It loads the cached mapping and property dictionaries of the current subcellular 
+    structure, loads the target storage folders for all objects in the chunk, and loads 
+    properties and mapping info. It also fetches all required mesh data and writes the 
+    properties and mapping info to the attribute dictionary for the batch of object IDs.
+    
     Args:
-        args:
-
+        args (list): A list containing the object ID chunks, the number of folders in the 
+        file system, a boolean indicating whether to generate SV mesh, and the processed 
+        organelles.
+    
     Returns:
-
+        None
     """
     obj_id_chs = args[0]
     n_folders_fs = args[1]
@@ -1220,20 +1312,32 @@ def _write_props_to_sv_thread(args):
 
 
 def merge_meshes_dict(m_storage, tmp_dict):
-    """ Merge meshes dictionaries:
-
-    m_storage: list dictionary
-    tmp_dict: list dictionary
-    {obj_id: [faces, vertices, normals]}
+    """
+    This function merges mesh dictionaries. It iterates over the object IDs in the temporary dictionary and merges the 
+    meshes for each object ID.
+    
+    Args:
+        m_storage (dict): A dictionary where the key is the object ID and the value is a list of faces, vertices, and 
+        normals of the mesh.
+        tmp_dict (dict): A temporary dictionary where the key is the object ID and the value is a list of faces, 
+        vertices, and normals of the mesh.
+    
+    Returns:
+        None
     """
     for obj_id in tmp_dict:
         merge_meshes_single(m_storage, obj_id, tmp_dict[obj_id])
 
 
 def merge_meshes_single(m_storage, obj_id, tmp_dict):
-    """ Merge meshes dictionaries:
-    m_storage: objec of type MeshStorage
-    tmp_dict: list dictionary
+    """
+    Merges mesh dictionaries for a single object. This function takes in a MeshStorage object, an object id, and a
+    temporary dictionary, and merges the temporary dictionary into the MeshStorage object.
+    
+    Args:
+        m_storage (MeshStorage): A MeshStorage object where the merged data will be stored.
+        obj_id (int): The id of the object whose mesh data is being merged.
+        tmp_dict (dict): A temporary dictionary containing mesh data to be merged into the MeshStorage object.
     """
     if obj_id not in m_storage:
         m_storage[obj_id] = [tmp_dict[0], tmp_dict[1], tmp_dict[2]]
@@ -1247,7 +1351,15 @@ def merge_meshes_single(m_storage, obj_id, tmp_dict):
 
 def merge_prop_dicts(prop_dicts: List[List[dict]],
                      offset: Optional[np.ndarray] = None):
-    """Merge property dicts in-place. All values will be stored in the first dict."""
+    """
+    Merges property dictionaries in-place. All values will be stored in the first dictionary. If an offset is provided,
+    it is added to the representative coordinates and bounding boxes of the objects.
+    
+    Args:
+        prop_dicts (List[List[dict]]): A list of property dictionaries to be merged.
+        offset (Optional[np.ndarray]): An optional offset to be added to the representative coordinates and bounding
+                                       boxes of the objects.
+    """
     tot_rc = prop_dicts[0][0]
     tot_bb = prop_dicts[0][1]
     tot_size = prop_dicts[0][2]
@@ -1274,10 +1386,15 @@ def merge_prop_dicts(prop_dicts: List[List[dict]],
 
 
 def convert_nvox2ratio_mapdict(map_dc):
-    """convert number of overlap voxels of each subcellular structure object
-     inside the mapping dicts to each cell SV
-     (subcell ID -> cell ID -> number overlap vxs) to fraction.
-     """
+    """
+    Converts the number of overlapping voxels of each subcellular structure 
+    object inside the mapping dictionaries to each cell SV (subcell ID -> 
+    cell ID -> number overlap vxs) to fraction.
+    
+    Args:
+        map_dc (dict): A dictionary mapping subcellular structure objects 
+                       to cell SVs and the number of overlapping voxels.
+    """
     # TODO consider to implement in cython
     for subcell_id, subcell_dc in map_dc.items():
         s = np.sum(list(subcell_dc.values()))  # total number of overlap voxels
@@ -1286,7 +1403,16 @@ def convert_nvox2ratio_mapdict(map_dc):
 
 
 def invert_mdc(mapping_dict):
-    """Inverts mapping dict to: cell ID -> subcell ID -> value (ratio or voxel count)"""
+    """
+    Inverts a mapping dictionary to: cell ID -> subcell ID -> value (ratio or voxel count).
+    
+    Args:
+        mapping_dict (dict): A dictionary mapping subcellular structure objects to cell SVs and the number of
+                             overlapping voxels or the ratio of overlapping voxels.
+    
+    Returns:
+        dict: The inverted mapping dictionary.
+    """
     mdc_inv = {}
     for subcell_id, subcell_dc in mapping_dict.items():
         for cell_id, v in subcell_dc.items():
@@ -1299,13 +1425,10 @@ def invert_mdc(mapping_dict):
 
 def merge_map_dicts(map_dicts):
     """
-    Merge map dictionaries in-place. Values will be stored in first dictionary
-
+    Merges map dictionaries in-place. Values will be stored in the first dictionary.
+    
     Args:
-        map_dicts:
-
-    Returns:
-
+        map_dicts (List[dict]): A list of map dictionaries to be merged.
     """
     tot_map = map_dicts[0]
     for el in map_dicts[1:]:
@@ -1323,6 +1446,15 @@ def merge_map_dicts(map_dicts):
 
 
 def init_sos(sos_dict):
+    """
+    Initializes a list of SegmentationObjects from a dictionary.
+    
+    Args:
+        sos_dict (dict): A dictionary containing parameters for initializing SegmentationObjects.
+    
+    Returns:
+        list: A list of initialized SegmentationObjects.
+    """
     loc_dict = sos_dict.copy()
     svixs = loc_dict["svixs"]
     del loc_dict["svixs"]
@@ -1332,6 +1464,20 @@ def init_sos(sos_dict):
 
 def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
                   working_dir=None, create=False):
+    """
+    Creates a dictionary with parameters for initializing SegmentationObjects.
+    
+    Args:
+        svixs (list): A list of segmentation object indices.
+        version (str, optional): The version of the SegmentationObjects. Defaults to None.
+        scaling (list, optional): The scaling factors for the SegmentationObjects. Defaults to None.
+        obj_type (str, optional): The type of the SegmentationObjects. Defaults to "sv".
+        working_dir (str, optional): The working directory for the SegmentationObjects. Defaults to None.
+        create (bool, optional): Whether to create the SegmentationObjects if they do not exist. Defaults to False.
+    
+    Returns:
+        dict: A dictionary with parameters for initializing SegmentationObjects.
+    """
     if working_dir is None:
         working_dir = global_params.config.working_dir
     if scaling is None:
@@ -1346,20 +1492,23 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       verbose=False, raw_only=False, single_cc_only=False,
                       return_proba=False):
     """
-
+    Predicts the views of a list of SegmentationObjects using a given model.
+    
     Args:
-        model:
-        sos:
-        pred_key:
-        nb_cpus:
-        woglia:
-        verbose:
-        raw_only:
-        single_cc_only:
-        return_proba:
-
+        model (nn.Model): The model to use for prediction.
+        sos (list): A list of SegmentationObjects whose views are to be predicted.
+        pred_key (str): The key to use for storing the predictions.
+        nb_cpus (int, optional): The number of CPUs to use for prediction. Defaults to 1.
+        woglia (bool, optional): Whether to exclude glia from the prediction. Defaults to True.
+        verbose (bool, optional): Whether to print verbose output. Defaults to False.
+        raw_only (bool, optional): Whether to use only raw data for prediction. Defaults to False.
+        single_cc_only (bool, optional): Whether to use only single connected components for 
+        prediction. Defaults to False.
+        return_proba (bool, optional): Whether to return the probabilities of the predictions. 
+        Defaults to False.
+    
     Returns:
-
+        np.ndarray: The predicted views if return_proba is True, otherwise None.
     """
     nb_chunks = np.max([1, len(sos) // 200])
     so_chs = basics.chunkify(sos, nb_chunks)
@@ -1386,20 +1535,21 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
 def predict_views(model, views, ch, pred_key, single_cc_only=False,
                   verbose=False, return_proba=False, nb_cpus=1) -> Optional[List[np.ndarray]]:
     """
-    Will not be written to disk if return_proba is True.
-
+    Predicts the views of a list of SegmentationObjects using a given model. The predictions are not written to disk
+    if return_proba is True.
+    
     Args:
-        model: nn.Model
-        views: np.array
-        ch: List[SegmentationObject]
-        pred_key: str
-        single_cc_only: bool
-        verbose: bool
-        return_proba: bool
-        nb_cpus: int
-
+        model (nn.Model): The model to use for prediction.
+        views (np.array): An array of views to be predicted.
+        ch (List[SegmentationObject]): A list of SegmentationObjects whose views are to be predicted.
+        pred_key (str): The key to use for storing the predictions.
+        single_cc_only (bool, optional): Whether to use only single connected components for prediction. Defaults to False.
+        verbose (bool, optional): Whether to print verbose output. Defaults to False.
+        return_proba (bool, optional): Whether to return the probabilities of the predictions. Defaults to False.
+        nb_cpus (int, optional): The number of CPUs to use for prediction. Defaults to 1.
+    
     Returns:
-
+        Optional[List[np.ndarray]]: The predicted views if return_proba is True, otherwise None.
     """
     if single_cc_only:
         for kk in range(len(views)):
@@ -1428,25 +1578,28 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
 
 
 def multi_probas_saver(args):
+    """
+    Saves the probabilities of predictions for a list of SegmentationObjects.
+    
+    Args:
+        args (tuple): A tuple containing a SegmentationObject, the probabilities of its predictions, and the key to use
+                      for storing the predictions.
+    """
     so, probas, key = args
     so.save_attributes([key], [probas])
 
 
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=None):
     """
-    Caches the meshes for all SegmentationObjects within the SegmentationDataset
-    with object type 'obj_type'.
-
+    Caches the meshes for all SegmentationObjects within the SegmentationDataset with a given object type.
+    
     Args:
-        working_dir: str
-            Path to working directory
-        obj_type: str
-            Object type identifier, like 'sj', 'vc' or 'mi'
-        nb_cpus: int
-            Default is 20.
-
-    Returns:
-
+        working_dir (str): The working directory for the SegmentationDataset.
+        obj_type (str): The type of the SegmentationObjects whose meshes are to be 
+                        cached. Object type identifier, like 'sj', 'vc' or 'mi'.
+        nb_cpus (int, optional): The number of CPUs to use for caching. Defaults to 
+                                 the number of cores per node in the global parameters.
+                                 Default is 20.
     """
     if nb_cpus is None:
         nb_cpus = global_params.config['ncores_per_node']

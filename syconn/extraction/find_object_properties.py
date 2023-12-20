@@ -24,27 +24,27 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
         -> Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray],
                  np.ndarray, np.ndarray]:
     """
-    Extract synaptic properties for every contact site ID tuple inside `cs_seg`.
-
-    Count of synaptic foreground voxel and if voxel is foreground also sums the number of symmetric
-    and asymmetric voxels. The type ratio can be computed
-    by using the total syn foreground voxels assigned to the CS object.
-
+    Extracts synaptic properties for each contact site ID tuple in `cs_seg`. It counts the number of synaptic 
+    foreground voxels and if a voxel is foreground, it also sums the number of symmetric and asymmetric voxels. 
+    The type ratio can be computed by using the total syn foreground voxels assigned to the CS object.
+    
     Notes:
         * `rep_coord` currently first voxel (could be more representative).
         * Assumes that the partner IDs in `cs_seg` are sorted, e.g. (1, 2) and (2, 1) must not exist.
         *  cs_seg, syn_mask, sym_mask and asym_mask  must all have the same spatial shape.
-
+    
     Args:
-        cs_seg: Contact site segmentation (XYZC, with C=2).
-        syn_mask: Synapse prediction (binary foreground mask, synapse=1, background=0).
-        asym_mask: Asymmetric type prediction (binary foreground mask, asym=1, background=0).
-        sym_mask: Symmetric type prediction (binary foreground mask, sym=1, background=0).
-
+        cs_seg (np.ndarray): Contact site segmentation (XYZC, with C=2).
+        syn_mask (np.ndarray): Synapse prediction (binary foreground mask, synapse=1, background=0).
+        asym_mask (np.ndarray): Asymmetric type prediction (binary foreground mask, asym=1, background=0).
+        sym_mask (np.ndarray): Symmetric type prediction (binary foreground mask, sym=1, background=0).
+    
     Returns:
-        Representative coordinate, bounding box and size for contact sites, representative coordinate, bounding box
-        and size for synapses (for voxels with ``syn_mask=1``), counts for asymmetric and symmetric voxels. All objects
-        are nested dictionaries with contact site/synapse partner IDs as keys.
+        Tuple[Tuple[np.ndarray, np.ndarray, np.ndarray], Tuple[np.ndarray, np.ndarray, np.ndarray],
+              np.ndarray, np.ndarray]: Returns representative coordinate, bounding box and size for contact sites, 
+              representative coordinate, bounding box and size for synapses (for voxels with ``syn_mask=1``), 
+              counts for asymmetric and symmetric voxels. All objects are nested dictionaries with contact 
+              site/synapse partner IDs as keys.
     """
 
     rep_coords = typed.Dict.empty(
@@ -197,16 +197,16 @@ def extract_cs_syntype_64bit(cs_seg: np.ndarray, syn_mask: np.ndarray, asym_mask
 @numba.jit(nopython=True)
 def find_object_properties_cs_64bit(cs_seg: np.ndarray):
     """
-    Extract contact properties for every contact site ID tuple inside `cs_seg`.
-
+    Extracts contact properties for each contact site ID tuple in `cs_seg`.
+    
     Notes:
         * `rep_coord` currently first voxel (could be more representative).
         * Assumes that the partner IDs in `cs_seg` are sorted, e.g. (1, 2) and (2, 1) must not exist.
-        *  cs_seg, syn_mask, sym_mask and asym_mask  must all have the same spatial shape.
-
+        * cs_seg, syn_mask, sym_mask and asym_mask must all have the same spatial shape.
+    
     Args:
-        cs_seg: Contact site segmentation (XYZC, with C=2).
-
+        cs_seg (np.ndarray): Contact site segmentation (XYZC, with C=2).
+    
     Returns:
         Representative coordinate, bounding box and size for contact sites. All objects
         are nested dictionaries with contact site/synapse partner IDs as keys.
@@ -271,17 +271,17 @@ def find_object_properties_cs_64bit(cs_seg: np.ndarray):
 
 def convert_nvox2ratio_syntype(syn_cnts, sym_cnts, asym_cnts):
     """
-    Get ratio of sym. and asym. voxels to the synaptic foreground voxels of each contact site
-    object.
-    Sym. and asym. ratios do not necessarily sum to 1 if types are predicted independently.
-
+    Gets the ratio of symmetric and asymmetric voxels to the synaptic 
+    foreground voxels of each contact site object. Symmetric and asymmetric 
+    ratios do not necessarily sum to 1 if types are predicted independently.
+    
     Args:
-        syn_cnts:
-        sym_cnts:
-        asym_cnts:
-
+        syn_cnts: Synaptic counts.
+        sym_cnts: Symmetric counts.
+        asym_cnts: Asymmetric counts.
+    
     Returns:
-
+        Tuple: Asymmetric ratio and symmetric ratio.
     """
     # TODO implement in numba
 
@@ -301,13 +301,15 @@ def convert_nvox2ratio_syntype(syn_cnts, sym_cnts, asym_cnts):
 
 def merge_type_dicts(type_dicts: List[dict]):
     """
-    Merge map dictionaries in-place. Values will be stored in first dictionary
-
+    Merges a list of dictionaries in-place, storing the values in the first dictionary. This function is used to 
+    consolidate multiple dictionaries containing synaptic type information into a single dictionary.
+    
     Args:
-        type_dicts:
-
+        type_dicts (List[dict]): A list of dictionaries to be merged. Each dictionary contains synaptic type 
+        information with contact site IDs as keys and counts as values.
+    
     Returns:
-
+        None. The function modifies the first dictionary in the list in-place.
     """
     tot_map = type_dicts[0]
     for el in type_dicts[1:]:
@@ -322,12 +324,18 @@ def merge_type_dicts(type_dicts: List[dict]):
 
 def merge_voxel_dicts(voxel_dicts: List[dict], key_to_str=False):
     """
-    Merge map dictionaries values will be stored in first dictionary, this method converts numpy arrays into lists.
-
+    Merges a list of dictionaries in-place, storing the values in the first dictionary. This function is used to 
+    consolidate multiple dictionaries containing voxel information into a single dictionary. It also has the option 
+    to convert numpy arrays into lists and the keys to strings.
+    
     Args:
-        voxel_dicts:
-        key_to_str: If False, keep keys as they are, which is needed when loading data from npz files (default).
+        voxel_dicts (List[dict]): A list of dictionaries to be merged. Each dictionary contains voxel coordinates 
+        with contact site IDs as keys and voxel coordinates as values.
+        key_to_str (bool): If False, keeps keys as they are, which is needed when loading data from npz files. 
             If True, converts keys to strings to enable `np.savez` (requires str).
+    
+    Returns:
+        None. The function modifies the first dictionary in the list in-place.
     """
     tot_map = voxel_dicts[0]
     for el in voxel_dicts[1:]:
@@ -346,13 +354,14 @@ def merge_voxel_dicts(voxel_dicts: List[dict], key_to_str=False):
 
 def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:
     """
-    Uses :func:`detect_seg_boundaries` to generate initial contact mask.
-
+    Generates an initial contact mask by identifying boundary voxels in a 3D segmentation array. This function 
+    is used to detect contact sites in a 64-bit segmentation.
+    
     Args:
-        arr: 3D segmentation array
-
+        arr (np.ndarray): A 3D segmentation array.
+    
     Returns:
-        4D contact site segmentation array (XYZC; with C=2).
+        np.ndarray: A 4D contact site segmentation array (XYZC; with C=2).
     """
     # first identify boundary voxels
     bdry = detect_seg_boundaries(arr)
@@ -370,17 +379,17 @@ def detect_cs_64bit(arr: np.ndarray) -> np.ndarray:
 @numba.jit(nopython=True)
 def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: np.ndarray) -> np.ndarray:
     """
-    Identify whether IDs differ within `offset` and return boundary mask. Resulting array will be ``2*offset`` smaller
-    than input `seg_arr` ("valid convolution").
-
+    Identifies whether IDs differ within a specified offset and returns a boundary mask. The resulting array will be 
+    `2*offset` smaller than the input `seg_arr` ("valid convolution").
+    
     Args:
-        seg_arr: Segmentation volume (XYZ).
-        edge_arr: Boundary/edge mask array (XYZ). Inspects location if != 0, skips if 0.
-        offset: Offset for all spatial axes. Must have shape (3, 2). E.g. [(-1, 1), (-1, 1), (-1, 1)]
+        seg_arr (np.ndarray): A 3D segmentation volume (XYZ).
+        edge_arr (np.ndarray): A boundary/edge mask array (XYZ). Inspects location if != 0, skips if 0.
+        offset (np.ndarray): Offset for all spatial axes. Must have shape (3, 2). E.g. [(-1, 1), (-1, 1), (-1, 1)]
             will check a 3x3x3 cube around every voxel.
-
+    
     Returns:
-        Boundary mask. Axes will be ``2*offset`` smaller.
+        np.ndarray: A boundary mask. Axes will be `2*offset` smaller.
     """
     nx, ny, nz = seg_arr.shape[:3]
     contact_partners = np.zeros((nx+offset[0, 0]-offset[0, 1],
@@ -424,14 +433,16 @@ def detect_contact_partners(seg_arr: np.ndarray, edge_arr: np.ndarray, offset: n
 @numba.jit(nopython=True)
 def detect_seg_boundaries(arr: np.ndarray) -> np.ndarray:
     """
-    Identify whether IDs differ within 6-connectivity and return boolean mask.
-    0 IDs are skipped.
-
+    Identifies whether IDs differ within 6-connectivity and returns a boolean mask. This 
+    function is used to detect segmentation boundaries in a 3D segmentation volume. Note 
+    that 0 IDs are skipped.
+    
     Args:
-        arr: Segmentation volume (XYZ).
-
+        arr (np.ndarray): A 3D segmentation volume (XYZ).
+    
     Returns:
-        Binary boundary mask (1: segmentation boundary, 0: inside segmentation or background).
+        np.ndarray: A binary boundary mask (1: segmentation boundary, 0: inside 
+        segmentation or background).
     """
     nx, ny, nz = arr.shape[:3]
     boundary = np.zeros((nx, ny, nz), dtype=np.bool_)
@@ -457,13 +468,15 @@ def detect_seg_boundaries(arr: np.ndarray) -> np.ndarray:
 
 def detect_cs(arr: np.ndarray) -> np.ndarray:
     """
-    Only works if ``arr.dtype`` is uint32. Use detect_cs_64bit for uin64 segmentation.
-
+    Detects contact sites in a 3D segmentation array. This function only works if `arr.dtype` is 
+    uint32. For uint64 segmentation, use `detect_cs_64bit`.
+    
     Args:
-        arr: 3D segmentation array (only np.uint32).
-
+        arr (np.ndarray): A 3D segmentation array. The dtype of the array should be np.uint32.
+    
     Returns:
-        3D contact site instance segmentation array (np.uint64).
+        np.ndarray: A 3D contact site instance segmentation array. The dtype of the returned array 
+        is np.uint64.
     """
     edges = detect_seg_boundaries(arr).astype(np.uint32, copy=False)
     arr = arr.astype(np.uint32, copy=False)

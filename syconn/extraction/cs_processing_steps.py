@@ -43,6 +43,10 @@ from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
     """
+    hashirah: Adding on Alex's comment. Here again, it seems
+    like the old docstring was just copied and nothing new
+    was added 
+
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
     (-1 for asym., 1 for sym. synapses).
@@ -60,10 +64,10 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
           synaptic partners.
 
     Args:
-        wd(str):
-        obj_version (str):
-        ssd_version (str) : Number of parallel jobs
-        debug : bool
+        wd (str): The working directory.
+        obj_version (str, optional): The version of the object. Defaults to None.
+        ssd_version (str, optional): The version of the super segmentation dataset. Defaults to None.
+        debug (bool, optional): If True, the function will run in debug mode. Defaults to False.
     """
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
@@ -108,14 +112,20 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
 def _collect_properties_from_ssv_partners_thread(args):
     """
+    hashirah: I think if a description for args is provided
+    here, then 'see 'collect_properties_...' is not required.
+    But not super important here.
+
     Helper function of 'collect_properties_from_ssv_partners'.
 
     Notes:
         * SSV objects that do not have any mesh vertex will be assigned zero values for all properties.
 
     Args
-        args(tuple) :
-            see 'collect_properties_from_ssv_partners'
+        args(tuple) : A tuple containing the working directory, object version, super segmentation dataset version, 
+                      and super segmentation object IDs. (see 'collect_properties_from_ssv_partners')
+
+    Alex gpt checked
     """
     wd, obj_version, ssd_version, ssv_ids = args
 
@@ -176,8 +186,13 @@ def _collect_properties_from_ssv_partners_thread(args):
 
 def _from_cell_to_syn_dict(args):
     """
-    args : Tuple
-        see 'collect_properties_from_ssv_partners'
+    Maps the properties of synaptic partners from the cell level to the synapse level.
+
+    Args:
+        args (tuple): A tuple containing the segmentation object directory paths, working directory, object version, 
+                      and super segmentation dataset version. (see 'collect_properties_from_ssv_partners')
+
+    Alex gpt checked
     """
     so_dir_paths, wd, obj_version, ssd_version = args
 
@@ -230,6 +245,12 @@ def _from_cell_to_syn_dict(args):
 
 
 def _delete_all_cache_dc(args):
+    """
+    Deletes all cache dictionaries in the super segmentation object directory.
+
+    Args:
+        args (tuple): A tuple containing the super segmentation object ID and configuration.
+    """
     ssv_id, config = args
     ssv_o = super_segmentation.SuperSegmentationObject(ssv_id, config=config)
     if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
@@ -239,21 +260,20 @@ def _delete_all_cache_dc(args):
 def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
                         ssd: super_segmentation.SuperSegmentationDataset, log: Logger) -> Dict[int, list]:
     """
-    This function filters (likely ;-) ) the intra-ssv contact sites (inside of an ssv, not between ssvs)
-    that do not need to be agglomerated.
-
-    Notes:
-        * Also applicable to cs.
-
+    Filters the intra-ssv contact sites (inside of an ssv, not between ssvs) that do not need to be agglomerated. This function is also 
+    applicable to cs.
+    
     Args:
-        sd_syn:
-        ssd:
-        log:
-
+        sd_syn (segmentation.SegmentationDataset): The segmentation dataset of synapses.
+        ssd (super_segmentation.SuperSegmentationDataset): The super segmentation dataset.
+        log (Logger): The logger for logging the progress and debugging information.
+    
     Returns:
-        Lookup from encoded SSV partner IDs (see :py:func:`~syconn.reps.connectivity_helper.sv_id_to_partner_ids_vec`
-        for decoding into SSV IDs) to SV syn. object IDs, keys: encoded SSV syn IDs; values: List of SV syn IDs.
+        Dict[int, list]: A dictionary where the keys are encoded SSV partner IDs and the values are 
+        lists of SV synapse object IDs. See :py:func:`~syconn.reps.connectivity_helper.sv_id_to_partner_ids_vec`
+        for decoding into SSV IDs.
 
+    Alex gpt: information from original that adds addiotional explanation what is meant with intra-ssv (cs within one ssvs not between ssvs missing)
     """
     if log is None:
         log = log_extraction
@@ -320,28 +340,26 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                           nb_cpus=None, n_folders_fs=10000, log=None, overwrite=False):
     """
-    Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
-    syn-objects on SSV level and aggregates the respective 'syn' attributes ['cs_id', 'asym_prop', 'sym_prop', ].
-
+    Creates 'syn_ssv' objects from 'syn' objects. It computes connected syn-objects on SSV level and aggregates the 
+    respective 'syn' attributes ['cs_id', 'asym_prop', 'sym_prop', ].
+    
     All objects of the resulting 'syn_ssv' SegmentationDataset contain the following attributes:
     ['syn_sign', 'syn_type_sym_ratio', 'asym_prop', 'sym_prop', 'cs_ids', 'neuron_partners']
-
+    
     Notes:
         * 'rep_coord' property is calculated as the voxel (part of the object) closest to the center of mass of
           all object voxels.
         * 'cs_id'/'cs_ids' is the same as syn_id ('syn' are just a subset of 'cs', preserving the IDs).
-
-
+    
     Args:
-        wd :
-        cs_gap_nm :
-        ssd_version :
-        syn_version :
-        nb_cpus :
-        log:
-        n_folders_fs:
-        overwrite:
-
+        wd (str): The working directory.
+        cs_gap_nm (int, optional): The gap in nm. Defaults to 300.
+        ssd_version (str, optional): The version of the super segmentation dataset. Defaults to None.
+        syn_version (str, optional): The version of the synapse dataset. Defaults to None.
+        nb_cpus (int, optional): The number of CPUs to use. Defaults to None.
+        n_folders_fs (int, optional): The number of folders in the file system. Defaults to 10000.
+        log (Logger, optional): The logger for logging the progress and debugging information. Defaults to None.
+        overwrite (bool, optional): If True, overwrites existing files. Defaults to False.
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version=syn_version)
@@ -388,6 +406,15 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
 
 
 def _combine_and_split_syn_thread(args):
+    """
+    This function is a helper function for combining and splitting synapses. It takes in a list of arguments and
+    performs operations on synapse objects. It calculates the connected components of synapse objects and aggregates
+    their attributes. It also handles the storage of these objects and their attributes.
+    
+    Args:
+        args (list): A list containing the working directory, relative SSV with synapse IDs, voxel relative paths,
+                     synapse version, synapse SSV version, and CS gap in nm.
+    """
     wd = args[0]
     rel_ssv_with_syn_ids_items = args[1]
     voxel_rel_paths = args[2]
@@ -552,23 +579,22 @@ def _combine_and_split_syn_thread(args):
 def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: float,
                              dist_inter_object: float, scale: np.ndarray) -> List[set]:
     """
-    Identify connected components within N objects. Two stage process: 1st stage adds edges between every
-    object voxel which are at most 2 voxels apart. The edges are added to a global graph which is used to
-    calculate connected components. In the 2nd stage, connected components are considered close if they are within a
-    maximum distance of `dist_inter_object` between a random voxel used as their representative coordinate.
-    Close connected components will then be connected if the minimum distance between any of their voxels is
-    smaller than `dist_intra_object`.
-
+    This function identifies connected components within N objects. It performs a two-stage process where it first
+    adds edges between every object voxel which are at most 2 voxels apart. The edges are added to a global graph
+    which is used to calculate connected components. In the second stage, connected components are considered close
+    if they are within a maximum distance of `dist_inter_object` between a random voxel used as their representative
+    coordinate. Close connected components will then be connected if the minimum distance between any of their
+    voxels is smaller than `dist_intra_object`.
+    
     Args:
-        voxel_coords: List of numpy arrays in voxel coordinates.
-        dist_intra_object: Maximum distance between two voxels of different synapse fragments to
-            consider them the same object. In nm.
-        dist_inter_object: Maximum distance between two objects to check for close voxels
-            between them. In nm.
-        scale: Voxel sizes in nm (XYZ).
-
+        voxel_coords (List[np.ndarray]): List of numpy arrays in voxel coordinates.
+        dist_intra_object (float): Maximum distance between two voxels of different synapse fragments to
+                                   consider them the same object. In nm.
+        dist_inter_object (float): Maximum distance between two objects to check for close voxels between them. In nm.
+        scale (np.ndarray): Voxel sizes in nm (XYZ).
+    
     Returns:
-        Connected components across all N input objects with at most `dist_intra_cluster` distance.
+        List[set]: Connected components across all N input objects with at most `dist_intra_cluster` distance.
     """
     import networkx as nx
     graph = nx.Graph()
@@ -605,23 +631,25 @@ def connected_cluster_kdtree(voxel_coords: List[np.ndarray], dist_intra_object: 
 def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_folders_fs=10000,
                          log=None, overwrite=False):
     """
-    Creates 'cs_ssv' objects from 'cs' objects. Computes connected
-    cs-objects on SSV level and re-calculates their attributes (mesh_area, size, ..).
-    In contrast to :func:`~combine_and_split_syn` this method performs connected component analysis on
-    the mesh of all cell-cell contacts instead of their voxels.
-
+    This function creates 'cs_ssv' objects from 'cs' objects. It computes connected
+    cs-objects on SSV level and re-calculates their attributes (mesh_area, size, etc.).
+    This method performs connected component analysis on the mesh of all cell-cell
+    contacts instead of their voxels.
+    
     Notes:
-        * 'rep_coord' property is calculated as the mesh vertex closest to the center of mass of all mesh vertices.
-
+        * 'rep_coord' property is calculated as the mesh vertex closest to the center
+        of mass of all mesh vertices.
+    
     Args:
-        wd :
-        ssd_version :
-        cs_version :
-        nb_cpus :
-        log:
-        n_folders_fs:
-        overwrite:
-
+        wd (str): The working directory.
+        ssd_version (str, optional): The version of the super segmentation dataset.
+        Defaults to None.
+        cs_version (str, optional): The version of the cell segmentation. Defaults to None.
+        nb_cpus (int, optional): The number of CPUs to use. Defaults to None.
+        n_folders_fs (int, optional): The number of folders in the file system.
+        Defaults to 10000.
+        log (Logger, optional): The logger to use. Defaults to None.
+        overwrite (bool, optional): Whether to overwrite existing files. Defaults to False.
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd, version=cs_version)
@@ -662,6 +690,20 @@ def combine_and_split_cs(wd, ssd_version=None, cs_version=None, nb_cpus=None, n_
 
 
 def _combine_and_split_cs_thread(args):
+    """
+    This function is a helper function for the combine_and_split_cs function. It takes a tuple of arguments and 
+    performs the task of combining and splitting 'cs' objects into 'cs_ssv' objects. It does this by computing 
+    connected cs-objects on SSV level and re-calculating their attributes (mesh_area, size, ..).
+    
+    Args:
+        args (tuple): A tuple containing the following elements:
+            - wd: The working directory.
+            - rel_ssv_with_cs_ids_items: A list of tuples, where each tuple contains an encoded SSV partner and 
+              a list of contact site IDs.
+            - voxel_rel_paths: A list of relative paths to the voxel data.
+            - cs_version: The version of the 'cs' dataset.
+            - cs_ssv_version: The version of the 'cs_ssv' dataset.
+    """
     wd = args[0]
     rel_ssv_with_cs_ids_items = args[1]
     voxel_rel_paths = args[2]
@@ -772,6 +814,21 @@ def _combine_and_split_cs_thread(args):
 
 
 def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000, verbose=False):
+    """
+    This function identifies connected components within a list of voxels. It uses a k-d tree data structure to 
+    efficiently query the nearest neighbors of each voxel. It then groups voxels into connected components based on 
+    their proximity to each other.
+    
+    Args:
+        voxel_list (list): A list of voxel coordinates.
+        cs_gap_nm (float): The maximum distance between two voxels to consider them as part of the same connected 
+            component. In nanometers.
+        max_concurrent_nodes (int, optional): The maximum number of nodes to process concurrently. Defaults to 5000.
+        verbose (bool, optional): If True, print debug information. Defaults to False.
+    
+    Returns:
+        list: A list of sets, where each set contains the indices of voxels that belong to the same connected component.
+    """
     kdtree = spatial.cKDTree(voxel_list)
 
     checked_ids = np.array([], dtype=np.int32)
@@ -814,29 +871,26 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
                                      debug: bool = False, log: Logger = None,
                                      max_rep_coord_dist_nm: Optional[float] = None):
     """
-    Map sub-cellular objects of the synaptic partners of 'syn_ssv' objects and stores
-    them in their attribute dict.
-
-    The following keys will be available in the ``attr_dict`` of ``syn_ssv``-typed
-    :class:`~syconn.reps.segmentation.SegmentationObject`:
+    This function maps sub-cellular objects of the synaptic partners of 'syn_ssv' objects and stores
+    them in their attribute dict. The following keys will be available in the ``attr_dict`` of 
+    ``syn_ssv``-typed :class:`~syconn.reps.segmentation.SegmentationObject`:
         * 'n_mi_objs_%d':
         * 'n_mi_vxs_%d':
         * 'min_dst_mi_nm_%d':
         * 'n_vc_objs_%d':
         * 'n_vc_vxs_%d':
         * 'min_dst_vc_nm_%d':
-
+    
     Args:
-        wd:
-        obj_version:
-        ssd_version:
-        n_jobs:
-        debug:
-        log:
-        max_rep_coord_dist_nm:
-
-    Returns:
-
+        wd (str): The working directory.
+        obj_version (str, optional): The version of the 'syn_ssv' dataset. Defaults to None.
+        ssd_version (str, optional): The version of the 'ssv' dataset. Defaults to None.
+        n_jobs (int, optional): The number of jobs to run in parallel. Defaults to None.
+        debug (bool, optional): If True, print debug information. Defaults to False.
+        log (Logger, optional): The logger to use for logging debug information. Defaults to None.
+        max_rep_coord_dist_nm (float, optional): The maximum distance between the representative 
+            coordinate of a synapse and a sub-cellular object to consider them as connected. In 
+            nanometers. Defaults to None.
     """
     if n_jobs is None:
         n_jobs = global_params.config.ncore_total * 4
@@ -887,13 +941,12 @@ def map_objects_from_synssv_partners(wd: str, obj_version: Optional[str] = None,
 
 def _map_objects_from_synssv_partners_thread(args: tuple):
     """
-    Helper function of 'map_objects_from_synssv_partners'.
-
+    This function is a helper function for 'map_objects_from_synssv_partners'. It maps cellular organelles to 
+    syn_ssv objects which are needed for the RFC model executed in 'classify_synssv_objects'. It takes a tuple 
+    of arguments as input and returns nothing.
+    
     Args:
-        args: see 'map_objects_from_synssv_partners'
-
-    Returns:
-
+        args(tuple): A tuple of arguments. See 'map_objects_from_synssv_partners' for more details.
     """
     max_vert_dist_nm = global_params.config['cell_objects']['max_vert_dist_nm']
     # TODO: add global overwrite kwarg
@@ -1011,23 +1064,27 @@ def _map_objects_from_synssv_partners_thread(args: tuple):
 
 def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2):
     """
-    TODO: Loading meshes for approximating close-by object volume is slow - exchange with summed object size?
-
-    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
-    is executed in 'classify_synssv_objects'.
-    Helper function of `objects_to_single_synssv`.
-
+    This function maps cellular organelles to syn_ssv objects. It is a helper function for 
+    `objects_to_single_synssv`. It takes a 'syn_ssv' synapse object, SegmentationObject of type 
+    'vc' or 'mi', a query radius for SegmentationObject vertices and a sampling factor as input. 
+    It returns the number of SegmentationObjects with more than 0 vertices, approximated number 
+    of object voxels within `max_vert_dist_nm` and minimal distance (in nm; maximum value: 1e12 
+    nm in case no object is present).
+    
+    Note: Loading meshes for approximating close-by object volume is slow - consider exchanging 
+    with summed object size?
+    
     Args:
         synssv_o: 'syn_ssv' synapse object.
         seg_objs: SegmentationObject of type 'vc' or 'mi'
-        max_vert_dist_nm: Query radius for SegmentationObject vertices. Used to estimate
-            number of nearby object voxels.
-        sample_fact: only use every Xth vertex.
-
+        max_vert_dist_nm: Query radius for SegmentationObject vertices. Used to estimate number 
+            of nearby object voxels.
+        sample_fact: Only use every Xth vertex.
+    
     Returns:
-        Number of SegmentationObjects with >0 vertices, approximated number of
-        object voxels within `max_vert_dist_nm` and minimal distance
-        (in nm; maximum value: 1e12 nm in case no object is present).
+        n_objects: Number of SegmentationObjects with >0 vertices.
+        n_vxs: Approximated number of object voxels within `max_vert_dist_nm`.
+        min_dist: Minimal distance (in nm; maximum value: 1e12 nm in case no object is present).
     """
     synssv_kdtree = spatial.cKDTree(synssv_o.voxel_list[::sample_fact] * synssv_o.scaling)
     min_dist = 1e12  # in nm
@@ -1054,8 +1111,12 @@ def _map_objects_from_synssv(synssv_o, seg_objs, max_vert_dist_nm, sample_fact=2
 
 def _objects_from_cell_to_syn_dict(args):
     """
-    args : Tuple
-        see 'map_objects_from_synssv_partners'
+    This function takes a tuple of arguments as input. See 
+    'map_objects_from_synssv_partners' for more details.
+    
+    Args:
+        args(tuple): A tuple of arguments. See 
+        'map_objects_from_synssv_partners' for more details.
     """
     so_dir_paths, wd, obj_version, ssd_version = args
 
@@ -1095,19 +1156,18 @@ def _objects_from_cell_to_syn_dict(args):
 
 def classify_synssv_objects(wd, obj_version=None, log=None, nb_cpus=None):
     """
-    TODO: Replace by new synapse detection.
-    Classify SSV contact sites into synaptic or non-synaptic using an RFC model
-    and store the result in the attribute dict of the syn_ssv objects.
-    For requirements see `synssv_o_features`.
-
+    This function classifies SSV contact sites into synaptic or non-synaptic using an RFC model and stores the result 
+    in the attribute dict of the syn_ssv objects. For requirements see `synssv_o_features`. It takes the working 
+    directory, object version, logger and number of CPUs as input and returns nothing.
+    
     Args:
-        wd:
-        obj_version:
-        log:
-        nb_cpus:
-
+        wd (str): Working directory.
+        obj_version (str): Object version.
+        log (Logger): Logger.
+        nb_cpus (int): Number of CPUs.
+    
     Returns:
-
+        None
     """
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
@@ -1128,11 +1188,12 @@ def classify_synssv_objects(wd, obj_version=None, log=None, nb_cpus=None):
 
 def _classify_synssv_objects_thread(args):
     """
-    Helper function of 'classify_synssv_objects'.
-
+    This function is a helper for 'classify_synssv_objects'. It takes a tuple 
+    of arguments as input and returns nothing.
+    
     Args:
-        args : Tuple
-            see 'classify_synssv_objects'
+        args(tuple): A tuple of arguments. See 'classify_synssv_objects' for 
+        more details.
     """
     so_dir_paths, wd, obj_version = args
 
@@ -1164,6 +1225,15 @@ def _classify_synssv_objects_thread(args):
 # Code for property extraction of contact sites (syn_ssv)
 
 def write_conn_gt_kzips(conn, n_objects, folder):
+    """
+    This function writes .k.zip summary files of connectivity matrix. It takes a connectivity matrix, number of 
+    objects and a folder as input and returns nothing.
+    
+    Args:
+        conn: Connectivity matrix.
+        n_objects: Number of objects.
+        folder: Folder to write .k.zip files.
+    """
     if not os.path.exists(folder):
         os.makedirs(folder)
 
@@ -1193,22 +1263,21 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     """
     Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic
     objects. Features are generated from the objects in `sd_syn_ssv` associated with the annotated
-    coordinates stored in `path2file`.
-    Will write the trained classifier to ``global_params.config.mpath_syn_rfc``.
-
+    coordinates stored in `path2file`. The trained classifier is written to 
+    ``global_params.config.mpath_syn_rfc``.
+    
     Args:
-        sd_syn_ssv: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
-            type ``syn_ssv``. Used to identify synaptic object candidates annotated
-            in the kzip/xls file at `path2file`.
-        path2file: Path to kzip file with synapse labels as node comments
-            ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
-            respectively).
-        overwrite: Replace existing files.
-        rfc_path_out: Filename for dumped RFC.
-        max_dist_vx: Maximum voxel distance between sample and target.
-
+        sd_syn_ssv (segmentation.SegmentationDataset): SegmentationDataset object of type ``syn_ssv``. 
+            Used to identify synaptic object candidates annotated in the kzip/xls file at `path2file`.
+        path2file (str): Path to kzip file with synapse labels as node comments ("non-synaptic", 
+            "synaptic"; labels used for classifier are 0 and 1 respectively).
+        overwrite (bool): If True, existing files will be replaced. Defaults to False.
+        rfc_path_out (str): Filename for dumped RFC. If None, the default path is used.
+        max_dist_vx (int): Maximum voxel distance between sample and target. Defaults to 20.
+    
     Returns:
-        The trained random forest classifier and the feature and label data.
+        Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]: The trained random forest 
+            classifier and the feature and label data.
     """
 
     log = log_extraction
@@ -1404,12 +1473,13 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
 def synssv_o_features(synssv_o: segmentation.SegmentationObject) -> list:
     """
     Collects syn_ssv feature for synapse prediction using an RFC.
-
+    
     Args:
-        synssv_o : SegmentationObject
-
+        synssv_o (segmentation.SegmentationObject): The SegmentationObject for 
+        which to collect features.
+    
     Returns:
-        list
+        list: A list of features for the given SegmentationObject.
     """
     features = [synssv_o.size, synssv_o.mesh_area]
 
@@ -1425,6 +1495,12 @@ def synssv_o_features(synssv_o: segmentation.SegmentationObject) -> list:
 
 
 def synssv_o_featurenames() -> list:
+    """
+    Returns a list of feature names used for synapse prediction.
+    
+    Returns:
+        list: A list of feature names.
+    """
     return ['size_vx', 'mesh_area_um2', 'n_mi_objs_neuron1',
             'n_mi_vxs_neuron1', 'min_dst_mi_nm_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
             'min_dst_vc_nm_neuron1', 'n_mi_objs_neuron2', 'n_mi_vxs_neuron2',
@@ -1434,16 +1510,15 @@ def synssv_o_featurenames() -> list:
 def export_matrix(obj_version: Optional[str] = None, dest_folder: Optional[str] = None,
                   threshold_syn: float = 0, export_kzip: bool = False, log: Optional[Logger] = None):
     """
-    Writes .csv and optionally .kzip (large memory consumption) summary file of connectivity matrix.
-
+    Exports the connectivity matrix as a .csv file and optionally as a .kzip file. 
+    
     Args:
-        obj_version (str):
-        dest_folder : Path to csv file.
-        threshold_syn : 
-            Threshold applied to filter synapses. Defaults to 0, i.e. exporting all synapses.
-        export_kzip: 
-            Export connectivity matrix as kzip - high memory consumption.
-        log: Logger.
+        obj_version (str, optional): Version of the object. Defaults to None.
+        dest_folder (str, optional): Destination folder for the exported file. Defaults to None.
+        threshold_syn (float, optional): Threshold for filtering synapses. Defaults to 0.
+        export_kzip (bool, optional): If True, exports the connectivity matrix as a .kzip file. 
+            Note that this can result in large memory consumption. Defaults to False.
+        log (Logger, optional): Logger for logging the process. Defaults to None.
     """
     if threshold_syn is None:
         threshold_syn = global_params.config['cell_objects']['thresh_synssv_proba']

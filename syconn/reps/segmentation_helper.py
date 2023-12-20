@@ -32,15 +32,15 @@ MeshType = Union[Tuple[np.ndarray, np.ndarray, np.ndarray], List[np.ndarray],
 def glia_pred_so(so: 'SegmentationObject', thresh: float,
                  pred_key_appendix: str) -> int:
     """
-    Perform the glia classification of a cell supervoxel (0: neuron, 1: glia).
-
+    Classifies a cell supervoxel as neuron or glia based on the provided threshold.
+    
     Args:
-        so: The cell supervoxel object.
-        thresh: Threshold used for the classification.
-        pred_key_appendix: Additional prediction key.
-
+        so: The cell supervoxel object to classify.
+        thresh: The probability threshold above which the supervoxel is classified as glia.
+        pred_key_appendix: A string appended to the prediction key used to retrieve glia probabilities.
+    
     Returns:
-
+        int: The classification result, where 0 indicates neuron and 1 indicates glia.
     """
     assert so.type == "sv"
     pred_key = "glia_probas" + pred_key_appendix
@@ -62,14 +62,16 @@ def glia_pred_so(so: 'SegmentationObject', thresh: float,
 
 def glia_proba_so(so: 'SegmentationObject', pred_key_appendix: str) -> float:
     """
-    Get mean glia probability of a cell supervoxel (0: neuron, 1: glia).
-
+    Calculates the mean glia probability for a cell supervoxel.
+    
     Args:
-        so: The cell supervoxel object.
-        pred_key_appendix: Additional prediction key.
-
+        so: The cell supervoxel object for which to calculate the probability.
+        pred_key_appendix: A string appended to the prediction key used to retrieve glia
+                           probabilities.
+    
     Returns:
-
+        float: The mean glia probability of a cell supervoxel with 0 indicating neuron and
+               1 indicating glia.
     """
     assert so.type == "sv"
     pred_key = "glia_probas" + pred_key_appendix
@@ -80,9 +82,15 @@ def glia_proba_so(so: 'SegmentationObject', pred_key_appendix: str) -> float:
 
 def acquire_obj_ids(sd: 'SegmentationDataset'):
     """
-    Acquires all obj ids present in the dataset. Loads id array if available.
-    Assembles id list by iterating over all voxel / attribute dicts,
-    otherwise (very slow).
+    Retrieves all object IDs present in the SegmentationDataset. If an id array is
+    available, it loads it to assemble the id list; otherwise, it iterates over all
+    voxel / attribute dicts which is slower.
+    
+    Args:
+        sd: The SegmentationDataset from which to acquire object IDs.
+    
+    Returns:
+        None: The object IDs are stored within the SegmentationDataset instance.
     """
     sd._ids = sd.load_numpy_data('id')
     if sd._ids is None:
@@ -106,16 +114,21 @@ def save_voxels(so: 'SegmentationObject', bin_arr: np.ndarray,
                 offset: np.ndarray, overwrite: bool = False):
     """
     Helper function to save SegmentationObject voxels.
-
+    
     Args:
         so: SegmentationObject
+            The SegmentationObject to which the voxel data belongs.
         bin_arr: np.array
-            Binary mask array, 0: background, 1: supervoxel locations.
+            A binary mask array indicating supervoxel locations. 0: background,
+            1: supervoxel locations.
         offset: np.array
+            The offset of the binary mask array within the full dataset.
         overwrite: bool
-
+            If True, existing voxel data will be overwritten.
+    
     Returns:
-
+        None: The voxel data is saved to the storage associated with the
+        SegmentationObject.
     """
     assert bin_arr.dtype == bool
 
@@ -134,15 +147,15 @@ def load_voxels_depr(so: 'SegmentationObject',
                      voxel_dc: Optional[VoxelStorage] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
-    Also calculates size and bounding box and assigns it to `so._size` and `so._bounding_box` respectively.
-
+    Also calculates size and bounding box and assigns it to `so._size` and `so._bounding_box`
+    respectively (deprecated function).
+    
     Args:
-        so: SegmentationObject
-        voxel_dc: VoxelStorage
-
+        so: The SegmentationObject from which to load voxels.
+        voxel_dc: An optional VoxelStorage instance to use for loading.
+    
     Returns: np.array
         3D binary mask array, 0: background, 1: supervoxel locations.
-
     """
     if voxel_dc is None:
         voxel_dc = VoxelStorage(so.voxel_path, read_only=True,
@@ -183,6 +196,16 @@ def load_voxels_depr(so: 'SegmentationObject',
 
 def load_voxels_downsampled(so: 'SegmentationObject',
                             ds: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
+    """
+    Loads downsampled voxels of a SegmentationObject.
+    
+    Args:
+        so: The SegmentationObject from which to load downsampled voxels.
+        ds: A tuple indicating the downsampling factors along each axis.
+    
+    Returns:
+        Union[np.ndarray, List]: A downsampled 3D binary mask or an empty list if no voxels are present.
+    """
     if isinstance(so.voxels, int):
         return []
 
@@ -191,14 +214,13 @@ def load_voxels_downsampled(so: 'SegmentationObject',
 
 def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
     """
-    Helper function to load voxels of a SegmentationObject.
-
+    Loads a list of voxel coordinates for a SegmentationObject.
+    
     Args:
-        so: SegmentationObject.
-
-    Returns: np.array
-        2D array of coordinates to all voxels in SegmentationObject.
-
+        so: SegmentationObject. The SegmentationObject from which to load voxel coordinates.
+    
+    Returns:
+        np.ndarray: 2D array of coordinates to all voxels in the SegmentationObject.
     """
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
@@ -221,14 +243,18 @@ def load_voxel_list(so: 'SegmentationObject') -> np.ndarray:
 
 def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
     """
-    TODO: refactor, probably more efficient implementation possible.
-
+    Loads a downsampled list of voxel coordinates for a SegmentationObject.
+    
     Args:
-        so: SegmentationObject
-        downsampling: Tuple[int]
-
+        so: The SegmentationObject from which to load downsampled voxel
+             coordinates.
+        downsampling: A tuple indicating the downsampling factors along
+                      each axis.
+    
     Returns:
-
+        np.ndarray: A downsampled list of voxel coordinates.
+        
+    TODO: refactor, probably more efficient implementation possible.
     """
     downsampling = np.array(downsampling)
     dvoxels = so.load_voxels_downsampled(downsampling)
@@ -238,6 +264,16 @@ def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
 
 
 def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
+    """
+    Loads a downsampled list of voxel coordinates for a SegmentationObject, adapting the downsampling if necessary.
+    
+    Args:
+        so: The SegmentationObject from which to load downsampled voxel coordinates.
+        downsampling: A tuple indicating the initial downsampling factors along each axis.
+    
+    Returns:
+        np.ndarray: An adaptively downsampled list of voxel coordinates.
+    """
     downsampling = np.array(downsampling, dtype=np.int32)
     dvoxels = so.load_voxels_downsampled(downsampling)
 
@@ -260,16 +296,16 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
 
 def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
     """
-    Load mesh of SegmentationObject.
-    TODO: Currently ignores potential color/label array.
-
+    Loads the mesh representation of a SegmentationObject.
+    
     Args:
-        so: SegmentationObject
-        recompute: bool
-
+        so: The SegmentationObject from which to load the mesh.
+        recompute: If True, the mesh will be recomputed instead of loaded from
+            storage. If False, the mesh is loaded without re-computation.
+    
     Returns:
-        indices, vertices, normals; all flattened
-
+        MeshType: A tuple containing indices, vertices, and normals of the mesh,
+            all flattened. TODO: Currently ignores potential color/label array.
     """
     if not recompute and so.mesh_exists:
         try:
@@ -308,14 +344,16 @@ def load_mesh(so: 'SegmentationObject', recompute: bool = False) -> MeshType:
 
 def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
     """
-
+    Loads the skeleton representation of a SegmentationObject.
+    
     Args:
-        so: SegmentationObject
-        recompute: Compute skeleton, will not store it in ``SkeletonStorage``.
-
+        so: The SegmentationObject from which to load the skeleton.
+        recompute: If True, the skeleton will be recomputed and not
+                   stored in SkeletonStorage. (default=False)
+    
     Returns:
-        Dictionary with "nodes", "diameters" and "edges".
-
+        dict: A dictionary containing "nodes", "diameters", and "edges" of
+              the skeleton.
     """
     empty_skel = dict(nodes=np.zeros((0, 3)).astype(np.int64), edges=np.zeros((0, 2)),
                       diameters=np.zeros((0,)).astype(np.int32))
@@ -347,13 +385,15 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) -> dict:
 
 def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
     """
-
+    Saves the skeleton data for a SegmentationObject.
+    
     Args:
-        so:
-        overwrite:
-
+        so: The SegmentationObject whose skeleton data is to be saved.
+        overwrite: If True, existing skeleton data will be overwritten.
+    
     Returns:
-
+        None: The skeleton data is saved to the storage associated with
+        the SegmentationObject.
     """
     skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False, disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:
@@ -409,14 +449,15 @@ def sv_attr_exists(args):
 
 def find_missing_sv_attributes(sd: 'SegmentationDataset', attr_key: str, n_cores: int = 20):
     """
-
+    Identifies missing attributes for supervoxels in a SegmentationDataset.
+    
     Args:
-        sd:
-        attr_key: str
-        n_cores: int
-
+        sd: The SegmentationDataset to check for missing attributes.
+        attr_key (str): The attribute key to check for in each supervoxel.
+        n_cores (int): The number of CPU cores to use for parallel processing.
+    
     Returns:
-
+        None: The result is not returned but may be used internally for processing.
     """
     multi_params = chunkify(sd.so_dir_paths, 100)
     params = [(ps, attr_key) for ps in multi_params]
@@ -429,14 +470,14 @@ def load_so_meshes_bulk(sos: Union[List['SegmentationObject'], Iterable['Segment
     """
     Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
     This will not assign the ``_mesh`` attribute!
-
+    
     Args:
-        sos: SegmentationObjects
-        use_new_subfold: Use new sub-folder structure
+        sos: SegmentationObjects or an iterable of SegmentationObjects for which to load meshes.
+        use_new_subfold: Use new sub-folder structure for storage if True.
         cache_decomp: Cache decompressed meshes.
-
+    
     Returns:
-        Dictionary, key: ID, value: mesh
+        Dictionary, key: ID, value: mesh data.
     """
     md_out = MeshStorage(None)  # in-memory dict with compression
     if len(sos) == 0:
@@ -467,20 +508,25 @@ def load_so_attr_bulk(sos: List['SegmentationObject'],
                       use_new_subfold: bool = True,
                       allow_missing: bool = False) -> Union[Dict[str, Dict[int, Any]], Dict[int, Any]]:
     """
-    Bulk loader for SegmentationObject (SO) meshes. Minimizes IO by loading IDs from the same storage at the same time.
-    Returns a single dict if only one attr_key is provided or a dict of dicts if many.
-    This method will also check if the requested attribute(s) already exist in the object's ``attr_dict``. This means
-    using ``cache_properties`` when initializing ``SegmentationDataset`` might be beneficial to avoid exhaustive file
-    reads in case `sos` is large.
-
+    Bulk loader for SegmentationObject (SO) meshes. This method minimizes IO by
+    loading IDs from the same storage at the same time and organizes them into a
+    dictionary. If only one attr_key is provided, a single dictionary is returned;
+    otherwise, a dictionary of dictionaries for multiple keys is returned. Existing
+    attributes in the object's ``attr_dict`` are checked, leveraging
+    ``cache_properties`` for efficiency with large datasets.
+    
     Args:
-        sos: SegmentationObjects
-        attr_keys: Attribute key(s).
-        use_new_subfold: Use new sub-folder structure
-        allow_missing: If True, sets attribute value to None if missing. If False and missing, raise KeyError.
-
+        sos: A list of SegmentationObjects for which to load attributes.
+        attr_keys: A single attribute key or an iterable of keys to load.
+        use_new_subfold: If True, uses the new sub-folder structure for storage
+            paths, beneficial for managing storage.
+        allow_missing: If True, sets missing attribute values to None; otherwise,
+            raises a KeyError.
+    
     Returns:
-        (Dict. with key: attr_key of) dict. with key: ID, value: attribute value
+        Union[Dict[str, Dict[int, Any]], Dict[int, Any]]: A dictionary or a dict
+        of dicts with object IDs as keys and attribute values as values, based on
+        the provided attr_keys.
     """
     if type(attr_keys) is str:
         attr_keys = [attr_keys]
@@ -524,16 +570,19 @@ def load_so_attr_bulk(sos: List['SegmentationObject'],
 
 def prepare_so_attr_cache(sd: 'SegmentationDataset', so_ids: np.ndarray, attr_keys: List[str]) -> Dict[str, dict]:
     """
-
+    Prepares a cache of attributes for a subset of SegmentationObjects within a SegmentationDataset.
+    
     Args:
-        sd: SegmentationDataset.
-        so_ids: SegmentationObject IDs for which to collect the attributes.
-        attr_keys: Attribute keys to collect. Corresponding numyp arrays must exist.
-
+        sd: The SegmentationDataset containing the SegmentationObjects.
+        so_ids: An array of SegmentationObject IDs for which to collect attributes.
+        attr_keys: A list of attribute keys to collect. The corresponding numpy arrays 
+            must exist.
+    
     Returns:
-        Dictionary with `attr_keys` as keys and an attribute dictionary as values for the IDs `so_ids`, e.g.
-        ``attr_cache[attr_keys[0]][so_ids[0]]`` will return the attribute value of type ``attr_keys[0]`` for the first
-        SegmentatonObect in `so_ids`.
+        Dict[str, dict]: A dictionary with `attr_keys` as keys and dictionaries of 
+        attribute values for the IDs `so_ids`. For example, `attr_cache[attr_keys[0]]
+        [so_ids[0]]` will return the attribute value of type `attr_keys[0]` for the 
+        first SegmentationObject in `so_ids`.
     """
     attr_cache = {k: dict() for k in attr_keys}
     # TODO: Use BinarySearchStore
@@ -596,14 +645,22 @@ def _helper_func(args):
 
 def get_sd_load_distribution(sd: 'SegmentationDataset', use_vxsize: bool = True) -> np.ndarray:
     """
-    Get the load distribution (number of objects per storage) of the SegmentationDataset's AttributeDicts.
-
+    Calculates the load distribution, which is the number of objects per storage, for
+    the given SegmentationDataset's AttributeDicts. This is useful for understanding
+    the distribution of data across different storage units and can help in optimizing
+    data access patterns.
+    
     Args:
-        sd: SegmentationDataset
-        use_vxsize:
-
+        sd: An instance of SegmentationDataset for which the load distribution is to be
+            calculated.
+        use_vxsize: A boolean flag indicating whether to use voxel size for calculating
+                    the load distribution (default is False). If True, the load is
+                    calculated based on the voxel size of each object.
+    
     Returns:
-        Load array.
+        A numpy array representing the load distribution across the storage units of
+        the SegmentationDataset. Each element in the array corresponds to the number of
+        objects in a storage unit.
     """
     n_objects = start_multiprocess_imap(_helper_func, [(ch, use_vxsize) for ch in chunkify(sd.so_dir_paths, 1000)],
                                         nb_cpus=None)
@@ -612,13 +669,18 @@ def get_sd_load_distribution(sd: 'SegmentationDataset', use_vxsize: bool = True)
 
 def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
     """
-    Poor man's solution to generate a SV "skeleton". Used for glia predictions.
-
+    Generates a simplified skeleton representation for a given SegmentationObject.
+    This function is a quick solution for creating a skeleton, primarily used for
+    glia predictions. The skeleton consists of nodes, edges, and uniform diameters.
+    
     Args:
-        so:
-
+        so: The SegmentationObject instance for which the skeleton is to be
+            generated.
+    
     Returns:
-        Dictionary with keys "nodes", "edges" and "diameters" (all 1).
+        A dictionary containing the keys "nodes", "edges", and "diameters". Each key
+        maps to a value of 1, indicating a basic scaffold structure without any
+        specific measurements or attributes.
     """
     verts = so.mesh[1].reshape(-1, 3)
     # choose random subset of surface vertices
@@ -649,12 +711,18 @@ def generate_skeleton_sv(so: 'SegmentationObject') -> Dict[str, np.ndarray]:
 
 def calc_center_of_mass(point_arr: np.ndarray) -> np.ndarray:
     """
-
+    Calculates the closest point to the center of mass from a given array of points.
+    This function identifies a representative point nearest to the geometric center of
+    a collection of points. It assumes uniform point distribution in isotropic units.
+    
     Args:
-        point_arr: Array of points (in nm or at least isotropic).
-
+        point_arr: A numpy array of points, where each point is represented by its
+                   coordinates (x, y, z). The points should conform to isotropic
+                   units preferably in nanometers.
+    
     Returns:
-        Closest point in `point_arr` to its center of mass.
+        A numpy array representing the single point that is closest to the center of
+        mass of the input array of points.
     """
     # downsampling to ensure fast processing - this is deterministic!
     if len(point_arr) > 1e5:

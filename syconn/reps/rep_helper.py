@@ -22,14 +22,15 @@ def knossos_ml_from_svixs(sv_ixs: Union[np.ndarray, List],
     """
     Generate a KNOSSOS merge list of an array of supervoxels with optional
     coordinates and comments.
-
+    
     Args:
-        sv_ixs: Supervoxel IDs.
-        coords: Representative coordinates of each supervoxel (in voxels).
-        comments: Comments for each supervoxel.
-
+        sv_ixs (Union[np.ndarray, List]): Supervoxel IDs.
+        coords (Optional[Union[np.ndarray, List[np.ndarray]]]): Representative coordinates
+                     of each supervoxel (in voxels).
+        comments (Optional[Union[List[str], np.ndarray]]): Comments for each supervoxel.
+    
     Returns:
-        A KNOSSOS compatible merge list in string representation.
+        str: A KNOSSOS compatible merge list in string representation.
     """
     txt = ""
     if comments is not None:
@@ -54,17 +55,19 @@ def knossos_ml_from_ccs(cc_ixs: Union[List[int], np.ndarray],
                         coords: Optional[np.ndarray] = None,
                         comments: Optional[List[str]] = None) -> str:
     """
-    Converts list of connected components (i.e. list of SV IDs) into knossos
-    merge list string.
-
+    Converts list of connected components (i.e. list of SV IDs) into KNOSSOS merge
+    list string.
+    
     Args:
-        cc_ixs: Connected component IDs, i.e. super-supervoxel IDs.
-        ccs: Supervoxel IDs for every connected component.
-        coords: Coordinates to each connected component (in voxels).
-        comments: Comments for each connected component.
-
+        cc_ixs (Union[List[int], np.ndarray]): Connected component IDs, i.e.
+            super-supervoxel IDs.
+        ccs (List[List[int]]): Supervoxel IDs for every connected component.
+        coords (Optional[np.ndarray]): Coordinates to each connected component
+            (in voxels).
+        comments (Optional[List[str]]): Comments for each connected component.
+    
     Returns:
-        A KNOSSOS compatible merge list in string representation.
+        str: A KNOSSOS compatible merge list in string representation.
     """
     if coords is None:
         coords = [None] * len(cc_ixs)
@@ -91,16 +94,16 @@ def knossos_ml_from_ccs(cc_ixs: Union[List[int], np.ndarray],
 def knossos_ml_from_sso(sso: 'SuperSegmentationObject',
                         comment: Optional[str] = None):
     """
-    Converts the sueprvoxels which are part of the `sso` into a KNOSSOS
+    Converts the supervoxels which are part of the `sso` into a KNOSSOS 
     compatible merge list string.
-
+    
     Args:
-        sso: :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` object.
-        comment: Comment.
-
+        sso (SuperSegmentationObject): The SuperSegmentationObject to be 
+            converted.
+        comment (Optional[str]): Comment to be included in the merge list.
+    
     Returns:
-        A KNOSSOS compatible merge list in string representation.
-
+        str: A KNOSSOS compatible merge list in string representation.
     """
     cc_ix = sso.id
     txt = "%d 0 0 " % cc_ix
@@ -124,14 +127,15 @@ def knossos_ml_from_sso(sso: 'SuperSegmentationObject',
 
 def subfold_from_ix(ix, n_folders, old_version=False):
     """
-    # TODO: remove 'old_version' as soon as possible, currently there is one usage
-
+    Determines the subfolder path based on the index and number of folders.
+    
     Args:
-        ix(int):
-        n_folders(int):
-
+        ix (int): Index of the object.
+        n_folders (int): Total number of folders.
+        old_version (bool): Flag to use the old version of the function.
+    
     Returns:
-        str:
+        str: Subfolder path for the given index.
     """
     assert n_folders % 10 == 0
     if not global_params.config.use_new_subfold:
@@ -142,13 +146,14 @@ def subfold_from_ix(ix, n_folders, old_version=False):
 
 def subfold_from_ix_new(ix, n_folders):
     """
-
+    Determines the subfolder path based on the index and number of folders using the new method.
+    
     Args:
-        ix(int):
-        n_folders(int):
-
+        ix (int): Index of the object.
+        n_folders (int): Total number of folders.
+    
     Returns:
-        str:
+        str: Subfolder path for the given index.
     """
     assert n_folders % 10 == 0
     order = int(np.log10(n_folders))
@@ -165,14 +170,17 @@ def subfold_from_ix_new(ix, n_folders):
 
 def subfold_from_ix_OLD(ix, n_folders, old_version=False):
     """
-    # TODO: remove 'old_version' as soon as possible, currently there is one usage
-
+    Determines the subfolder path based on the index and number of folders using the old method.
+    
     Args:
-        ix(int):
-        n_folders(int):
-
+        ix (int): Index of the object.
+        n_folders (int): Total number of folders.
+        old_version (bool): Flag to use the old version of the function. 
+                            # TODO: remove 'old_version' as soon as possible, 
+                            currently there is one usage
+    
     Returns:
-        str:
+        str: Subfolder path for the given index.
     """
     assert n_folders in [10 ** i for i in range(6)]
 
@@ -194,13 +202,14 @@ def subfold_from_ix_OLD(ix, n_folders, old_version=False):
 
 def ix_from_subfold(subfold, n_folders) -> int:
     """
-
+    Determines the index from the subfolder path and number of folders.
+    
     Args:
-        subfold:
-        n_folders:
-
+        subfold (str): Subfolder path.
+        n_folders (int): Total number of folders.
+    
     Returns:
-        int:
+        int: Index of the object.
     """
     if not global_params.config.use_new_subfold:
         return ix_from_subfold_OLD(subfold, n_folders)
@@ -210,12 +219,13 @@ def ix_from_subfold(subfold, n_folders) -> int:
 
 def ix_from_subfold_new(subfold, n_folders):
     """
-
+    _Determines the index from the subfolder path and number of folders using the new method._
+    
     Args:
-        subfold(str):
-
+        subfold (str): Subfolder path.
+    
     Returns:
-        int:
+        int: Index of the object.
     """
     parts = subfold.strip("/").split("/")
     order = int(np.log10(n_folders))
@@ -228,12 +238,13 @@ def ix_from_subfold_new(subfold, n_folders):
 
 def ix_from_subfold_OLD(subfold, n_folders):
     """
-
+    Determines the index from the subfolder path and number of folders using the old method.
+    
     Args:
-        subfold(str):
-
+        subfold (str): The subfolder path provided as a string to calculate the index.
+    
     Returns:
-        int:
+        int: Index of the object determined from the provided subfolder path.
     """
 
     parts = subfold.strip("/").split("/")
@@ -248,12 +259,13 @@ def ix_from_subfold_OLD(subfold, n_folders):
 
 def subfold_from_ix_SSO(ix):
     """
-
+    Determines the subfolder path for a SuperSegmentationObject based on its index.
+    
     Args:
-        ix(int):
-
+        ix (int): Index of the SuperSegmentationObject.
+    
     Returns:
-        str:
+        str: Subfolder path for the SuperSegmentationObject.
     """
 
     # raise NotImplementedError("Outdated")
@@ -262,13 +274,13 @@ def subfold_from_ix_SSO(ix):
 
 def get_unique_subfold_ixs(n_folders):
     """
-    Returns unique IDs each associated with a unique storage dict
-
+    Generates unique IDs each associated with a unique storage dictionary.
+    
     Args:
-        n_folders(int):
-
+        n_folders (int): Total number of folders.
+    
     Returns:
-        np.ndarray
+        np.ndarray: Array of unique IDs.
     """
     if global_params.config.use_new_subfold:
         # TODO: this needs to be adapted as soon as `div_base` is changed in `subfold_from_ix`
@@ -282,28 +294,33 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
                        nb_cpus=-1, k=1, return_color=True):
     """
     Assigns all vertices the kNN majority label from rep_coords/rep_values and
-    if return_color is True assigns those a color. Helper function to colorcode
-    a set of coordinates (vertices) by known labels (rep_coords, rep_values).
-
+    if return_color is True, assigns those a color. Colors vertices based on 
+    the nearest representative coordinates and values.
+    
     Args:
-        vertices (np.array):
-            [N, 3]
-        rep_coords (np.array):
-            [M ,3]
-        rep_values (np.array):
-            [M, 1] int values to be color coded for each vertex; used as indices
-            for colors
-        colors (list):
-            color for each rep_value
-        nb_cpus (int):
-        k (int):
-            Number of nearest neighbors (average prediction)
-        return_color(bool):
-            If false it returns the majority vote for each index
-
+        vertices (np.ndarray): 
+            Array of vertices to be color-coded, shape [N, 3].
+        rep_coords (np.ndarray):
+            Representative coordinates, shape [M, 3].
+        rep_values (np.ndarray):
+            Int values to be color coded for each vertex; used as indices for
+            colors, shape [M, 1].
+        colors (Optional[np.ndarray]):
+            Color for each rep_value, used if return_color is True.
+        nb_cpus (int): 
+            Number of CPUs to use for the computation.
+        k (int): 
+            Number of nearest neighbors to consider for majority voting and/or
+            color assignment.
+        return_color (bool): 
+            If False, returns the majority vote for each index; if True, returns
+            the color values.
+    
     Returns:
-        np.array [N, 4]
-            rgba values for every vertex from 0 to 255
+        np.ndarray: 
+            If return_color is True, RGBA values for every vertex from 0 to 255,
+            shape [N, 4]. If return_color is False, indices of the representative
+            values, shape [N, 1].
     """
     if colors is None:
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
@@ -339,21 +356,21 @@ def assign_rep_values(target_coords, rep_coords, rep_values,
     """
     Assigns values corresponding to representative coordinates to every target
     coordinate.
-
+    
     Args:
-        target_coords (np.array):
-            [N, 3]
-        rep_coords (np.array):
-            [M ,3]
-        rep_values (np.array):
-            [M, Z] any type of values for each rep_coord.
-        nb_cpus (int):
-        return_ixs(bool):
-            returns indices of k-closest rep_coord for every target coordinate
-
+        target_coords (np.array): An array with shape [N, 3], where N is the number
+            of target coordinates.
+        rep_coords (np.array): An array with shape [M, 3], where M is the number of
+            representative coordinates.
+        rep_values (np.array): An array with shape [M, Z] containing any type of
+            values for each representative coordinate, where Z is the dimensionality.
+        nb_cpus (int): Number of CPUs to use for the computation.
+        return_ixs (bool): If true, returns indices of k-closest representative
+            coordinates for each target coordinate.
+    
     Returns:
-        np.array [N, Z]
-            representation values for every vertex
+        np.array [N, Z]: An array where each entry has the representation values
+            assigned for each target coordinate based on the representative coordinates.
     """
     if not type(rep_values) is np.ndarray:
         rep_values = np.array(rep_values)
@@ -377,19 +394,22 @@ def surface_samples(coords: np.ndarray,
                     bin_sizes: Tuple[int, int, int] = (2000, 2000, 2000),
                     max_nb_samples: int = 5000,
                     r: int = 1000) -> np.ndarray:
-    """'TODO: optimization required -- maybe use simple downsampling instead of histogram
-    Sample locations from density grid given by coordinates and bin sizes.
-    At each grid center, collects coordinates within the given radius to
-    calculate the center of mass which yields the sample location.
+    """
+    Samples locations from a density grid based on coordinates and bin sizes.
+    Collects coordinates within the given radius at each grid center
+    to calculate the center of mass which yields the sample location.
     
     Args:
-        coords (np.array):
-        bin_sizes (np.array):
-        max_nb_samples (int | None):
-        r (int):
-
+        coords (np.ndarray): Array of coordinates.
+        bin_sizes (Tuple[int, int, int]): Sizes of bins used for creating the
+                                          density grid.
+        max_nb_samples (int | None): Maximum number of samples or None for no
+                                     limit.
+        r (int): Radius within which to collect coordinates for center of mass
+                 calculation.
+    
     Returns:
-        np.array
+        np.ndarray: Array of sampled locations.
     """
     coords = np.array(coords)  # create copy!
     offset = np.min(coords, axis=0)
@@ -418,6 +438,14 @@ def surface_samples(coords: np.ndarray,
 
 
 class SegmentationBase:
+    """
+    Base class for segmentation-related operations in SyConn.
+    
+    Attributes:
+        _scaling (Optional[np.ndarray]): Voxel size in nm.
+        _working_dir (Optional[str]): Working directory for file operations.
+        _config (Optional[DynConfig]): Configuration object.
+    """
     _scaling = None
     _working_dir = None
     _config = None
@@ -425,13 +453,13 @@ class SegmentationBase:
     def _setup_working_dir(self, working_dir: Optional[str], config: Optional[DynConfig],
                            version: Optional[str], scaling: Optional[np.ndarray]):
         """
-        Set private attributes for working_dir, config and scaling. Version must be handled outside.
-
+        Set up the working directory, configuration, and scaling for segmentation operations.
+        
         Args:
-            working_dir: Working directory.
-            config: Configuration object.
-            version: Version.
-            scaling: Voxel size in nm.
+            working_dir (str): Working directory.
+            config (DynConfig): Configuration object.
+            version (str): Version identifier. Version must be handled outside.
+            scaling (np.ndarray): Voxel size in nm. Scaling parameter for the operation.
         """
         if working_dir is None:
             if config is not None:

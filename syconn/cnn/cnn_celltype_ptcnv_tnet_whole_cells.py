@@ -26,13 +26,42 @@ Z_DIM = 10
 
 class TripletNet(nn.Module):
     """
-    adapted from https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py
+    This class is an adaptation from the Triplet Network implementation in PyTorch. 
+    It is a type of neural network that takes 3 input vectors and outputs 3 vectors.
+    The network is trained to minimize the distance between the first vector and the 
+    second one, while maximizing the distance between the first vector and the third one.
+    
+    Args:
+        rep_net: The base network to be used for representation learning.
+        
+    Adapted from: https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py
     """
     def __init__(self, rep_net):
+        """
+        Initializes the TripletNet class.
+        
+        Args:
+            rep_net: The base network to be used for representation learning.
+        """
         super().__init__()
         self.rep_net = rep_net
 
     def forward(self, x0, x1, x2):
+        """
+        Defines the computation performed at every call.
+        
+        Args:
+            x0: The anchor input to the network.
+            x1: The positive input to the network, which is similar to x0.
+            x2: The negative input to the network, which is dissimilar to x0.
+        
+        Returns:
+            dist_a: The distance between the anchor and the positive input.
+            dist_b: The distance between the anchor and the negative input.
+            z_0: The output of the base network for the anchor input.
+            z_1: The output of the base network for the positive input.
+            z_2: The output of the base network for the negative input.
+        """
         if not self.training:
             assert x1 is None and x2 is None
             return self.rep_net(x0[0], x0[1])

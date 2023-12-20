@@ -54,6 +54,14 @@ pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70,
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
+    """
+    Writes a PLY file with vertex and color information.
+    
+    Args:
+        fn (str): The filename to which the PLY data will be written.
+        verts (np.ndarray): An array of vertex positions with shape (N, 3).
+        colors (np.ndarray): An array of colors corresponding to the vertices with shape (N, 3).
+    """
     ply_header = '''ply
     format ascii 1.0
     element vertex %(vert_num)d
@@ -73,6 +81,15 @@ def write_ply(fn, verts, colors):
 
 
 def write_pts_ply(fname: str, pts: np.ndarray, feats: np.ndarray, binarized=False):
+    """
+    Writes a PLY file with point and feature information.
+    
+    Args:
+        fname (str): The filename to which the PLY data will be written.
+        pts (np.ndarray): An array of point positions with shape (N, 3).
+        feats (np.ndarray): An array of features corresponding to the points with shape (N, C).
+        binarized (bool): If True, the features are assumed to be binarized; otherwise, they will be binarized.
+    """
     assert pts.ndim == 2
     assert feats.ndim == 2
     pts = np.asarray(pts)
@@ -93,14 +110,17 @@ def worker_postproc(q_out: Queue, q_postproc: Queue, d_postproc: dict,
                     postproc_func: Callable, postproc_kwargs: dict,
                     n_worker_pred):
     """
-
+    Worker function for post-processing the output of prediction workers.
+    
     Args:
-        q_out:
-        q_postproc:
-        d_postproc:
-        postproc_func:
-        postproc_kwargs:
-        n_worker_pred:
+        q_out (Queue): Queue to put the post-processed results.
+        q_postproc (Queue): Queue from which to get the items to be
+            post-processed.
+        d_postproc (dict): Dictionary to store the post-processed results.
+        postproc_func (Callable): Function to apply for post-processing.
+        postproc_kwargs (dict): Keyword arguments for the post-processing
+            function.
+        n_worker_pred (int): Number of prediction workers.
     """
     stops_received = set()
     while True:
@@ -135,24 +155,26 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
                 device: str, mpath: Optional[str] = None, bs: Optional[int] = None,
                 model_loader_kwargs: Optional[dict] = None):
     """
-
+    Worker function for making predictions using a machine learning model.
+    
     Args:
-        worker_cnt: Index of this worker.
-        q_out: Queue which contains SSV IDs.
-        d_out: Dict (key: SSV ID, value: list of prediction outputs).
-        q_progress: Progress queue.
-        q_in: Queue with the output of the loaders.
-        model_loader: Factory method for the pytorch model.
-        pred_func: Method used to perform the prediction. Must have the syntax
-            (model, input, q_out, d_out, q_progress, device, batchsize). The return needs to be placed in the dict.
-             Only put the SSV ID in `q_out` for the first batch of an SSV! Otherwise multiple postproc worker might
-             be assigned to the same object!
-        mpath: Path to the pytorch model.
-        device: Device
-        bs: Batch size.
-        n_worker_load: Number of loader.
-        n_worker_postproc: Number of postproc worker.
-        model_loader_kwargs: Additional keyword arguments for the model loader.
+        worker_cnt (int): Index of this worker.
+        q_out (Queue): Queue which contains SSV IDs. Only put the SSV ID in
+            `q_out` for the first batch of an SSV!
+        d_out (dict): Dict (key: SSV ID, value: list of prediction outputs).
+        q_progress (Queue): Queue to report progress to the main thread.
+        q_in (Queue): Queue with the output of the loaders.
+        model_loader (Callable): Factory method for loading the pytorch model.
+        pred_func (Callable): Method used to perform the prediction. Must have the
+            syntax (model, input, q_out, d_out, q_progress, device, batchsize).
+            The return needs to be placed in the dict.
+        mpath (Optional[str]): Path to the pytorch model.
+        device (str): Device to run the predictions on, e.g., 'cuda' or 'cpu'.
+        bs (Optional[int]): Batch size for processing.
+        n_worker_load (int): Number of loader workers.
+        n_worker_postproc (int): Number of post-processing workers.
+        model_loader_kwargs (Optional[dict]): Additional keyword arguments for the
+            model loader.
     """
     try:
         if model_loader_kwargs is None:
@@ -213,14 +235,15 @@ def worker_pred(worker_cnt: int, q_out: Queue, d_out: dict, q_progress: Queue, q
 def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Queue, loader_func: Callable,
                 n_worker_pred: int):
     """
-
+    Worker function for loading data samples for prediction.
+    
     Args:
-        worker_cnt:
-        q_loader:
-        q_out:
-        q_loader_sync:
-        loader_func:
-        n_worker_pred:
+        worker_cnt (int): Index of this worker.
+        q_loader (Queue): Queue to get the loading parameters.
+        q_out (Queue): Queue to put the loaded samples.
+        q_loader_sync (Queue): Queue for loader synchronization.
+        loader_func (Callable): Function to load data samples.
+        n_worker_pred (int): Number of prediction workers.
     """
     while True:
         kwargs = q_loader.get()
@@ -254,13 +277,14 @@ def worker_load(worker_cnt: int, q_loader: Queue, q_out: Queue, q_loader_sync: Q
 def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
              show_progress: bool = True):
     """
-
+    Listener function to monitor and report the progress of loading and prediction tasks.
+    
     Args:
-        q_progress:
-        q_loader_sync:
-        nloader:
-        total:
-        show_progress
+        q_progress (Queue): Queue to get progress updates.
+        q_loader_sync (Queue): Queue for loader synchronization.
+        nloader (int): Number of loader workers.
+        total (int): Total number of samples to process.
+        show_progress (bool): If True, show a progress bar.
     """
     if show_progress:
         pbar = tqdm.tqdm(total=total, leave=False)
@@ -287,6 +311,15 @@ def listener(q_progress: Queue, q_loader_sync: Queue, nloader: int, total: int,
 
 
 def _size_counter(args):
+    """
+    Helper function to count the size of a SuperSegmentationObject.
+    
+    Args:
+        args (tuple): Arguments containing the SuperSegmentationObject ID and keyword arguments.
+    
+    Returns:
+        int: The size of the SuperSegmentationObject.
+    """
     ssv_id, ssd_kwargs = args
     return SuperSegmentationObject(ssv_id, **ssd_kwargs).size
 
@@ -313,14 +346,14 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
     fraction of the total number of vertices over `npoints` times two, but at least 5.
     Every point set is constructed by collecting the vertices associated with skeleton within a
     breadth-first search up to a maximum of `npoints`.
-
+    
     Overview:
         * loader (load_func) -> input queue
         * input queue -> prediction worker
         * prediction worker (pred_func) -> postprocessing queue (default: identity)
         * postprocessing worker (postproc_func) -> output queue
         * output queue -> result dictionary (return)
-
+    
     Args:
         ssd_kwargs: Keyword arguments to specify the underlying ``SuperSegmentationDataset``. If type dict,
             `redundancy` kwarg will be used to process each cell at minimum `redundancy` times and at most as many
@@ -333,17 +366,18 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         loader_func: Loader function, used by `nloader` workers retrieving samples.
         pred_func: Predict function, used by `npredictor` workers performing the inference.
         npoints: Number of points used to generate a sample.
-        ctx_size: .
+        ctx_size: Context size for the prediction. The exact use of this parameter needs to be
+                  defined within the prediction function or model specifications.
         scale_fact: Scale factor; used to normalize point clouds prior to model inference.
         postproc_kwargs: Keyword arguments for post-processing.
         postproc_func: Optional post-processing layer for the output of pred_func.
         output_func: Transforms the elements in the output queue and stores it in the final dictionary.
             If None, elements as returned by `pred_func` are assumed to be of form ``(ssv_ids, results)``:
-
+    
                 def output_func(res_dc, (ssv_ids, predictions)):
                     for ssv_id, ssv_pred in zip(*(ssv_ids, predictions)):
                         res_dc[ssv_id].append(ssv_pred)
-
+    
         nloader: Number of workers loading samples from the given cell IDs via `load_func`.
         npredictor: Number of workers which will call `model_loader` and process (via `pred_func`) the output of
             the "loaders", i.e. workers which retrieve samples via `loader_func`.
@@ -351,22 +385,22 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         ssv_ids: IDs of cells to predict.
         use_test_aug: Use test-time augmentations. Currently this adds the following transformation
             to the basic transforms:
-
+    
                 transform = [clouds.Normalization(scale_fact), clouds.Center()]
                 [clouds.RandomVariation((-5, 5), distr='normal')] + transform + [clouds.RandomRotate()]
-
+    
         device: pytorch device.
         bs: Batch size.
         loader_kwargs: Optional keyword arguments for loader func.
         seeded: Loader will hash ssv, sample and batch IDs to generate a random seed.
         model_loader_kwargs: Optional keyword arguments for model_loader func.
         show_progress: Show progress bar.
-
+    
     Examples:
-
+    
         from syconn.handler.prediction_pts import pts_loader_scalar, pts_pred_scalar
-
-
+    
+    
         def load_model(mkwargs, device):
             from elektronn3.models.convpoint import ModelNet40
             import torch
@@ -375,7 +409,7 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
             m = torch.nn.DataParallel(m)
             m.eval()
             return m
-
+    
         ssd_kwargs = dict(working_dir='', version='ctgt')
         mdir = ''
         ssv_ids = []
@@ -385,10 +419,9 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
         dict_out = predict_pts_plain(ssd_kwargs, load_model, pts_loader_scalar, pts_pred_scalar,
                                      npoints, scale_fact, ssv_ids=ssv_ids,
                                      nloader=2, npredictor=1, use_test_aug=True)
-
+    
     Returns:
         Dictionary with the prediction result. Key: SSV ID, value: output of `pred_func` to output queue.
-
     """
     apply_proxy_fix()
     m = Manager()
@@ -515,17 +548,29 @@ def predict_pts_plain(ssd_kwargs: Union[dict, Iterable], model_loader: Callable,
 
 @functools.lru_cache(256)
 def _load_ssv_hc_cached(args):
+    """
+    Cached function to load a SuperSegmentationObject as a HybridCloud.
+    
+    Args:
+        args: Arguments to pass to the `_load_ssv_hc` function.
+    
+    Returns:
+        HybridCloud: The loaded HybridCloud object.
+    """
     return _load_ssv_hc(args)
 
 
 def _load_ssv_hc(args):
     """
-
+    Loads a SuperSegmentationObject as a HybridCloud.
+    
     Args:
-        args:
-
+        args: Arguments containing the SuperSegmentationObject, features,
+              feature labels, point type, radius, and optional flags for
+              mapping myelin and recalculating skeletons.
+    
     Returns:
-
+        HybridCloud: The loaded HybridCloud object.
     """
     # TODO: refactor
     map_myelin = False
@@ -595,30 +640,43 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
                             use_syntype: bool = True, cellshape_only: bool = False, min_npoints: Optional[int] = None,
                             ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    per-cell point-to-scalar tasks, e.g. cell type prediction.
-
+    Generates point cloud samples from SuperSegmentationObjects.
+    
+    This function provides a generator for creating point cloud samples with a 
+    specified number of points (`npoints`) from SuperSegmentationObjects. Primarily 
+    used for tasks such as cell type prediction, the function supports both training 
+    and inference modes with a variety of options including context-based sampling, 
+    myelin mapping, synapse type usage, and cell shape only features. Minimum point 
+    requirements for samples can be enforced and batch processing is supported.
+    
     Args:
-        ssd_kwargs: SuperSegmentationDataset keyword arguments specifying e.g.
-            working directory, version, etc.
-        ssv_ids: SuperSegmentationObject IDs and redundancy.
-        batchsize: Only used during training.
-        npoints: Number of points used to generate sample context.
-        ctx_size: Euclidean distance between the two most distant nodes in nm.
-            1/4 samples will fluctuate around factor 0.7+-0.2 (mean, s.d.) during training.
-        transform: Transformation/agumentation applied to every sample.
-        seeded: If True, will set the seed to ``hash(frozenset(ssv_id, n_samples, curr_batch_count))``.
-        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
-            until `npoints` have been collected.
-        redundancy: Number of samples generated from each SSV.
-        map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
-        use_syntype:
-        cellshape_only:
-        min_npoints: Minimum number of points used as input. If mesh vertices are below, missing points will be filled
-            by random sampling.
-
-    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
-
+        ssd_kwargs: SuperSegmentationDataset keyword arguments specifying details
+            such as the working directory and version.
+        ssv_ids: SuperSegmentationObject IDs and the redundancy factor indicating
+            how many samples to generate from each SSV.
+        batchsize: The number of samples to process in one batch. Only used during
+            training.
+        npoints: The number of points each sample should contain.
+        ctx_size: The Euclidean distance between the two most distant nodes in nm.
+            For training, 1/4 samples will have a context size that fluctuates around
+            factor 0.7±0.2 (mean, standard deviation).
+        transform: An optional callable for transforming or augmenting samples.
+        seeded: If True, will set the seed for reproducibility based on SSV IDs,
+            the number of samples, and the current batch count.
+        use_ctx_sampling: If True, uses context-based sampling based on `ctx_size`.
+            Otherwise, visits skeleton nodes until `npoints` are collected.
+        redundancy: Number of times each SSV is sampled.
+        map_myelin: If True, includes myelin as a vertex feature, using the myelin 
+            node attribute 'myelin_avg10000'.
+        use_syntype: If set, includes synapse types in the features.
+        cellshape_only: If True, restricts features to only cell shape information.
+        min_npoints: The minimum number of points required for the input sample. If
+            the actual number of mesh vertices is below this, the deficit will be
+            filled by random sampling.
+    
+    Yields:
+        A tuple containing the SSV IDs, the point features, and point locations. 
+        During training, also yields batch progress and total number of batches.
     """
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
@@ -724,31 +782,36 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                       map_myelin: bool = False, use_syntype: bool = True, cellshape_only: bool = False
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    per-cell point-to-scalar tasks, e.g. cell type prediction.
-
+    Generates point cloud samples from SuperSegmentationObjects for various tasks.
+    
+    This function shuffles the given SSV IDs and generates point cloud samples
+    based on the provided parameters. It supports context-based sampling, myelin
+    mapping, synapse type usage, cell shape only features, and caching of loaded
+    SSVs. It also allows drawing similar contexts from the same location.
+    
     Args:
-        ssd_kwargs: SuperSegmentationDataset keyword arguments specifying e.g.
-            working directory, version, etc.
-        ssv_ids: SuperSegmentationObject IDs for which samples are generated.
-        batchsize: Only used during training.
-        npoints: Number of points used to generate sample context.
-        ctx_size: Euclidean distance between the two most distant nodes in nm.
-            1/4 samples will fluctuate around factor 0.7+-0.2 (mean, s.d.) during training.
-        transform: Transformation/agumentation applied to every sample.
-        train: If false, eval mode -> batch size won't be used.
-        draw_local: Will draw similar contexts from approx.
-            the same location, requires a single unique element in ssv_ids
-        draw_local_dist: Maximum distance to similar source node in nm.
-        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm). Otherwise vist skeleton nodes
-            until `npoints` have been collected.
-        cache: Cache loaded SSVs.
-        map_myelin: Use myelin as vertex feature. Requires myelin node attribute 'myelin_avg10000'.
-        use_syntype:
-        cellshape_only:
-
-    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
-
+        ssd_kwargs: A dictionary of keyword arguments for initializing the
+            SuperSegmentationDataset, specifying working directory, version, etc.
+        ssv_ids: A list or ndarray of SuperSegmentationObject IDs for sample generation.
+        batchsize: The number of samples to process in one batch, used only during training.
+        npoints: The number of points each sample should contain.
+        ctx_size: The Euclidean distance between the two most distant nodes in nm.
+            During training, 1/4 samples will fluctuate around factor 0.7±0.2 (mean, s.d.).
+        transform: An optional callable for transforming or augmenting the samples.
+        train: If False, the function operates in evaluation mode and batch size is not applied.
+        draw_local: If True, draws similar contexts from approximately the same location,
+            requires a single unique element in ssv_ids.
+        draw_local_dist: The maximum distance to a similar source node in nanometers.
+        use_ctx_sampling: If True, uses context-based sampling with `ctx_size`. Otherwise,
+            visits skeleton nodes until `npoints` have been collected.
+        cache: If True, caches loaded SSVs for efficiency.
+        map_myelin: If True, includes myelin mapping in the vertex features, requires
+            myelin node attribute 'myelin_avg10000'.
+        use_syntype: If True, includes synapse types in the features.
+        cellshape_only: If True, only cell shape features are used.
+    
+    Yields:
+        A tuple containing the SSV IDs and point features and point locations for each sample.
     """
     np.random.shuffle(ssv_ids)
     ssd = SuperSegmentationDataset(**ssd_kwargs)
@@ -856,18 +919,24 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
 
 def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
     """
-
+    Processes input samples and performs predictions using a given model.
+    
+    This function takes input samples and performs predictions using the provided
+    model. The results are then stored in a dictionary and put into a queue for
+    further processing.
+    
     Args:
-        m: Model instance.
-        inp: Input as given by the loader_func.
-        q_out:
-        d_out:
-        q_cnt:
-        device:
-        bs:
-
+        m: The model instance used for predictions.
+        inp: The input data as provided by the loader function.
+        q_out: The queue to which processed results are put.
+        d_out: The dictionary where prediction results are stored.
+        q_cnt: The queue used for counting processed samples.
+        device: The device on which the model is running.
+        bs: The batch size used for processing the samples.
+    
     Returns:
-
+        None. The function puts the results into the provided queues and
+        dictionary.
     """
     ssv_kwargs, model_inp, batch_progress, n_batches = inp
     n_samples = len(model_inp[0])
@@ -900,18 +969,22 @@ def pts_pred_scalar(m, inp, q_out, d_out, q_cnt, device, bs):
 
 def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
     """
-
+    Processes input samples and performs predictions without post-processing.
+    
+    This function is similar to `pts_pred_scalar` but does not involve any
+    post-processing steps. The predictions are directly put into the output queue.
+    
     Args:
-        m: Model instance.
-        inp: Input as given by the loader_func.
-        q_out:
-        d_out:
-        q_cnt:
-        device:
-        bs:
-
+        m: The model instance used for predictions.
+        inp: The input data as provided by the loader function.
+        q_out: The queue to which the results are put.
+        d_out: The dictionary where prediction results are stored (unused in this function).
+        q_cnt: The queue used for counting processed samples.
+        device: The device on which the model is running.
+        bs: The batch size used for processing the samples.
+    
     Returns:
-
+        None. The function puts the results into the provided queue.
     """
     ssv_kwargs, model_inp, _, _ = inp
     n_samples = len(model_inp[0])
@@ -931,15 +1004,21 @@ def pts_pred_scalar_nopostproc(m, inp, q_out, d_out, q_cnt, device, bs):
 def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = None,
                         da_equals_tan: bool = True) -> Tuple[List[int], List[bool]]:
     """
-
+    Post-processes the prediction results and saves them to the SuperSegmentationObject.
+    
+    This function takes the prediction results from the input dictionary, concatenates
+    the probabilities, and computes the majority class. The results are then saved to
+    the SuperSegmentationObject's attributes.
+    
     Args:
-        ssv_kwargs:
-        d_in:
-        pred_key:
-        da_equals_tan: This flag is only applied if the working directory belongs to j0126.
-
+        ssv_kwargs: A dictionary of keyword arguments for initializing the SuperSegmentationObject.
+        d_in: The dictionary containing the prediction results.
+        pred_key: The key under which the predictions are saved in the SuperSegmentationObject.
+        da_equals_tan: This flag is only applied if the working directory belongs to j0126. If True and
+                       the working directory belongs to j0126, DA and TAN evidence is accumulated.
+    
     Returns:
-
+        A tuple containing a list of SSV IDs and a list of boolean values indicating success.
     """
     if pred_key is None:
         pred_key = 'celltype_cnn_e3'
@@ -978,6 +1057,19 @@ def pts_postproc_scalar(ssv_kwargs: dict, d_in: dict, pred_key: Optional[str] = 
 
 
 def pts_loader_local_skel(*args, **kwargs):
+    """
+    Chooses the appropriate point cloud sample generator based on the training mode.
+    
+    This function acts as a dispatcher that selects the correct generator function
+    for point cloud samples, depending on whether it is called in training mode or not.
+    
+    Args:
+        *args: Positional arguments passed to the generator functions.
+        **kwargs: Keyword arguments passed to the generator functions.
+    
+    Returns:
+        A generator that yields point cloud samples for local tasks.
+    """
     if 'train' not in kwargs:
         train = False
     else:
@@ -997,33 +1089,35 @@ def _pts_loader_local_skel_train(ssv_params: List[dict], out_point_label: Option
                                  recalc_skeletons: bool = False,
                                  use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    local point-to-scalar tasks, e.g. morphology embeddings or glia detection.
-
-    For training:
-        * choose `batchsize` random nodes from the SSV skeleton as base points for the context retrieval.
-
+    Generates point cloud samples from SuperSegmentationObjects for tasks such as 
+    morphology embeddings or glia detection.
+    
+    This generator function is primarily used during training to choose `batchsize` 
+    random nodes from the SSV skeleton as base points for context retrieval. It 
+    supports various features like synapse type usage, context-based sampling, myelin 
+    mapping, and inclusion of subcellular structures when generating samples.
+    
     Args:
         ssv_params: SuperSegmentationObject kwargs for which samples are generated.
-        out_point_label: Either key for sso.skeleton attribute or int (used for all out locations). Currently only
-            int is supported!
-        batchsize: Only used during training.
-        ctx_size: Context size in nm.
-        npoints: Number of points used to generate sample context.
-        transform: Transformation/agumentation applied to every sample.
-        n_out_pts: Maximum number of out points.
-        use_subcell: Use points of subcellular structure.
-            * eval:
-        use_syntype: Use synapse type as point feature.
-        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm).
-        recalc_skeletons: Do not use existing cell skeleton but recalculate it with
+        out_point_label: Either key for sso.skeleton attribute or int (used for all 
+            output locations). Currently only int is supported!
+        batchsize: The number of samples to process in one batch, chosen randomly.
+        ctx_size: The context size for sampling in nanometers.
+        npoints: The number of points each sample should contain for context generation.
+        transform: An optional callable for sample transformation/augmentation.
+        n_out_pts: The maximum number of output points per sample.
+        use_ctx_sampling: If True, uses context-based sampling instead of BFS, defined by 
+            `ctx_size`.
+        use_syntype: If True, includes synapse type as a point feature in the samples.
+        use_myelin: If True, includes myelin mapping in the point features.
+        recalc_skeletons: If set, recalculates the cell skeleton using 
             :py:func:`syconn.reps.super_segmentation_object.SuperSegmentationObject.calculate_skeleton`.
-        use_myelin: Use myelin point cloud as inpute feature.
-
-    Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
-        If train is False, outpub_labels will be a scalar indicating the current SSV progress, i.e.
-        the last batch will have output_label=1.
-
+        use_subcell: If True, includes points from subcellular structures in the samples.
+    
+    Yields:
+        A tuple containing the SSV IDs [M, ], point locations [N, 3], point features [N, C], 
+        and for training, output points [N, 3] and labels [N, 1]. During evaluation, 
+        output_labels will be scalar indicating the SSV progress.
     """
     if ctx_size is None:
         ctx_size = 20000
@@ -1153,34 +1247,35 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
                                  recalc_skeletons: bool = False,
                                  use_subcell: bool = False) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    local point-to-scalar tasks, e.g. morphology embeddings or astrocyte detection.
+    Generates point cloud samples from SuperSegmentationObjects for various tasks.
+    
+    This function yields point cloud samples for local point-to-scalar tasks such as morphology
+    embeddings or astrocyte detection, based on SuperSegmentationObject parameters.
 
     For inference:
     * return as many batches (size `batchsize`) as there are base nodes in the SSV skeleton
       (distance between nodes see `base_node_dst`).
-
+    
     Args:
-        ssv_params: SuperSegmentationObject kwargs for which samples are generated.
-        out_point_label: Either key for sso.skeleton attribute or int (used for all out locations). Currently only
-            int is supported!
-        batchsize: Only used during training.
-        ctx_size: Context size in nm.
-        npoints: Number of points used to generate sample context.
-        transform: Transformation/agumentation applied to every sample.
-        n_out_pts: Maximum number of out points.
-        use_subcell: Use points of subcellular structure.
-        base_node_dst: Distance between base nodes for context retrieval during eval mode.
-        use_syntype: Use synapse type as point feature.
-        use_ctx_sampling: Use context based sampling. If True, uses `ctx_size` (in nm).
-        recalc_skeletons: Do not use existing cell skeleton but recalculate it with
-            :py:func:`syconn.reps.super_segmentation_object.SuperSegmentationObject.calculate_skeleton`.
-        use_myelin: Use myelin point cloud as inpute feature.
-
-    Yields: SSV IDs [M, ], (point location [N, 3], point feature [N, C]), (out_pts [N, 3], out_labels [N, 1])
-        If train is False, out_labels will be a scalar indicating the current SSV progress, i.e.
-        the last batch will have output_label=1.
-
+        ssv_params: SuperSegmentationObject kwargs for sample generation.
+        out_point_label: Key for sso.skeleton attribute or int (only int is supported).
+        batchsize: Number of samples per batch, used only during training.
+        ctx_size: Context size in nm, defines extent of local neighborhood.
+        npoints: Number of points in each sample context.
+        transform: Transformation/augmentation applied to each sample.
+        n_out_pts: Maximum number of output points per sample.
+        base_node_dst: Distance between base nodes for context sampling in eval mode.
+        use_ctx_sampling: If True, uses `ctx_size` for context-based sampling.
+        use_syntype: If True, includes synapse type as a point feature.
+        recalc_skeletons: If True, recalculates cell skeleton instead of using existing.
+        use_myelin: If True, includes myelin point cloud as an input feature.
+        use_subcell: If True, includes subcellular structure points in samples.
+    
+    Yields: 
+        SSV IDs [M, ], (point features [N, C], point locations [N, 3]), 
+        (out_pts [N, 3], out_labels [N, 1]). In non-training mode (train is False), 
+        out_labels is a scalar indicating SSV progress, with the last batch having 
+        output_label=1.
     """
     if ctx_size is None:
         ctx_size = 20000
@@ -1308,18 +1403,22 @@ def _pts_loader_local_skel_infer(ssv_params: List[dict], out_point_label: Option
 
 def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
     """
-
+    Performs prediction on point cloud samples using a provided model.
+    
+    This function processes the input data by passing it through the model and storing the
+    results in a dictionary. It also handles worker synchronization through queues.
+    
     Args:
-        m: Model instance.
-        inp: Input as given by the loader_func.
-        q_out:
-        d_out:
-        q_cnt:
-        device:
-        bs:
-
+        m: The model instance used for prediction.
+        inp: The input data as provided by the loader function, which includes SSV parameters
+             and model input data.
+        q_out: A queue used for worker synchronization, where SSV IDs are put after processing.
+        d_out: A dictionary where prediction results are stored, keyed by SSV IDs.
+        q_cnt: A queue used to track the progress of the workers.
+        device: The device on which the model is running (e.g., 'cuda' or 'cpu').
+        bs: The batch size used for processing the input data.
+    
     Returns:
-
     """
     ssv_params, model_inp, out_pts_orig, batch_progress, n_batches = inp
     res = []
@@ -1342,6 +1441,27 @@ def pts_pred_local_skel(m, inp, q_out, d_out, q_cnt, device, bs):
 def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: Optional[int] = None,
                       partitioned: Optional[bool] = False, apply_softmax: bool = True,
                       sample_loc_ds: float = 100, pred2loc_knn: int = 5) -> Tuple[List[int], List[bool]]:
+    """
+    Post-processes the predictions for glia detection.
+    
+    This function takes the raw predictions from the prediction queue, evaluates them, and
+    writes the results back to the corresponding SuperSegmentationObjects.
+    
+    Args:
+        ssv_params: A dictionary of keyword arguments used to initialize the
+            SuperSegmentationObject.
+        d_in: A dictionary containing the prediction results.
+        pred_key: The key under which the predictions will be stored in the SuperSegmentationObject.
+        lo_first_n: If provided, only the first N supervoxels will be considered for writing results.
+        partitioned: A flag indicating whether the supervoxels were partitioned to generate additional context.
+        apply_softmax: If True, applies the softmax function to the prediction probabilities.
+        sample_loc_ds: The downsampling factor for sample locations.
+        pred2loc_knn: The number of nearest neighbors to consider when mapping predictions to locations.
+    
+    Returns:
+        A tuple containing a list of processed SSV IDs and a list of boolean values indicating
+        whether the processing was successful for each SSV.
+    """
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
     node_probas = []
@@ -1396,18 +1516,24 @@ def pts_postproc_glia(ssv_params: dict, d_in: dict, pred_key: str, lo_first_n: O
 
 def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
     """
-    Uses loader method: :py:func:`~pts_loader_local_skel`.
+    Predicts embeddings for point cloud samples using a provided model.
+    
+    This function is similar to `pts_pred_local_skel` but is specifically tailored for
+    generating embeddings. It processes the input data, passes it through the model, and
+    stores the embeddings in a dictionary, using the loader method 
+    :py:func:`~pts_loader_local_skel`.
+    
     Args:
-        m: Model instance.
-        inp: Input as given by the loader_func.
-        q_out:
-        d_out:
-        q_cnt:
-        device:
-        bs:
-
+        m: The model instance used for prediction.
+        inp: The input data as provided by the loader function, which includes SSV parameters
+             and model input data.
+        q_out: A queue used for worker synchronization, where SSV IDs are put after processing.
+        d_out: A dictionary where embedding results are stored, keyed by SSV IDs.
+        q_cnt: A queue used to track the progress of the workers.
+        device: The device on which the model is running (e.g., 'cuda' or 'cpu').
+        bs: The batch size used for processing the input data.
+    
     Returns:
-
     """
     ssv_params, model_inp, out_pts_orig, batch_progress, n_batches = inp
     # ignore target points, not needed for the representation network (e.g. ModelNet40) which is pts2scalar
@@ -1432,16 +1558,22 @@ def pts_pred_embedding(m, inp, q_out, d_out, q_cnt, device, bs):
 def pts_postproc_embedding(ssv_params: dict, d_in: dict, pred_key: Optional[str] = None
                            ) -> Tuple[List[int], List[bool]]:
     """
-
+    Post-processes the embeddings for cell morphology.
+    
+    This function maps the predicted embeddings to the skeleton nodes of the
+    SuperSegmentationObject using nearest-neighbor to propagate embedding
+    locations to nodes and saves the results.
+    
     Args:
-        ssv_params: Dictionary of kwargs (key: cell ID, value: dict) used to initialze the
-            ~py:class:`SuperSegmentationObject`.
-        d_in: Dictionary of prediction results.
-        pred_key: Key to store embeddings in skeleton nodes (using nearest-neighbor to propagate embedding locations
-            to nodes).
-
+        ssv_params: A dictionary of keyword arguments used to initialize the
+            SuperSegmentationObject. Each key is a cell ID and its value is a dict.
+        d_in: A dictionary containing the prediction results.
+        pred_key: The key under which the embeddings will be stored in the skeleton
+            nodes.
+    
     Returns:
-
+        A tuple containing a list of processed SSV IDs and a list of boolean values
+        indicating whether the processing was successful for each SSV.
     """
     curr_ix = 0
     sso = SuperSegmentationObject(**ssv_params)
@@ -1484,23 +1616,26 @@ def pts_loader_semseg_train(fname_pkl: str, batchsize: int,
                             use_subcell: bool = False, mask_borders_with_id: Optional[int] = None
                             ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Generator for SSV point cloud samples of size `npoints`. Currently used for
-    semantic segmentation tasks, e.g. spine, bouton and functional compartment
-    prediction.
-    Output point labels for ultra-structure will be -1.
-
+    Generator for SSV point cloud samples of size `npoints`. Used for
+    semantic segmentation tasks, such as spine, bouton, and functional
+    compartment prediction. This generator yields batches of point cloud
+    samples with corresponding labels for training models.
+    
     Args:
-        fname_pkl:
-        batchsize:
-        npoints:
-        ctx_size:
-        transform:
-        use_subcell:
-        mask_borders_with_id: Take into account potential label remapping downstream. Setting `mask_borders_with_id` to
-            -1 will tread boundary regions the same way as ultra-structure.
-
-    Yields: SSV IDs [M, ], (point feature [N, C], point location [N, 3])
-
+        fname_pkl: The filename of the pickle file containing the
+            HybridCloud data.
+        batchsize: The number of samples in each batch.
+        npoints: The number of points per sample context.
+        ctx_size: The context size in nanometers, determining the local
+            neighborhood around each base node.
+        transform: Optional callable for transformations or augmentations.
+        use_subcell: Include points from subcellular structures if True.
+        mask_borders_with_id: ID for masking context region borders, with
+            -1 treating boundaries as ultra-structure.
+    
+    Yields:
+        SSV IDs [M, ], along with point features [N, C], point locations
+        [N, 3], and labels for ultra-structure will be -1.
     """
     feat_dc = dict(pts_feat_dict)
     del feat_dc['syn_ssv_asym']
@@ -1611,24 +1746,28 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
     """
     TODO: move pts_feat_dict and pts_feat_ds_dict to config.
 
-    Load HybridCloud from pkl file (cached via functools.lur_cache).
-    The following properties must be met:
-
-    * Vertex features are labeled according to ``pts_feat_dict`` in
-      handler.prediction_pts.
-    * Skeleton nodes require to have labels (0, 1) indicating whether they can
-      be used as source node for the context generation (1) or not (0).
-
-    Down sampling will be performed via open3d's ``voxel_down_sample`` with
-    voxel sizes defined in pts_feat_ds_dict (handler.prediction_pts)
-
+    Load HybridCloud from a pkl file (cached via functools.lru_cache).
+    This function loads a HybridCloud object, which represents a point cloud with
+    additional features and labels, from a pickle file. Down sampling and additional
+    edges between skeleton nodes are supported.
+    
+    Vertex features are labeled according to `pts_feat_dict` in
+    handler.prediction_pts. Skeleton nodes must have labels (0, 1) indicating their
+    usability as source nodes for context generation (1) or not (0).
+    
+    Down sampling is performed using open3d's `voxel_down_sample` with voxel sizes
+    defined in `pts_feat_ds_dict` (handler.prediction_pts).
+    
     Args:
         path: Path to HybridCloud pickle file.
-        gt_type: See pts_feat_ds_dict in handler.prediction_pts.
-        radius: Add additional edges between skeleton nodes within `radius`.
-
+        gt_type: Ground truth type, used to determine the downsampling strategy. See
+                 `pts_feat_ds_dict` in handler.prediction_pts for details.
+        radius: Radius within which additional edges will be added between skeleton
+                nodes, if applicable.
+    
     Returns:
-        Populated HybridCloud.
+        A populated HybridCloud object, with features and skeleton nodes according to
+        the specified parameters.
     """
     feat_ds_dict = dict(pts_feat_ds_dict[gt_type])
     # requires cloud keys to be in [vc, syn_ssv, mi, hybrid]
@@ -1671,6 +1810,15 @@ def load_hc_pkl(path: str, gt_type: str, radius: Optional[float] = None) -> Hybr
 
 # factory methods for models
 def get_pt_kwargs(mdir: str) -> Tuple[dict, dict]:
+    """
+    Parses the model directory path to extract and construct keyword arguments for the model and loader.
+    
+    Args:
+        mdir: The directory path containing the model.
+    
+    Returns:
+        A tuple containing two dictionaries: `mkwargs` for the model and `loader_kwargs` for the loader.
+    """
     use_norm = False
     track_running_stats = False
     activation = 'relu'
@@ -1696,6 +1844,16 @@ def get_pt_kwargs(mdir: str) -> Tuple[dict, dict]:
 
 
 def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'InferenceModel':
+    """
+    Loads the glia prediction model with parameters specified by the model path.
+    
+    Args:
+        mpath: Optional; the path to the model. If None, uses the default model path from global parameters.
+        device: The device to load the model onto, e.g., 'cuda' or 'cpu'.
+    
+    Returns:
+        The loaded and evaluated glia prediction model.
+    """
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
     from elektronn3.models.convpoint import SegSmall
@@ -1712,6 +1870,16 @@ def get_glia_model_pts(mpath: Optional[str] = None, device: str = 'cuda') -> 'In
 
 
 def get_compartment_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
+    """
+    Loads the compartment prediction model with parameters specified by the model path.
+    
+    Args:
+        mpath: Optional; the path to the model. If None, uses the default model path from global parameters.
+        device: The device to load the model onto, e.g., 'cuda' or 'cpu'.
+    
+    Returns:
+        The loaded and evaluated compartment prediction model.
+    """
     if mpath is None:
         mpath = global_params.config.mpath_comp_pts
     from elektronn3.models.convpoint import SegSmall2
@@ -1723,6 +1891,16 @@ def get_compartment_model_pts(mpath: Optional[str] = None, device='cuda') -> 'In
 
 
 def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
+    """
+    Loads the cell type prediction model with parameters specified by the model path.
+    
+    Args:
+        mpath: Optional; the path to the model. If None, uses the default model path from global parameters.
+        device: The device to load the model onto, e.g., 'cuda' or 'cpu'.
+    
+    Returns:
+        The loaded and evaluated cell type prediction model.
+    """
     if mpath is None:
         mpath = global_params.config.mpath_celltype_pts
     from elektronn3.models.convpoint import ModelNet40
@@ -1751,6 +1929,16 @@ def get_celltype_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Infer
 
 
 def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'InferenceModel':
+    """
+    Loads the triplet network model with parameters specified by the model path.
+    
+    Args:
+        mpath: Optional; the path to the model. If None, uses the default model path from global parameters.
+        device: The device to load the model onto, e.g., 'cuda' or 'cpu'.
+    
+    Returns:
+        The loaded and evaluated triplet network model.
+    """
     if mpath is None:
         mpath = global_params.config.mpath_tnet_pts
     from elektronn3.models.convpoint import ModelNet40, TripletNet
@@ -1769,23 +1957,24 @@ def get_tnet_model_pts(mpath: Optional[str] = None, device='cuda') -> 'Inference
 def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
                      postproc_kwargs: Optional[dict] = None, show_progress: bool = True, **add_kwargs):
     """
-    Perform glia predictions of cell reconstructions on sampled point sets from the
-    cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
-    fraction of the total number of vertices over ``npoints`` times two, but at least 5.
-    Every point set is constructed by collecting the vertices associated with skeleton within a
-    breadth-first search up to a maximum of ``npoints``.
-
+    Predicts glia from cell reconstructions using sampled point sets from the cell's vertices.
+    The number of predictions `npreds` per cell is determined by the fraction of the total
+    number of vertices over `npoints` times two, but at least 5. Sets are constructed by
+    collecting vertices associated with the skeleton in a breadth-first search up to a
+    maximum of `npoints`.
+    
     Notes:
-        * :py:func:`~pts_postproc_glia` currently requires locking.
-
+        * `pts_postproc_glia` currently requires locking.
+    
     Args:
-        ssv_params: List of kwargs to initialize SSVs.
-        mpath: Path to model.
-        postproc_kwargs: Postprocessing kwargs.
-        show_progress: Show progress bar.
-
+        ssv_params: List of kwargs to initialize SuperSegmentationObjects for prediction.
+        mpath (str, optional): Path to the model. If None, uses default model path.
+        postproc_kwargs (dict, optional): Keyword arguments for post-processing.
+        show_progress (bool, optional): If True, shows a progress bar.
+        **add_kwargs: Additional keyword arguments.
+    
     Returns:
-
+        None; predictions are performed in-place and relevant data is updated.
     """
     if mpath is None:
         mpath = global_params.config.mpath_glia_pts
@@ -1808,20 +1997,22 @@ def predict_glia_ssv(ssv_params: List[dict], mpath: Optional[str] = None,
 def infere_cell_morphology_ssd(ssv_params, mpath: Optional[str] = None, pred_key_appendix: str = '', **add_kwargs):
     """
     Extract local morphology embeddings of cell reconstructions on sampled point sets from the
-    cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
-    fraction of the total number of vertices over ``npoints`` times two, but at least 5.
-    Every point set is constructed by collecting the vertices associated with skeleton within a
-    breadth-first search up to a maximum of ``npoints``.
-    Result is stored with key 'latent_morph' (+ `pred_key_appendix`) in the SSV skeleton.
-
-
+    cell's vertices. The number of predictions `npreds` per cell is calculated based on the
+    fraction of the total number of vertices over `npoints` times two, but at least 5. Each
+    point set is constructed by collecting the vertices associated with the skeleton within a
+    breadth-first search up to a maximum of `npoints`. Result is stored with key 'latent_morph'
+    (+ `pred_key_appendix`) in the SSV skeleton.
+    
     Args:
-        ssv_params:
-        mpath:
-        pred_key_appendix:
-
+        ssv_params: Parameters to initialize SuperSegmentationObjects for embedding extraction.
+        mpath: Optional; path to the model. If None, uses the default model path from global
+               parameters.
+        pred_key_appendix: Optional; appendix to the prediction key used for storing results.
+        **add_kwargs: Additional keyword arguments.
+    
     Returns:
-
+        None; embeddings are inferred in-place and relevant data is updated with key
+        'latent_morph' (+ `pred_key_appendix`) in the SSV skeleton.
     """
     pred_key = "latent_morph"
     pred_key += pred_key_appendix
@@ -1848,23 +2039,24 @@ def predict_celltype_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optio
                          da_equals_tan: bool = True, pred_key: Optional[str] = None,
                          show_progress: bool = True, **add_kwargs):
     """
-    Perform cell type predictions of cell reconstructions on sampled point sets from the
-    cell's vertices. The number of predictions ``npreds`` per cell is calculated based on the
-    fraction of the total number of vertices over ``npoints`` times two, but at least 5.
-    Every point set is constructed by collecting the vertices associated with skeleton within a
-    breadth-first search up to a maximum of ``npoints``.
-
-
+    Predicts cell types of cell reconstructions using sampled point sets from the cell's vertices. The
+    number of predictions `npreds` per cell is based on the fraction of the total number of vertices
+    over `npoints` times two, but not less than 5. Constructs point sets by collecting vertices within
+    a breadth-first search up to `npoints`.
+    
     Args:
-        ssd_kwargs:
-        mpath:
-        ssv_ids:
-        da_equals_tan: Only relevant for j0126.
-        pred_key: Key used to store predictions in `attr_dict` of cell SSOs.
-        show_progress: Show progress bar.
-
+        ssd_kwargs: Keyword arguments specifying the SuperSegmentationDataset.
+        mpath: Path to the model. If None, the default model path from global parameters is used.
+        ssv_ids: Iterable of SuperSegmentationObject IDs to predict. If not provided, all SSOs in 
+                 the given SuperSegmentationDataset are used.
+        da_equals_tan: Only relevant for j0126, indicates if dendrite and axon are considered the same.
+        pred_key: Key to store predictions in `attr_dict` of cell SSOs. Defaults to a specific key
+                  if not provided.
+        show_progress: If True, shows a progress bar. Hidden by default.
+        **add_kwargs: Additional keyword arguments.
+    
     Returns:
-
+        None; predictions are performed in-place and the relevant data in the cell SSOs is updated.
     """
     if pred_key is None:
         pred_key = 'celltype_cnn_e3'
@@ -1909,17 +2101,17 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
     by the pred_type which is inferred from the models at mpath. This enables the pred worker to apply multiple
     different models at once. E.g. when mpath contains models with identifiers 'ads', 'abt' and 'dnh', ctx_size would
     e.g. be {'ads': 20000, 'abt': 3000, 'dnh': 3000}.
-
+    
     Args:
-         ssd_kwargs: Keyword arguments which specify the ssd in use.
-         mpath: Path to model folder (which contains models with model identifier) or to single model file.
-         ssv_ids: Ids of ssv objects which should get processed.
-         ctx_dst_fac: Defines the redundancy of the predictions by determining the distance of the base nodes
+        ssd_kwargs: Keyword arguments which specify the ssd in use.
+        mpath: Path to model folder (which contains models with model identifier) or to single model file.
+        ssv_ids: Ids of ssv objects which should get processed.
+        ctx_dst_fac: Defines the redundancy of the predictions by determining the distance of the base nodes
             used for context extraction. Higher ``ctx_dst_fac`` means smaller distance (ctx / ctx_dst_fac) and
             therefore larger context overlap and longer processing time.
-         add_kwargs: Can for example contain parameter ``bs`` for batchsize. ``bs`` is supposed to be a factor
+        add_kwargs: Can for example contain parameter ``bs`` for batchsize. ``bs`` is supposed to be a factor
             which gets multiplied with the model dependent batch sizes.
-        show_progress: Show progress bar.
+        show_progress: Show progress bar.    
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -1982,15 +2174,20 @@ def predict_cmpt_ssd(ssd_kwargs, mpath: Optional[str] = None, ssv_ids: Optional[
 
 
 def get_cpmt_model_pts_OLD(mpath: Optional[str] = None, device='cuda', pred_types: Optional[List] = None):
-    """ Loads multiple models (or only one), depending on ``pred_types``. Models which should be used
-        must contain one of the pred_types in their names. If ``mpath`` points to a single model, this
-        model must contain 'cmpt' in its name.
-
+    """
+    Loads multiple models based on given prediction types in their names. If `mpath` is
+    a single model, it must contain 'cmpt' in its name to be eligible for loading.
+    
     Args:
-        mpath: Path to model folder (containing multiple models) or to single model file. Models should
-            have one of the pred_types in their names, a single model must contain 'cmpt' in its name.
-        device: Device onto which the models should get transfered.
-        pred_types: List of prediction types, e.g. ['ads', 'abt', dnh'] for axon, dendrite, soma; ...
+        mpath: Path to a model folder or to a single model file. If None, defaults to a
+            predefined model path. Each model must include one of the `pred_types` in its
+            name, or 'cmpt' if it's a single model.
+        device: The device to which the models are transferred.
+        pred_types: A list of prediction types, such as ['ads', 'abt', 'dnh'] for axon,
+            dendrite, soma. If not provided, defaults may be used.
+    
+    Returns:
+        A dictionary of loaded pytorch models keyed by prediction type.
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -2027,15 +2224,21 @@ def get_cpmt_model_pts_OLD(mpath: Optional[str] = None, device='cuda', pred_type
 
 
 def get_cmpt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: Optional[List] = None):
-    """ Loads multiple models (or only one), depending on ``pred_types``. Models which should be used
-        must contain one of the pred_types in their names. If ``mpath`` points to a single model, this
-        model must contain 'cmpt' in its name.
+    """
+    Loads multiple models (or only one), depending on ``pred_types``. Models which should be used
+    must contain one of the pred_types in their names. If ``mpath`` points to a single model, this
+    model must contain 'cmpt' in its name.
 
     Args:
-        mpath: Path to model folder (containing multiple models) or to single model file. Models should
-            have one of the pred_types in their names, a single model must contain 'cmpt' in its name.
-        device: Device onto which the models should get transfered.
-        pred_types: List of prediction types, e.g. ['ads', 'abt', dnh'] for axon, dendrite, soma; ...
+        mpath: Path to model folder (containing multiple models) or to a single model file.
+            Models should have one of the pred_types in their names, a single model must
+            contain 'cmpt' in its name.
+        device: The device onto which the models should be transferred.
+        pred_types: Optional; list of prediction types (e.g., ['ads', 'abt', 'dnh'] for axon,
+            dendrite, soma). If None, the default prediction types are used.
+    
+    Returns:
+        A dictionary of loaded pytorch models keyed by the prediction type.
     """
     if mpath is None:
         mpath = global_params.config.mpath_compartment_pts
@@ -2076,25 +2279,29 @@ def get_cmpt_model_pts(mpath: Optional[str] = None, device='cuda', pred_types: O
 def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints: dict, ctx_size: dict, transform: dict,
                     ctx_dst_fac: int, use_subcell: bool = True, use_myelin: bool = False,
                     ssd_kwargs: Optional[dict] = None):
-    """ Given multiple ssvs, defined by ssv_params, this function produces samples for each ssv which are
-        later processed by the prediction function. Different models of the pred_func need different contexts.
-        Therefore, this function splits each ssv multiple times, depending on the entries in the given dicts,
-        like e.g. ``ctx_size``.
+    """
+    Given multiple ssvs, defined by ssv_params, this function produces samples for each ssv which are
+    later processed by the prediction function. Different models of the pred_func need different contexts.
+    Therefore, this function splits each ssv multiple times, depending on the entries in the given dicts,
+    like e.g. ``ctx_size``.
 
     Args:
-        ssv_params: Parameters of the ssvs which should get processed.
-        pred_types: List of prediction types, e.g. ['ads', 'abt', dnh'] for axon, dendrite, soma; ...
-        batchsize: Dict of batch sizes, keyed by the respective context size. Models with the same context size
-            will have the same batch size, no matter how many points are sampled from the contexts.
-        npoints: Dict with numbers of sample points (extracted from subset) keyed by the respective prediction key.
-        ctx_size: Dict with context sizes, keyed by the respective prediction key.
-        transform: Dict of transformations, keyed by the respective prediction key.
-        use_subcell: Flag for using cell organelles
-        use_myelin: Flag for using myelin.
-        ssd_kwargs: Keyword arguments to initialize the ssd.
-        ctx_dst_fac: Defines the redundancy of the predictions by determining the distance of the base nodes
-            used for context extraction. Higher ``ctx_dst_fac`` means smaller distance (ctx / ctx_dst_fac) and
-            therefore larger context overlap and longer processing time.
+        ssv_params: Parameters of the SuperSegmentationObjects to process.
+        pred_types: List of prediction types (e.g., ['ads', 'abt', 'dnh'] for axon, dendrite, soma).
+        batchsize: Dictionary of batch sizes keyed by the respective context size.
+        npoints: Dictionary of the number of sample points keyed by the respective prediction type.
+        ctx_size: Dictionary of context sizes keyed by the respective prediction type.
+        transform: Dictionary of transformations keyed by the respective prediction type.
+        use_subcell: Flag indicating whether to use cell organelles.
+        use_myelin: Flag indicating whether to use myelin.
+        ssd_kwargs: Optional; keyword arguments to initialize the SuperSegmentationDataset.
+        ctx_dst_fac: Factor defining the redundancy of predictions by determining the 
+            distance of base nodes used for context extraction. Higher `ctx_dst_fac` means 
+            smaller distance (ctx / ctx_dst_fac) and therefore larger context overlap and 
+            longer processing time.
+    
+    Yields:
+        Samples for each SuperSegmentationObject, which are processed by the prediction function.
     """
     if pred_types is None:
         raise ValueError("pred_types is None. However, pred_types must at least contain one pred_type such as "
@@ -2198,17 +2405,22 @@ def pts_loader_cpmt(ssv_params, pred_types: List[str], batchsize: dict, npoints:
 
 def pts_pred_cmpt(m, inp, q_out, d_out, q_cnt, device, bs):
     """
+    Prediction function for compartment prediction using loaded models.
+    
     Args:
-        m: Dict with pytorch models keyed by the prediction type
-        inp: Tuple of ssv_params, (feats, verts), (mapping_indices, masks (for removing cell organelles),
-        voxel_indices), (batch_progress, n_batches, p_t (prediction type of this batch), pred_types (only
-        present in first batches)
-        q_out: Queue for worker syncing
-        d_out: Dict to save prediction results
-        q_cnt: Queue for worker syncing
-        device: Device to which models in m have been transfered
-        bs: Dict of batch sizes, keyed by the respective context size. Models with the same context size
-            will have the same batch size, no matter how many points are sampled from the contexts.
+        m: Dictionary of PyTorch models keyed by the prediction type.
+        inp: Tuple containing SuperSegmentationObject parameters, model input (features, vertices),
+             indices for mapping and masks for cell organelle removal, voxel indices, batch
+             progress, number of batches, and prediction type information for the batch.
+        q_out: Queue for worker synchronization.
+        d_out: Dictionary to save prediction results.
+        q_cnt: Queue for worker synchronization.
+        device: Device to which models in `m` have been transferred.
+        bs: Dictionary of batch sizes, keyed by the respective context size. Models with the same
+            context size will have the same batch size, regardless of the number of points sampled
+            from the contexts.
+    
+    Processes the input and saves the prediction results in the output dictionary.
     """
     ssv_params, model_inp, batch_info, batch_progress = inp
     idcs_list = batch_info[0]
@@ -2251,10 +2463,15 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
     then concatenates and evaluates all the predictions (taking the majority vote over all predictions per vertex).
     The resulting label arrays (number dependent on the number of prediction types (e.g. ads, abt, dnh)) get saved
     in the original sso object.
-
+        
     Args:
-        sso_params: Params of sso object for which the predictions should get evaluated.
-        d_in: Dict with prediction results
+        sso_params: Parameters of the SuperSegmentationObject for which predictions should be
+                    evaluated.
+        d_in: Dictionary with prediction results.
+    
+    Returns:
+        A list of SuperSegmentationObject IDs and a list of boolean values indicating successful
+        processing.
     """
     sso = SuperSegmentationObject(**sso_params)
     preds = {}
@@ -2358,26 +2575,27 @@ def pts_postproc_cpmt(sso_params: dict, d_in: dict):
 
 def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
     """
-    Convert vertex predictions in ``label_dict`` of cell reconstruction object to common layout.
-
-    Expected keys in label dict for point cloud based predictions:
+    Convert vertex predictions in `label_dict` of cell reconstruction object to common layout.
+    
+    Expected keys in label dict for point cloud predictions:
         * Coarse compartments ['ads']: dendrite (0), axon (1), soma (2).
         * Axon compartments ['abt']: axon (0), en-passant bouton (1), terminal bouton (2).
-        * Dendritic compartments ['dnh']: dendritic shaft (0), spine neck (1), spine head (2)
-
+        * Dendritic compartments ['dnh']: dendritic shaft (0), spine neck (1), spine head (2).
+    
     Alternative layout from multi-views:
-        * 'axoness': 0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5: background, 6: unpredicted.
+        * 'axoness': 0: dendrite, 1: axon, 2: soma, 3: en-passant, 4: terminal, 5:
+          background, 6: unpredicted.
         * 'spiness': 0: shaft, 1: head, 2: neck, 3: other, 4: background, 5: unpredicted.
-
+    
     Resulting layout:
-        Single array with dendrite (0), axon (1), soma (2), en-passant bouton (3), terminal bouton (4),
-        spine head (5), spine neck (6).
-
+        Single array with dendrite (0), axon (1), soma (2), en-passant bouton (3),
+        terminal bouton (4), spine head (5), spine neck (6).
+    
     Args:
-        sso: Cell reconstruction.
-
+        sso: The SuperSegmentationObject containing the vertex predictions.
+    
     Returns:
-        Single array with compartment predictions.
+        An array with compartment predictions in a standardized layout.
     """
     ld = sso.label_dict('vertex')
     if 'ads' in ld and 'abt' in ld and 'dnh' in ld:
@@ -2407,9 +2625,18 @@ def convert_cmpt_preds(sso: SuperSegmentationObject) -> np.ndarray:
 
 
 def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.ndarray):
-    """ ith entry in ``preds_idcs`` contains vertex index of prediction saved at ith entry of preds.
-        Predictions for each vertex index are gathered and then evaluated by a majority vote.
-        The result gets saved at the respective index in the pred_labels array. """
+    """
+    Evaluates predictions for each vertex index by a majority vote and saves the result in the
+    pred_labels array. The ith entry in preds_idcs contains the vertex index of the prediction
+    saved at the ith entry of preds. Predictions for each vertex index are gathered and then
+    evaluated by a majority vote. The result gets saved at the respective index in the
+    pred_labels array.
+    
+    Args:
+        preds_idcs: Array containing vertex indices for predictions.
+        preds: Array containing predictions.
+        pred_labels: Array where the evaluated predictions will be saved.
+    """
     pred_dict = defaultdict(list)
     u_preds_idcs = np.unique(preds_idcs)
     for i in range(len(preds_idcs)):
@@ -2421,6 +2648,15 @@ def evaluate_preds(preds_idcs: np.ndarray, preds: np.ndarray, pred_labels: np.nd
 
 # TODO: Merge with get_pt_kwargs
 def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
+    """
+    Retrieves model and loader keyword arguments for compartment prediction models based on the model directory name.
+    
+    Args:
+        mdir: The directory name of the model.
+    
+    Returns:
+        A tuple containing two dictionaries: model keyword arguments and loader keyword arguments.
+    """
     use_norm = True
     use_bias = True
     norm_type = 'gn'
@@ -2451,6 +2687,22 @@ def get_cmpt_kwargs(mdir: str) -> Tuple[dict, dict]:
 @functools.lru_cache(256)
 def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: Union[Tuple, int], pt_type: str, myelin: bool = False,
            radius: int = None, label_remove: List[int] = None, label_mappings: List[Tuple[int, int]] = None):
+    """
+    Converts a SuperSegmentationObject to a HybridCloud object for morphological analysis.
+    
+    Args:
+        sso: The SuperSegmentationObject to convert.
+        feats: A tuple or string specifying the features to include in the HybridCloud.
+        feat_labels: A tuple or integer specifying the labels for the features.
+        pt_type: The prediction type to be used for downsampling.
+        myelin: Flag indicating whether to include myelin information.
+        radius: Optional; radius to add additional edges between skeleton nodes.
+        label_remove: Optional; list of labels to remove from the nodes.
+        label_mappings: Optional; list of tuples for label remapping.
+    
+    Returns:
+        A HybridCloud object and a dictionary of indices.
+    """
     if type(feats) == str:
         feats = [feats]
     if type(feat_labels) == int:
@@ -2495,14 +2747,19 @@ def sso2hc(sso: SuperSegmentationObject, feats: Union[Tuple, str], feat_labels: 
 
 
 def add_myelin(ssv: SuperSegmentationObject, hc: HybridCloud, average: bool = True):
-    """ Tranfers myelin prediction from a SuperSegmentationObject to an existing
-        HybridCloud (hc). Myelin is added in form of the types array of the hc,
-        where myelinated vertices have type 1 and 0 otherwise. Works in-place.
-
+    """
+    Transfers myelin prediction from a SuperSegmentationObject to an existing
+    HybridCloud (hc). Myelin is added to the 'types' array of the hc, where
+    myelinated vertices are marked as type 1, and non-myelinated as type 0. This
+    update is done in-place.
+    
     Args:
-        ssv: SuperSegmentationObject which contains skeleton to which myelin should get mapped.
-        hc: HybridCloud to which myelin should get added.
-        average: Flag for applying majority vote to the myelin property
+        ssv: SuperSegmentationObject with skeleton for myelin mapping.
+        hc: HybridCloud to which myelin is to be added.
+        average: Flag for applying majority vote to the myelin property.
+    
+    The function updates the HybridCloud object's 'types' array with myelin
+    information based on the provided SuperSegmentationObject.
     """
     ssv.skeleton['myelin'] = map_myelin2coords(ssv.skeleton['nodes'], mag=4)
     if average:
@@ -2537,6 +2794,18 @@ orig_AutoProxy = managers.AutoProxy
 
 @wraps(managers.AutoProxy)
 def AutoProxy(*args, incref=True, manager_owned=False, **kwargs):
+    """
+    Wrapper for AutoProxy to add the manager_owned flag.
+    
+    Args:
+        *args: Positional arguments for the original AutoProxy function.
+        incref: If True, increments the reference count for the returned proxy object.
+        manager_owned: If True, indicates that the manager owns the proxy object.
+        **kwargs: Keyword arguments for the original AutoProxy function.
+    
+    Returns:
+        A proxy object for a shared object.
+    """
     # Create the autoproxy without the manager_owned flag, then
     # update the flag on the generated instance. If the manager_owned flag
     # is set, `incref` is disabled, so set it to False here for the same
@@ -2549,7 +2818,18 @@ def AutoProxy(*args, incref=True, manager_owned=False, **kwargs):
 
 def apply_proxy_fix():
     """
-    See https://stackoverflow.com/questions/46779860/multiprocessing-managers-and-custom-classes
+    Applies a patch to the multiprocessing.managers.AutoProxy to add the
+    manager_owned parameter if it's missing. This is a workaround for a known
+    issue with custom classes and multiprocessing managers.
+    
+    This function checks if the 'manager_owned' parameter is part of the
+    signature for managers.AutoProxy. If it is not, it debug logs the patching
+    action, applies the patch, and re-registers any types that were already
+    registered to SyncManager without a custom proxy type.
+    
+    References:
+        - Stack Overflow discussion on the issue:
+          https://stackoverflow.com/questions/46779860/multiprocessing-managers-and-custom-classes
     """
     if "manager_owned" in signature(managers.AutoProxy).parameters:
         return

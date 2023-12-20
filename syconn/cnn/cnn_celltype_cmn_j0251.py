@@ -20,8 +20,25 @@ from elektronn3.data import transforms
 
 
 class StackedConv2ScalarWithLatentAdd(nn.Module):
+    """
+    This class is a PyTorch module for a convolutional neural network model. The model is a stack of 
+    Conv3DLayer layers with a final fully connected layer. The model also includes a latent addition 
+    operation.
+    
+    Args:
+        in_channels (int): The number of input channels.
+        n_classes (int): The number of output classes.
+        dropout_rate (float, optional): The dropout rate for each Conv3DLayer. Defaults to 0.08.
+        act (str, optional): The activation function to use. Can be either 'relu' or 'leaky_relu'. 
+            Defaults to 'relu'.
+        n_scalar (int, optional): The number of scalar inputs to the fully connected layer. 
+            Defaults to 1.
+    """
     def __init__(self, in_channels, n_classes, dropout_rate=0.08, act='relu',
                  n_scalar=1):
+        """
+        docstring
+        """
         super().__init__()
         if act == 'relu':
             act = nn.ReLU()
@@ -52,6 +69,18 @@ class StackedConv2ScalarWithLatentAdd(nn.Module):
         )
 
     def forward(self, *args):
+        """
+        Defines the forward pass of the model. The input is passed through each Conv3DLayer in 
+        sequence, then reshaped and concatenated with the scalar input before being passed through 
+        the fully connected layer.
+        
+        Args:
+            *args: The input to the model. This should be a tuple containing two elements: a tensor 
+                representing the input data and a tensor representing the scalar input.
+        
+        Returns:
+            The output of the model.
+        """
         x, scal = args
         x = self.seq(x)
         x = x.view(x.size()[0], -1)
@@ -61,6 +90,12 @@ class StackedConv2ScalarWithLatentAdd(nn.Module):
 
 
 def get_model():
+    """
+    This function creates and returns an instance of the StackedConv2ScalarWithLatentAdd model.
+    
+    Returns:
+        StackedConv2ScalarWithLatentAdd: An instance of the model.
+    """
     model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=11, n_scalar=2)
     # model = StackedConv2Scalar(in_channels=4, n_classes=8)
     return model

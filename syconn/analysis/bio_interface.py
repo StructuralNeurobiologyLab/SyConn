@@ -55,23 +55,33 @@ rev_celltype = {0:'STN', 1:'DA', 2:'MSN', 3:'LMAN', 4:'HVC', 5:'TAN', 6:'GPe', 7
 
 class Timer:
     """
-    Simple timer, optionally named, for use as context manager.
-    Time is given in seconds.
-    E.g.:
+    A simple timer class that can be used as a context manager. It measures the time taken for a block 
+    of code to execute in seconds. The timer can be optionally named for identification purposes.
+    
+    Example usage:
     with Timer('print-test'):
         print(f'{[i for i in range(100000)]}')
     """
     def __init__(self, name: Optional[str] = None):
         """
-        Init function.
+        Initializes the Timer class.
+        
         Args:
-            name: Plots the given name additionally to the passed time.
+            name (Optional[str]): The name of the timer. If provided, the name is 
+            printed along with the elapsed time.
         """
         self.start = 0
         self.name = name
     def __enter__(self):
+        """
+        Defines the actions to be taken at the start of the block of code. In this case, it starts the timer.
+        """
         self.start = time.time()
     def __exit__(self, type, value, traceback):
+        """
+        Defines the actions to be taken at the end of the block of code. In this case, it stops the timer and prints 
+        the elapsed time.
+        """
         if self.name:
             print(f'Timer {self.name} finished after {time.time()-self.start}s.')
         else:
@@ -79,16 +89,16 @@ class Timer:
 
 class Dataset:
     """
-    Lightweight in memory wrapper of a SyConn dataset for analyses purposes.
-    Analyses often iterate and access the data either in a synapse-centric or
-    neuron-centric paradigm (or focused on another organelle), which is why
-    these are directly exposed.
-    todo: benchmark max. num synapses for e.g. xGB of RAM.
+    A lightweight in-memory wrapper for a SyConn dataset for analysis purposes. The data 
+    can be accessed in a synapse-centric or neuron-centric paradigm, or focused on another 
+    organelle. The class exposes these paradigms directly for ease of use.
+    
+    Note: The maximum number of synapses for a given amount of RAM needs to be benchmarked.
     """
     def __init__(self):
         """
-        Datasets are currently populated using the module level
-        function init_in_mem_dataset() mainly historical reasons.
+        Initializes the Dataset class. The datasets are populated using the module-level 
+        function init_in_mem_dataset() due to historical reasons.
         """
         self.neurons: dict = dict()
         self.synapses: dict = dict()
@@ -97,9 +107,18 @@ class Dataset:
 
 class Neuron:
     """
-    Represents a single neuron in the dataset.
+    Represents a single neuron in the dataset. Each neuron has an ID and 
+    optionally a cell type. It is structured into compartments (axon, 
+    dendrite, and soma) which allow access to the contained structures.
     """
     def __init__(self, ID, celltype: Optional[str] = None) -> None:
+        """
+        Initializes the Neuron class.
+        
+        Args:
+            ID (int): The ID of the neuron.
+            celltype (Optional[str]): The cell type of the neuron.
+        """
         self.ID: int = ID
         self.SV_ids: Optional[List[int]] = None
         self.celltype: str = celltype
@@ -118,13 +137,16 @@ class Neuron:
 
 class Compartment:
     """
-    A neuron is structured into compartments which allow access to the contained
-    structures. It is not enforced that a compartment is anatomically continuous.
-    The main compartments in use at the moment are axon, dendrite and soma,
-    but any other type could be defined. Compartments support querying basic
-    statistics about their structure.
+    Represents a compartment of a neuron. A neuron is structured into compartments 
+    which allow access to the contained structures. It is not enforced that a 
+    compartment is anatomically continuous. The main compartments in use at the 
+    moment are axon, dendrite and soma, but any other type could be defined. 
+    Compartments support querying basic statistics about their structure.
     """
     def __init__(self) -> None:
+        """
+        Initializes the Compartment class.
+        """
         self.synapses: Dict = dict()
         self.mitos: Dict = dict()
         self.vesicles: Dict = dict()
@@ -134,6 +156,9 @@ class Compartment:
 
     @property
     def mito_sizes(self):
+        """
+        Returns the sizes of mitochondria in the compartment.
+        """
         if self.mitos:
             return np.array([v.size for v in self.mitos.values()])
         else:
@@ -141,6 +166,9 @@ class Compartment:
 
     @property
     def vesicle_sizes(self):
+        """
+        Returns the sizes of vesicles in the compartment.
+        """
         if self.vesicles:
             return np.array([v.size for v in self.vesicles.values()])
         else:
@@ -148,6 +176,9 @@ class Compartment:
 
     @property
     def synapse_sizes(self):
+        """
+        Returns the sizes of synapses in the compartment.
+        """
         if self.synapses:
             return np.array([v.size for v in self.synapses.values()])
         else:
@@ -155,6 +186,9 @@ class Compartment:
 
     @property
     def synapse_path_density(self):
+        """
+        Returns the synapse path density in the compartment.
+        """
         # caching decorators can be problematic with pickling
         try:
             return self._synapse_path_density
@@ -167,6 +201,9 @@ class Compartment:
 
     @property
     def mitos_path_density(self):
+        """
+        Returns the mitochondria path density in the compartment.
+        """
         try:
             return self._mitos_path_density
         except AttributeError:
@@ -178,6 +215,9 @@ class Compartment:
 
     @property
     def vesicles_path_density(self):
+        """
+        Returns the vesicles path density in the compartment.
+        """
         try:
             return self._vesicles_path_density
         except AttributeError:
@@ -189,6 +229,9 @@ class Compartment:
 
     @property
     def synapse_vol_path_density(self):
+        """
+        Returns the synapse volume path density in the compartment.
+        """
         try:
             return self._synapse_vol_path_density
         except AttributeError:
@@ -200,6 +243,9 @@ class Compartment:
 
     @property
     def mitos_vol_path_density(self):
+        """
+        Returns the mitochondria volume path density in the compartment.
+        """
         try:
             return self._mitos_vol_path_density
         except AttributeError:
@@ -211,6 +257,9 @@ class Compartment:
 
     @property
     def vesicles_vol_path_density(self):
+        """
+        Returns the vesicles volume path density in the compartment.
+        """
         try:
             return self._vesicles_vol_path_density
         except AttributeError:
@@ -222,6 +271,9 @@ class Compartment:
 
     @property
     def abs_synapse_sizes(self):
+        """
+        Returns the absolute sizes of synapses in the compartment.
+        """
         if self.synapses:
             return np.array([np.abs(v.size) for v in self.synapses.values()])
         else:
@@ -229,6 +281,9 @@ class Compartment:
 
     @property
     def fraction_asym(self):
+        """
+        Returns the fraction of asymmetric synapses in the compartment.
+        """
         try:
             return self._fraction_asym
         except AttributeError:
@@ -239,14 +294,23 @@ class Compartment:
 
     @property
     def post_neurons(self):
+        """
+        Returns the post-synaptic neurons in the compartment.
+        """
         return [v.post for v in self.synapses.values()]
 
     @property
     def pre_neurons(self):
+        """
+        Returns the pre-synaptic neurons in the compartment.
+        """
         return [v.pre for v in self.synapses.values()]
 
     @property
     def head_other_ratio(self):
+        """
+        Returns the ratio of head synapses to other synapses in the compartment.
+        """
         # We currently care only about the dendritic morphology,
         # also in the case of axon compartments! Might be interesting
         # to add the presynaptic morphology as well at some point
@@ -264,12 +328,27 @@ class Compartment:
 
 class Synapse:
     """
-    Class which represents a synapse, including various properties that
-    were inferred from syconn.
+    Represents a synapse, including various properties that were inferred from SyConn.
     """
 
     def __init__(self, ID: int, pre, post, post_spine_vol, post_morph, pre_morph, size: float,
                  coordinate, pre_latent_morph, post_latent_morph, prob: float) -> None:
+        """
+        Initializes the Synapse class.
+        
+        Args:
+            ID (int): The ID of the synapse.
+            pre: The pre-synaptic neuron.
+            post: The post-synaptic neuron.
+            post_spine_vol: The volume of the post-synaptic spine.
+            post_morph: The morphology of the post-synaptic neuron.
+            pre_morph: The morphology of the pre-synaptic neuron.
+            size (float): The size of the synapse.
+            coordinate: The coordinate of the synapse.
+            pre_latent_morph: The latent morphology of the pre-synaptic neuron.
+            post_latent_morph: The latent morphology of the post-synaptic neuron.
+            prob (float): The probability of the synapse.
+        """
 
         self.id: int = ID
         self.type: Optional[int] = None
@@ -286,9 +365,19 @@ class Synapse:
 
 class Organelle():
     """
-    Class which represents e.g., mitochondria or synaptic vesicles clouds.
+    Represents an organelle such as a mitochondrion or a synaptic vesicle cloud.
     """
     def __init__(self, ID: int, parent: Compartment, o_type: str, size: float, coordinate):
+        """
+        Initializes the Organelle class.
+        
+        Args:
+            ID (int): The ID of the organelle.
+            parent (Compartment): The parent compartment of the organelle.
+            o_type (str): The type of the organelle.
+            size (float): The size of the organelle.
+            coordinate: The coordinate of the organelle.
+        """
         self.id = ID
         self.type = o_type
         self.parent = parent
@@ -296,7 +385,21 @@ class Organelle():
         self.coordinate = coordinate
 
 class Spine:
+    """
+    Represents a single spine in the dendrite of a neuron. A spine is a small 
+    dendritic protrusion where synapses are located. Each spine contains a 
+    dictionary of synapses, its volume, and its coordinate in the 3D space.
+    """
     def __init__(self, ID, dendrite, volume, coordinate):
+        """
+        Initializes a Spine instance.
+        
+        Args:
+            ID: Unique identifier for the spine.
+            dendrite: The dendrite to which the spine belongs.
+            volume: The volume of the spine.
+            coordinate: The 3D coordinate of the spine.
+        """
         self.id = ID
         self.dendrite = dendrite
         self.synapses = dict()
@@ -305,11 +408,32 @@ class Spine:
 
 
 def get_cmap(n, name='hsv'):
-    '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
-    RGB color; the keyword argument name must be a standard mpl colormap name.'''
+    """
+    Returns a function that maps each index in 0, 1, ..., n-1 to a distinct
+    RGB color. The keyword argument name must be a standard matplotlib colormap 
+    name.
+    
+    Args:
+        n: The number of colors needed.
+        name: The name of the colormap. Default is 'hsv'.
+        
+    Returns:
+        A colormap function that can be used to map indices to RGB colors.
+    """
     return plt.cm.get_cmap(name, n)
 
 def scale_coords(coords, sc=[0.009, 0.009, 0.02], ds='j0126'):
+    """
+    Scales a set of coordinates according to a given scale factor and dataset.
+    
+    Args:
+        coords: The coordinates to be scaled.
+        sc: The scale factor. Default is [0.009, 0.009, 0.02].
+        ds: The dataset. Default is 'j0126'.
+        
+    Returns:
+        The scaled coordinates.
+    """
     if ds == 'j0126':
         scaled = np.multiply(coords, np.array([sc]*len(coords)))
     elif ds == 'j0251':
@@ -317,6 +441,17 @@ def scale_coords(coords, sc=[0.009, 0.009, 0.02], ds='j0126'):
     return scaled
 
 def scale_coord(coord, sc=[0.009, 0.009, 0.02], ds='j0126'):
+    """
+    Scales a single coordinate according to a given scale factor and dataset.
+    
+    Args:
+        coord: The coordinate to be scaled.
+        sc: The scale factor. Default is [0.009, 0.009, 0.02].
+        ds: The dataset. Default is 'j0126'.
+        
+    Returns:
+        The scaled coordinate.
+    """
     if ds == 'j0126':
         scaled = np.multiply(coord, sc)
     elif ds == 'j0251':
@@ -324,6 +459,16 @@ def scale_coord(coord, sc=[0.009, 0.009, 0.02], ds='j0126'):
     return scaled
 
 def descale_coord(coord, roundint=False):
+    """
+    Descales a coordinate by dividing it by a given scale factor.
+    
+    Args:
+        coord: The coordinate to be descaled.
+        roundint: If True, the descaled coordinate is rounded to the nearest integer.
+        
+    Returns:
+        The descaled coordinate.
+    """
     scaled = np.divide(coord, [0.009, 0.009, 0.02])
     if roundint:
         scaled = scaled.astype(np.int)
@@ -331,12 +476,13 @@ def descale_coord(coord, roundint=False):
 
 def benchmark_dataset_creation(num_syns: int, num_neurons:int ) -> None:
     """
-    Very simple benchmark to test how many neurons and synapses can be stored
-    in this way.
+    Benchmarks the creation of a dataset by simulating a given number of neurons 
+    and synapses. This function is used to test how many neurons and synapses can 
+    be stored in memory.
+    
     Args:
-        num_syns: Number of synapses to simulated
-        num_neurons: Number of neurons to simulate
-
+        num_syns: The number of synapses to simulate.
+        num_neurons: The number of neurons to simulate.
     """
 
     # generate random pre and post partners
@@ -376,21 +522,17 @@ def benchmark_dataset_creation(num_syns: int, num_neurons:int ) -> None:
 
 def update_neuron_features(n: Neuron) -> None:
     """
-    Recalculates the feature vector for a neuron. This happens outside of the
-    neuron class to allow for rapid development cycles, since recreation of the
-    neuron objects is relatively time consuming.
-    The feature vector of each neurite is split up into three feature classes:
-
-        axon features, dendrite features and soma features.
-
-    If a neurite lacks a compartment, these features do not contribute to
-    the distance metric between two neurites.
-
-    todo: Replace hard coded parameters
-
+    Recalculates the feature vector for a neuron. This function is used to allow 
+    for rapid development cycles, as recreating the neuron objects is relatively 
+    time-consuming. The feature vector of each neurite is split up into three 
+    feature classes: axon features, dendrite features, and soma features. If a 
+    neurite lacks a compartment, these features do not contribute to the distance 
+    metric between two neurites.
+    
+    Todo: Replace hard coded parameters
+    
     Args:
-        n: neuron instance
-
+        n: The neuron instance for which the feature vector is to be updated.
     """
     fv: Dict = dict()
 
@@ -565,6 +707,17 @@ def update_neuron_features(n: Neuron) -> None:
 
 
 def get_feature_labels(dendrite=True, axon=True, soma=True):
+    """
+    Generates a list of feature labels for axon, dendrite, and soma based on the given parameters.
+    
+    Args:
+        dendrite (bool): If True, dendrite feature labels are included in the output.
+        axon (bool): If True, axon feature labels are included in the output.
+        soma (bool): If True, soma feature labels are included in the output.
+        
+    Returns:
+        labels (list): A list of feature labels.
+    """
     labels_axon = [
               # axon below
               'global_branch_density',
@@ -707,6 +860,23 @@ mds_pkl_path='/wholebrain/songbird/j0251/mds_Dec_10_2021_v4.pkl'
 def init_in_mem_dataset(from_scratch = False,
                         syconn_working_dir = syconn_wd,
                         mds_pkl_path = mds_pkl_path):
+    """
+    Initializes an in-memory dataset from a given path or creates a new one if specified. 
+    The function first checks if the dataset exists and if it does, it loads it from the pickle file. 
+    If the dataset does not exist or if the from_scratch flag is set to True, it creates a new dataset 
+    by reading the connectivity matrix from a csv file and populating the dataset with neurons and synapses. 
+    It also checks for unassigned synapses and skips them. Finally, it loads some data directly from syconn 
+    and sets the in_analysis_set flag for neurons based on the number of synapses they have.
+    
+    Args:
+        from_scratch (bool, optional): Flag to indicate whether to create a new dataset or load from existing. 
+                                        Defaults to False.
+        syconn_working_dir (str, optional): Path to the syconn working directory. Defaults to syconn_wd.
+        mds_pkl_path (str, optional): Path to the pickle file of the dataset. Defaults to mds_pkl_path.
+    
+    Returns:
+        Dataset: The loaded or newly created dataset.
+    """
 
     # check if mds exists already:
     if not from_scratch:
@@ -1059,6 +1229,17 @@ def init_in_mem_dataset(from_scratch = False,
     return mds
 
 def syn_dist(s1, s2, ds='j0126'):
+    """
+    Calculates the Euclidean distance between two synapses in a given dataset.
+    
+    Args:
+        s1: The first synapse.
+        s2: The second synapse.
+        ds: The dataset in which the synapses are located. Default is 'j0126'.
+    
+    Returns:
+        The Euclidean distance between the two synapses.
+    """
     return np.linalg.norm(scale_coord(s1.coordinate, ds=ds) - scale_coord(s2.coordinate, ds=ds))
 
 #from functools import lru_cache
@@ -1072,6 +1253,24 @@ def get_skeleton_path_distance(c1, c2, n,
                                scale=False,
                                ds = 'j0251',
                                cutoff = 50.):
+    """
+    Calculates the path distance between two coordinates on a neuron's skeleton.
+    
+    Args:
+        c1: The first coordinate.
+        c2: The second coordinate.
+        n: The neuron on which the coordinates are located.
+        nx_skel: The neuron's skeleton. Default is None.
+        max_query_coord_dist: The maximum distance for query coordinates to actual skeleton nodes. Default is 1.5.
+        dendritic_shaft_dist_only: If True, only calculates the distance along the dendritic shaft. Default is False.
+        return_path_nodes: If True, returns the nodes along the path. Default is False.
+        scale: If True, scales the coordinates. Default is False.
+        ds: The dataset in which the neuron is located. Default is 'j0251'.
+        cutoff: The cutoff distance for the path. Default is 50.
+    
+    Returns:
+        The path distance between the two coordinates. If return_path_nodes is True, also returns the nodes along the path.
+    """
     #print(f'c1: {c1} c2: {c2}')
     # skeleton path distance of two closest skeleton nodes to coords c on
     # neuron n; max dist for query coords to actual skeleton nodes to
@@ -1172,6 +1371,14 @@ def get_skeleton_path_distance(c1, c2, n,
 
 
 def update_mds_neuron_features(mds):
+    """
+    Updates the neuron features of the given in-memory dataset. The function iterates over all neurons
+    in the dataset that are marked for analysis and updates their features. It also ensures that the 
+    synapse distance cache of the dataset is initialized.
+    
+    Args:
+        mds: The in-memory dataset whose neuron features are to be updated.
+    """
     n_in_analysis_set = [n for n in mds.neurons.values() if n.in_analysis_set]
     for n in tqdm(n_in_analysis_set):
         update_neuron_features(n)
@@ -1185,18 +1392,18 @@ def update_mds_neuron_features(mds):
 @numba.njit(parallel=False)
 def numba_pairwise_neuron_euclidean_dist_with_conn_mat(n1_features, n2_features):
     """
-    The last two columns of the n1 and n2 features contains an index into the
-    global connectivity matrix conn_mat. This is used to compare their incoming
-    synaptic connections and the outgoing connections.
-    The calculated distance by this function is euclidean for all but the
-    axonic and dendritic wiring distance features, which are combined with the
-    euclidean distance of the other features.
+    Calculates the Euclidean distance between two neurons based on their features and connectivity matrix.
+    The last two columns of the feature vectors contain indices into the global connectivity matrix. These
+    are used to compare the incoming and outgoing synaptic connections of the neurons. The calculated 
+    distance is Euclidean for all features except the axonic and dendritic wiring distance features, which 
+    are combined with the Euclidean distance of the other features.
+    
     Args:
-        n1_features:
-        n2_features:
-
+        n1_features: The feature vector of the first neuron.
+        n2_features: The feature vector of the second neuron.
+        
     Returns:
-        dist: combined euclidean feature distance and connectivity matrix distance
+        The combined Euclidean feature distance and connectivity matrix distance.
     """
 
     # row overlap
@@ -1242,15 +1449,16 @@ def numba_pairwise_neuron_euclidean_dist_with_conn_mat(n1_features, n2_features)
 @numba.njit(parallel=False)
 def numba_pairwise_neuron_dist(n1_features, n2_features):
     """
-    Fast pairwise neuron feature distance using a custom metric that calculates
-    distances between axons, dendrites and soma compartments separately.
-
+    Calculates a custom distance between two neurons based on their features. The distance is calculated
+    separately for the axon, dendrite, and soma compartments of the neurons. If a compartment does not 
+    exist (i.e., all its features are zero), it is excluded from the comparison.
+    
     Args:
-        n1_features: feature vector of neuron 1
-        n2_features: feature vector of neuron 2
-
-    Returns: distance
-
+        n1_features: The feature vector of the first neuron.
+        n2_features: The feature vector of the second neuron.
+        
+    Returns:
+        The calculated distance between the two neurons.
     """
 
     # todo: do not hard code feature numbers, make parameter.
@@ -1325,15 +1533,20 @@ def get_norm_mds_fv(mds: Dataset = None,
                     add_conn_mat_idx: bool = False,
                     selection_mask: Optional[np.ndarray] = None) -> Union[list, Optional[list], Optional[list], Optional[list]]:
     """
-    Helper function for feature calculation, which can return an equally indexed
-    array of cell types classifications for plotting convenience.
+    Helper function for feature calculation. It returns an equally indexed array of cell types 
+    classifications for plotting convenience. If no specific neurons are provided, the function uses all 
+    neurons in the given dataset.
+    
     Args:
-        mds: in memory dataset
-        return_CMN_celltype: flag whether celltypes should be returned
-
-    Returns: list of features with optional lists of celltypes and neuron IDs
-             in same order.
-
+        mds: The in-memory dataset to use.
+        neurons: The specific neurons to consider.
+        return_CMN_celltype: Whether to return the cell type classifications.
+        return_nID_index: Whether to return the neuron IDs.
+        add_conn_mat_idx: Whether to add the connectivity matrix index to the features.
+        selection_mask: A mask to select a subset of features.
+        
+    Returns:
+        A list of features with optional lists of cell types and neuron IDs in the same order.
     """
 
     if not neurons:
@@ -1399,12 +1612,14 @@ def get_norm_mds_fv(mds: Dataset = None,
 
 def norm_fv(X: list) -> np.ndarray:
     """
-    Standardize features by subtracting mean and dividing by standard deviation.
+    Standardizes a list of features by subtracting the mean and dividing by the standard deviation. 
+    The function handles cases where a feature column contains NaN or Inf values, or is empty.
+    
     Args:
-        X: Matrix containing features.
-
-    Returns: Normalized matrix.
-
+        X: The list of features to standardize.
+        
+    Returns:
+        The standardized features as a NumPy array.
     """
     X = np.array(X)
     X_norm = np.empty_like(X)
@@ -1440,6 +1655,17 @@ def norm_fv(X: list) -> np.ndarray:
     return X_norm[:, idx]
 
 def prune_skel_stub_branches(nx_g, n, len_thres=5.):
+    """
+    Prunes the skeleton stub branches of a neuron based on a length threshold.
+    
+    Args:
+        nx_g: NetworkX graph representing the neuron's skeleton.
+        n: Neuron object.
+        len_thres: Length threshold for pruning. Branches shorter than this are pruned.
+        
+    Returns:
+        nx_g: Pruned NetworkX graph.
+    """
     start = time.time()
     pruned = True
     num_ends = 0
@@ -1536,6 +1762,17 @@ def prune_skel_stub_branches(nx_g, n, len_thres=5.):
     return nx_g
 
 def create_nx_skel_of_neuron(n, ds='j0126', write_to_object=False):
+    """
+    Creates a NetworkX graph of a neuron's skeleton.
+    
+    Args:
+        n: Neuron object.
+        ds: Dataset identifier.
+        write_to_object: Boolean flag indicating whether to write the graph to the neuron object.
+        
+    Returns:
+        skel_nx: NetworkX graph of the neuron's skeleton.
+    """
 
     skel_coords = scale_coords(n.skeleton['nodes'], ds=ds)
     skel_nx = nx.Graph()
@@ -1582,14 +1819,15 @@ def create_nx_skel_of_neuron(n, ds='j0126', write_to_object=False):
 
 def build_conn_mat(mds, neurons, min_syn_size=0.01):
     """
-    Construct a simple dense directed connectivity matrix, containing only the
-    neurons in neurons, which must be part of the mds.
+    Constructs a dense directed connectivity matrix for a set of neurons.
+    
     Args:
-        mds: in memory dataset
-        neurons: iterable of Neurons
-
+        mds: In-memory dataset. Must be part of the mds.
+        neurons: Iterable of Neuron objects. Must be part of the neurons.
+        min_syn_size: Minimum synapse size to consider in the connectivity matrix.
+    
     Returns:
-
+        conn_mat: Connectivity matrix.
     """
     conn_mat = np.zeros((len(list(neurons)), len(list(neurons))))
     n_ID_contained = {int(nID): True for nID in [n.ID for n in neurons]}

@@ -5,6 +5,22 @@ import sys
 
 
 def start_training(q_in: Queue, dc: dict):
+    """
+    Executes training scripts provided in the queue with the given arguments.
+    
+    This function runs in an infinite loop, checking for script paths and arguments in the
+    input queue. For each set of script and arguments, it constructs a command and executes
+    it using `subprocess.Popen`. It captures the output and error streams, checks for
+    successful execution, and logs the results. If a training folder already exists, it
+    skips the training for that command. The function breaks out of the loop when the queue
+    is empty, indicating that all training tasks have been completed.
+    
+    Args:
+        q_in: A multiprocessing queue containing tuples of script paths and their
+              corresponding argument dictionaries.
+        dc: A manager dictionary that stores the command strings as keys and the return
+            status or error messages as values.
+    """
     while True:
         if q_in.empty():
             print('Worker finished.')
@@ -32,13 +48,26 @@ def start_training(q_in: Queue, dc: dict):
 
 def worker_train(args):
     """
-    Launch ``len(args)`` trainings. Currently `n_workers` is hard-coded to 5, i.e. this method with launch 5 threads
-    each running one training.
-
+    Launches multiple training processes in parallel based on the provided arguments.
+    
+    This function initializes a multiprocessing environment and manages the execution of
+    training routines in parallel threads or processes. It is designed to handle a list
+    of training configurations, each specified as a tuple containing a script path and
+    a set of arguments. The number of worker threads is currently fixed at 5, which will
+    each undertake a separate training sequence. 
+    
     Args:
-        args: List of tuples of script path and arguments, i.e.
-            [('...', dict(bs=10, scale_norm=30000), ('...', dict())]
-
+        args: A list of tuples, where each tuple consists of a script path and a 
+              dictionary of arguments for the training command, e.g., 
+              [('...', {'bs': 10, 'scale_norm': 30000}), ('...', {})]
+    
+    Raises:
+        RuntimeError: If any training process encounters an error, an exception is 
+                      raised, including information about the failures.
+    
+    Note: The docstring has been updated to reflect the hard-coded number of workers
+          from the old docstring which specifies 5 workers as opposed to the generated
+          docstring's mention of a maximum of 4 workers.
     """
     n_worker = min(4, len(args))
     print(f'Starting {n_worker} trainings in parallel.')

@@ -34,13 +34,19 @@ __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
 
 def arrtolz4string(arr: np.ndarray) -> bytes:
     """
-    Converts (multi-dimensional) array to list of lz4 compressed strings.
-
+    Converts (multi-dimensional) array to an LZ4 compressed byte string.
+    
+    This function takes a NumPy array or a list and compresses it using the LZ4
+    algorithm, returning the compressed data as a byte string. If the input is a
+    list, it is first converted to a NumPy array. If the array is empty, an empty
+    byte string is returned. In case of an OverflowError during compression, a
+    warning is logged, and the 'arrtolz4string_list' function is used instead.
+    
     Args:
-        arr: Input array.
-
+        arr: The NumPy array to be compressed.
+    
     Returns:
-        lz4 compressed string.
+        A byte string containing the LZ4 compressed data.
     """
     if isinstance(arr, list):
         arr = np.array(arr)
@@ -59,15 +65,21 @@ def arrtolz4string(arr: np.ndarray) -> bytes:
 def lz4stringtoarr(string: bytes, dtype: np.dtype = np.float32,
                    shape: Optional[Tuple[int]] = None):
     """
-    Converts lz4 compressed string to 1d array.
-
+    Converts an LZ4 compressed byte string back to a NumPy array.
+    
+    This function decompresses a byte string that was previously compressed using
+    the LZ4 algorithm and reconstructs the original NumPy array. The data type and
+    shape of the original array must be provided. If the input string is empty, an
+    empty NumPy array is returned. If the shape is provided, the decompressed data
+    is reshaped accordingly.
+    
     Args:
-        string: Serialized array.
-        dtype: Data type of original array.
-        shape: Shape of original array.
-
+        string: The LZ4 compressed byte string to be decompressed.
+        dtype: The data type of the original array, to ensure data integrity.
+        shape: The original array's shape, used to reshape the decompressed data.
+    
     Returns:
-        N-dimensional numpy array.
+        An N-dimensional numpy array reconstructed from the compressed data.
     """
     if len(string) == 0:
         return np.zeros((0,), dtype=dtype)
@@ -82,13 +94,19 @@ def lz4stringtoarr(string: bytes, dtype: np.dtype = np.float32,
 
 def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     """
-    Converts (multi-dimensional) array to list of lz4 compressed strings.
-
+    Converts a NumPy array to a list of LZ4 compressed byte strings.
+    
+    This function is similar to 'arrtolz4string' but returns a list of compressed byte
+    strings instead of a single byte string, to handle large arrays that cannot be
+    compressed in a single step. If the input is a list, it is first converted to a
+    NumPy array. If the array is empty, a list containing a single empty byte string
+    is returned.
+    
     Args:
-        arr: Input array.
-
+        arr: The NumPy array or a list to be compressed.
+    
     Returns:
-        lz4 compressed string.
+        A list of LZ4 compressed byte strings.
     """
     if isinstance(arr, list):
         arr = np.array(arr)
@@ -106,15 +124,25 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
 def lz4string_listtoarr(str_lst: Union[List[bytes], np.ndarray], dtype: np.dtype = np.float32,
                         shape: Optional[Tuple[int]] = None) -> np.ndarray:
     """
-    Converts lz4 compressed strings to array.
-
+    Converts a list of LZ4 compressed byte strings back to a NumPy array.
+    
+    This function takes a list of byte strings, each compressed using the LZ4
+    algorithm, and concatenates their decompressed data to reconstruct the original
+    NumPy array. If the input is already a NumPy array, it is returned as is. If the
+    list is empty, an empty NumPy array is returned. If the shape is provided, the
+    decompressed data is reshaped accordingly.
+    
     Args:
-        str_lst: Binary string representation of the array. If numpy array, do nothing.
-        dtype: Data type of the serialized array.
-        shape: Shape of the serialized array.
-
+        str_lst: A list of LZ4 compressed byte strings or a NumPy array. If numpy
+                 array, do nothing.
+        dtype: The data type of the original array. If not provided, the dtype
+               inferred from the compressed data will be used.
+        shape: The shape of the original array, used for reshaping the decompressed
+               data into the specified shape. If not provided, the shape is inferred
+               from the compressed data.
+    
     Returns:
-        1d numpy array.
+        A 1d numpy array reconstructed from the compressed data.
     """
     if type(str_lst) is np.ndarray:
         return str_lst
@@ -128,26 +156,35 @@ def lz4string_listtoarr(str_lst: Union[List[bytes], np.ndarray], dtype: np.dtype
 
 def multi_lz4stringtoarr(args: tuple) -> np.ndarray:
     """
-    Helper function for multiprocessing.
-
+    Helper function for multiprocessing that converts LZ4 compressed byte strings to a NumPy array.
+    
+    This function is intended for use with multiprocessing to decompress multiple
+    LZ4 compressed byte strings in parallel. It accepts a tuple with arguments for
+    the 'lz4string_listtoarr' function and returns the resulting 1d NumPy array.
+    
     Args:
-        args: see :func:`~syconn.handler.compression.lz4string_listtoarr`.
-
+        args: Tuple with arguments for :func:`~syconn.handler.compression.lz4string_listtoarr`.
+    
     Returns:
-        1d numpy array.
+        1d numpy array reconstructed from the compressed data.
     """
     return lz4string_listtoarr(*args)
 
 
 def save_lz4_compressed(p: str, arr: np.ndarray, dtype: np.dtype = np.float32):
     """
-    Saves array as lz4 compressed string. Due to overflow in python2 added
-    error handling by recursive splitting.
-
+    Saves a NumPy array as an LZ4 compressed file.
+    
+    This function compresses a NumPy array using the LZ4 algorithm and saves the
+    compressed data to a file. If an OverflowError or ValueError occurs during
+    compression, the array is split into two halves and the function is called
+    recursively to save each half separately, addressing issues specifically
+    related to python2.
+    
     Args:
-        p: Path to the destination file.
-        arr: Numpy array.
-        dtype: Data type in which the array should be stored.
+        p: The file path where the compressed data will be saved.
+        arr: The NumPy array to be compressed and saved.
+        dtype: The data type to which the array should be cast before compression.
     """
     arr = arr.astype(dtype)
     try:
@@ -169,16 +206,21 @@ def save_lz4_compressed(p: str, arr: np.ndarray, dtype: np.dtype = np.float32):
 def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
                         dtype: np.dtype = np.float32):
     """
-    Shape must be known in order to load (multi-dimensional) array from binary
-    string. Due to overflow in python2 added recursive loading.
-
+    Loads a NumPy array from an LZ4 compressed file.
+    
+    This function reads LZ4 compressed data from a file and decompresses it to
+    reconstruct the original NumPy array. The shape and data type of the original
+    array must be provided. In cases of decompression issues, possibly due to
+    overflow in Python 2, it attempts to recursively load and concatenate split
+    parts of the array to return the complete array.
+    
     Args:
-        p: path to lz4 file
-        shape: tuple
-        dtype: type
-
-    Returns: np.array
-
+        p: The file path of the LZ4 compressed file.
+        shape: The shape of the original array, provided as a tuple.
+        dtype: The data type of the original array, provided as a type.
+    
+    Returns:
+        The decompressed NumPy array as np.array.
     """
     with open(p, "rb") as text_file:
         decomp_arr = lz4stringtoarr(text_file.read(), dtype=dtype, shape=shape)
@@ -198,16 +240,21 @@ def load_from_h5py(path: str, hdf5_names: Optional[Iterable[str]] = None,
                    as_dict: bool = False) \
         -> Union[Dict[str, np.ndarray], List[np.ndarray]]:
     """
-    Loads data from a h5py File.
-
+    Loads data from an HDF5 file.
+    
+    This function reads data from an HDF5 file and returns it either as a list of
+    NumPy arrays or as a dictionary mapping dataset names to their corresponding
+    arrays. If 'hdf5_names' is None, all datasets in the file are loaded. If 'as_dict'
+    is True, the data is returned as a dictionary; otherwise, it is returned as a list.
+    
     Args:
-        path: Path to .h5 file.
-        hdf5_names: If None, all keys will be loaded.
-        as_dict: If True, returns a dictionary.
-
+        path: The file path of the HDF5 file.
+        hdf5_names: An iterable of dataset names to load; if None, all datasets are loaded.
+        as_dict: Whether to return the data as a dictionary.
+    
     Returns:
-        The data stored at `path` either as list of arrays
-        (ordering as `hdf5_names`) or as dictionary.
+        The data stored at `path` either as a list of NumPy arrays (ordering as
+        `hdf5_names`) or as a dictionary.
     """
     if as_dict:
         data = {}
@@ -236,16 +283,29 @@ def save_to_h5py(data: Union[Dict[str, np.ndarray], List[np.ndarray]],
                  overwrite: bool = False,
                  compression: bool = True):
     """
-    Saves data to h5py File.
-
+    Saves data to an HDF5 file.
+    
+    This function writes data to an HDF5 file, using dataset names provided in
+    'hdf5_names' if 'data' is a list. If 'data' is a dictionary, its keys are used
+    as dataset names. If 'overwrite' is True, existing files at the specified path
+    are overwritten. If 'compression' is True, gzip compression is used, which is
+    beneficial for sparse and ordered data.
+    
     Args:
-        data: If list, hdf5_names has to be set.
-        path: Forward-slash separated path to file.
-        hdf5_names: Keys used to store arrays in `data`.
-            Has to be the same length as `data`.
-        overwrite: Determines whether existing files are overwritten.
-        compression: If True, ``compression='gzip'`` is used which is
-            recommended for sparse and ordered data.
+        data: The data to be saved, either as a list of NumPy arrays or as a
+              dictionary. If list, 'hdf5_names' must be provided and have the same
+              length as 'data'.
+        path: Forward-slash separated path to the file where the HDF5 file will be
+              saved.
+        hdf5_names: The names of the datasets to be saved; required if 'data' is a
+                    list and must be the same length as 'data'.
+        overwrite: Whether to overwrite existing files.
+        compression: Whether to use gzip compression, recommended for sparse and
+                     ordered data.
+    
+    Raises:
+        TypeError: If 'data' is a list and 'hdf5_names' is not provided.
+        ValueError: If the length of 'hdf5_names' does not match the length of 'data'.
     """
     if (not type(data) is dict) and hdf5_names is None:
         raise TypeError("hdf5names has to be set when data is a list")
