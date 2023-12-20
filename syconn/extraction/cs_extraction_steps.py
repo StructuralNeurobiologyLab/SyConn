@@ -46,9 +46,6 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
                           n_folders_fs: int = 1000, cube_shape: Optional[Tuple[int]] = None, overwrite: bool = False,
                           transf_func_sj_seg: Optional[Callable] = None):
     """
-    hashirah: this docstring looks entirely similar to what
-    we already have. Is GPT skipping this?
-    
     Extracts contact sites and their overlap with ``sj`` objects and stores them in a
     :class:`~syconn.reps.segmentation.SegmentationDataset` of type ``cs`` and ``syn``
     respectively. If synapse type is available, this information will be stored
@@ -319,15 +316,7 @@ def extract_contact_sites(chunk_size: Optional[Tuple[int, int, int]] = None, log
 def _contact_site_extraction_thread(args: Union[tuple, list]) \
         -> Tuple[int, Dict[str, List[dict]]]:
     """
-    hashirah: Arguments need not be explained in the first
-    paragraph of the docstring. The "Args" section does it
-    for them. 
-
-    This function is a helper function that extracts properties of 'cs' and 'syn' objects. It takes
-    a tuple or list of arguments which includes 'Chunk' objects and a path to KnossosDataset 
-    containing the cell supervoxels. It returns two lists of dictionaries for 'cs' and 'syn' objects 
-    which include representative coordinates, bounding box and voxel count, and per-synapse counts 
-    of symmetric and asymmetric voxels.
+    This function is a helper function that extracts properties of 'cs' and 'syn' objects. 
     
     Args:
         args (Union[tuple, list]): A tuple or list that includes 'Chunk' objects and a path to 
@@ -339,7 +328,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     Returns:
         Tuple[int, Dict[str, List[dict]]]: Returns a tuple where the first element is an integer 
         and the second element is a dictionary that contains two lists of dictionaries for 'cs' 
-        and 'syn' objects, per-synapse counts of symmetric and asymmetric voxels.
+        and 'syn' objects which include representative coordinates, bounding box and voxel count, and per-synapse counts 
+    of symmetric and asymmetric voxels.
     """
     chunks = args[0]
     knossos_path = args[1]

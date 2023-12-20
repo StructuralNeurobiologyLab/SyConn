@@ -43,10 +43,6 @@ from ..proc.meshes import gen_mesh_voxelmask, calc_contact_syn_mesh
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None, debug=False):
     """
-    hashirah: Adding on Alex's comment. Here again, it seems
-    like the old docstring was just copied and nothing new
-    was added 
-
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
     (-1 for asym., 1 for sym. synapses).
@@ -112,10 +108,6 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
 def _collect_properties_from_ssv_partners_thread(args):
     """
-    hashirah: I think if a description for args is provided
-    here, then 'see 'collect_properties_...' is not required.
-    But not super important here.
-
     Helper function of 'collect_properties_from_ssv_partners'.
 
     Notes:
@@ -124,8 +116,6 @@ def _collect_properties_from_ssv_partners_thread(args):
     Args
         args(tuple) : A tuple containing the working directory, object version, super segmentation dataset version, 
                       and super segmentation object IDs. (see 'collect_properties_from_ssv_partners')
-
-    Alex gpt checked
     """
     wd, obj_version, ssd_version, ssv_ids = args
 
@@ -191,8 +181,6 @@ def _from_cell_to_syn_dict(args):
     Args:
         args (tuple): A tuple containing the segmentation object directory paths, working directory, object version, 
                       and super segmentation dataset version. (see 'collect_properties_from_ssv_partners')
-
-    Alex gpt checked
     """
     so_dir_paths, wd, obj_version, ssd_version = args
 
@@ -272,8 +260,6 @@ def filter_relevant_syn(sd_syn: segmentation.SegmentationDataset,
         Dict[int, list]: A dictionary where the keys are encoded SSV partner IDs and the values are 
         lists of SV synapse object IDs. See :py:func:`~syconn.reps.connectivity_helper.sv_id_to_partner_ids_vec`
         for decoding into SSV IDs.
-
-    Alex gpt: information from original that adds addiotional explanation what is meant with intra-ssv (cs within one ssvs not between ssvs missing)
     """
     if log is None:
         log = log_extraction

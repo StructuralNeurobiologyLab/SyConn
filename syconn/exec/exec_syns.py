@@ -156,8 +156,8 @@ def run_cs_ssv_generation(n_folders_fs: int = 10000, overwrite: bool = False):
     Args:
         n_folders_fs: Number of folders used to create the folder structure in
             each :class:`~syconn.reps.segmentation.SegmentationDataset`.
-        overwrite:
-    Alex gpt: overwrite description still missing
+        overwrite(bool): If True, existing :class:`~syconn.reps.segmentation.SegmentationDataset` objects of type
+            'cs_ssv' will be overwritten.
     """
     # create SD of type 'cs_ssv' -> cell-cell contact sites
     log = initialize_logging('contact_detection', global_params.config.working_dir + '/logs/',
