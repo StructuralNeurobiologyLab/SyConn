@@ -701,7 +701,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
     else:
         path_to_out = qu.batchjob_script(multi_params, "write_super_segmentation_dataset", n_cores=nb_cpus, exclude_nodes=exclude_nodes,
-                                         additional_flags='--mem=10000')
+                                         additional_flags='--mem=10000', remove_jobfolder=False)
 
         out_files = glob.glob(path_to_out + "/*")
         results = []
