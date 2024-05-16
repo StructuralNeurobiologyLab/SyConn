@@ -869,6 +869,8 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
     on axoness prediction of SV's contained in SuperSuperVoxel ssv. Skeleton of cell needs to be loaded.
     If not enough soma skeleton nodes or only ones far away from surface, might not find the corresponding vertices.
     To get coordinates from vertices of a given compartment use sso.label_dict('vertex')['axoness'] or ['spiness'].
+    Be careful when using this for estimating soma surface areas or other structures where the skeleton might have
+    a large distance to the mesh. Computations could be wrong or strong underestimations. Better use compartmentalize_mesh_fromvert.
     Args:
         ssv: SuperSegmentationObject
         pred_key_appendix: str
@@ -916,6 +918,58 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
 
+
+def compartmentalize_mesh_fromvert(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
+    """
+    Based on compartmentalize_mesh but uses predictions on the vertex of cells and axoness prediction.
+    Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
+    on axoness prediction of SV's contained in SuperSuperVoxel ssv. Skeleton of cell needs to be loaded.
+    If not enough soma skeleton nodes or only ones far away from surface, might not find the corresponding vertices.
+    To get coordinates from vertices of a given compartment use sso.label_dict('vertex')['axoness'] or ['spiness'].
+    Args:
+        ssv: SuperSegmentationObject
+        pred_key_appendix: str
+            Specific version of axoness prediction
+
+    Returns: np.array
+        Majority label of each face / triangle in mesh indices;
+        triangulation is assumed. If majority class has n=1, majority label is
+        set to -1.
+    """
+    ssv_ld = ssv.label_dict('vertex')
+    ssv_vertex_axoness = ssv_ld['axoness']
+    ssv_vertex_axoness[ssv_vertex_axoness == 3] = 1
+    ssv_vertex_axoness[ssv_vertex_axoness == 4] = 1
+    # get axoness of each vertex where indices are pointing to
+    ind, vert, norm = ssv.mesh
+    ind_comp = ssv_vertex_axoness[ind]
+    ind = ind.reshape(-1, 3)
+    vert = vert.reshape(-1, 3)
+    norm = norm.reshape(-1, 3)
+    ind_comp = ind_comp.reshape(-1, 3)
+    ind_comp_maj = np.zeros((len(ind)), dtype=np.uint8)
+    for ii in range(len(ind)):
+        triangle = ind_comp[ii]
+        cnt = Counter(triangle)
+        ax, n = cnt.most_common(1)[0]
+        if n == 1:
+            ax = -1
+        ind_comp_maj[ii] = ax
+    comp_meshes = {}
+    for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
+        comp_ind = ind[ind_comp_maj == ii].flatten()
+        unique_comp_ind = np.unique(comp_ind)
+        comp_vert = vert[unique_comp_ind].flatten()
+        if len(ssv.mesh[2]) != 0:
+            comp_norm = norm[unique_comp_ind].flatten()
+        else:
+            comp_norm = ssv.mesh[2]
+        remap_dict = {}
+        for i in range(len(unique_comp_ind)):
+            remap_dict[unique_comp_ind[i]] = i
+        comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
+        comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
+    return comp_meshes
 
 def mesh_creator_sso(ssv: 'super_segmentation_object.SuperSegmentationObject',
                      segobjs: Iterable[str] = ('sv', 'mi', 'sj', 'vc')):

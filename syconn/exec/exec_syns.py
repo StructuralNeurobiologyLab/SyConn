@@ -134,7 +134,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
                                      obj_type='syn_ssv')
     # recompute=False: size, bounding box, rep_coord and mesh properties
     # have already been processed in combine_and_split_syn
-    '''
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     syn_sign = sd_syn_ssv.load_numpy_data('syn_sign')
     n_sym = np.sum(syn_sign == -1)
@@ -160,7 +159,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
     # just collect new data: ``recompute=False``
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
-    '''
     map_synssv_objects(log=log)
     log.info('Finished.')
 
