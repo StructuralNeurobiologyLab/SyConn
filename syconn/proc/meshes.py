@@ -863,7 +863,7 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
 
-def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmentationObject', pred_key_appendix=""):
+def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmentationObject', k = 1):
     """
     Based on compartmentalize_mesh but uses skeleton coordinates and axoness prediction. Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
     on axoness prediction of SV's contained in SuperSuperVoxel ssv. Skeleton of cell needs to be loaded.
@@ -873,8 +873,7 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
     a large distance to the mesh. Computations could be wrong or strong underestimations. Better use compartmentalize_mesh_fromvert.
     Args:
         ssv: SuperSegmentationObject
-        pred_key_appendix: str
-            Specific version of axoness prediction
+        k: number of nearest nodes to use for mapping to soma; for synapse mapping k = 1
 
     Returns: np.array
         Majority label of each face / triangle in mesh indices;
@@ -886,7 +885,7 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
     preds[preds == 3] = 1
     preds[preds == 4] = 1
     pred_coords = ssv.skeleton["nodes"] * ssv.scaling
-    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3,
+    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=k,
                                         colors=(0, 1, 2))
     # get axoness of each vertex where indices are pointing to
     ind_comp = axoness[ind]
