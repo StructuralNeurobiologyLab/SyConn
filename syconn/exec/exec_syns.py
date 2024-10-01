@@ -90,7 +90,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     """
     log = initialize_logging('synapse_detection', global_params.config.working_dir + '/logs/',
                              overwrite=True)
-    '''
     kd_seg_path = global_params.config.kd_seg_path
     kd = kd_factory(kd_seg_path)
     if cube_of_interest_bb is None:
@@ -129,7 +128,6 @@ def run_syn_generation(chunk_size: Optional[Tuple[int, int, int]] = (512, 512, 5
     cps.combine_and_split_syn(global_params.config.working_dir,
                               cs_gap_nm=global_params.config['cell_objects']['cs_gap_nm'],
                               log=log, n_folders_fs=n_folders_fs, overwrite=overwrite, exclude_nodes = exclude_nodes)
-    '''
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     # recompute=False: size, bounding box, rep_coord and mesh properties

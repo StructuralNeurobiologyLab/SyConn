@@ -210,7 +210,6 @@ valid_metrics = {  # mean metrics
     'val_IoU_mean': metrics.IoU(),
 }
 
-raise ValueError
 # Create trainer
 # it seems pytorch 1.1 does not support batch_size=None to enable batched dataloader, instead
 # using batch size 1 with custom collate_fn
