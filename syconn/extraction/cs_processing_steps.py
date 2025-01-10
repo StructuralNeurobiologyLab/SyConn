@@ -1267,7 +1267,7 @@ def write_conn_gt_kzips(conn, n_objects, folder):
 
 
 def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: str, overwrite: bool = False,
-                   rfc_path_out: str = None, max_dist_vx: int = 20) -> \
+                   rfc_path_out: str = None, max_dist_vx: int = 20, min_syn_size = None) -> \
         Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]:
     """
     Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic
@@ -1354,7 +1354,15 @@ def create_syn_rfc(sd_syn_ssv: 'segmentation.SegmentationDataset', path2file: st
     ds, list_ids = conn_kdtree.query(label_coords * sd_syn_ssv.scaling)
     synssv_ids = sd_syn_ssv.ids[list_ids]
     mask = np.ones(synssv_ids.shape, dtype=np.bool)
-    log.info(f'Mapped {len(labels)} GT coordinates to {sd_syn_ssv.type}-objects.')
+    log.info(f'Mapped {len(synssv_ids)} GT coordinates to {sd_syn_ssv.type}-objects.')
+    if min_syn_size is not None:
+        syn_sizes = sd_syn_ssv.load_numpy_data('mesh_area') / 2
+        list_syn_sizes = syn_sizes[list_ids]
+        size_inds = list_syn_sizes >= min_syn_size
+        synssv_ids = synssv_ids[size_inds]
+        labels = labels[size_inds]
+        log.info(f'{len(synssv_ids)} GT synapses >= {min_syn_size} µm².')
+        mask = np.ones(synssv_ids.shape, dtype=np.bool)
     for label_id in np.where(ds > 0)[0]:
         dists, close_ids = conn_kdtree.query(label_coords[label_id] * sd_syn_ssv.scaling,
                                              k=20)
