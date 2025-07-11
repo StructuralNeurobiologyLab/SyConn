@@ -848,7 +848,7 @@ def compartmentalize_mesh(ssv: 'super_segmentation_object.SuperSegmentationObjec
             ax = -1
         ind_comp_maj[ii] = ax
     comp_meshes = {}
-    for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
+    for ii, comp_type in enumerate(["dendrite", "axon", "soma"]):
         comp_ind = ind[ind_comp_maj == ii].flatten()
         unique_comp_ind = np.unique(comp_ind)
         comp_vert = vert[unique_comp_ind].flatten()
@@ -902,7 +902,7 @@ def compartmentalize_mesh_fromskel(ssv: 'super_segmentation_object.SuperSegmenta
             ax = -1
         ind_comp_maj[ii] = ax
     comp_meshes = {}
-    for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
+    for ii, comp_type in enumerate(["dendrite", "axon", "soma"]):
         comp_ind = ind[ind_comp_maj == ii].flatten()
         unique_comp_ind = np.unique(comp_ind)
         comp_vert = vert[unique_comp_ind].flatten()
