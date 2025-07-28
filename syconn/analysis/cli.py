@@ -169,6 +169,12 @@ class SyConnClient(object):
             elif organelle == 'vc':
                 name = 'vesicle clouds'
                 color = "#2d954d" # rgba(45, 149, 77, 255)
+            elif organelle == 'golgi':
+                name = 'golgi'
+                color = '#f88379'
+            elif organelle == 'er':
+                name = 'endoplasmic reticulum'
+                color = '#581845'
             else:
                 logger.error('Unsupported organelle layer requested')
                 return

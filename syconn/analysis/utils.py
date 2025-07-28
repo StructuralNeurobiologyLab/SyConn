@@ -31,7 +31,8 @@ def get_encoded_skeleton(ssd: SuperSegmentationDataset, ssv_id: int) -> bytes:
     
     ssv.load_skeleton()
     skeleton = ssv.skeleton
-    if skeleton is None:
+    if skeleton == None:
+        print(f"No skeleton found for the ssv id {ssv_id}")
         return bytes()
 
     skel_attr = ["nodes", "edges", "diameters"]
@@ -83,11 +84,11 @@ def get_encoded_skeleton(ssd: SuperSegmentationDataset, ssv_id: int) -> bytes:
     return encoded_skeleton
 
 
-def get_encoded_mesh(ssd: SuperSegmentationDataset, ssv_id: int, obj_type: str) -> bytes:
+def get_encoded_mesh(dataset: Union[SuperSegmentationDataset, SegmentationDataset], ssv_id: int, obj_type: str) -> bytes:
     """Gets encoded mesh for ssv_id.
 
     Args:
-        ssd (SuperSegmentationDataset): 
+        dataset (SuperSegmentationDataset, SegmentationDataset): 
         ssv_id (int): segment id
         obj_type (str): segmentation object (sv, mi, vc, syn_ssv)
 
@@ -95,20 +96,26 @@ def get_encoded_mesh(ssd: SuperSegmentationDataset, ssv_id: int, obj_type: str) 
         bytes: encoded mesh
     """    
     start = time.time()
-    ssv = ssd.get_super_segmentation_object(int(ssv_id))
+    if obj_type == "er":
+        assert isinstance(dataset, SegmentationDataset), f"For obj_type 'er', dataset must be of type `SegmentationDataset`. Found {type(dataset)}"
+        so = dataset.get_segmentation_object(ssv_id)
+        mesh = so.mesh
+    else:
+        ssv = dataset.get_super_segmentation_object(int(ssv_id))
 
-    ssv.load_attr_dict()
+        ssv.load_attr_dict()
 
-    if obj_type == "sj":
-        try:
-            obj_type = "syn_ssv"
-            _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
-            log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
-                            "{}.".format(obj_type, ssv_id))
-        except KeyError:
-            obj_type = "sj"
+        if obj_type == "sj":
+            try:
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
+                                "{}.".format(obj_type, ssv_id))
+            except KeyError:
+                obj_type = "sj"
 
-    mesh = ssv.load_mesh(obj_type)
+        mesh = ssv.load_mesh(obj_type)
+        
     dtime = time.time() - start
     log_gate.debug(f"Got ssv {ssv_id} {obj_type} mesh after {dtime:.2f}s")
 

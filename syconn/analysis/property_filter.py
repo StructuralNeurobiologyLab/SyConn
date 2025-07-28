@@ -21,7 +21,13 @@ from neuroglancer.viewer_state import SegmentationLayer
 from neuroglancer.config import NeuroConfig
 
 # names of the segmentation layers that contain the segmentation data
-SEG_LAYERS = ("j0251_72_seg_20210127_agglo2", "j0251_rag_flat_Jan2019_v3", "j0126_areaxfs_v10", "j0126_assembled_core_relabeled")
+SEG_LAYERS = (
+    "j0251_72_seg_20210127_agglo2_syn_20220811_celltypes_20230822", 
+    "j0251_72_seg_20210127_agglo2", 
+    "j0251_rag_flat_Jan2019_v3", 
+    "j0126_areaxfs_v10", 
+    "j0126_assembled_core_relabeled"
+)
 
 
 def get_segmentation_layer(layers: List[SegmentationLayer]) -> SegmentationLayer:
@@ -51,11 +57,26 @@ def get_celltype(ct: int, gt_type: str) -> str:
 
     Returns:
         str: celltype name
-    """    
-    if gt_type == "ctgt_j0251_v3":
+    """
+    if gt_type == "ctgt_j0251_v5":
+        int2str_label = {0: 'DA', 1: 'LMAN', 2: 'HVC', 3: 'MSN',\
+                        4: 'STN', 5: 'TAN', 6: 'GP', 7: 'GP',\
+                        8: 'LTS', 9: 'INT1', 10: 'INT2',\
+                        11: 'INT3', 12: 'ASTRO',\
+                        13: 'OLIGO', 14: 'MICRO',\
+                        15: 'MIGR', 16: 'FRAG'}
+    elif gt_type == "ctgt_j0251_v4":
+        int2str_label = {0: 'STN', 1: 'DA', 2: 'MSN', 3: 'LMAN',\
+                        4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP',\
+                        8: 'FS', 9: 'LTS', 10: 'NGF',\
+                        11: 'ASTRO', 12: 'OLIGO',\
+                        13: 'MICRO', 14: 'FRAG'}
+    elif gt_type == "ctgt_j0251_v3":
         int2str_label = {0:'STN', 1: 'DA', 2: 'MSN', 3: 'LMAN', 4: 'HVC', 5: 'TAN', 6: 'GP', 7: 'GP', 8: 'FS', 9: 'LTS', 10: 'NGF'}
     elif gt_type == "ctgt_v2":
         int2str_label = {0:"exc", 1: "modulatory", 2: "MSN", 3: "LMAN", 4: "HVC", 5: "GP", 6: "INT"}
+    elif gt_type == "axgt":
+        return int2str_converter(ct, gt_type)
     else:
         raise ValueError("Unknown gt_type {}".format(gt_type))
 
@@ -135,12 +156,17 @@ class PropertyFilter(SyConnClient):
         self.version = params.version
         self.use_tpl_mask = use_tpl_mask
 
+        print(self.params.entries.keys())
+
         if self.use_tpl_mask:
             logger.debug("Using total path length mask for dynamic properties")
 
         self.gt_type = "ctgt_v2"
         if params.acquisition == "j0251":
-            self.gt_type = "ctgt_j0251_v3"
+            if params.version == "72_seg_20210127_agglo2_syn_20220811_celltypes_20230822":
+                self.gt_type = "ctgt_j0251_v5"
+            else:
+                self.gt_type = "ctgt_j0251_v3"
         
         # Uncomment when the old segment properties are used
         # self.CTs = params["backend"].cts_in_data(self.gt_type)
@@ -192,14 +218,15 @@ class PropertyFilter(SyConnClient):
         #     lambda: self.viewer.defer_callback(self.on_state_changed)
         # )
 
-    def update_status_message(self, message: str):
+    def update_status_message(self, message: Optional[str] = None):
         """Updates the status message in the viewer
 
         Args:
             message (str): message to display
-        """      
-        with self.viewer.config_state.txn() as s:
-            s.status_messages['status'] = message
+        """
+        if message != None:
+            with self.viewer.config_state.txn() as s:
+                s.status_messages['status'] = message
 
     def generate_viewer_link(self, action_state):
         """Generates a link to the current viewer state
@@ -227,13 +254,26 @@ class PropertyFilter(SyConnClient):
         """Resets the viewer state to the default state"""
 
         with self.viewer.txn() as s:
+            # reset viewer state
             layer = get_segmentation_layer(s.layers)
             layer.segments.clear()
             layer.segment_query = ""
             s.position = [b // 2 for b in self.params["boundary"]]  # set viewer position to the center of the dataset
+            
+            # clear caches
+            self.counter = 0
+            self.active_cell = None
+            self.active_ct = None
+            self.partner_type = None
+            self.partner_ids = None
+            self.rep_coords = None  # coordinates of the synapses
+            self.cts = None  # cell types of the filtered partners
+            self.mesh_areas = None  # areas of the synapses
+            self.depth = 0  # depth of the depth-first search
+            self.visited = set()  # set of visited nodes
+            self.next_cell = None  # next cell to be visited
 
-        with self.viewer.config_state.txn() as s:
-            s.status_messages['status'] = None  # clear status message
+        self.update_status_message("Viewer reset")
 
     def depth_first_search(self, action_state):
         """Depth-first search of the synaptic chain starting from the
@@ -434,6 +474,7 @@ class PropertyFilter(SyConnClient):
         )
 
         if not np.any(mask):
+            
             return -1
 
         mask = mask & (self.params["syn_probs"] >= 0.5)

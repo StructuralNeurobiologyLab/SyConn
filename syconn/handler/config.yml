@@ -40,7 +40,7 @@ disable_file_logging: True
 
 # Data paths
 paths:
-  kd_seg:
+  kd_seg: /new_mounts/ssdscratch/songbird/j0251/segmentation/j0251_72_seg_20210127_agglo2
   kd_sym:
   kd_asym:
   kd_sj:

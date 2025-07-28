@@ -1272,6 +1272,19 @@ def str2int_converter(comment: str, gt_type: str) -> int:
         str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
                              FS=8, LTS=9, NGF=10)
         return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v3':
+        str2int_label = dict(exc=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5,\
+                             GPe=6, GPi=7, INT3=8, INT1=9, INT2=10)
+        return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v4':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                                                 FS=8, LTS=9, NGF=10, ASTRO=11, OLIGO=12, MICRO=13, FRAG=14)
+        return str2int_label[comment]
+    elif gt_type == 'ctgt_j0251_v5':
+        str2int_label = dict(DA=0, LMAN = 1, HVC = 2, MSN = 3, STN=4, TAN=5, GPe=6, GPi=7,
+                         LTS=8, INT1 = 9, INT2 = 10, INT3 = 11, ASTRO=12,
+                         OLIGO=13, MICRO=14, MIGR = 15, FRAG=16)
+        return str2int_label[comment]
     else:
         raise ValueError("Given groundtruth type is not valid.")
 
@@ -1373,6 +1386,16 @@ def int2str_converter(label: int, gt_type: str) -> str:
         except KeyError:
             logger.error('Cell type unknown for ssv id {}'.format(label))
             return "Unknown"
-
+    elif gt_type == 'ctgt_j0251_v4':
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, TAN=5, GPe=6, GPi=7,
+                                                 FS=8, LTS=9, NGF=10, ASTRO=11, OLIGO=12, MICRO=13, FRAG=14)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
+    elif gt_type == 'ctgt_j0251_v5':
+        str2int_label = dict(DA=0, LMAN = 1, HVC = 2, MSN = 3, STN=4, TAN=5, GPe=6, GPi=7,
+                         LTS=8, INT1 = 9, INT2 = 10, INT3 = 11, ASTRO=12,
+                         OLIGO=13, MICRO=14, MIGR = 15, FRAG=16)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        return int2str_label[label]
     else:
         raise ValueError("Given ground truth type is not valid.")

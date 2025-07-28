@@ -35,19 +35,22 @@ class NumpyEncoder(json.JSONEncoder):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate info file for Neuroglancer precomputed segmentation properties')
     parser.add_argument('--wd', type=str, default=None, help='SyConn working directory of the dataset')
-
     args = parser.parse_args()
+
+    acq = os.path.basename(args.wd).split('_')[0]
+    version = os.path.basename(args.wd)
+
     if args.wd is not None:
         global_params.wd = args.wd
         ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
         if "j0251" in global_params.config.working_dir:
-            gt_type = "ctgt_j0251_v2"
+            gt_type = "ctgt_j0251_v5"
         else:
             gt_type = "ctgt_v2"
 
         # load cell properties
-        cts = ssd.load_numpy_data("celltype_cnn_e3")
+        cts = ssd.load_numpy_data("celltype_pts_e3")
         unique_cts = np.unique(cts)
         labels = []
 
@@ -56,14 +59,14 @@ if __name__ == "__main__":
             labels.append(int2str_converter(ct, gt_type=gt_type))
 
         labels = np.array(labels, dtype=str)
-        if "GPi" and "GPe" in labels:
-            # remap GPe and GPi to GP
-            cts[cts == 7] = 6
-            cts[cts == 8] = 7
-            cts[cts == 9] = 8
-            cts[cts == 10] = 9
-            labels = labels[labels != 'GPi']
-            labels[labels == "GPe"] = "GP"
+        # if "GPi" and "GPe" in labels:
+        #     # remap GPe and GPi to GP
+        #     cts[cts == 7] = 6
+        #     cts[cts == 8] = 7
+        #     cts[cts == 9] = 8
+        #     cts[cts == 10] = 9
+        #     labels = labels[labels != 'GPi']
+        #     labels[labels == "GPe"] = "GP"
 
         if "j0126" in global_params.config.working_dir and "STN" in labels:
             labels[labels == "STN"] = "exc"
@@ -81,11 +84,13 @@ if __name__ == "__main__":
                 sv.load_attr_dict()
                 sizes[i] = sv.attr_dict["size"]
 
-        logger.info("Converting voxel sizes to volume (um)")
+        logger.info("Converting voxel sizes to volume (µm^3)")
         vol = (sizes * np.prod(ssd.scaling)) / 1e9  # µm³
 
-        ct_certainty = ssd.load_numpy_data("celltype_cnn_e3_certainty")
-        ct_certainty = np.around(ct_certainty, decimals=4).astype(str)
+        # convert to percentages
+        ct_certainty = ssd.load_numpy_data("celltype_pts_e3_certainty") * 100
+        func = lambda x: x+"%"
+        ct_certainty = np.array(list(map(func, ct_certainty.astype(np.int8).astype(str))))
 
         total_edge_length = ssd.load_numpy_data("total_edge_length")
         if not isinstance(total_edge_length, np.ndarray):
@@ -99,7 +104,7 @@ if __name__ == "__main__":
             elif "assembled_core_relabeled" in global_params.config.working_dir:
                 total_edge_length = np.load('/home/shared/j0126/j0126_assembled_core_relabeled/total_edge_lengths.npy')
         
-        total_edge_length /= 1000  # convert to um
+        total_edge_length /= 1000  # convert to µm
         total_edge_length = total_edge_length.astype(np.int32)
 
         logger.info("Counting total number of synapse per cell")
@@ -110,6 +115,7 @@ if __name__ == "__main__":
         ssvs = ssd.ssv_ids
 
         if "j0251" in global_params.config.working_dir:
+            logger.info("Apply total path length mask (all cells with path length > 150 are considered)")
             mask = total_edge_length > 150
             cts = cts[mask]
             vol = vol[mask]
@@ -177,18 +183,18 @@ if __name__ == "__main__":
         )
 
         # Cell type certainty
-        # info["inline"]["properties"].append(
-        #     {
-        #         "id": "CellTypeCertainty",
-        #         "type": "label",
-        #         "description": "Certainty of cell type prediction",
-        #         "values": list(ct_certainty)
-        #     }
-        # )
+        info["inline"]["properties"].append(
+            {
+                "id": "CellTypeCertainty",
+                "type": "label",
+                "description": "Certainty of cell type prediction",
+                "values": list(ct_certainty)
+            }
+        )
         
+        logger.info("Writing properties to disk")
         info = json.dumps(info, cls=NumpyEncoder)
-
-        with open("/home/hashir/j0251/rag_flat_Jan2019_v3.json", "w") as f:
+        with open(f"/home/neuro/abc.json", "w") as f:
             f.write(info)
 
     

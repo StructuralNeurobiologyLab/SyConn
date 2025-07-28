@@ -1,12 +1,12 @@
+import os
 import argparse
 import numpy as np
 import multiprocessing
 from multiprocessing import Process, Manager, Pool
-from tqdm import tqdm
 
 from syconn import global_params
-from syconn.reps.super_segmentation import SuperSegmentationDataset, get_total_edge_lengths
-from syconn.handler import basics
+from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.mp.mp_utils import start_multiprocess_imap
 
 
 def get_edge_length(ssv_id):
@@ -41,11 +41,15 @@ if __name__ == '__main__':
     global_params.wd = args.wd
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
-    # Use multiprocessing with as many workers as CPUs
-    with Pool(processes=args.nb_cpus) as p:
-        # imap is slower than map but works with tqdm
-        r = list(tqdm(p.imap(get_edge_length, ssd.ssv_ids), total=len(ssd.ssv_ids), desc='Computing edge lengths'))
+    r = start_multiprocess_imap(get_edge_length, ssd.ssv_ids, \
+                                nb_cpus=os.cpu_count()*20, desc="Computing edge lengths")
+    # with Pool(processes=args.nb_cpus) as p:
+    #     # imap is slower than map but works with tqdm
+    #     r = list(tqdm(p.imap(get_edge_length, ssd.ssv_ids), total=len(ssd.ssv_ids), desc=''))
 
     total_edge_lengths = np.array(r)
-    # TODO: select the save directory based on the working directory    
-    np.save("/wholebrain/scratch/hashirah/areaxfsv10_tpl.npy", total_edge_lengths)
+
+    # save_path = os.path.join(args.wd, "ssv_0")
+    # assert os.path.exists(save_path) and os.path.isdir(save_path), "Path does not exist or is not a directory"
+
+    np.save(os.path.join(f"/home/hashir/total_edge_lengths.npy"), total_edge_lengths)

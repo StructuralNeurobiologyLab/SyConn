@@ -31,7 +31,7 @@ if __name__ == "__main__":
     sd = SegmentationDataset('syn_ssv', working_dir=global_params.config.working_dir)
 
     try:
-        tpl = ssd.load_numpy_data('total_edge_length') / 1000  # convert to um
+        tpl = ssd.load_numpy_data('total_edge_length') / 1000  # convert to µm
         mask = tpl > 150
     except Exception as e:
         print(e)
@@ -42,5 +42,5 @@ if __name__ == "__main__":
     with Pool(processes=args.nb_cpus) as p:
         r = list(tqdm(p.imap(compute_partner_mask, neuron_partners), total=len(neuron_partners), desc='Computing neuron partners mask'))
 
-    areaxfs_v10 = np.array(r, dtype=bool)
-    np.save('/home/hashir/areaxfs_v10.npy', areaxfs_v10)
+    mask = np.array(r, dtype=bool)
+    np.save('/home/neuro/neuron_partners_mask_celltypes_20230822.npy', mask)
