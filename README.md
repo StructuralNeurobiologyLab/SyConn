@@ -10,7 +10,7 @@ Connectomic analysis toolkit for automated synaptic connectivity inference based
 Current features:
 - interface to supervoxel properties for various types (e.g. cell fragments, synapses, mitochondria, vesicle clouds, ..) and entire cell reconstructions 
 (associated cell objects, mesh, skeleton, prediction results, ..)
-- (sub-) cellular compartment (spines, boutons and axon/dendrite/soma) and cell type classification with multiview- [\[2\]](https://www.nature.com/articles/s41467-019-10836-3) and with skeleton-based approaches [\[1\]](https://www.nature.com/articles/nmeth.4206)
+- (sub-) cellular compartment (spines, boutons and axon/dendrite/soma) and cell type classification with multiview- [\[2\]](https://www.nature.com/articles/s41467-019-10836-3), with skeleton-based approaches [\[1\]](https://www.nature.com/articles/nmeth.4206) and with point cloud models (ConvPoint, Point Transformer V3; see [neuron analysis](docs/neuron_analysis.md))
 - distributed parallelization (SLURM, QSUB) of all processing steps
 - astrocyte identification and separation [\[2\]](https://www.nature.com/articles/s41467-019-10836-3)
 - neuroglancer web interface

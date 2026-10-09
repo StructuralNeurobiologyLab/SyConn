@@ -25,3 +25,16 @@ Dataset-wide predictions can be started via the respective scripts:
 * Cell types: `celltype_prediction.py`
 
 Their results are stored on SSV level and used for [extracting the wiring diagram](contact_site_classification.md) later on.
+
+## Point cloud based cell type classification (Point Transformer V3)
+`syconn/cnn/ptv3/` contains a vendored Point Transformer V3 (Pointcept, MIT license) with a cell type head
+(`celltype.py`), an exact submanifold convolution for batch-independent inference (`subm.py`) and a lean inference
+loader for SSVs (`ctinfer.py`). The model is trained on the hybrid point clouds of the ground truth cells
+(`SYCONN_CT_GT_CSV`, `SYCONN_CT_HC_DIR`; k-fold split with `SYCONN_CT_NFOLDS`) and applied dataset-wide:
+
+    python syconn/cnn/cnn_celltype_ptv3_j0251.py --sr <run dir> --cval <fold or -1 for all GT> --num_classes <C>
+    python syconn/exec/exec_celltype_ptv3_inference.py --ids <npy with SSV ids> --out <part.npz> --ckpt <state dict> --num_classes <C>
+    python syconn/exec/exec_celltype_ptv3_merge.py --wd <working dir> --parts "<part*.npz>" --out <array dir> --key celltype_pts_<name> --temperature <T>
+
+The merge script writes the per-SSV class, certainty (entropy of the temperature-scaled mean softmax over the
+`redundancy` contexts) and logits as arrays aligned with `ssv_0/id.npy`.

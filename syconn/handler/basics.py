@@ -10,7 +10,10 @@ import contextlib
 import gc
 import glob
 import os
-import pickle5 as pkl
+try:
+    import pickle5 as pkl
+except ImportError:
+    import pickle as pkl
 import re
 import shutil
 import signal

@@ -122,7 +122,6 @@ print(f'Running on device: {device}')
 
 # set paths
 #save_root = "cajal/nvmescratch/projects/data/songbird_tmp/j0251/j0251_72_seg_20210127_agglo2_syn_20220811/celltype_training/221216_celltype_noval/"
-save_root = '/cajal/nvmescratch/users/arother/cnn_training/240115_celltype_training_testval_1/'
 if save_root is None:
     save_root = '~/e3_training_convpoint/'
 save_root = os.path.expanduser(save_root)
@@ -165,6 +164,9 @@ train_transform = clouds.Compose([clouds.RandomVariation((-40, 40), distr='norma
                                   clouds.RandomRotate(apply_flip=True),
                                   clouds.ElasticTransform(res=(40, 40, 40), sigma=6),
                                   clouds.RandomScale(distr_scale=0.1, distr='uniform')])
+# load the GT hybrid clouds once in the main process so the forked dataloader workers share the pages
+from syconn.handler.prediction_pts import init_hc_cache_gt
+init_hc_cache_gt()
 train_ds = CellCloudDataJ0251(npoints=npoints, transform=train_transform, cv_val=cval,
                               cellshape_only=cellshape_only, use_syntype=use_syntype,
                               onehot=onehot, batch_size=batch_size, ctx_size=ctx, map_myelin=use_myelin)

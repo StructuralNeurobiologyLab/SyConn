@@ -95,7 +95,7 @@ if elektronn3_avail:
             log_cnn.info(f'Set {ssd} as GT source.')
             split_dc_path = f'{gt_dir}/ctgt_v4_splitting_cv0_10fold.pkl'
             if os.path.isfile(split_dc_path):
-                if cv_val is -1:
+                if cv_val == -1:
                     log_cnn.critical(f'"cval_val" was set to -1. training will also '
                                      f'include validation data.')
                     split_dc = load_pkl2obj(split_dc_path)
@@ -197,7 +197,8 @@ if elektronn3_avail:
                     self.ssd_kwargs, [self.sso_ids[item], ], self._batch_size,
                     self.num_pts, transform=self.transform, ctx_size=self.ctx_size,
                     use_syntype=self.use_syntype, cellshape_only=self.cellshape_only,
-                    train=True, cache=True, map_myelin=self.map_myelin)][0]
+                    train=True, cache=True, map_myelin=self.map_myelin,
+                    frag_p=getattr(self, 'frag_p', 0.0))][0]
             assert np.unique(sso_id) == self.sso_ids[item]
             if self._batch_size == 1 and not draw_local:
                 return sample_pts[0], sample_feats[0]
@@ -275,13 +276,14 @@ if elektronn3_avail:
         Uses the same data for train and valid set.
         """
         def __init__(self, cv_val=None, **kwargs):
-            ssd_kwargs = dict(working_dir="cajal/nvmescratch/projects/data/songbird/j0251/j0251_72_seg_20210127_agglo2_syn_20220811_celltypes_20230822")
+            ssd_kwargs = dict(working_dir="/cajal/nvmescratch/projects/data/songbird/j0251/j0251_72_seg_20210127_agglo2_syn_20220811_celltypes_20230822")
 
             super().__init__(ssd_kwargs=ssd_kwargs, cv_val=cv_val, **kwargs)
             # load GT
             #assert self.train, "Other mode than 'train' is not implemented."
             verbose = kwargs.get('verbose', False)
-            self.csv_p = "/cajal/nvmescratch/projects/data/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v7_j0251_72_seg_20210127_agglo2_IDs.csv"
+            from syconn.handler.prediction_pts import CT_GT_CSV
+            self.csv_p = kwargs.get("csv_path", None) or CT_GT_CSV
             df = pandas.io.parsers.read_csv(self.csv_p, header=None, names=['ID', 'type']).values
             ssv_ids = df[:, 0].astype(np.uint64)
             if len(np.unique(ssv_ids)) != len(ssv_ids):
@@ -290,8 +292,9 @@ if elektronn3_avail:
             str_labels = df[:, 1]
             ssv_labels = np.array([str2int_converter(el, gt_type='ctgt_j0251_v4') for el in str_labels], dtype=np.uint16)
             if self.cv_val is not None and self.cv_val != -1:
-                assert self.cv_val < 10
-                kfold = StratifiedKFold(n_splits=10, shuffle=True, random_state=0)
+                n_splits = int(os.environ.get("SYCONN_CT_NFOLDS", 10))
+                assert self.cv_val < n_splits
+                kfold = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=0)
                 for ii, (train_ixs, test_ixs) in enumerate(kfold.split(ssv_ids, y=ssv_labels)):
                     if ii == self.cv_val:
                         self.splitting_dict = {'train': ssv_ids[train_ixs], 'valid': ssv_ids[test_ixs]}
@@ -2321,10 +2324,10 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
     segmentation = np.pad(segmentation, pad_offset, 'constant',
                           constant_values=pad_value)  # volumetric binary mask
     if n_dilations > 0:
-        segmentation = ndimage.binary_dilation(segmentation.astype(np.bool),
+        segmentation = ndimage.binary_dilation(segmentation.astype(bool),
                                                iterations=n_dilations).astype(np.uint16)
     if n_closings > 0:
-        segmentation = ndimage.binary_closing(segmentation.astype(np.bool),
+        segmentation = ndimage.binary_closing(segmentation.astype(bool),
                                               iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
@@ -2383,10 +2386,10 @@ def fetch_single_synssv_typseg_enhanced(
     segmentation = np.pad(segmentation, pad_offset, 'constant',
                           constant_values=pad_value)  # volumetric binary mask
     if n_dilations > 0:
-        segmentation = ndimage.binary_dilation(segmentation.astype(np.bool),
+        segmentation = ndimage.binary_dilation(segmentation.astype(bool),
                                                iterations=n_dilations).astype(np.uint16)
     if n_closings > 0:
-        segmentation = ndimage.binary_closing(segmentation.astype(np.bool),
+        segmentation = ndimage.binary_closing(segmentation.astype(bool),
                                               iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
@@ -2467,7 +2470,7 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
         m_exc = (syn_cts == 0) | (syn_cts == 3) | (syn_cts == 4)
     else:
         # use alle cells
-        m_exc = np.ones_like(syn_cts, dtype=np.bool)
+        m_exc = np.ones_like(syn_cts, dtype=bool)
     # excitatory cell is pre-synaptic, high probability synapse, synapse must be on a
     # dendrite or soma
     pre_mask = np.any(m_exc & (syn_axs == 1), axis=1) & m_prob & \
@@ -2481,7 +2484,7 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
         m_inh = (syn_cts == 2) | (syn_cts == 5) | (syn_cts == 6)
     else:
         # this time set it to zero - all celltypes were already taken into account above
-        m_inh = np.zeros_like(syn_cts, dtype=np.bool)
+        m_inh = np.zeros_like(syn_cts, dtype=bool)
     # inhibitory cell is pre-synaptic, high probability synapse, synapse must be on a
     # dendrite or soma
     pre_mask = np.any(m_inh & (syn_axs == 1), axis=1) & m_prob & \

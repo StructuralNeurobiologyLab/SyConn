@@ -54,20 +54,21 @@ pts_feat_ds_dict = dict(celltype=dict(sv=70, mi=100, syn_ssv=70, syn_ssv_sym=70,
                         compartment=dict(sv=80, mi=100, syn_ssv=100, syn_ssv_sym=100, syn_ssv_asym=100, vc=100))
 
 hc_cache_gt = {}
-#kdtree_cache_gt = {}
+# Cell type GT csv and pre-computed hybrid cloud dir used for training (defaults for j0251; override via env vars).
+CT_GT_CSV = os.environ.get("SYCONN_CT_GT_CSV", "/cajal/nvmescratch/projects/data/songbird/j0251/groundtruth/celltypes/"
+                           "j0251_celltype_gt_v6_j0251_72_seg_20210127_agglo2_IDs.csv")
+CT_HC_DIR = os.environ.get("SYCONN_CT_HC_DIR", "/cajal/nvmescratch/users/arother/cnn_training/231202_hybrid_clouds_gt/")
+
 
 def init_hc_cache_gt():
-    print("initialising cache")
-    v7_gt = pd.read_csv(
-        "cajal/nvmescratch/projects/songbird/j0251/groundtruth/celltypes/j0251_celltype_gt_v7_j0251_72_seg_20210127_agglo2_IDs.csv",
-        names=["cellids", "celltype"])
-    cellids = np.array(v7_gt["cellids"])
-    for cellid in cellids:
-        hc = load_pkl2obj('cajal/nvmescratch/users/arother/cnn_training/231202_hybrid_clouds_gt/%i_hc.pkl' % cellid)
-        hc_cache_gt[cellid] = hc
+    """Lazily loads all GT hybrid clouds (called on first use during training, not at import)."""
+    if len(hc_cache_gt) > 0:
+        return
+    print(f"initialising hybrid cloud cache from {CT_GT_CSV} / {CT_HC_DIR}")
+    gt = pd.read_csv(CT_GT_CSV, names=["cellids", "celltype"])
+    for cellid in np.array(gt["cellids"]):
+        hc_cache_gt[cellid] = load_pkl2obj(os.path.join(CT_HC_DIR, "%i_hc.pkl" % cellid))
 
-
-init_hc_cache_gt()
 
 # TODO: move to handler.basics
 def write_ply(fn, verts, colors):
@@ -539,6 +540,7 @@ def _load_ssv_hc_cached(args):
     return _load_ssv_hc(args)
 
 def _load_ssv_hc_pkl(ssvid):
+    init_hc_cache_gt()
     hc = hc_cache_gt[ssvid]
     #hc = load_pkl2obj("cajal/nvmescratch/users/arother/cnn_training/hybrid_clouds/%i_hc.pkl" % ssvid)
     return hc
@@ -581,7 +583,7 @@ def _load_ssv_hc(args):
             ssv.save_skeleton()
         _, _, myelinated = ssv._pred2mesh(ssv.skeleton['nodes'] * ssv.scaling, ssv.skeleton['myelin_avg10000'],
                                           return_color=False)
-        myelinated = myelinated.astype(np.bool)
+        myelinated = myelinated.astype(bool)
     for k in feats:
         if k == 'sv_myelin':  # do not process - 'sv_myelin' is processed together with 'sv'
             continue
@@ -670,11 +672,8 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
         ssv.clear_cache()
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(hc.nodes)
-        try:
-            pcd, idcs = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
-        except DeprecationWarning as e:
-            log.warn(f"{e.args[0]}: Upgrade to open3d 0.9 or higher.")
-            pcd, idcs, _ = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        res = pcd.voxel_down_sample_and_trace(2500, pcd.get_min_bound(), pcd.get_max_bound())
+        pcd, idcs = res[0], res[1]  # open3d >= 0.10 returns a third element
         nodes = np.max(idcs, axis=1)
         if seeded:
             np.random.seed(np.uint32(hash(frozenset((ssv_id, redundancy_ssv)))))
@@ -752,14 +751,40 @@ def pts_loader_scalar_infer(ssd_kwargs: dict, ssv_ids: Tuple[Union[list, np.ndar
             yield ssv.ssv_kwargs, (batch_f, batch), ii + 1, n_batches
 
 
+_skel_diam_cache = {}
+
+
+def _skeleton_diameters(working_dir: str, ssv_id: int, n_nodes: int):
+    """Node diameters of the SSV skeleton (skeleton.pkl 'diameters', same node order as the hybrid cloud) or None."""
+    ssv_id = int(ssv_id)
+    if ssv_id not in _skel_diam_cache:
+        d = None
+        try:
+            with open(f"{working_dir}/ssv_0/so_storage/{ssv_id % 100}/{ssv_id % 10000}/{ssv_id}/skeleton.pkl", 'rb') as f:
+                d = np.asarray(load_pkl2obj.__globals__['pkl'].load(f)['diameters'], dtype=np.float32)
+            if len(d) != n_nodes:
+                d = None
+        except Exception as e:  # noqa
+            log_handler.warning(f'Could not load skeleton diameters of {ssv_id}: {e}')
+        _skel_diam_cache[ssv_id] = d
+    return _skel_diam_cache[ssv_id]
+
+
 def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchsize: int, npoints: int, ctx_size: float,
                       transform: Optional[Callable] = None, train: bool = False, draw_local: bool = False,
                       draw_local_dist: int = 1000, use_ctx_sampling: bool = True, cache: Optional[bool] = True,
-                      map_myelin: bool = False, use_syntype: bool = True, cellshape_only: bool = False
+                      map_myelin: bool = False, use_syntype: bool = True, cellshape_only: bool = False,
+                      frag_p: float = 0.0, frag_len: Tuple[float, float] = (2000., 40000.),
+                      frag_diam: Tuple[float, float] = (8., 20.)
                       ) -> Tuple[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
     """
     Generator for SSV point cloud samples of size `npoints`. Currently used for
     per-cell point-to-scalar tasks, e.g. cell type prediction.
+
+    Synthetic fragments: with probability `frag_p` a sample is a short piece of the cell instead of a
+    `ctx_size` context: graph radius log-uniform in ``frag_len / 2`` (skeleton path length of the piece ~ `frag_len`,
+    matching the 2-40 um of real fragments), started at a skeleton node whose diameter lies in `frag_diam` (thin
+    stretches; real fragments are thin neurites), no point duplication (real fragments have few points). Label = cell.
 
     Args:
         ssd_kwargs: SuperSegmentationDataset keyword arguments specifying e.g.
@@ -858,6 +883,14 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                 g = hc.graph()
                 for source_node in source_nodes:
                     cnt_ctx = 0
+                    cutoff = ctx_size_fluct
+                    is_frag = frag_p > 0 and np.random.rand() < frag_p
+                    if is_frag:
+                        diam = _skeleton_diameters(ssd_kwargs['working_dir'], curr_ssvid, len(hc.nodes))
+                        cand = np.flatnonzero((diam >= frag_diam[0]) & (diam <= frag_diam[1])) if diam is not None else []
+                        if len(cand) > 0:
+                            source_node = int(np.random.choice(cand))
+                        cutoff = float(np.exp(np.random.uniform(np.log(frag_len[0] / 2), np.log(frag_len[1] / 2))))
                     while True:
                         if cnt_ctx > 2*len(source_nodes):
                             raise ValueError(f'Could not find context with > 0 vertices in {curr_ssvid}.')
@@ -866,7 +899,7 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
                             #node_ids = context_splitting_kdt(hc, source_node, ctx_size_fluct)
                             #node_ids = kdt.query_ball_point(hc.nodes[source_node], ctx_size_fluct)
                             #this approach comes from the function context_splitting_graph_many
-                            path = nx.single_source_dijkstra_path(g, source_node, weight='weight', cutoff=ctx_size_fluct)
+                            path = nx.single_source_dijkstra_path(g, source_node, weight='weight', cutoff=cutoff)
                             node_ids = np.array(list(path.keys()))
                         else:
                             node_ids = bfs_vertices(hc, source_node, npoints_ssv)
@@ -878,6 +911,12 @@ def pts_loader_scalar(ssd_kwargs: dict, ssv_ids: Union[list, np.ndarray], batchs
 
                     sample_feats = hc_sub.features
                     sample_pts = hc_sub.vertices
+                    if is_frag and batchsize == 1 and len(sample_pts) < npoints_ssv:
+                        # no duplication for synthetic fragments (the transform adds noise per point, duplicates would
+                        # not merge in the voxel grid and a 500-point piece would turn into a 50k-point blob)
+                        npoints_ssv = len(sample_pts)
+                        batch = np.zeros((1, npoints_ssv, 3))
+                        batch_f = np.zeros((1, npoints_ssv, len(feat_dc)))
                     # shuffling
                     sample_ixs = np.arange(len(sample_pts))
                     np.random.shuffle(sample_ixs)
